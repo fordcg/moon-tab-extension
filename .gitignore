@@ -1,0 +1,5 @@
+.edge-profile*/
+*-temp.json
+*.log
+tmp/
+.worktrees/
