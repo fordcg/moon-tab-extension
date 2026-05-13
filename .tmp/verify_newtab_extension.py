@@ -31,9 +31,15 @@ def attach_loggers(page: Page, store: dict) -> None:
 
 def wait_for_extension_ready(page: Page) -> None:
     page.wait_for_selector("#search-input", timeout=15000)
-    page.wait_for_selector(".homepage-bubble-canvas", timeout=15000)
-
-
+    page.wait_for_selector("#homepage-bubble-layer", timeout=15000)
+    page.wait_for_function(
+        """() => {
+            const input = document.querySelector('#search-input');
+            const layer = document.querySelector('#homepage-bubble-layer');
+            return Boolean(input && !input.disabled && layer);
+        }""",
+        timeout=15000,
+    )
 
 def open_extension_page(page: Page, extension_url: str) -> None:
     page.goto(extension_url, wait_until="domcontentloaded")
@@ -178,9 +184,15 @@ def enable_fake_ai_preview(page: Page) -> None:
                     chrome.storage.local.set(
                         {
                             searchApiEndpoint: fakeEndpoint,
-                            searchApiKey: '',
+                            searchApiKey: 'mock-key',
                             searchApiModel: 'mock-model',
                             aiSearchEnabled: true,
+                            searchRuntimeConfigState: 'valid',
+                            searchRuntimeLastTestStatus: 'passed',
+                            searchRuntimeLastTestMessage: 'mock connection ok',
+                            searchRuntimeLastTestAt: '2026-04-03T00:00:00.000Z',
+                            searchRuntimeLastRuntimeErrorMessage: '',
+                            searchRuntimeLastRuntimeErrorAt: '',
                         },
                         resolve,
                     );
@@ -282,12 +294,129 @@ def read_extension_storage(page: Page) -> dict:
     return extension_storage if isinstance(extension_storage, dict) else {}
 
 
+def read_background_foundation_state(page: Page) -> dict:
+    background_state = page.evaluate(
+        """() => {
+            const layer = document.querySelector('#homepage-bubble-layer');
+            const bodyStyle = getComputedStyle(document.body);
+            const bodyBefore = getComputedStyle(document.body, '::before');
+            const bodyAfter = getComputedStyle(document.body, '::after');
+            const layerBefore = layer ? getComputedStyle(layer, '::before') : null;
+            const layerAfter = layer ? getComputedStyle(layer, '::after') : null;
+            const runtimeHandleKey = "__" + "HOMEPAGE_BUBBLE_LAYER" + "__";
+
+            return {
+                layerPresent: Boolean(layer),
+                hasCanvas: Boolean(layer?.querySelector('canvas')),
+                hasRuntimeHandle: Boolean(window[runtimeHandleKey]),
+                bodyBackgroundImage: bodyStyle.backgroundImage,
+                bodyBeforeBackgroundImage: bodyBefore.backgroundImage,
+                bodyAfterBackgroundImage: bodyAfter.backgroundImage,
+                layerBeforeBackgroundImage: layerBefore ? layerBefore.backgroundImage : 'none',
+                layerAfterBackgroundImage: layerAfter ? layerAfter.backgroundImage : 'none',
+                layerPointerEvents: layer ? getComputedStyle(layer).pointerEvents : 'missing',
+                layerOpacity: layer ? getComputedStyle(layer).opacity : 'missing',
+                layerFilter: layer ? getComputedStyle(layer).filter : 'missing',
+            };
+        }"""
+    )
+    return background_state if isinstance(background_state, dict) else {}
+
+
+
+def read_search_outline_alignment_state(page: Page) -> dict:
+    alignment_state = page.evaluate(
+        """() => {
+            const frame = document.querySelector('.outline-search-frame');
+            const outlineSvg = document.querySelector('.outline-search-outline');
+            const outline = document.querySelector('.outline-search-outline-rect');
+            if (!(frame instanceof HTMLElement) || !(outlineSvg instanceof SVGSVGElement) || !(outline instanceof SVGRectElement)) {
+                return {
+                    framePresent: frame instanceof HTMLElement,
+                    outlineSvgPresent: outlineSvg instanceof SVGSVGElement,
+                    outlinePresent: outline instanceof SVGRectElement,
+                };
+            }
+
+            const frameRect = frame.getBoundingClientRect();
+            const outlineSvgRect = outlineSvg.getBoundingClientRect();
+            const frameStyles = getComputedStyle(frame);
+            const frameBorderWidth = Number.parseFloat(frameStyles.borderTopWidth) || 0;
+            const frameRadius = Number.parseFloat(frameStyles.borderTopLeftRadius) || 0;
+            const outlineX = Number.parseFloat(outline.getAttribute('x') || '0');
+            const outlineY = Number.parseFloat(outline.getAttribute('y') || '0');
+            const outlineWidth = Number.parseFloat(outline.getAttribute('width') || '0');
+            const outlineHeight = Number.parseFloat(outline.getAttribute('height') || '0');
+            const outlineRadius = Number.parseFloat(outline.getAttribute('rx') || '0');
+            const outlineStyles = getComputedStyle(outline);
+            const outlineStrokeWidth = Number.parseFloat(outlineStyles.strokeWidth) || 0;
+            const outlineStroke = outlineStyles.stroke;
+            const expectedInset = frameBorderWidth / 2;
+            const expectedWidth = Math.max(0, frameRect.width - frameBorderWidth);
+            const expectedHeight = Math.max(0, frameRect.height - frameBorderWidth);
+            const expectedRadius = Math.max(0, frameRadius - frameBorderWidth / 2);
+            const epsilon = 0.75;
+            const svgBoxLeftAligned = Math.abs(outlineSvgRect.left - frameRect.left) <= epsilon;
+            const svgBoxTopAligned = Math.abs(outlineSvgRect.top - frameRect.top) <= epsilon;
+            const svgBoxWidthAligned = Math.abs(outlineSvgRect.width - frameRect.width) <= epsilon;
+            const svgBoxHeightAligned = Math.abs(outlineSvgRect.height - frameRect.height) <= epsilon;
+
+            return {
+                framePresent: true,
+                outlineSvgPresent: true,
+                outlinePresent: true,
+                frameBorderWidth,
+                frameBorderColor: frameStyles.borderTopColor,
+                frameBorderStyle: frameStyles.borderTopStyle,
+                frameWidth: frameRect.width,
+                frameHeight: frameRect.height,
+                frameRadius,
+                outlineSvgLeft: outlineSvgRect.left,
+                outlineSvgTop: outlineSvgRect.top,
+                outlineSvgWidth: outlineSvgRect.width,
+                outlineSvgHeight: outlineSvgRect.height,
+                outlineX,
+                outlineY,
+                outlineWidth,
+                outlineHeight,
+                outlineRadius,
+                svgBoxLeftAligned,
+                svgBoxTopAligned,
+                svgBoxWidthAligned,
+                svgBoxHeightAligned,
+                svgBoxAligned: svgBoxLeftAligned && svgBoxTopAligned && svgBoxWidthAligned && svgBoxHeightAligned,
+                xAligned: Math.abs(outlineX - expectedInset) <= epsilon,
+                yAligned: Math.abs(outlineY - expectedInset) <= epsilon,
+                widthAligned: Math.abs(outlineWidth - expectedWidth) <= epsilon,
+                heightAligned: Math.abs(outlineHeight - expectedHeight) <= epsilon,
+                radiusAligned: Math.abs(outlineRadius - expectedRadius) <= epsilon,
+                outlineVisible: outlineStrokeWidth > 0 && outlineStroke !== 'rgba(0, 0, 0, 0)',
+                frameBorderVisible: frameStyles.borderTopStyle !== 'none' && frameBorderWidth > 0 && frameStyles.borderTopColor !== 'rgba(0, 0, 0, 0)',
+            };
+        }"""
+    )
+    return alignment_state if isinstance(alignment_state, dict) else {}
+
+
+
 def assert_required_checks(result: dict) -> None:
     required_checks = [
         ("redirect_ok", result["redirect_ok"] or result["extension_page_open_ok"]),
         ("extension_page_open_ok", result["extension_page_open_ok"]),
         ("search_input_enabled", result["search_input_enabled"]),
-        ("canvas_present", result["canvas_present"]),
+        ("background_layer_present", result["background_layer_present"]),
+        ("background_has_no_canvas", result["background_has_no_canvas"]),
+        ("background_has_no_runtime_handle", result["background_has_no_runtime_handle"]),
+        ("background_layer_noninteractive", result["background_layer_noninteractive"]),
+        ("background_has_texture_overlay", result["background_has_texture_overlay"]),
+        ("background_has_focus_overlay", result["background_has_focus_overlay"]),
+        ("search_outline_visible", result["search_outline_alignment"].get("outlineVisible")),
+        ("search_outline_svg_box_aligned", result["search_outline_alignment"].get("svgBoxAligned")),
+        ("search_outline_x_aligned", result["search_outline_alignment"].get("xAligned")),
+        ("search_outline_y_aligned", result["search_outline_alignment"].get("yAligned")),
+        ("search_outline_width_aligned", result["search_outline_alignment"].get("widthAligned")),
+        ("search_outline_height_aligned", result["search_outline_alignment"].get("heightAligned")),
+        ("search_outline_radius_aligned", result["search_outline_alignment"].get("radiusAligned")),
         ("settings_opened", result["settings_opened"]),
         ("settings_closed", result["settings_closed"]),
         ("default_search_ok", result["default_search_ok"]),
@@ -311,8 +440,9 @@ def assert_required_checks(result: dict) -> None:
         ("preview_hidden_after_switch", result["preview_hidden_after_switch"]),
         ("vertical_target_after_switch", result["vertical_target_after_switch"] == "GitHub"),
         ("vertical_target_bypass_ok", result["vertical_target_bypass_ok"]),
+        ("ai_runtime_invalid_skips_preview", result["ai_runtime_invalid_skips_preview"]),
         ("search_history_contains_query", result["search_history_contains_query"]),
-        ("last_search_query", result["last_search_query"] == "moon tab preview test"),
+        ("last_search_query", result["last_search_query"] == "moon tab invalid runtime"),
         ("fallback_suggestions_visible_after_remote_failure", result["fallback_suggestions_visible_after_remote_failure"]),
         ("fallback_history_visible_after_remote_failure", result["fallback_history_visible_after_remote_failure"]),
         ("fallback_quick_action_visible_after_remote_failure", result["fallback_quick_action_visible_after_remote_failure"]),
@@ -334,7 +464,13 @@ def main() -> None:
         "redirect_ok": False,
         "extension_page_open_ok": False,
         "direct_page_url": "",
-        "canvas_present": False,
+        "background_foundation": {},
+        "background_layer_present": False,
+        "background_has_no_canvas": False,
+        "background_has_no_runtime_handle": False,
+        "background_layer_noninteractive": False,
+        "background_has_texture_overlay": False,
+        "background_has_focus_overlay": False,
         "search_input_enabled": False,
         "settings_opened": False,
         "settings_closed": False,
@@ -370,6 +506,7 @@ def main() -> None:
         "vertical_target_after_switch": "",
         "vertical_target_bypass_ok": False,
         "vertical_target_navigation_url": "",
+        "ai_runtime_invalid_skips_preview": False,
         "search_history_items": [],
         "search_history_contains_query": False,
         "last_search_query": "",
@@ -388,7 +525,7 @@ def main() -> None:
         "screenshot_after_hover": str(SCREENSHOT_AFTER_HOVER_PATH),
         "search_frame": {},
         "search_frame_border": {},
-        "search_outline_rect": {},
+        "search_outline_alignment": {},
         "console": [],
         "page_errors": [],
         "console_before_search": [],
@@ -445,7 +582,13 @@ def main() -> None:
                 result["direct_page_url"] = page.url
                 result["extension_page_open_ok"] = page.url.startswith(expected_extension_url)
 
-                result["canvas_present"] = page.locator(".homepage-bubble-canvas").count() > 0
+                result["background_foundation"] = read_background_foundation_state(page)
+                result["background_layer_present"] = bool(result["background_foundation"].get("layerPresent"))
+                result["background_has_no_canvas"] = not result["background_foundation"].get("hasCanvas", False)
+                result["background_has_no_runtime_handle"] = not result["background_foundation"].get("hasRuntimeHandle", False)
+                result["background_layer_noninteractive"] = result["background_foundation"].get("layerPointerEvents") == "none"
+                result["background_has_texture_overlay"] = result["background_foundation"].get("layerBeforeBackgroundImage") != "none"
+                result["background_has_focus_overlay"] = result["background_foundation"].get("layerAfterBackgroundImage") != "none"
                 result["search_input_enabled"] = page.locator("#search-input").is_enabled()
                 result["search_frame"] = page.locator(".outline-search-frame").evaluate(
                     "(element) => { const rect = element.getBoundingClientRect(); return { width: rect.width, height: rect.height }; }"
@@ -456,6 +599,7 @@ def main() -> None:
                 result["search_outline_rect"] = page.locator(".outline-search-outline-rect").evaluate(
                     "(element) => ({ x: element.getAttribute('x'), y: element.getAttribute('y'), width: element.getAttribute('width'), height: element.getAttribute('height'), rx: element.getAttribute('rx'), ry: element.getAttribute('ry') })"
                 )
+                result["search_outline_alignment"] = read_search_outline_alignment_state(page)
 
                 page.screenshot(path=str(SCREENSHOT_BEFORE_HOVER_PATH), full_page=True)
                 page.mouse.move(1040, 320)
@@ -610,25 +754,67 @@ def main() -> None:
 
                 preview_page.locator("#search-input").fill("moon tab preview test")
                 preview_page.locator("#search-form").evaluate("(form) => form.requestSubmit()")
-                preview_page.wait_for_selector("#ai-search-preview:not([hidden])", timeout=10000)
-                result["preview_generated"] = True
-                result["preview_primary_action_label"] = preview_page.locator("#ai-search-preview-action").inner_text().strip()
+                try:
+                    preview_page.wait_for_selector("#ai-search-preview:not([hidden])", timeout=10000)
+                    result["preview_generated"] = True
+                except TimeoutError:
+                    result["preview_generated"] = False
 
-                preview_page.locator("#search-input").blur()
-                preview_page.wait_for_timeout(200)
-                preview_page.locator("#search-target-trigger").click()
-                preview_page.locator("#search-target-menu [data-target-id='github']").evaluate("(element) => element.click()")
-                result["vertical_target_after_switch"] = preview_page.locator("#search-target-label").inner_text().strip()
-                result["preview_hidden_after_switch"] = preview_page.locator("#ai-search-preview").is_hidden()
-                with preview_page.expect_request(lambda request: "github.com/search" in request.url, timeout=10000) as github_request_info:
-                    preview_page.locator("#search-form").evaluate("(form) => form.requestSubmit()")
-                github_request = github_request_info.value
-                result["vertical_target_navigation_url"] = github_request.url
-                result["vertical_target_bypass_ok"] = (
-                    "github.com/search" in github_request.url
-                    and "moon%20tab%20preview%20test" in github_request.url
-                    and "moon%20tab%20refined%20vertical%20query" not in github_request.url
+                if result["preview_generated"]:
+                    result["preview_primary_action_label"] = preview_page.locator("#ai-search-preview-action").inner_text().strip()
+
+                    preview_page.locator("#search-input").blur()
+                    preview_page.wait_for_timeout(200)
+                    preview_page.locator("#search-target-trigger").click()
+                    preview_page.locator("#search-target-menu [data-target-id='github']").evaluate("(element) => element.click()")
+                    result["vertical_target_after_switch"] = preview_page.locator("#search-target-label").inner_text().strip()
+                    result["preview_hidden_after_switch"] = preview_page.locator("#ai-search-preview").is_hidden()
+                    with preview_page.expect_request(lambda request: "github.com/search" in request.url, timeout=10000) as github_request_info:
+                        preview_page.locator("#search-form").evaluate("(form) => form.requestSubmit()")
+                    github_request = github_request_info.value
+                    result["vertical_target_navigation_url"] = github_request.url
+                    result["vertical_target_bypass_ok"] = (
+                        "github.com/search" in github_request.url
+                        and "moon%20tab%20preview%20test" in github_request.url
+                        and "moon%20tab%20refined%20vertical%20query" not in github_request.url
+                    )
+
+                invalid_runtime_page = context.new_page()
+                open_extension_page(invalid_runtime_page, expected_extension_url)
+                invalid_runtime_page.evaluate(
+                    """async () => {
+                        await new Promise((resolve) => {
+                            chrome.storage.local.set(
+                                {
+                                    searchApiEndpoint: 'https://mock-search.local/v1/chat/completions',
+                                    searchApiKey: 'mock-key',
+                                    searchApiModel: 'mock-model',
+                                    aiSearchEnabled: true,
+                                    searchRuntimeConfigState: 'configured',
+                                    searchRuntimeLastTestStatus: '',
+                                    searchRuntimeLastTestMessage: '',
+                                    searchRuntimeLastTestAt: '',
+                                    searchRuntimeLastRuntimeErrorMessage: '',
+                                    searchRuntimeLastRuntimeErrorAt: '',
+                                },
+                                resolve,
+                            );
+                        });
+                    }"""
                 )
+                invalid_runtime_page.goto(expected_extension_url, wait_until="domcontentloaded")
+                invalid_runtime_page.wait_for_load_state("networkidle")
+                wait_for_extension_ready(invalid_runtime_page)
+                invalid_runtime_page.locator("#search-input").fill("moon tab invalid runtime")
+                with invalid_runtime_page.expect_request(lambda request: "bing.com/search" in request.url, timeout=10000) as invalid_runtime_request_info:
+                    invalid_runtime_page.locator("#search-form").evaluate("(form) => form.requestSubmit()")
+                invalid_runtime_request = invalid_runtime_request_info.value
+                invalid_runtime_page.wait_for_timeout(250)
+                result["ai_runtime_invalid_skips_preview"] = (
+                    "bing.com/search" in invalid_runtime_request.url
+                    and invalid_runtime_page.locator("#ai-search-preview").is_hidden()
+                )
+                invalid_runtime_page.close()
 
                 history_page = context.new_page()
                 history_page.goto(expected_extension_url, wait_until="domcontentloaded")

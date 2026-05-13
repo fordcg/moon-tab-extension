@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light" />
     <title>月标签</title>
     <link
       rel="icon"
@@ -55,6 +55,15 @@
                     </label>
                   </div>
 
+                  <div id="ai-config-state-card" class="settings-section" data-state="unconfigured" aria-live="polite">
+                    <div class="settings-section-header">
+                      <h3 class="settings-section-title">AI 配置状态</h3>
+                      <p class="settings-section-description">保存配置后需要单独测试，测试通过后才能启用 AI 搜索增强。</p>
+                    </div>
+                    <p id="ai-config-state-label" class="settings-note">未配置</p>
+                    <p id="ai-config-state-message" class="settings-note">请先完整填写接口地址、API Key 和模型，然后保存设置。</p>
+                  </div>
+
                   <label class="settings-label" for="search-api-endpoint">搜索接口地址</label>
                   <input id="search-api-endpoint" class="settings-input" type="url" inputmode="url" placeholder="https://api.example.com 或 https://api.example.com/v1/chat/completions" />
                   <p class="settings-note">可填基地址或完整 <code>/v1/chat/completions</code> 地址，扩展会自动补全。</p>
@@ -80,6 +89,7 @@
               <div class="settings-panel-footer">
                 <p id="settings-status" class="settings-status" role="status" aria-live="polite" hidden></p>
                 <div class="settings-actions">
+                  <button id="test-search-api-connection" class="settings-secondary-button" type="button">测试连接</button>
                   <button id="save-settings" class="settings-save-button" type="submit">保存设置</button>
                 </div>
               </div>
@@ -104,6 +114,10 @@
                       <span class="ai-toggle-coil" aria-hidden="true">
                         <span></span><span></span><span></span><span></span>
                       </span>
+                    </button>
+                    <button id="open-ai-sidebar" class="settings-trigger search-settings-trigger search-ai-sidebar-trigger" type="button" aria-label="打开 AI 助手侧边栏">
+                      <span class="search-settings-trigger-icon" aria-hidden="true">AI</span>
+                      <span class="search-settings-trigger-label visually-hidden">打开 AI 助手侧边栏</span>
                     </button>
                     <button id="open-settings" class="settings-trigger search-settings-trigger" type="button" aria-label="打开设置">
                       <span class="search-settings-trigger-icon" aria-hidden="true">

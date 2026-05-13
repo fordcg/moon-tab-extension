@@ -4,9 +4,10 @@
   "description": "一个带有月色氛围的 Microsoft Edge 新标签页扩展。",
   "version": "0.1.0",
   "permissions": [
-    "permissions",
     "tabs",
-    "storage"
+    "storage",
+    "sidePanel",
+    "permissions"
   ],
   "host_permissions": [
     "https://api.bing.com/*"
@@ -16,6 +17,22 @@
     "https://*/*"
   ],
   "background": {
-    "service_worker": "src/background/newtab-redirect.js"
-  }
+    "service_worker": "src/background/newtab-redirect.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/pages/sidebar/index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/content/page-context.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

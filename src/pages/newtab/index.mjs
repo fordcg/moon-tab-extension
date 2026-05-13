@@ -1,11 +1,12 @@
 import {
   ensureOriginPermission,
+  getStoredAiConfigState,
   getStoredSearchSettings,
-  initializeSettingsUi,
   isChatCompletionsEndpoint,
   resolveChatCompletionsEndpoint,
   resolveOriginPatternSafely,
-} from "./settings/index.mjs";
+} from "../../shared/search-settings.mjs";
+import { initializeSettingsUi } from "./settings/index.mjs";
 import {
   normalizeTextValue,
   resolveDirectNavigationTarget,
@@ -24,7 +25,6 @@ import { createSuggestionsController } from "./suggestions-controller.mjs";
 import { createSearchTargetController } from "./search-target-controller.mjs";
 import { createStartupController } from "./startup-controller.mjs";
 import { createInteractionsController } from "./interactions-controller.mjs";
-import { initializeLiquidGlassBubbleLayer } from "./liquid-glass-bubble-layer.mjs";
 
 const searchForm = document.getElementById("search-form");
 const searchInput = document.getElementById("search-input");
@@ -32,6 +32,7 @@ const searchStatus = document.getElementById("search-status");
 const aiSearchIndicator = document.getElementById("ai-search-indicator");
 const aiSearchIndicatorText = document.getElementById("ai-search-indicator-text");
 const aiToggleButton = document.getElementById("ai-toggle-btn");
+const openAiSidebarButton = document.getElementById("open-ai-sidebar");
 const aiSearchEnabledInput = document.getElementById("ai-search-enabled");
 const aiSearchPreview = document.getElementById("ai-search-preview");
 const aiSearchPreviewIntent = document.getElementById("ai-search-preview-intent");
@@ -52,7 +53,6 @@ const searchSuggestions = document.getElementById("search-suggestions");
 const searchFrame = document.querySelector(".outline-search-frame");
 const searchOutline = document.querySelector(".outline-search-outline");
 const searchOutlineRect = document.querySelector(".outline-search-outline-rect");
-const homepageBubbleLayer = document.getElementById("homepage-bubble-layer");
 
 const SEARCH_TRACE_DURATION = 1280;
 const PLACEHOLDER_FADE_DURATION = 320;
@@ -60,7 +60,7 @@ const MODULE_REVEAL_DELAY = 160;
 const SEARCH_REQUEST_TIMEOUT = 15000;
 const TRANSIENT_RETRY_DELAYS = [450, 1100];
 const SEARCH_OUTLINE_STROKE_WIDTH = 1;
-const SEARCH_OUTLINE_INSET = 6;
+const SEARCH_OUTLINE_INSET = 0;
 const BING_SEARCH_ORIGIN_PATTERN = "https://www.bing.com/*";
 const BING_RSS_ENDPOINT = "https://www.bing.com/search?format=rss&mkt=zh-CN&q=";
 const extensionApi = typeof chrome !== "undefined" ? chrome : null;
@@ -131,6 +131,26 @@ const runSearchForTarget = async (query, targetId = currentSearchTarget?.id ?? D
   window.location.href = searchTarget.buildSearchUrl(query);
 };
 
+const openAiSidebar = async () => {
+  if (!extensionApi?.sidePanel?.open || !extensionApi?.tabs?.query || typeof window === "undefined") {
+    setSearchStatus("当前环境不支持侧边栏，请在兼容浏览器中重试。", "error");
+    return;
+  }
+
+  try {
+    const [activeTab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab?.windowId) {
+      setSearchStatus("未找到当前窗口，无法打开 AI 侧边栏。", "error");
+      return;
+    }
+
+    await extensionApi.sidePanel.open({ windowId: activeTab.windowId });
+    setSearchStatus("已打开 AI 助手侧边栏。", "success");
+  } catch (error) {
+    setSearchStatus(error instanceof Error ? error.message : "打开 AI 侧边栏失败。", "error");
+  }
+};
+
 const triggerAiSearchToggle = () => {
   if (!(aiSearchEnabledInput instanceof HTMLInputElement)) {
     setSearchStatus("设置项未就绪，请稍后重试。", "error");
@@ -151,6 +171,12 @@ const syncAiSearchEnabled = (enabled) => {
 
 const syncAiSearchActivating = (activating) => {
   aiPreviewController.syncActivating(activating);
+};
+
+const syncAiConfigState = (configState) => {
+  if (configState !== "valid" && configState !== "degraded") {
+    hideAiSearchPreview();
+  }
 };
 
 const focusSearchInputIfIdle = () => {
@@ -183,6 +209,21 @@ const shouldBypassAiForCurrentTarget = () => {
 };
 
 const shouldUseAiSearchFlow = (settings) => Boolean(settings?.aiSearchEnabled) && !shouldBypassAiForCurrentTarget();
+
+const getHomepageSearchSettings = async () => {
+  const [settings, runtimeState] = await Promise.all([
+    getStoredSearchSettings(),
+    getStoredAiConfigState(),
+  ]);
+
+  return {
+    ...settings,
+    aiSearchEnabled: Boolean(
+      settings.aiSearchEnabled
+      && (runtimeState?.configState === "valid" || runtimeState?.configState === "degraded")
+    ),
+  };
+};
 
 aiPreviewController = createAiPreviewController({
   elements: {
@@ -327,7 +368,7 @@ interactionsController = createInteractionsController({
     setSearchStatus,
     shouldUseAiSearchFlow,
     runDefaultSearchFlow,
-    getStoredSearchSettings,
+    getStoredSearchSettings: getHomepageSearchSettings,
     focusSearchInput: () => {
       searchInput.focus();
     },
@@ -338,22 +379,23 @@ interactionsController = createInteractionsController({
 });
 interactionsController.bind();
 
+openAiSidebarButton?.addEventListener("click", () => {
+  void openAiSidebar();
+});
+
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 initializeSettingsUi({
   setSearchStatus,
   syncAiSearchEnabled,
   syncAiSearchActivating,
+  syncAiConfigState,
 });
 syncRenderedSearchUi();
 searchTargetController.syncShell();
 aiPreviewController.renderIndicator();
 void readSearchHistory(extensionApi).then((items) => {
   searchHistoryItems = Array.isArray(items) ? [...items] : [];
-});
-initializeLiquidGlassBubbleLayer({
-  root: homepageBubbleLayer,
-  prefersReducedMotionQuery: prefersReducedMotion,
 });
 startupController.initialize({ prefersReducedMotion });
 

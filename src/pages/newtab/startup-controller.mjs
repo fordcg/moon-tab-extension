@@ -42,11 +42,13 @@ export const createStartupController = ({ elements, callbacks, config }) => {
     const strokeWidth = searchOutlineStrokeWidth;
     const inset = searchOutlineInset;
     const halfStroke = strokeWidth / 2;
+    const frameStyles = window.getComputedStyle(searchFrame);
+    const frameRadius = Number.parseFloat(frameStyles.borderTopLeftRadius) || 0;
     const x = inset + halfStroke;
     const y = inset + halfStroke;
     const outlineWidth = Math.max(1, width - inset * 2 - strokeWidth);
     const outlineHeight = Math.max(1, height - inset * 2 - strokeWidth);
-    const radius = Math.max(0, outlineHeight / 2 - halfStroke);
+    const radius = Math.max(0, frameRadius - inset - halfStroke);
 
     searchOutline.setAttribute("viewBox", `0 0 ${width} ${height}`);
     searchOutlineRect.style.strokeWidth = String(strokeWidth);
@@ -81,7 +83,6 @@ export const createStartupController = ({ elements, callbacks, config }) => {
       {
         duration: searchTraceDuration,
         easing: "cubic-bezier(0.35, 0, 0.15, 1)",
-        fill: "forwards",
       },
     );
 

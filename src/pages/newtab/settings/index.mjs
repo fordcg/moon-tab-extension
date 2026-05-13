@@ -1,12 +1,20 @@
 import {
-  AI_REFUSAL_PATTERN,
-  buildDecisionUserPrompt,
-  isLikelySearchQueryText,
-  looksLikeGatewayErrorPage,
-  looksLikeHtmlDocument,
-  parseJsonSafely,
-  unwrapJsonFence,
-} from "../../../shared/search-ai-contract.mjs";
+  AI_PROTOCOL_TYPES,
+  buildAiTestRequest,
+  normalizeAiRuntimeError,
+  parseAiRuntimeResponse,
+} from "../../../shared/ai-runtime-adapter.mjs";
+import { AI_CONFIG_STATES } from "../../../shared/ai-config-state.mjs";
+import {
+  ensureOriginPermission,
+  fetchWithTimeout,
+  getStoredAiConfigState,
+  getStoredSearchSettings,
+  resolveOriginPattern,
+  resolveOriginPatternSafely,
+  saveStoredAiConfigState,
+  saveStoredSearchSettings,
+} from "../../../shared/search-settings.mjs";
 
 const openSettingsButton = document.getElementById("open-settings");
 const closeSettingsButton = document.getElementById("close-settings");
@@ -22,20 +30,16 @@ const searchApiModelSelect = document.getElementById("search-api-model-select");
 const aiSearchEnabledInput = document.getElementById("ai-search-enabled");
 const settingsStatus = document.getElementById("settings-status");
 const saveSettingsButton = document.getElementById("save-settings");
+const testSearchApiConnectionButton = document.getElementById("test-search-api-connection");
+const aiConfigStateCard = document.getElementById("ai-config-state-card");
+const aiConfigStateLabel = document.getElementById("ai-config-state-label");
+const aiConfigStateMessage = document.getElementById("ai-config-state-message");
 const homepageSearchInput = document.getElementById("search-input");
 
-const SEARCH_SETTINGS_KEYS = {
-  endpoint: "searchApiEndpoint",
-  apiKey: "searchApiKey",
-  model: "searchApiModel",
-  aiSearchEnabled: "aiSearchEnabled",
-};
-
-const extensionApi = typeof chrome !== "undefined" ? chrome : null;
 let lockedBodyScrollY = 0;
 let lastFocusedElement = null;
-const TEMPORARY_FAILURE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const SETTINGS_REQUEST_TIMEOUT = 10000;
+const AI_USABLE_STATES = new Set([AI_CONFIG_STATES.VALID, AI_CONFIG_STATES.DEGRADED]);
 const SETTINGS_FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -44,6 +48,28 @@ const SETTINGS_FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
+const AI_STATE_COPY = {
+  [AI_CONFIG_STATES.UNCONFIGURED]: {
+    label: "未配置",
+    message: "请先完整填写接口地址、API Key 和模型，然后保存设置。",
+  },
+  [AI_CONFIG_STATES.CONFIGURED]: {
+    label: "已保存，待测试",
+    message: "配置已保存，请点击“测试连接”验证接口是否可用。",
+  },
+  [AI_CONFIG_STATES.VALID]: {
+    label: "连接正常",
+    message: "最近一次测试通过，可以启用 AI 搜索增强。",
+  },
+  [AI_CONFIG_STATES.INVALID]: {
+    label: "连接失败",
+    message: "最近一次测试失败，请检查配置后重新测试。",
+  },
+  [AI_CONFIG_STATES.DEGRADED]: {
+    label: "运行中降级",
+    message: "最近一次运行发生错误，请重新测试连接。",
+  },
+};
 
 const isSettingsPopupOpen = () => document.body.classList.contains("is-settings-open");
 
@@ -134,156 +160,17 @@ const setSettingsSaving = (saving) => {
   }
 };
 
+const setSettingsTesting = (testing) => {
+  if (testSearchApiConnectionButton instanceof HTMLButtonElement) {
+    testSearchApiConnectionButton.disabled = testing;
+  }
+};
+
 const setFetchModelsPending = (pending) => {
   if (fetchModelsButton instanceof HTMLButtonElement) {
     fetchModelsButton.disabled = pending;
   }
 };
-
-const resolveValidationText = (rawText) => {
-  const trimmed = rawText.trim();
-  const payload = parseJsonSafely(trimmed);
-  if (payload && typeof payload === "object") {
-    if (Array.isArray(payload.choices)) {
-      const firstChoice = payload.choices[0];
-      const content = firstChoice && typeof firstChoice === "object" && firstChoice.message && typeof firstChoice.message === "object"
-        ? firstChoice.message.content
-        : "";
-      if (typeof content === "string") {
-        return unwrapJsonFence(content.trim());
-      }
-    }
-
-    if (typeof payload.query === "string") {
-      return payload.query.trim();
-    }
-
-    if (typeof payload.url === "string") {
-      return payload.url.trim();
-    }
-  }
-
-  return unwrapJsonFence(trimmed);
-};
-
-const hasUsableDecisionPayload = (value) => {
-  const parsedPayload = parseJsonSafely(value);
-  if (!parsedPayload || typeof parsedPayload !== "object") {
-    return false;
-  }
-
-  const payload = parsedPayload.result && typeof parsedPayload.result === "object" ? parsedPayload.result : parsedPayload;
-  const mode = typeof payload.mode === "string" ? payload.mode.trim().toLowerCase() : "";
-  const urlValue = typeof payload.url === "string" && payload.url.trim()
-    ? payload.url.trim()
-    : typeof payload.target === "string" && payload.target.trim()
-      ? payload.target.trim()
-      : "";
-
-  if (["open", "url", "navigate"].includes(mode) && urlValue) {
-    return true;
-  }
-
-  const queryValue = typeof payload.query === "string" && payload.query.trim()
-    ? payload.query.trim()
-    : typeof payload.rewritten_query === "string" && payload.rewritten_query.trim()
-      ? payload.rewritten_query.trim()
-    : typeof payload.target === "string" && payload.target.trim()
-      ? payload.target.trim()
-      : "";
-
-  if (["search", "query"].includes(mode) && queryValue) {
-    return true;
-  }
-
-  return Boolean(queryValue || urlValue);
-};
-
-export const isChatCompletionsEndpoint = (endpoint) => {
-  if (typeof endpoint !== "string" || !endpoint.trim()) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(endpoint.trim());
-    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
-    return pathname === "/" || pathname === "/v1" || /\/v1\/chat\/completions$/i.test(pathname);
-  } catch {
-    return false;
-  }
-};
-
-export const resolveChatCompletionsEndpoint = (endpoint) => {
-  const parsed = new URL(endpoint.trim());
-  const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
-
-  if (/\/v1\/chat\/completions$/i.test(pathname)) {
-    parsed.pathname = pathname;
-    return parsed.toString();
-  }
-
-  if (pathname === "/" || pathname === "/v1") {
-    parsed.pathname = "/v1/chat/completions";
-    return parsed.toString();
-  }
-
-  return parsed.toString();
-};
-
-export const getStoredSearchSettings = () =>
-  new Promise((resolve, reject) => {
-    if (!extensionApi?.storage?.local) {
-      resolve({ endpoint: "", apiKey: "", model: "", aiSearchEnabled: false });
-      return;
-    }
-
-    extensionApi.storage.local.get(
-      {
-        [SEARCH_SETTINGS_KEYS.endpoint]: "",
-        [SEARCH_SETTINGS_KEYS.apiKey]: "",
-        [SEARCH_SETTINGS_KEYS.model]: "",
-        [SEARCH_SETTINGS_KEYS.aiSearchEnabled]: false,
-      },
-      (items) => {
-        if (extensionApi.runtime?.lastError) {
-          reject(new Error(extensionApi.runtime.lastError.message));
-          return;
-        }
-
-        resolve({
-          endpoint: typeof items[SEARCH_SETTINGS_KEYS.endpoint] === "string" ? items[SEARCH_SETTINGS_KEYS.endpoint].trim() : "",
-          apiKey: typeof items[SEARCH_SETTINGS_KEYS.apiKey] === "string" ? items[SEARCH_SETTINGS_KEYS.apiKey].trim() : "",
-          model: typeof items[SEARCH_SETTINGS_KEYS.model] === "string" ? items[SEARCH_SETTINGS_KEYS.model].trim() : "",
-          aiSearchEnabled: Boolean(items[SEARCH_SETTINGS_KEYS.aiSearchEnabled]),
-        });
-      },
-    );
-  });
-
-const saveStoredSearchSettings = (settings) =>
-  new Promise((resolve, reject) => {
-    if (!extensionApi?.storage?.local) {
-      reject(new Error("当前环境不支持扩展存储"));
-      return;
-    }
-
-    extensionApi.storage.local.set(
-      {
-        [SEARCH_SETTINGS_KEYS.endpoint]: settings.endpoint,
-        [SEARCH_SETTINGS_KEYS.apiKey]: settings.apiKey,
-        [SEARCH_SETTINGS_KEYS.model]: settings.model,
-        [SEARCH_SETTINGS_KEYS.aiSearchEnabled]: settings.aiSearchEnabled,
-      },
-      () => {
-        if (extensionApi.runtime?.lastError) {
-          reject(new Error(extensionApi.runtime.lastError.message));
-          return;
-        }
-
-        resolve();
-      },
-    );
-  });
 
 const fillSettingsForm = (settings) => {
   if (searchApiEndpointInput instanceof HTMLInputElement) {
@@ -363,180 +250,157 @@ const setAiSearchFeedback = (setSearchStatus, message, tone = "neutral") => {
   }
 };
 
-export const resolveOriginPattern = (endpoint) => {
-  const parsed = new URL(endpoint);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("搜索接口地址只支持 http 或 https");
-  }
+const getAiStatePresentation = (runtimeState = {}) => {
+  const configState = typeof runtimeState.configState === "string" && runtimeState.configState
+    ? runtimeState.configState
+    : AI_CONFIG_STATES.UNCONFIGURED;
+  const copy = AI_STATE_COPY[configState] ?? AI_STATE_COPY[AI_CONFIG_STATES.UNCONFIGURED];
+  const detailMessage = configState === AI_CONFIG_STATES.DEGRADED
+    ? runtimeState.lastRuntimeErrorMessage
+    : runtimeState.lastTestMessage;
+  const detailTimestamp = configState === AI_CONFIG_STATES.DEGRADED
+    ? runtimeState.lastRuntimeErrorAt
+    : runtimeState.lastTestAt;
+  const normalizedDetailTimestamp = typeof detailTimestamp === "string" ? detailTimestamp.trim() : "";
+  const detailSuffix = normalizedDetailTimestamp ? ` 最近一次记录时间：${normalizedDetailTimestamp}` : "";
 
-  return `${parsed.protocol}//${parsed.host}/*`;
+  return {
+    configState,
+    label: copy.label,
+    message: typeof detailMessage === "string" && detailMessage.trim()
+      ? `${detailMessage.trim()}${detailSuffix}`
+      : copy.message,
+  };
 };
 
-export const resolveOriginPatternSafely = (endpoint, invalidMessage) => {
-  try {
-    return resolveOriginPattern(endpoint);
-  } catch {
-    throw new Error(invalidMessage);
+const renderAiConfigState = (runtimeState = {}, syncAiConfigState) => {
+  const presentation = getAiStatePresentation(runtimeState);
+
+  if (aiConfigStateCard instanceof HTMLElement) {
+    aiConfigStateCard.dataset.state = presentation.configState;
+  }
+
+  if (aiConfigStateLabel instanceof HTMLElement) {
+    aiConfigStateLabel.textContent = presentation.label;
+  }
+
+  if (aiConfigStateMessage instanceof HTMLElement) {
+    aiConfigStateMessage.textContent = presentation.message;
+  }
+
+  if (typeof syncAiConfigState === "function") {
+    syncAiConfigState(presentation.configState, runtimeState);
   }
 };
 
-const fetchWithTimeout = async (url, options, timeoutMessage) => {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), SETTINGS_REQUEST_TIMEOUT);
+const isAiConfigUsable = (runtimeState = {}) => AI_USABLE_STATES.has(runtimeState.configState);
+
+const syncHomepageAiAvailability = (settings, runtimeState, syncAiSearchEnabled, syncAiConfigState) => {
+  renderAiConfigState(runtimeState, syncAiConfigState);
+
+  if (typeof syncAiSearchEnabled === "function") {
+    syncAiSearchEnabled(Boolean(settings.aiSearchEnabled) && isAiConfigUsable(runtimeState));
+  }
+};
+
+const readStoredSettingsSnapshot = async () => {
+  const [settings, runtimeState] = await Promise.all([
+    getStoredSearchSettings(),
+    getStoredAiConfigState(),
+  ]);
+
+  return { settings, runtimeState };
+};
+
+const persistRuntimeStateAfterSave = async () => saveStoredAiConfigState({
+  protocol: "",
+  configState: "",
+  lastTestStatus: "",
+  lastTestMessage: "",
+  lastTestAt: "",
+  lastRuntimeErrorMessage: "",
+  lastRuntimeErrorAt: "",
+});
+
+const persistRuntimeTestResult = async ({
+  protocolType,
+  status,
+  message,
+}) => saveStoredAiConfigState({
+  protocol: protocolType,
+  configState: "",
+  lastTestStatus: status,
+  lastTestMessage: message,
+  lastTestAt: new Date().toISOString(),
+  lastRuntimeErrorMessage: "",
+  lastRuntimeErrorAt: "",
+});
+
+const resolveSavedAiSettings = async () => {
+  const { settings, runtimeState } = await readStoredSettingsSnapshot();
+
+  if (hasUnsavedAiConfigDraft(settings)) {
+    throw new Error("当前有未保存的接口配置，请先保存设置，再测试连接。", { cause: runtimeState });
+  }
+
+  return { settings, runtimeState };
+};
+
+const requireValidEndpointDraft = (endpoint) => {
+  if (!endpoint) {
+    return;
+  }
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    resolveOriginPattern(endpoint);
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error(timeoutMessage);
-    }
-
-    throw error;
-  } finally {
-    window.clearTimeout(timeoutId);
+    throw new Error(error instanceof Error ? error.message : "搜索接口地址不正确");
   }
 };
 
-const hasOriginPermission = (originPattern) =>
-  new Promise((resolve, reject) => {
-    if (!extensionApi?.permissions?.contains) {
-      resolve(false);
-      return;
-    }
-
-    extensionApi.permissions.contains({ origins: [originPattern] }, (granted) => {
-      if (extensionApi.runtime?.lastError) {
-        reject(new Error(extensionApi.runtime.lastError.message));
-        return;
-      }
-
-      resolve(Boolean(granted));
+const runAiConnectionTest = async (settings) => {
+  const testRequest = buildAiTestRequest(settings);
+  if (!testRequest.ok) {
+    throw Object.assign(new Error(testRequest.message), {
+      aiProtocolType: testRequest.protocolType,
     });
-  });
-
-const requestOriginPermission = (originPattern) =>
-  new Promise((resolve, reject) => {
-    if (!extensionApi?.permissions?.request) {
-      resolve(true);
-      return;
-    }
-
-    extensionApi.permissions.request({ origins: [originPattern] }, (granted) => {
-      if (extensionApi.runtime?.lastError) {
-        reject(new Error(extensionApi.runtime.lastError.message));
-        return;
-      }
-
-      resolve(granted);
-    });
-  });
-
-export const ensureOriginPermission = async (originPattern, deniedMessage) => {
-  if (!extensionApi?.permissions?.request) {
-    return;
   }
 
-  const alreadyGranted = await hasOriginPermission(originPattern);
-  if (alreadyGranted) {
-    return;
-  }
+  const originPattern = resolveOriginPatternSafely(testRequest.endpoint, "搜索接口地址无效，请重新填写。");
+  await ensureOriginPermission(originPattern, "未授予该搜索接口域名权限，无法测试连接。");
 
-  const granted = await requestOriginPermission(originPattern);
-  if (!granted) {
-    throw new Error(deniedMessage);
-  }
-};
-
-const normalizeResponseError = (status, rawText) => {
-  const payload = parseJsonSafely(rawText);
-  const errorMessage = payload && typeof payload === "object"
-    ? payload.error?.message ?? payload.message ?? ""
-    : "";
-  const preview = (errorMessage || rawText || "").trim();
-
-  if (status >= 500 && looksLikeHtmlDocument(preview)) {
-    return `搜索接口上游暂时不可用（${status}）：${looksLikeGatewayErrorPage(preview) ? "网关返回了错误页面" : "服务端返回了 HTML 错误页"}`;
-  }
-
-  if (looksLikeHtmlDocument(preview)) {
-    return "搜索接口返回了 HTML 页面，请确认填写的是 API 接口地址，而不是站点首页或后台页面。";
-  }
-
-  if (status === 403 && /1010/.test(preview)) {
-    return "搜索接口被服务端拦截（403 / error code: 1010），请检查该域名是否禁止扩展或脚本请求。";
-  }
-
-  if (TEMPORARY_FAILURE_STATUSES.has(status) || /\b429\b/.test(preview) || /upstream_error/i.test(preview)) {
-    return `搜索接口上游暂时不可用（${status}）：${preview.slice(0, 200) || "请稍后重试"}`;
-  }
-
-  if (preview) {
-    return `搜索接口请求失败（${status}）：${preview.slice(0, 200)}`;
-  }
-
-  return `搜索接口请求失败（${status}）`;
-};
-
-const validateAiEndpoint = async ({ endpoint, apiKey, model }) => {
-  if (!isChatCompletionsEndpoint(endpoint)) {
-    return;
-  }
-
-  const chatEndpoint = resolveChatCompletionsEndpoint(endpoint);
-
-  const headers = {
-    "Content-Type": "application/json",
-    Accept: "*/*",
-    "X-Title": "Moon Tab",
-  };
-
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  const requestBody = {
-    model,
-    messages: [
-      { role: "user", content: buildDecisionUserPrompt("validation check") },
-    ],
-    temperature: 0,
-    stream: false,
-  };
-
-  const response = await fetchWithTimeout(chatEndpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(requestBody),
-  }, "搜索接口校验超时，请稍后重试。");
+  const response = await fetchWithTimeout(
+    testRequest.endpoint,
+    {
+      method: "POST",
+      headers: testRequest.headers,
+      body: JSON.stringify(testRequest.body),
+    },
+    "测试连接超时，请稍后重试。",
+    SETTINGS_REQUEST_TIMEOUT,
+  );
   const rawText = await response.text();
 
-  if (response.ok) {
-    if (!rawText.trim()) {
-      throw new Error("搜索接口返回为空，无法启用 AI 搜索增强。");
-    }
-
-    if (looksLikeHtmlDocument(rawText)) {
-      throw new Error("搜索接口返回了 HTML 页面，请确认填写的是 API 接口地址，而不是站点首页或后台页面。");
-    }
-
-    const validationText = resolveValidationText(rawText);
-    if (hasUsableDecisionPayload(validationText)) {
-      return { temporaryWarning: "" };
-    }
-
-    if (AI_REFUSAL_PATTERN.test(validationText) || !isLikelySearchQueryText(validationText)) {
-      throw new Error("搜索接口返回了说明性文本，未形成可用的搜索决策。请更换模型或稍后重试。");
-    }
-
-    return { temporaryWarning: "" };
+  if (!response.ok) {
+    const runtimeError = normalizeAiRuntimeError(response.status, rawText);
+    throw Object.assign(new Error(runtimeError.message), {
+      aiProtocolType: testRequest.protocolType,
+    });
   }
 
-  const normalizedMessage = normalizeResponseError(response.status, rawText);
-  if (TEMPORARY_FAILURE_STATUSES.has(response.status) || /\b429\b/.test(normalizedMessage) || /上游暂时不可用/.test(normalizedMessage)) {
-    return { temporaryWarning: normalizedMessage };
+  const parsedResponse = parseAiRuntimeResponse(testRequest.protocolType, rawText);
+  if (!parsedResponse.ok) {
+    throw Object.assign(new Error(parsedResponse.message), {
+      aiProtocolType: testRequest.protocolType,
+    });
   }
 
-  throw new Error(normalizedMessage);
+  return {
+    protocolType: testRequest.protocolType,
+    message: testRequest.protocolType === AI_PROTOCOL_TYPES.RESPONSES
+      ? "连接正常：responses 接口可用。"
+      : "连接正常：chat/completions 接口可用。",
+  };
 };
 
 const resolveModelsEndpoint = (endpoint) => {
@@ -591,7 +455,7 @@ const fetchAvailableModels = async () => {
     const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
     headers.Accept = "*/*";
     headers["X-Title"] = "Moon Tab";
-    const response = await fetchWithTimeout(modelsEndpoint, { headers }, "模型列表请求超时，请稍后重试。");
+    const response = await fetchWithTimeout(modelsEndpoint, { headers }, "模型列表请求超时，请稍后重试。", SETTINGS_REQUEST_TIMEOUT);
     const rawText = await response.text();
     if (!response.ok) {
       throw new Error(rawText || `模型列表请求失败（${response.status}）`);
@@ -684,13 +548,14 @@ const setSettingsPopupOpen = (open) => {
   }
 };
 
-const openSettingsPopup = async () => {
+const openSettingsPopup = async (syncAiSearchEnabled, syncAiConfigState) => {
   setSettingsStatus("", "neutral");
 
   try {
-    const settings = await getStoredSearchSettings();
+    const { settings, runtimeState } = await readStoredSettingsSnapshot();
     fillSettingsForm(settings);
     syncHomepageAiToggle(settings);
+    syncHomepageAiAvailability(settings, runtimeState, syncAiSearchEnabled, syncAiConfigState);
   } catch (error) {
     setSettingsStatus(error instanceof Error ? error.message : "读取设置失败", "error");
   }
@@ -702,22 +567,33 @@ const closeSettingsPopup = () => {
   setSettingsPopupOpen(false);
 };
 
-const hydrateHomepageSettings = async (syncAiSearchEnabled) => {
+const hydrateHomepageSettings = async (syncAiSearchEnabled, syncAiConfigState, setSearchStatus) => {
   try {
-    const settings = await getStoredSearchSettings();
+    const { settings, runtimeState } = await readStoredSettingsSnapshot();
     fillSettingsForm(settings);
     syncHomepageAiToggle(settings);
+    syncHomepageAiAvailability(settings, runtimeState, syncAiSearchEnabled, syncAiConfigState);
+  } catch (error) {
+    renderAiConfigState({ configState: AI_CONFIG_STATES.UNCONFIGURED, lastTestMessage: "读取 AI 配置失败，请重新打开设置重试。" }, syncAiConfigState);
     if (typeof syncAiSearchEnabled === "function") {
-      syncAiSearchEnabled(settings.aiSearchEnabled);
+      syncAiSearchEnabled(false);
     }
-  } catch {
+    if (typeof setSearchStatus === "function") {
+      setSearchStatus(error instanceof Error ? error.message : "读取 AI 配置失败", "error");
+    }
+    setSettingsStatus(error instanceof Error ? error.message : "读取 AI 配置失败", "error");
   }
 };
 
-export const initializeSettingsUi = ({ setSearchStatus, syncAiSearchEnabled, syncAiSearchActivating }) => {
+export const initializeSettingsUi = ({
+  setSearchStatus,
+  syncAiSearchEnabled,
+  syncAiSearchActivating,
+  syncAiConfigState,
+}) => {
   if (openSettingsButton instanceof HTMLButtonElement) {
     openSettingsButton.addEventListener("click", () => {
-      openSettingsPopup();
+      void openSettingsPopup(syncAiSearchEnabled, syncAiConfigState);
     });
   }
 
@@ -735,7 +611,7 @@ export const initializeSettingsUi = ({ setSearchStatus, syncAiSearchEnabled, syn
 
   if (fetchModelsButton instanceof HTMLButtonElement) {
     fetchModelsButton.addEventListener("click", () => {
-      fetchAvailableModels();
+      void fetchAvailableModels();
     });
   }
 
@@ -760,19 +636,11 @@ export const initializeSettingsUi = ({ setSearchStatus, syncAiSearchEnabled, syn
       const apiKey = searchApiKeyInput.value.trim();
       const model = searchApiModelInput.value.trim();
 
-      if (endpoint) {
-        try {
-          resolveOriginPattern(endpoint);
-        } catch (error) {
-          setSettingsStatus(error instanceof Error ? error.message : "搜索接口地址不正确", "error");
-          searchApiEndpointInput.focus();
-          return;
-        }
-      }
-
-      if (isChatCompletionsEndpoint(endpoint) && !model) {
-        setSettingsStatus("chat/completions 接口需要填写模型名称。", "error");
-        searchApiModelInput.focus();
+      try {
+        requireValidEndpointDraft(endpoint);
+      } catch (error) {
+        setSettingsStatus(error instanceof Error ? error.message : "搜索接口地址不正确", "error");
+        searchApiEndpointInput.focus();
         return;
       }
 
@@ -786,19 +654,55 @@ export const initializeSettingsUi = ({ setSearchStatus, syncAiSearchEnabled, syn
           model,
           aiSearchEnabled: aiSearchEnabledInput instanceof HTMLInputElement ? aiSearchEnabledInput.checked : false,
         });
-        if (typeof syncAiSearchEnabled === "function" && aiSearchEnabledInput instanceof HTMLInputElement) {
-          syncAiSearchEnabled(aiSearchEnabledInput.checked);
-        }
-
-        const willValidateLazily = Boolean(endpoint);
+        const runtimeState = await persistRuntimeStateAfterSave();
+        const settings = await getStoredSearchSettings();
+        syncHomepageAiToggle(settings);
+        syncHomepageAiAvailability(settings, runtimeState, syncAiSearchEnabled, syncAiConfigState);
         setSettingsStatus(
-          willValidateLazily ? "设置已保存。联网校验会在启用或使用 AI 搜索时进行。" : "设置已保存。",
+          runtimeState.configState === AI_CONFIG_STATES.CONFIGURED
+            ? "设置已保存。请点击“测试连接”验证接口可用性。"
+            : "设置已保存。请补全接口地址、API Key 和模型。",
           "neutral",
         );
       } catch (error) {
         setSettingsStatus(error instanceof Error ? error.message : "保存设置失败", "error");
       } finally {
         setSettingsSaving(false);
+      }
+    });
+  }
+
+  if (testSearchApiConnectionButton instanceof HTMLButtonElement) {
+    testSearchApiConnectionButton.addEventListener("click", async () => {
+      setSettingsTesting(true);
+      setSettingsStatus("正在测试连接…", "neutral");
+
+      try {
+        const { settings } = await resolveSavedAiSettings();
+        const testResult = await runAiConnectionTest(settings);
+        const runtimeState = await persistRuntimeTestResult({
+          protocolType: testResult.protocolType,
+          status: "passed",
+          message: testResult.message,
+        });
+        const refreshedSettings = await getStoredSearchSettings();
+        syncHomepageAiAvailability(refreshedSettings, runtimeState, syncAiSearchEnabled, syncAiConfigState);
+        setSettingsStatus(testResult.message, "success");
+      } catch (error) {
+        const protocolType = error && typeof error === "object" && "aiProtocolType" in error
+          ? error.aiProtocolType
+          : "";
+        const failureMessage = error instanceof Error ? error.message : "测试连接失败";
+        const runtimeState = await persistRuntimeTestResult({
+          protocolType,
+          status: "failed",
+          message: failureMessage,
+        });
+        const refreshedSettings = await getStoredSearchSettings();
+        syncHomepageAiAvailability(refreshedSettings, runtimeState, syncAiSearchEnabled, syncAiConfigState);
+        setSettingsStatus(failureMessage, "error");
+      } finally {
+        setSettingsTesting(false);
       }
     });
   }
@@ -813,65 +717,42 @@ export const initializeSettingsUi = ({ setSearchStatus, syncAiSearchEnabled, syn
       }
 
       try {
-        const currentSettings = await getStoredSearchSettings();
+        const { settings: currentSettings, runtimeState } = await readStoredSettingsSnapshot();
         if (aiSearchEnabledInput.checked && hasUnsavedAiConfigDraft(currentSettings)) {
-          setAiSearchFeedback(setSearchStatus, "当前有未保存的接口配置，请先保存设置，再开启 AI 搜索增强。", "error");
-          aiSearchEnabledInput.checked = false;
-          if (typeof syncAiSearchEnabled === "function") {
-            syncAiSearchEnabled(false);
-          }
-          return;
+          throw new Error("当前有未保存的接口配置，请先保存设置，再开启 AI 搜索增强。");
         }
 
-        if (aiSearchEnabledInput.checked && !currentSettings.endpoint) {
-          setAiSearchFeedback(setSearchStatus, "请先在设置里填写搜索接口地址，再开启 AI 搜索增强。", "error");
-          aiSearchEnabledInput.checked = false;
-          if (typeof syncAiSearchEnabled === "function") {
-            syncAiSearchEnabled(false);
-          }
-          return;
+        if (aiSearchEnabledInput.checked && !isAiConfigUsable(runtimeState)) {
+          throw new Error(
+            runtimeState.configState === AI_CONFIG_STATES.CONFIGURED
+              ? "请先点击“测试连接”，确认接口可用后再开启 AI 搜索增强。"
+              : runtimeState.configState === AI_CONFIG_STATES.INVALID
+                ? "当前接口测试未通过，请修正配置并重新测试后再开启 AI 搜索增强。"
+                : "请先完整配置并测试接口连接，再开启 AI 搜索增强。",
+          );
         }
 
-        if (aiSearchEnabledInput.checked && isChatCompletionsEndpoint(currentSettings.endpoint) && !currentSettings.model) {
-          setAiSearchFeedback(setSearchStatus, "chat/completions 接口需要先在设置里填写模型名称。", "error");
-          aiSearchEnabledInput.checked = false;
-          if (typeof syncAiSearchEnabled === "function") {
-            syncAiSearchEnabled(false);
-          }
-          return;
-        }
-
-        let validationResult = null;
-        if (aiSearchEnabledInput.checked) {
-          const originPattern = resolveOriginPatternSafely(currentSettings.endpoint, "搜索接口地址无效，请重新在设置里填写。");
-          await ensureOriginPermission(originPattern, "未授予该搜索接口域名权限，无法启用 AI 搜索增强。");
-          validationResult = await validateAiEndpoint({
-            endpoint: currentSettings.endpoint,
-            apiKey: currentSettings.apiKey,
-            model: currentSettings.model,
-          });
-        }
-
-        await saveStoredSearchSettings({
+        const nextSettings = {
           endpoint: currentSettings.endpoint,
           apiKey: currentSettings.apiKey,
           model: currentSettings.model,
           aiSearchEnabled: aiSearchEnabledInput.checked,
-        });
-        if (typeof syncAiSearchEnabled === "function") {
-          syncAiSearchEnabled(aiSearchEnabledInput.checked);
-        }
-
-        if (validationResult?.temporaryWarning) {
-          setAiSearchFeedback(setSearchStatus, `AI 搜索增强已开启，但 ${validationResult.temporaryWarning}`, "neutral");
-        } else {
-          setAiSearchFeedback(setSearchStatus, "", "neutral");
-        }
+        };
+        await saveStoredSearchSettings(nextSettings);
+        syncHomepageAiAvailability(nextSettings, runtimeState, syncAiSearchEnabled, syncAiConfigState);
+        setAiSearchFeedback(setSearchStatus, "", "neutral");
       } catch (error) {
         setAiSearchFeedback(setSearchStatus, error instanceof Error ? error.message : "保存 AI 开关失败", "error");
         aiSearchEnabledInput.checked = !aiSearchEnabledInput.checked;
-        if (typeof syncAiSearchEnabled === "function") {
-          syncAiSearchEnabled(aiSearchEnabledInput.checked);
+        try {
+          const { settings: revertedSettings, runtimeState: revertedRuntimeState } = await readStoredSettingsSnapshot();
+          syncHomepageAiAvailability(revertedSettings, revertedRuntimeState, syncAiSearchEnabled, syncAiConfigState);
+        } catch (revertError) {
+          renderAiConfigState({ configState: AI_CONFIG_STATES.UNCONFIGURED, lastTestMessage: "恢复 AI 配置状态失败，请重新打开设置重试。" }, syncAiConfigState);
+          if (typeof syncAiSearchEnabled === "function") {
+            syncAiSearchEnabled(false);
+          }
+          setSettingsStatus(revertError instanceof Error ? revertError.message : "恢复 AI 配置状态失败", "error");
         }
       } finally {
         if (activationStarted && typeof syncAiSearchActivating === "function") {
@@ -881,7 +762,7 @@ export const initializeSettingsUi = ({ setSearchStatus, syncAiSearchEnabled, syn
     });
   }
 
-  hydrateHomepageSettings(syncAiSearchEnabled);
+  void hydrateHomepageSettings(syncAiSearchEnabled, syncAiConfigState, setSearchStatus);
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && document.body.classList.contains("is-settings-open")) {

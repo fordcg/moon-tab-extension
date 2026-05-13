@@ -1,3 +1,5 @@
+import "./sidebar-bridge.js";
+
 const TARGET_URL = chrome.runtime.getURL("src/pages/newtab/index.html");
 
 function getTabUrl(tab, changeInfo = {}) {
