@@ -29,8 +29,15 @@ const createRegistryIndex = (registryItems = []) => {
 
   const knownIds = new Set(items.map((item) => item.id));
   const coreIds = items.filter((item) => item.core).map((item) => item.id);
+  const defaultVisibleIds = items.filter((item) => item.defaultVisible).map((item) => item.id);
+  const registryOrderIds = items.map((item) => item.id);
 
-  return { knownIds, coreIds };
+  return {
+    knownIds,
+    coreIds,
+    defaultVisibleIds,
+    registryOrderIds,
+  };
 };
 
 const dedupeKnownIds = (value, knownIds) => {
@@ -53,36 +60,39 @@ const dedupeKnownIds = (value, knownIds) => {
   return normalizedIds;
 };
 
-const getCoreIdsInDefaultOrder = (coreIds) => {
-  const coreIdSet = new Set(coreIds);
-  const orderedCoreIds = DEFAULT_WIDGET_ORDER.filter((itemId) => coreIdSet.has(itemId));
+const orderIdsByPreference = (itemIds, registryOrderIds) => {
+  const candidateIds = new Set(itemIds);
+  const orderedIds = [];
 
-  for (const itemId of coreIds) {
-    if (!orderedCoreIds.includes(itemId)) {
-      orderedCoreIds.push(itemId);
+  for (const itemId of DEFAULT_WIDGET_ORDER) {
+    if (candidateIds.has(itemId) && !orderedIds.includes(itemId)) {
+      orderedIds.push(itemId);
     }
   }
 
-  return orderedCoreIds;
+  for (const itemId of registryOrderIds) {
+    if (candidateIds.has(itemId) && !orderedIds.includes(itemId)) {
+      orderedIds.push(itemId);
+    }
+  }
+
+  for (const itemId of itemIds) {
+    if (!orderedIds.includes(itemId)) {
+      orderedIds.push(itemId);
+    }
+  }
+
+  return orderedIds;
 };
 
 const loadStoredLayout = async () => {
   const storageArea = getStorageArea();
-  if (storageArea?.get) {
-    const result = await storageArea.get(WIDGET_LAYOUT_STORAGE_KEY);
-    return result?.[WIDGET_LAYOUT_STORAGE_KEY] ?? null;
+  if (!storageArea?.get) {
+    throw new Error("Widget layout storage is unavailable.");
   }
 
-  if (typeof localStorage === "undefined") {
-    return null;
-  }
-
-  const rawValue = localStorage.getItem(WIDGET_LAYOUT_STORAGE_KEY);
-  if (!rawValue) {
-    return null;
-  }
-
-  return JSON.parse(rawValue);
+  const result = await storageArea.get(WIDGET_LAYOUT_STORAGE_KEY);
+  return result?.[WIDGET_LAYOUT_STORAGE_KEY] ?? null;
 };
 
 export const createDefaultWidgetLayout = () => ({
@@ -93,26 +103,40 @@ export const createDefaultWidgetLayout = () => ({
 });
 
 export const normalizeWidgetLayout = ({ layout, registryItems }) => {
-  const { knownIds, coreIds } = createRegistryIndex(registryItems);
+  const {
+    knownIds,
+    coreIds,
+    defaultVisibleIds,
+    registryOrderIds,
+  } = createRegistryIndex(registryItems);
   const fallbackLayout = createDefaultWidgetLayout();
   const sourceLayout = isPlainObject(layout) ? layout : fallbackLayout;
 
-  const orderedWidgetIds = dedupeKnownIds(sourceLayout.orderedWidgetIds, knownIds);
-  const hiddenWidgetIds = dedupeKnownIds(sourceLayout.hiddenWidgetIds, knownIds);
+  const storedHiddenWidgetIds = dedupeKnownIds(sourceLayout.hiddenWidgetIds, knownIds).filter(
+    (itemId) => !coreIds.includes(itemId),
+  );
+  const hiddenWidgetIdSet = new Set(storedHiddenWidgetIds);
+  const orderedWidgetIds = dedupeKnownIds(sourceLayout.orderedWidgetIds, knownIds).filter(
+    (itemId) => !hiddenWidgetIdSet.has(itemId),
+  );
   const orderedWidgetIdSet = new Set(orderedWidgetIds);
 
-  const orderedCoreIds = getCoreIdsInDefaultOrder(coreIds);
-  for (const coreId of orderedCoreIds) {
-    if (orderedWidgetIdSet.has(coreId)) {
+  const guaranteedVisibleIds = orderIdsByPreference(
+    [...coreIds, ...defaultVisibleIds.filter((itemId) => !hiddenWidgetIdSet.has(itemId))],
+    registryOrderIds,
+  );
+
+  for (const itemId of guaranteedVisibleIds) {
+    if (orderedWidgetIdSet.has(itemId)) {
       continue;
     }
 
-    orderedWidgetIds.push(coreId);
-    orderedWidgetIdSet.add(coreId);
+    orderedWidgetIds.push(itemId);
+    orderedWidgetIdSet.add(itemId);
   }
 
-  const normalizedHiddenWidgetIds = hiddenWidgetIds.filter(
-    (itemId) => !orderedWidgetIdSet.has(itemId) && !coreIds.includes(itemId),
+  const normalizedHiddenWidgetIds = storedHiddenWidgetIds.filter(
+    (itemId) => !orderedWidgetIdSet.has(itemId),
   );
 
   const sourceWidgetPrefs = isPlainObject(sourceLayout.widgetPrefs) ? sourceLayout.widgetPrefs : {};
@@ -135,24 +159,16 @@ export const normalizeWidgetLayout = ({ layout, registryItems }) => {
 };
 
 export const loadWidgetLayout = async ({ registryItems }) => {
-  try {
-    const layout = await loadStoredLayout();
-    return normalizeWidgetLayout({ layout, registryItems });
-  } catch (error) {
-    return normalizeWidgetLayout({ layout: createDefaultWidgetLayout(), registryItems });
-  }
+  const layout = await loadStoredLayout();
+  return normalizeWidgetLayout({ layout, registryItems });
 };
 
 export const saveWidgetLayout = async (layout) => {
   const storageArea = getStorageArea();
-  if (storageArea?.set) {
-    await storageArea.set({ [WIDGET_LAYOUT_STORAGE_KEY]: layout });
-    return layout;
+  if (!storageArea?.set) {
+    throw new Error("Widget layout storage is unavailable.");
   }
 
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(WIDGET_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
-  }
-
+  await storageArea.set({ [WIDGET_LAYOUT_STORAGE_KEY]: layout });
   return layout;
 };
