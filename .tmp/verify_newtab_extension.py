@@ -47,6 +47,23 @@ def open_extension_page(page: Page, extension_url: str) -> None:
     wait_for_extension_ready(page)
 
 
+def wait_for_search_action_group_ready(page: Page) -> None:
+    page.wait_for_selector("#search-input", timeout=15000)
+    page.wait_for_selector("#ai-toggle-btn", timeout=15000)
+    page.wait_for_selector("#open-ai-sidebar", timeout=15000)
+    page.wait_for_selector("#open-settings", timeout=15000)
+    page.wait_for_function(
+        """() => {
+            const input = document.querySelector('#search-input');
+            const primary = document.querySelector('#ai-toggle-btn');
+            const sidebar = document.querySelector('#open-ai-sidebar');
+            const settings = document.querySelector('#open-settings');
+            return Boolean(input && !input.disabled && primary && sidebar && settings);
+        }""",
+        timeout=15000,
+    )
+
+
 def wait_for_redirect_or_extension_ready(page: Page, timeout: int = 15000) -> None:
     try:
         page.wait_for_url("chrome-extension://**", timeout=timeout)
@@ -92,6 +109,72 @@ def read_search_target_controls(page: Page) -> tuple[str, bool, bool, bool, bool
         target_trigger_present,
         target_menu_present,
         suggestions_shell_present,
+    )
+
+
+def read_search_action_group(page: Page) -> dict:
+    action_group = page.evaluate(
+        """() => {
+            const group = document.querySelector('.search-shell-actions.ui-toolbar-group');
+            const primary = group?.querySelector('#ai-toggle-btn') ?? null;
+            const sidebar = group?.querySelector('#open-ai-sidebar') ?? null;
+            const settings = group?.querySelector('#open-settings') ?? null;
+            const readVisibleText = (element) => {
+                if (!(element instanceof HTMLElement)) {
+                    return '';
+                }
+
+                const visibleParts = Array.from(element.querySelectorAll('*'))
+                    .filter((node) => {
+                        if (!(node instanceof HTMLElement)) {
+                            return false;
+                        }
+
+                        const styles = getComputedStyle(node);
+                        return !node.hidden && !node.classList.contains('visually-hidden') && styles.display !== 'none' && styles.visibility !== 'hidden';
+                    })
+                    .map((node) => node.innerText.replace(/\\s+/g, ' ').trim())
+                    .filter(Boolean);
+
+                return visibleParts.join(' ').trim();
+            };
+
+            return {
+                group_present: Boolean(group),
+                primary_text: primary?.innerText?.replace(/\\s+/g, ' ').trim() ?? '',
+                sidebar_text: readVisibleText(sidebar),
+                settings_present: Boolean(settings),
+                primary_classes: primary ? Array.from(primary.classList) : [],
+            };
+        }"""
+    )
+    return action_group if isinstance(action_group, dict) else {}
+
+
+def read_widget_runtime_state(page: Page) -> dict:
+    state = page.evaluate(
+        """() => {
+            const widgetRoot = document.querySelector('#widget-root');
+            const addButton = document.querySelector('#open-widget-panel');
+            const panel = document.querySelector('#widget-panel');
+            const cards = Array.from(document.querySelectorAll('[data-widget-id]'));
+            return {
+                widget_root_present: Boolean(widgetRoot),
+                add_button_present: Boolean(addButton),
+                panel_present: Boolean(panel),
+                visible_widget_ids: cards.map((card) => card.getAttribute('data-widget-id')).filter(Boolean),
+            };
+        }"""
+    )
+    return state if isinstance(state, dict) else {}
+
+
+def seed_widget_layout(page: Page, layout: dict) -> None:
+    page.evaluate(
+        """(nextLayout) => new Promise((resolve) => {
+            chrome.storage.local.set({ newtabWidgetLayout: nextLayout }, resolve);
+        })""",
+        layout,
     )
 
 
@@ -398,7 +481,6 @@ def read_search_outline_alignment_state(page: Page) -> dict:
     return alignment_state if isinstance(alignment_state, dict) else {}
 
 
-
 def assert_required_checks(result: dict) -> None:
     required_checks = [
         ("redirect_ok", result["redirect_ok"] or result["extension_page_open_ok"]),
@@ -417,8 +499,12 @@ def assert_required_checks(result: dict) -> None:
         ("search_outline_width_aligned", result["search_outline_alignment"].get("widthAligned")),
         ("search_outline_height_aligned", result["search_outline_alignment"].get("heightAligned")),
         ("search_outline_radius_aligned", result["search_outline_alignment"].get("radiusAligned")),
+        ("widget_root_present", result["widget_runtime"].get("widget_root_present")),
+        ("widget_add_button_present", result["widget_runtime"].get("add_button_present")),
+        ("widget_search_visible", "search" in result["widget_runtime"].get("visible_widget_ids", [])),
         ("settings_opened", result["settings_opened"]),
         ("settings_closed", result["settings_closed"]),
+        ("widget_hide_restore_ok", result["widget_hide_restore_ok"]),
         ("default_search_ok", result["default_search_ok"]),
         ("current_search_target", result["current_search_target"] == "Bing"),
         ("target_trigger_present", result["target_trigger_present"]),
@@ -475,6 +561,9 @@ def main() -> None:
         "settings_opened": False,
         "settings_closed": False,
         "default_search_ok": False,
+        "search_action_group": {},
+        "widget_runtime": {},
+        "widget_hide_restore_ok": False,
         "current_search_target": "",
         "target_trigger_present": False,
         "target_menu_present": False,
@@ -574,10 +663,26 @@ def main() -> None:
                 result["redirect_ok"] = page.url.startswith(f"chrome-extension://{result['extension_id']}/")
 
                 if not result["redirect_ok"]:
-                    open_extension_page(page, expected_extension_url)
+                    page.goto(expected_extension_url, wait_until="domcontentloaded")
+                    page.wait_for_load_state("networkidle")
                 else:
                     page.wait_for_load_state("networkidle")
-                    wait_for_extension_ready(page)
+
+                wait_for_search_action_group_ready(page)
+
+                result["search_action_group"] = read_search_action_group(page)
+                assert result["search_action_group"]["group_present"], "expected .ui-toolbar-group around search actions"
+                assert "AI增强搜索" in result["search_action_group"]["primary_text"], "expected primary button text to be AI增强搜索"
+                assert result["search_action_group"]["sidebar_text"] == "侧栏", "expected sidebar button copy to stay 侧栏"
+                assert result["search_action_group"]["settings_present"], "expected settings button in search action group"
+                assert "ui-btn-primary" in result["search_action_group"]["primary_classes"], "expected primary button class"
+                widget_runtime = read_widget_runtime_state(page)
+                result["widget_runtime"] = widget_runtime
+                assert widget_runtime["widget_root_present"], "expected #widget-root mount"
+                assert widget_runtime["add_button_present"], "expected add-widget trigger"
+                assert "search" in widget_runtime["visible_widget_ids"], "expected search core widget to be rendered"
+
+                wait_for_extension_ready(page)
 
                 result["direct_page_url"] = page.url
                 result["extension_page_open_ok"] = page.url.startswith(expected_extension_url)
@@ -606,13 +711,24 @@ def main() -> None:
                 page.wait_for_load_state("networkidle")
                 page.screenshot(path=str(SCREENSHOT_AFTER_HOVER_PATH), full_page=True)
                 page.screenshot(path=str(SCREENSHOT_PATH), full_page=True)
-
                 page.locator("#open-settings").click()
                 page.wait_for_selector("body.is-settings-open", timeout=10000)
                 result["settings_opened"] = True
                 page.locator("#close-settings").click()
                 page.wait_for_selector("#settings-popup[aria-hidden='true']", timeout=10000)
                 result["settings_closed"] = True
+                page.locator("[data-widget-id='quicksites'] [data-widget-action='hide']").click()
+                page.wait_for_function(
+                    "() => !document.querySelector(\"[data-widget-id='quicksites']\")",
+                    timeout=10000,
+                )
+                page.locator("#open-widget-panel").click()
+                page.locator("[data-widget-panel-action='restore'][data-widget-id='quicksites']").click()
+                page.wait_for_function(
+                    "() => Boolean(document.querySelector(\"[data-widget-id='quicksites']\"))",
+                    timeout=10000,
+                )
+                result["widget_hide_restore_ok"] = True
 
                 result["console_before_search"] = list(result["console"])
                 result["page_errors_before_search"] = list(result["page_errors"])
