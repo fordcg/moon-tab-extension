@@ -41,6 +41,20 @@ def wait_for_extension_ready(page: Page) -> None:
         timeout=15000,
     )
 
+
+def wait_for_widget_runtime_ready(page: Page, timeout: int = 10000) -> None:
+    try:
+        page.wait_for_function(
+            """() => Boolean(
+                document.querySelector('#widget-root')
+                && document.querySelector('#open-widget-panel')
+            )""",
+            timeout=timeout,
+        )
+    except TimeoutError:
+        pass
+
+
 def open_extension_page(page: Page, extension_url: str) -> None:
     page.goto(extension_url, wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
@@ -99,7 +113,9 @@ def read_widget_runtime_state(page: Page) -> dict:
             const widgetRoot = document.querySelector('#widget-root');
             const addButton = document.querySelector('#open-widget-panel');
             const panel = document.querySelector('#widget-panel');
-            const cards = Array.from(document.querySelectorAll('[data-widget-id]'));
+            const cards = Array.from(
+                document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-id]')
+            );
             return {
                 widget_root_present: Boolean(widgetRoot),
                 add_button_present: Boolean(addButton),
@@ -608,6 +624,7 @@ def main() -> None:
                 else:
                     page.wait_for_load_state("networkidle")
                     wait_for_extension_ready(page)
+                wait_for_widget_runtime_ready(page)
                 widget_runtime = read_widget_runtime_state(page)
                 result["widget_runtime"] = widget_runtime
                 assert widget_runtime["widget_root_present"], "expected #widget-root mount"
@@ -649,15 +666,20 @@ def main() -> None:
                 page.locator("#close-settings").click()
                 page.wait_for_selector("#settings-popup[aria-hidden='true']", timeout=10000)
                 result["settings_closed"] = True
-                page.locator("[data-widget-id='quicksites'] [data-widget-action='hide']").click()
+                quicksites_widget_selector = "#widget-root .homepage-widget-card[data-widget-id='quicksites']"
+                quicksites_hide_selector = f"{quicksites_widget_selector} [data-widget-action='hide']"
+                assert page.locator(quicksites_widget_selector).count() > 0, (
+                    "expected quicksites widget card in #widget-root for hide/restore smoke scenario"
+                )
+                page.locator(quicksites_hide_selector).click()
                 page.wait_for_function(
-                    "() => !document.querySelector(\"[data-widget-id='quicksites']\")",
+                    "() => !document.querySelector(\"#widget-root .homepage-widget-card[data-widget-id='quicksites']\")",
                     timeout=10000,
                 )
                 page.locator("#open-widget-panel").click()
                 page.locator("[data-widget-panel-action='restore'][data-widget-id='quicksites']").click()
                 page.wait_for_function(
-                    "() => Boolean(document.querySelector(\"[data-widget-id='quicksites']\"))",
+                    "() => Boolean(document.querySelector(\"#widget-root .homepage-widget-card[data-widget-id='quicksites']\"))",
                     timeout=10000,
                 )
                 result["widget_hide_restore_ok"] = True
