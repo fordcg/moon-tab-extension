@@ -113,9 +113,21 @@ def read_widget_runtime_state(page: Page) -> dict:
             const widgetRoot = document.querySelector('#widget-root');
             const addButton = document.querySelector('#open-widget-panel');
             const panel = document.querySelector('#widget-panel');
+            const isRenderedVisible = (element) => {
+                if (!(element instanceof HTMLElement) || element.hidden) {
+                    return false;
+                }
+
+                const styles = getComputedStyle(element);
+                if (styles.display === 'none' || styles.visibility === 'hidden') {
+                    return false;
+                }
+
+                return element.offsetParent !== null || element.getClientRects().length > 0;
+            };
             const cards = Array.from(
                 document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-id]')
-            );
+            ).filter((card) => isRenderedVisible(card));
             return {
                 widget_root_present: Boolean(widgetRoot),
                 add_button_present: Boolean(addButton),
