@@ -7,19 +7,29 @@
     <title>月标签</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23eef4f3'/%3E%3Ccircle cx='34' cy='30' r='16' fill='%2335bfab'/%3E%3Ccircle cx='41' cy='25' r='16' fill='%23eef4f3'/%3E%3Ccircle cx='21' cy='19' r='3' fill='%231fc9e7'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23fff7ea'/%3E%3Cpath d='M18 20c0-5 4-9 9-9h10c5 0 9 4 9 9v18c0 8-6 14-14 14s-14-6-14-14V20Z' fill='%23ffc57f'/%3E%3Cpath d='M20 16l7 6H17l3-6Zm27 0 3 6H40l7-6Z' fill='%23ffac82'/%3E%3Ccircle cx='27' cy='31' r='2.2' fill='%2363482b'/%3E%3Ccircle cx='37' cy='31' r='2.2' fill='%2363482b'/%3E%3Cpath d='M29 38c1.4 1.8 4.6 1.8 6 0' stroke='%23e98788' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="./styles/index.css" />
   </head>
   <body>
     <main class="homepage-shell">
       <section class="homepage-hero" aria-label="新标签页搜索">
-        <div id="homepage-bubble-layer" class="homepage-bubble-layer" aria-hidden="true"></div>
+        <div id="homepage-bubble-layer" class="homepage-paper-glow" aria-hidden="true"></div>
 
         <div class="settings-modal-host">
           <div id="settings-backdrop" class="settings-backdrop" aria-hidden="true"></div>
 
-          <section id="settings-popup" class="settings-popup" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settings-title" aria-describedby="settings-description" tabindex="-1" inert>
+          <section
+            id="settings-popup"
+            class="settings-popup"
+            role="dialog"
+            aria-modal="true"
+            aria-hidden="true"
+            aria-labelledby="settings-title"
+            aria-describedby="settings-description"
+            tabindex="-1"
+            inert
+          >
             <div class="settings-popup-header">
               <div>
                 <p class="settings-popup-eyebrow">设置</p>
@@ -39,13 +49,13 @@
                 <section class="settings-section" aria-labelledby="settings-api-section-title">
                   <div class="settings-section-header">
                     <h3 id="settings-api-section-title" class="settings-section-title">搜索接口</h3>
-                    <p class="settings-section-description">接口地址、鉴权和模型将用于生成搜索预览。</p>
+                    <p class="settings-section-description">接口地址、鉴权和模型将用于生成 AI 增强搜索结果。</p>
                   </div>
 
                   <div class="settings-inline-switch">
                     <div class="settings-switch-copy">
                       <p class="settings-switch-title">启用 AI 搜索增强</p>
-                      <p class="settings-switch-description">开启后会先生成搜索预览，再执行搜索或打开站点。</p>
+                      <p class="settings-switch-description">开启后会先生成 AI 增强搜索方案，再执行搜索或打开站点。</p>
                     </div>
                     <label class="settings-switch-control" for="ai-search-enabled">
                       <input id="ai-search-enabled" class="settings-switch-input" type="checkbox" />
@@ -97,53 +107,98 @@
           </section>
         </div>
 
-        <section class="homepage-focus-shell" aria-label="主页搜索区域">
-          <div class="homepage-orbit-grid" aria-hidden="true">
-            <span class="homepage-orbit-line homepage-orbit-line-a"></span>
-            <span class="homepage-orbit-line homepage-orbit-line-b"></span>
-            <span class="homepage-orbit-dot homepage-orbit-dot-a"></span>
-            <span class="homepage-orbit-dot homepage-orbit-dot-b"></span>
-          </div>
+        <section class="homepage-focus-shell layout-newtab-hero" aria-label="主页搜索区域">
+          <header class="homepage-title-band" aria-label="主题标题">
+            <div class="homepage-pet-pair" aria-hidden="true">
+              <div class="homepage-pet homepage-pet-cat">
+                <span class="homepage-pet-ear homepage-pet-ear-left"></span>
+                <span class="homepage-pet-ear homepage-pet-ear-right"></span>
+                <span class="homepage-pet-eye homepage-pet-eye-left"></span>
+                <span class="homepage-pet-eye homepage-pet-eye-right"></span>
+                <span class="homepage-pet-mouth"></span>
+              </div>
+              <div class="homepage-pet homepage-pet-dog">
+                <span class="homepage-pet-ear homepage-pet-ear-left"></span>
+                <span class="homepage-pet-ear homepage-pet-ear-right"></span>
+                <span class="homepage-pet-eye homepage-pet-eye-left"></span>
+                <span class="homepage-pet-eye homepage-pet-eye-right"></span>
+                <span class="homepage-pet-mouth"></span>
+              </div>
+            </div>
 
-          <div class="homepage-content-grid">
-            <div class="homepage-search-stack">
-              <form id="search-form" class="outline-search-form" autocomplete="off">
-                <div class="search-shell-head">
-                  <div class="search-shell-actions">
-                    <button id="ai-toggle-btn" type="button" class="ai-toggle-btn" aria-label="切换AI搜索增强" aria-pressed="false">
-                      <span class="ai-toggle-coil" aria-hidden="true">
-                        <span></span><span></span><span></span><span></span>
-                      </span>
-                    </button>
-                    <button id="open-ai-sidebar" class="settings-trigger search-settings-trigger search-ai-sidebar-trigger" type="button" aria-label="打开 AI 助手侧边栏">
-                      <span class="search-settings-trigger-icon" aria-hidden="true">AI</span>
-                      <span class="search-settings-trigger-label visually-hidden">打开 AI 助手侧边栏</span>
-                    </button>
-                    <button id="open-settings" class="settings-trigger search-settings-trigger" type="button" aria-label="打开设置">
-                      <span class="search-settings-trigger-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                          <path d="M4 6.5h7.2"></path>
-                          <path d="M16.8 6.5H20"></path>
-                          <circle cx="14" cy="6.5" r="1.85"></circle>
-                          <path d="M4 12h2.8"></path>
-                          <path d="M12.8 12H20"></path>
-                          <circle cx="9.8" cy="12" r="1.85"></circle>
-                          <path d="M4 17.5h8.4"></path>
-                          <path d="M18 17.5h2"></path>
-                          <circle cx="15.2" cy="17.5" r="1.85"></circle>
-                        </svg>
-                      </span>
-                      <span class="search-settings-trigger-label visually-hidden">设置面板</span>
-                    </button>
-                  </div>
+            <div class="homepage-title-copy">
+              <p class="homepage-title-kicker">猫狗搭子新标签页</p>
+              <h1 class="homepage-title">今天想找点什么？</h1>
+            </div>
+
+            <button
+              id="open-widget-panel"
+              class="ui-btn-secondary homepage-widget-trigger"
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              添加组件
+            </button>
+          </header>
+
+          <div id="widget-root" class="homepage-widget-root" aria-live="polite"></div>
+
+          <section id="widget-panel" class="widget-panel" aria-label="组件面板" hidden>
+            <div class="widget-panel-header">
+              <h2 class="widget-panel-title">添加组件</h2>
+              <button id="close-widget-panel" class="ui-btn-icon" type="button" aria-label="关闭组件面板">×</button>
+            </div>
+            <div id="widget-panel-status" class="widget-panel-status" hidden></div>
+            <div id="widget-panel-list" class="widget-panel-list"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <template id="widget-search-template">
+      <div class="homepage-search-stack">
+        <form id="search-form" class="outline-search-form widget-search-shell" autocomplete="off">
+          <label class="visually-hidden" for="search-input">输入内容并搜索或打开</label>
+          <div class="outline-search-frame ui-input-shell">
+            <svg class="outline-search-outline" aria-hidden="true" focusable="false">
+              <rect class="outline-search-outline-rect"></rect>
+            </svg>
+
+            <div class="outline-search-frame-inner">
+              <div class="search-control-rail widget-search-shell__top">
+                <p class="search-card-badge">便签搜索</p>
+                <div class="search-shell-actions ui-toolbar-group" role="group" aria-label="搜索操作">
+                  <button id="ai-toggle-btn" type="button" class="ai-toggle-btn ui-btn-primary" aria-label="切换AI增强搜索" aria-pressed="false">
+                    <span class="ai-toggle-icon" aria-hidden="true">AI</span>
+                    <span class="ai-toggle-text">AI增强搜索</span>
+                  </button>
+                  <button id="open-ai-sidebar" class="settings-trigger search-settings-trigger search-ai-sidebar-trigger ui-btn-secondary" type="button" aria-label="打开 AI 助手侧边栏">
+                    <span class="search-settings-trigger-icon" aria-hidden="true">侧栏</span>
+                    <span class="search-settings-trigger-label visually-hidden">打开 AI 助手侧边栏</span>
+                  </button>
+                  <button id="open-settings" class="settings-trigger search-settings-trigger ui-btn-icon" type="button" aria-label="打开设置">
+                    <span class="search-settings-trigger-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                        <path d="M4 6.5h7.2"></path>
+                        <path d="M16.8 6.5H20"></path>
+                        <circle cx="14" cy="6.5" r="1.85"></circle>
+                        <path d="M4 12h2.8"></path>
+                        <path d="M12.8 12H20"></path>
+                        <circle cx="9.8" cy="12" r="1.85"></circle>
+                        <path d="M4 17.5h8.4"></path>
+                        <path d="M18 17.5h2"></path>
+                        <circle cx="15.2" cy="17.5" r="1.85"></circle>
+                      </svg>
+                    </span>
+                    <span class="search-settings-trigger-label visually-hidden">设置面板</span>
+                  </button>
                 </div>
+              </div>
 
-                <label class="visually-hidden" for="search-input">输入内容并搜索或打开</label>
-                <div class="outline-search-frame">
-                  <svg class="outline-search-outline" aria-hidden="true" focusable="false">
-                    <rect class="outline-search-outline-rect"></rect>
-                  </svg>
-                  <div class="search-frame-inner">
+              <div class="search-main-row">
+                <div class="search-input-stack widget-search-shell__input">
+                  <div class="search-entry-row widget-search-shell__target-row">
                     <button
                       id="search-target-trigger"
                       type="button"
@@ -152,87 +207,94 @@
                       aria-expanded="false"
                       aria-controls="search-target-menu"
                     >
+                      <span class="search-target-chip-label">目标</span>
                       <span id="search-target-label">Bing</span>
                     </button>
-                    <input id="search-input" name="q" type="search" placeholder="例如：设计灵感、github.com、今天适合看的东西" disabled aria-disabled="true" />
                   </div>
+                  <input id="search-input" name="q" type="search" placeholder="例如：设计灵感、github.com、今天适合看的东西" disabled aria-disabled="true" />
+                  <p class="search-input-hint">支持直接打开网址，也支持 AI 先帮你整理搜索方向。</p>
                 </div>
-                <div id="search-target-menu" class="search-target-menu" role="listbox" hidden>
-                  <div class="search-target-menu-group" role="presentation">
-                    <p class="search-dropdown-group-label">搜索目标</p>
-                    <button type="button" class="search-target-menu-item" data-target-id="bing" role="option" aria-selected="true">Bing</button>
-                    <button type="button" class="search-target-menu-item" data-target-id="google" role="option" aria-selected="false">Google</button>
-                    <button type="button" class="search-target-menu-item" data-target-id="github" role="option" aria-selected="false">GitHub</button>
-                    <button type="button" class="search-target-menu-item" data-target-id="bilibili" role="option" aria-selected="false">B站</button>
-                  </div>
-                </div>
-                <div id="search-suggestions" class="search-suggestions" hidden>
-                  <div class="search-suggestions-group" role="presentation">
-                    <p class="search-dropdown-group-label">搜索建议</p>
-                  </div>
-                </div>
-                <div class="search-ai-status-line">
-                  <div id="ai-search-indicator" class="ai-search-indicator" role="status" aria-live="polite" data-state="off">
-                    <span id="ai-search-indicator-text"></span>
-                  </div>
-                </div>
-                <div class="ai-loading-overlay" aria-hidden="true">
-                  <svg class="ai-loading-geometry" viewBox="0 0 720 12" preserveAspectRatio="none" role="presentation">
-                    <title>AI 搜索处理中</title>
-                    <line class="geo-track" x1="4" y1="6" x2="716" y2="6" />
-                    <line class="geo-scan" x1="-140" y1="6" x2="96" y2="6" />
-                    <circle class="geo-node geo-node-1" cx="240" cy="6" r="2" />
-                    <circle class="geo-node geo-node-2" cx="480" cy="6" r="2" />
-                  </svg>
-                </div>
-              </form>
+              </div>
+            </div>
+          </div>
 
-              <p id="search-status" class="search-status" role="status" aria-live="polite" hidden></p>
+          <div id="search-target-menu" class="search-target-menu" role="listbox" hidden>
+            <div class="search-target-menu-group" role="presentation">
+              <p class="search-dropdown-group-label">搜索目标</p>
+              <button type="button" class="search-target-menu-item" data-target-id="bing" role="option" aria-selected="true">Bing</button>
+              <button type="button" class="search-target-menu-item" data-target-id="google" role="option" aria-selected="false">Google</button>
+              <button type="button" class="search-target-menu-item" data-target-id="github" role="option" aria-selected="false">GitHub</button>
+              <button type="button" class="search-target-menu-item" data-target-id="bilibili" role="option" aria-selected="false">B站</button>
+            </div>
+          </div>
 
-              <section id="ai-search-preview" class="ai-search-preview" aria-live="polite" hidden>
-                <div class="ai-search-preview-content">
-                  <div class="ai-search-preview-header">
-                    <div class="ai-search-preview-header-copy">
-                      <p class="ai-search-preview-kicker">Preview</p>
-                      <p id="ai-search-preview-intent" class="ai-search-preview-intent" hidden></p>
-                    </div>
-                  </div>
+          <div id="search-suggestions" class="search-suggestions" hidden>
+            <div class="search-suggestions-group" role="presentation">
+              <p class="search-dropdown-group-label">搜索建议</p>
+            </div>
+          </div>
 
-                  <p id="ai-search-preview-summary" class="ai-search-preview-summary"></p>
+          <div class="search-ai-status-line">
+            <div id="ai-search-indicator" class="ai-search-indicator" role="status" aria-live="polite" data-state="off">
+              <span class="ai-search-indicator-dot" aria-hidden="true"></span>
+              <span id="ai-search-indicator-text"></span>
+            </div>
+          </div>
 
-                  <div class="ai-search-preview-query-map">
-                    <div class="ai-search-preview-query-item">
-                      <p class="ai-search-preview-target-label">原始</p>
-                      <p id="ai-search-preview-original-query" class="ai-search-preview-target"></p>
-                    </div>
+          <div class="ai-loading-overlay" aria-hidden="true">
+            <svg class="ai-loading-geometry" viewBox="0 0 720 12" preserveAspectRatio="none" role="presentation">
+              <title>AI 搜索处理中</title>
+              <line class="geo-track" x1="4" y1="6" x2="716" y2="6" />
+              <line class="geo-scan" x1="-140" y1="6" x2="96" y2="6" />
+              <circle class="geo-node geo-node-1" cx="240" cy="6" r="2" />
+              <circle class="geo-node geo-node-2" cx="480" cy="6" r="2" />
+            </svg>
+          </div>
+        </form>
 
-                    <div class="ai-search-preview-query-item">
-                      <p id="ai-search-preview-target-label" class="ai-search-preview-target-label"></p>
-                      <p id="ai-search-preview-target" class="ai-search-preview-target"></p>
-                    </div>
-                  </div>
+        <p id="search-status" class="search-status" role="status" aria-live="polite" hidden></p>
 
-                  <section id="ai-search-preview-websites" class="ai-search-preview-related" hidden>
-                    <p class="ai-search-preview-related-label">候选网站</p>
-                    <div id="ai-search-preview-websites-list" class="ai-search-preview-websites-list"></div>
-                  </section>
+        <section id="ai-search-preview" class="ai-search-preview" aria-live="polite" hidden>
+          <div class="ai-search-preview-content">
+            <div class="ai-search-preview-header">
+              <div class="ai-search-preview-header-copy">
+                <p class="ai-search-preview-kicker">AI 便签</p>
+                <p id="ai-search-preview-intent" class="ai-search-preview-intent" hidden></p>
+              </div>
+            </div>
 
-                  <section id="ai-search-preview-related" class="ai-search-preview-related" hidden>
-                    <p class="ai-search-preview-related-label">相关搜索</p>
-                    <div id="ai-search-preview-suggestions" class="ai-search-preview-suggestions"></div>
-                  </section>
+            <p id="ai-search-preview-summary" class="ai-search-preview-summary"></p>
 
-                  <div class="ai-search-preview-actions">
-                    <button id="ai-search-preview-action" class="ai-search-preview-button" type="button"></button>
-                    <button id="ai-search-preview-secondary-action" class="ai-search-preview-button ai-search-preview-button-secondary" type="button" hidden></button>
-                  </div>
-                </div>
-              </section>
+            <div class="ai-search-preview-query-map">
+              <div class="ai-search-preview-query-item">
+                <p class="ai-search-preview-target-label">原始输入</p>
+                <p id="ai-search-preview-original-query" class="ai-search-preview-target"></p>
+              </div>
+
+              <div class="ai-search-preview-query-item">
+                <p id="ai-search-preview-target-label" class="ai-search-preview-target-label"></p>
+                <p id="ai-search-preview-target" class="ai-search-preview-target"></p>
+              </div>
+            </div>
+
+            <section id="ai-search-preview-websites" class="ai-search-preview-related" hidden>
+              <p class="ai-search-preview-related-label">候选网站</p>
+              <div id="ai-search-preview-websites-list" class="ai-search-preview-websites-list"></div>
+            </section>
+
+            <section id="ai-search-preview-related" class="ai-search-preview-related" hidden>
+              <p class="ai-search-preview-related-label">相关搜索</p>
+              <div id="ai-search-preview-suggestions" class="ai-search-preview-suggestions"></div>
+            </section>
+
+            <div class="ai-search-preview-actions">
+              <button id="ai-search-preview-action" class="ai-search-preview-button" type="button"></button>
+              <button id="ai-search-preview-secondary-action" class="ai-search-preview-button ai-search-preview-button-secondary" type="button" hidden></button>
             </div>
           </div>
         </section>
-      </section>
-    </main>
+      </div>
+    </template>
 
     <script type="module" src="./index.mjs"></script>
   </body>

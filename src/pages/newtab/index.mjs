@@ -27,14 +27,21 @@ import { createSearchTargetController } from "./search-target-controller.mjs";
 import { createStartupController } from "./startup-controller.mjs";
 import { createInteractionsController } from "./interactions-controller.mjs";
 import { listWidgets } from "./widgets/registry.mjs";
-import { loadWidgetLayout } from "./widgets/layout-state.mjs";
+import { createWidgetRuntime } from "./widgets/widget-runtime.mjs";
+import * as widgetLayoutState from "./widgets/layout-state.mjs";
+
+const registeredWidgets = listWidgets();
+const initialElements = getNewtabDomRefs();
+const widgetRuntime = createWidgetRuntime({
+  documentRef: document,
+  registryItems: registeredWidgets,
+  layoutStateApi: widgetLayoutState,
+  elements: initialElements.widgetRuntime,
+});
+
+await widgetRuntime.mount();
 
 const elements = getNewtabDomRefs();
-const registeredWidgets = listWidgets();
-const widgetLayoutPreload = loadWidgetLayout({ registryItems: registeredWidgets }).catch((error) => {
-  console.warn("Failed to preload widget layout.", error);
-  return null;
-});
 const { search, ai, controllerElements } = elements;
 
 const SEARCH_TRACE_DURATION = 1280;
