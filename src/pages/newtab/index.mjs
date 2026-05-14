@@ -6,7 +6,6 @@ import {
   resolveChatCompletionsEndpoint,
   resolveOriginPatternSafely,
 } from "../../shared/search-settings.mjs";
-import { initializeSettingsUi } from "./settings/index.mjs";
 import {
   normalizeTextValue,
   resolveDirectNavigationTarget,
@@ -43,6 +42,7 @@ await widgetRuntime.mount();
 
 const elements = getNewtabDomRefs();
 const { search, ai, controllerElements } = elements;
+const { initializeSettingsUi } = await import("./settings/index.mjs");
 
 const SEARCH_TRACE_DURATION = 1280;
 const PLACEHOLDER_FADE_DURATION = 320;
