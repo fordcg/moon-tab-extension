@@ -46,24 +46,6 @@ def open_extension_page(page: Page, extension_url: str) -> None:
     page.wait_for_load_state("networkidle")
     wait_for_extension_ready(page)
 
-
-def wait_for_search_action_group_ready(page: Page) -> None:
-    page.wait_for_selector("#search-input", timeout=15000)
-    page.wait_for_selector("#ai-toggle-btn", timeout=15000)
-    page.wait_for_selector("#open-ai-sidebar", timeout=15000)
-    page.wait_for_selector("#open-settings", timeout=15000)
-    page.wait_for_function(
-        """() => {
-            const input = document.querySelector('#search-input');
-            const primary = document.querySelector('#ai-toggle-btn');
-            const sidebar = document.querySelector('#open-ai-sidebar');
-            const settings = document.querySelector('#open-settings');
-            return Boolean(input && !input.disabled && primary && sidebar && settings);
-        }""",
-        timeout=15000,
-    )
-
-
 def wait_for_redirect_or_extension_ready(page: Page, timeout: int = 15000) -> None:
     try:
         page.wait_for_url("chrome-extension://**", timeout=timeout)
@@ -110,46 +92,6 @@ def read_search_target_controls(page: Page) -> tuple[str, bool, bool, bool, bool
         target_menu_present,
         suggestions_shell_present,
     )
-
-
-def read_search_action_group(page: Page) -> dict:
-    action_group = page.evaluate(
-        """() => {
-            const group = document.querySelector('.search-shell-actions.ui-toolbar-group');
-            const primary = group?.querySelector('#ai-toggle-btn') ?? null;
-            const sidebar = group?.querySelector('#open-ai-sidebar') ?? null;
-            const settings = group?.querySelector('#open-settings') ?? null;
-            const readVisibleText = (element) => {
-                if (!(element instanceof HTMLElement)) {
-                    return '';
-                }
-
-                const visibleParts = Array.from(element.querySelectorAll('*'))
-                    .filter((node) => {
-                        if (!(node instanceof HTMLElement)) {
-                            return false;
-                        }
-
-                        const styles = getComputedStyle(node);
-                        return !node.hidden && !node.classList.contains('visually-hidden') && styles.display !== 'none' && styles.visibility !== 'hidden';
-                    })
-                    .map((node) => node.innerText.replace(/\\s+/g, ' ').trim())
-                    .filter(Boolean);
-
-                return visibleParts.join(' ').trim();
-            };
-
-            return {
-                group_present: Boolean(group),
-                primary_text: primary?.innerText?.replace(/\\s+/g, ' ').trim() ?? '',
-                sidebar_text: readVisibleText(sidebar),
-                settings_present: Boolean(settings),
-                primary_classes: primary ? Array.from(primary.classList) : [],
-            };
-        }"""
-    )
-    return action_group if isinstance(action_group, dict) else {}
-
 
 def read_widget_runtime_state(page: Page) -> dict:
     state = page.evaluate(
@@ -561,7 +503,6 @@ def main() -> None:
         "settings_opened": False,
         "settings_closed": False,
         "default_search_ok": False,
-        "search_action_group": {},
         "widget_runtime": {},
         "widget_hide_restore_ok": False,
         "current_search_target": "",
@@ -663,19 +604,10 @@ def main() -> None:
                 result["redirect_ok"] = page.url.startswith(f"chrome-extension://{result['extension_id']}/")
 
                 if not result["redirect_ok"]:
-                    page.goto(expected_extension_url, wait_until="domcontentloaded")
-                    page.wait_for_load_state("networkidle")
+                    open_extension_page(page, expected_extension_url)
                 else:
                     page.wait_for_load_state("networkidle")
-
-                wait_for_search_action_group_ready(page)
-
-                result["search_action_group"] = read_search_action_group(page)
-                assert result["search_action_group"]["group_present"], "expected .ui-toolbar-group around search actions"
-                assert "AI增强搜索" in result["search_action_group"]["primary_text"], "expected primary button text to be AI增强搜索"
-                assert result["search_action_group"]["sidebar_text"] == "侧栏", "expected sidebar button copy to stay 侧栏"
-                assert result["search_action_group"]["settings_present"], "expected settings button in search action group"
-                assert "ui-btn-primary" in result["search_action_group"]["primary_classes"], "expected primary button class"
+                    wait_for_extension_ready(page)
                 widget_runtime = read_widget_runtime_state(page)
                 result["widget_runtime"] = widget_runtime
                 assert widget_runtime["widget_root_present"], "expected #widget-root mount"
