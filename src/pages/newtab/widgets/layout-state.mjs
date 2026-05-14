@@ -181,3 +181,74 @@ export const saveWidgetLayout = async (layout) => {
   await storageArea.set({ [WIDGET_LAYOUT_STORAGE_KEY]: layout });
   return layout;
 };
+
+const getRegistryItemById = (widgetId, registryItems = []) =>
+  registryItems.find((item) => item.id === widgetId) ?? null;
+
+const insertWidgetIdByRegistryOrder = ({ orderedWidgetIds, widgetId, registryItems }) => {
+  if (orderedWidgetIds.includes(widgetId)) {
+    return [...orderedWidgetIds];
+  }
+
+  const registryOrderIds = registryItems.map((item) => item.id);
+  const widgetOrderIndex = registryOrderIds.indexOf(widgetId);
+
+  if (widgetOrderIndex === -1) {
+    return [...orderedWidgetIds, widgetId];
+  }
+
+  const nextOrderedWidgetIds = [...orderedWidgetIds];
+
+  for (let index = 0; index < nextOrderedWidgetIds.length; index += 1) {
+    const currentId = nextOrderedWidgetIds[index];
+    const currentOrderIndex = registryOrderIds.indexOf(currentId);
+    if (currentOrderIndex > widgetOrderIndex) {
+      nextOrderedWidgetIds.splice(index, 0, widgetId);
+      return nextOrderedWidgetIds;
+    }
+  }
+
+  nextOrderedWidgetIds.push(widgetId);
+  return nextOrderedWidgetIds;
+};
+
+export const hideWidget = async ({ layout, widgetId, registryItems }) => {
+  const widget = getRegistryItemById(widgetId, registryItems);
+  if (!widget || widget.core || !widget.canHide) {
+    return normalizeWidgetLayout({ layout, registryItems });
+  }
+
+  const nextLayout = normalizeWidgetLayout({
+    layout: {
+      ...layout,
+      hiddenWidgetIds: [...(layout?.hiddenWidgetIds ?? []), widgetId],
+    },
+    registryItems,
+  });
+
+  await saveWidgetLayout(nextLayout);
+  return nextLayout;
+};
+
+export const restoreWidget = async ({ layout, widgetId, registryItems }) => {
+  const widget = getRegistryItemById(widgetId, registryItems);
+  if (!widget) {
+    return normalizeWidgetLayout({ layout, registryItems });
+  }
+
+  const nextLayout = normalizeWidgetLayout({
+    layout: {
+      ...layout,
+      hiddenWidgetIds: (layout?.hiddenWidgetIds ?? []).filter((itemId) => itemId !== widgetId),
+      orderedWidgetIds: insertWidgetIdByRegistryOrder({
+        orderedWidgetIds: layout?.orderedWidgetIds ?? [],
+        widgetId,
+        registryItems,
+      }),
+    },
+    registryItems,
+  });
+
+  await saveWidgetLayout(nextLayout);
+  return nextLayout;
+};

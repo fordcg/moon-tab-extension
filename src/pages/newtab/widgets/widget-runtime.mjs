@@ -43,6 +43,23 @@ export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi
     const rendered = widget.render({ documentRef });
     const content = resolveWidgetContent(rendered);
     card.body.appendChild(content);
+    card.article.addEventListener("click", async (event) => {
+      const actionButton =
+        event.target instanceof Element
+          ? event.target.closest("[data-widget-action='hide']")
+          : null;
+
+      if (!actionButton) {
+        return;
+      }
+
+      currentLayout = await layoutStateApi.hideWidget({
+        layout: currentLayout,
+        widgetId: widget.id,
+        registryItems,
+      });
+      render();
+    });
     widgetCards.set(widget.id, card);
     return card;
   };

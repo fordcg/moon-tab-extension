@@ -1,0 +1,226 @@
+@media (max-width: 760px) {
+  .homepage-hero {
+    padding-top: 1rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .homepage-focus-shell {
+    width: min(100%, calc(100vw - 1rem));
+  }
+
+  .homepage-title-band {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem;
+    margin-bottom: 0.72rem;
+    padding-inline: 0;
+  }
+
+  .homepage-pet {
+    width: 44px;
+    height: 44px;
+    border-radius: 15px;
+  }
+
+  .homepage-title-copy {
+    text-align: left;
+  }
+
+  .widget-chip {
+    min-height: 34px;
+    padding-inline: 0.72rem;
+  }
+
+  .widget-note-item {
+    padding: 0.62rem 0.68rem;
+  }
+
+  .homepage-title {
+    font-size: clamp(1.45rem, 5.6vw, 1.9rem);
+  }
+
+  .homepage-pet-eye {
+    top: 18px;
+  }
+
+  .search-control-rail {
+    gap: 0.8rem;
+  }
+
+  .search-shell-actions {
+    margin-left: auto;
+    gap: 0.55rem;
+  }
+
+  .search-input-stack {
+    padding-top: 0.95rem;
+    padding-bottom: 0.95rem;
+  }
+
+  .ai-search-preview-content {
+    padding: 0.88rem;
+  }
+
+  .ai-search-preview-query-item {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+
+  .ai-search-preview-website-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ai-search-preview-website-button,
+  .ai-search-preview-button,
+  .ai-search-preview-button-secondary,
+  .ai-search-preview-suggestion {
+    width: 100%;
+  }
+
+  .ai-search-preview-actions,
+  .ai-search-preview-suggestions {
+    flex-direction: column;
+  }
+
+  .settings-popup {
+    width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    border-radius: 22px;
+  }
+
+  .settings-popup-header,
+  .settings-scroll-area,
+  .settings-panel-footer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .settings-inline-switch {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-model-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .settings-save-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .homepage-focus-shell {
+    width: min(100%, calc(100vw - 0.75rem));
+  }
+
+  .homepage-title {
+    font-size: clamp(1.14rem, 7.5vw, 1.38rem);
+  }
+
+  .widget-chip-list {
+    gap: 0.5rem;
+  }
+
+  .widget-note-item {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .widget-note-bullet {
+    display: none;
+  }
+
+  .homepage-pet {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .homepage-pet-eye {
+    top: 14px;
+  }
+
+  .homepage-pet-eye-left {
+    left: 11px;
+  }
+
+  .homepage-pet-eye-right {
+    right: 11px;
+  }
+
+  .homepage-pet-mouth {
+    bottom: 6px;
+  }
+
+  .homepage-pet::before {
+    bottom: 4px;
+    width: 14px;
+    height: 10px;
+  }
+
+  .outline-search-frame {
+    min-height: 0;
+    border-radius: 22px;
+  }
+
+  .outline-search-frame::before,
+  .outline-search-frame::after {
+    width: 50px;
+    height: 14px;
+    top: -8px;
+  }
+
+  .search-control-rail {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.8rem 0.84rem 0.68rem;
+  }
+
+  .search-shell-actions {
+    margin-left: 0;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .ui-toolbar-group {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .ai-toggle-btn,
+  .search-settings-trigger {
+    flex: 1 1 0;
+  }
+
+  .ui-btn-primary {
+    flex: 1 1 auto;
+  }
+
+  .search-entry-row {
+    gap: 0.55rem;
+  }
+
+  .search-target-trigger {
+    max-width: 100%;
+    padding-inline: 0.72rem;
+  }
+
+  .search-input-stack {
+    padding: 0.92rem;
+  }
+
+  .settings-popup-title {
+    font-size: 1.3rem;
+  }
+}
