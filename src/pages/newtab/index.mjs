@@ -20,39 +20,23 @@ import {
   fetchRemoteSuggestionItems,
   mergeSuggestionItems,
 } from "./helpers/search-suggestions.mjs";
+import { getNewtabDomRefs } from "./dom-refs.mjs";
+import { createNewtabRuntimeState } from "./runtime-state.mjs";
 import { createAiPreviewController } from "./ai-preview-controller.mjs";
 import { createSuggestionsController } from "./suggestions-controller.mjs";
 import { createSearchTargetController } from "./search-target-controller.mjs";
 import { createStartupController } from "./startup-controller.mjs";
 import { createInteractionsController } from "./interactions-controller.mjs";
+import { listWidgets } from "./widgets/registry.mjs";
+import { loadWidgetLayout } from "./widgets/layout-state.mjs";
 
-const searchForm = document.getElementById("search-form");
-const searchInput = document.getElementById("search-input");
-const searchStatus = document.getElementById("search-status");
-const aiSearchIndicator = document.getElementById("ai-search-indicator");
-const aiSearchIndicatorText = document.getElementById("ai-search-indicator-text");
-const aiToggleButton = document.getElementById("ai-toggle-btn");
-const openAiSidebarButton = document.getElementById("open-ai-sidebar");
-const aiSearchEnabledInput = document.getElementById("ai-search-enabled");
-const aiSearchPreview = document.getElementById("ai-search-preview");
-const aiSearchPreviewIntent = document.getElementById("ai-search-preview-intent");
-const aiSearchPreviewSummary = document.getElementById("ai-search-preview-summary");
-const aiSearchPreviewOriginalQuery = document.getElementById("ai-search-preview-original-query");
-const aiSearchPreviewTargetLabel = document.getElementById("ai-search-preview-target-label");
-const aiSearchPreviewTarget = document.getElementById("ai-search-preview-target");
-const aiSearchPreviewWebsites = document.getElementById("ai-search-preview-websites");
-const aiSearchPreviewWebsitesList = document.getElementById("ai-search-preview-websites-list");
-const aiSearchPreviewRelated = document.getElementById("ai-search-preview-related");
-const aiSearchPreviewSuggestions = document.getElementById("ai-search-preview-suggestions");
-const aiSearchPreviewAction = document.getElementById("ai-search-preview-action");
-const aiSearchPreviewSecondaryAction = document.getElementById("ai-search-preview-secondary-action");
-const searchTargetTrigger = document.getElementById("search-target-trigger");
-const searchTargetLabel = document.getElementById("search-target-label");
-const searchTargetMenu = document.getElementById("search-target-menu");
-const searchSuggestions = document.getElementById("search-suggestions");
-const searchFrame = document.querySelector(".outline-search-frame");
-const searchOutline = document.querySelector(".outline-search-outline");
-const searchOutlineRect = document.querySelector(".outline-search-outline-rect");
+const elements = getNewtabDomRefs();
+const registeredWidgets = listWidgets();
+void loadWidgetLayout({ registryItems: registeredWidgets }).catch(() => null);
+const runtimeState = createNewtabRuntimeState({
+  initialSearchTarget: getSearchTargetById(DEFAULT_SEARCH_TARGET_ID),
+});
+const { search, ai, controllerElements } = elements;
 
 const SEARCH_TRACE_DURATION = 1280;
 const PLACEHOLDER_FADE_DURATION = 320;
@@ -64,9 +48,7 @@ const SEARCH_OUTLINE_INSET = 0;
 const BING_SEARCH_ORIGIN_PATTERN = "https://www.bing.com/*";
 const BING_RSS_ENDPOINT = "https://www.bing.com/search?format=rss&mkt=zh-CN&q=";
 const extensionApi = typeof chrome !== "undefined" ? chrome : null;
-let currentSearchTarget = getSearchTargetById(DEFAULT_SEARCH_TARGET_ID);
 const availableSearchTargets = SEARCH_TARGETS;
-let searchHistoryItems = [];
 
 let aiPreviewController;
 let suggestionsController;
@@ -87,13 +69,13 @@ const openUrlInNewTab = (url) => {
 };
 
 const setSearchStatus = (message, tone = "neutral") => {
-  if (!(searchStatus instanceof HTMLElement)) {
+  if (!(search.status instanceof HTMLElement)) {
     return;
   }
 
-  searchStatus.textContent = message;
-  searchStatus.dataset.tone = tone;
-  searchStatus.hidden = !message;
+  search.status.textContent = message;
+  search.status.dataset.tone = tone;
+  search.status.hidden = !message;
 };
 
 const syncRenderedSearchUi = () => {
@@ -109,24 +91,23 @@ const closeSearchMenus = () => {
 const recordSearchHistoryEntry = async (query) => {
   const normalizedQuery = normalizeTextValue(query);
   if (!normalizedQuery) {
-    return searchHistoryItems;
+    return runtimeState.getSearchHistoryItems();
   }
 
   const nextHistoryItems = await saveSearchHistoryEntry(extensionApi, normalizedQuery);
-  searchHistoryItems = Array.isArray(nextHistoryItems) ? [...nextHistoryItems] : [];
-  return searchHistoryItems;
+  return runtimeState.setSearchHistoryItems(nextHistoryItems);
 };
 
 const hideAiSearchPreview = () => {
   aiPreviewController.hidePreview();
 };
 
-const resolveSearchTarget = (targetId = currentSearchTarget?.id ?? DEFAULT_SEARCH_TARGET_ID) =>
-  getSearchTargetById(targetId) ?? currentSearchTarget ?? SEARCH_TARGETS[0];
+const resolveSearchTarget = (targetId = runtimeState.getCurrentSearchTarget()?.id ?? DEFAULT_SEARCH_TARGET_ID) =>
+  getSearchTargetById(targetId) ?? runtimeState.getCurrentSearchTarget() ?? SEARCH_TARGETS[0];
 
-const runSearchForTarget = async (query, targetId = currentSearchTarget?.id ?? DEFAULT_SEARCH_TARGET_ID) => {
+const runSearchForTarget = async (query, targetId = runtimeState.getCurrentSearchTarget()?.id ?? DEFAULT_SEARCH_TARGET_ID) => {
   const searchTarget = resolveSearchTarget(targetId);
-  currentSearchTarget = searchTarget;
+  runtimeState.setCurrentSearchTarget(searchTarget);
   await recordSearchHistoryEntry(query);
   window.location.href = searchTarget.buildSearchUrl(query);
 };
@@ -152,7 +133,7 @@ const openAiSidebar = async () => {
 };
 
 const triggerAiSearchToggle = () => {
-  if (!(aiSearchEnabledInput instanceof HTMLInputElement)) {
+  if (!(ai.enabledInput instanceof HTMLInputElement)) {
     setSearchStatus("设置项未就绪，请稍后重试。", "error");
     return;
   }
@@ -161,8 +142,8 @@ const triggerAiSearchToggle = () => {
     return;
   }
 
-  aiSearchEnabledInput.checked = !aiSearchEnabledInput.checked;
-  aiSearchEnabledInput.dispatchEvent(new Event("change", { bubbles: true }));
+  ai.enabledInput.checked = !ai.enabledInput.checked;
+  ai.enabledInput.dispatchEvent(new Event("change", { bubbles: true }));
 };
 
 const syncAiSearchEnabled = (enabled) => {
@@ -180,7 +161,7 @@ const syncAiConfigState = (configState) => {
 };
 
 const focusSearchInputIfIdle = () => {
-  if (!(searchInput instanceof HTMLInputElement) || searchInput.disabled) {
+  if (!(search.input instanceof HTMLInputElement) || search.input.disabled) {
     return;
   }
 
@@ -190,7 +171,7 @@ const focusSearchInputIfIdle = () => {
     return;
   }
 
-  searchInput.focus({ preventScroll: true });
+  search.input.focus({ preventScroll: true });
 };
 
 const runDefaultSearchFlow = async (query) => {
@@ -200,18 +181,18 @@ const runDefaultSearchFlow = async (query) => {
     return;
   }
 
-  await runSearchForTarget(normalizeTextValue(query), currentSearchTarget?.id ?? DEFAULT_SEARCH_TARGET_ID);
+  await runSearchForTarget(normalizeTextValue(query), runtimeState.getCurrentSearchTarget()?.id ?? DEFAULT_SEARCH_TARGET_ID);
 };
 
 const shouldBypassAiForCurrentTarget = () => {
-  const activeTarget = resolveSearchTarget(currentSearchTarget?.id ?? DEFAULT_SEARCH_TARGET_ID);
+  const activeTarget = resolveSearchTarget(runtimeState.getCurrentSearchTarget()?.id ?? DEFAULT_SEARCH_TARGET_ID);
   return !activeTarget.isGeneral;
 };
 
 const shouldUseAiSearchFlow = (settings) => Boolean(settings?.aiSearchEnabled) && !shouldBypassAiForCurrentTarget();
 
 const getHomepageSearchSettings = async () => {
-  const [settings, runtimeState] = await Promise.all([
+  const [settings, aiConfigState] = await Promise.all([
     getStoredSearchSettings(),
     getStoredAiConfigState(),
   ]);
@@ -220,39 +201,20 @@ const getHomepageSearchSettings = async () => {
     ...settings,
     aiSearchEnabled: Boolean(
       settings.aiSearchEnabled
-      && (runtimeState?.configState === "valid" || runtimeState?.configState === "degraded")
+      && (aiConfigState?.configState === "valid" || aiConfigState?.configState === "degraded")
     ),
   };
 };
 
 aiPreviewController = createAiPreviewController({
-  elements: {
-    searchForm,
-    searchInput,
-    searchStatus,
-    aiSearchIndicator,
-    aiSearchIndicatorText,
-    aiToggleButton,
-    aiSearchPreview,
-    aiSearchPreviewIntent,
-    aiSearchPreviewSummary,
-    aiSearchPreviewOriginalQuery,
-    aiSearchPreviewTargetLabel,
-    aiSearchPreviewTarget,
-    aiSearchPreviewWebsites,
-    aiSearchPreviewWebsitesList,
-    aiSearchPreviewRelated,
-    aiSearchPreviewSuggestions,
-    aiSearchPreviewAction,
-    aiSearchPreviewSecondaryAction,
-  },
+  elements: controllerElements.aiPreview,
   callbacks: {
     openUrlInNewTab,
     runSearchForTarget,
     runDefaultSearchFlow,
-    getCurrentSearchTarget: () => currentSearchTarget,
+    getCurrentSearchTarget: runtimeState.getCurrentSearchTarget,
     shouldBypassAiForCurrentTarget,
-    getCurrentInputQuery: () => (searchInput instanceof HTMLInputElement ? searchInput.value : ""),
+    getCurrentInputQuery: () => (search.input instanceof HTMLInputElement ? search.input.value : ""),
     setSearchStatus,
   },
   deps: {
@@ -270,10 +232,7 @@ aiPreviewController = createAiPreviewController({
 });
 
 suggestionsController = createSuggestionsController({
-  elements: {
-    searchInput,
-    searchSuggestions,
-  },
+  elements: controllerElements.suggestions,
   deps: {
     normalizeTextValue,
     resolveDirectNavigationTarget,
@@ -282,12 +241,10 @@ suggestionsController = createSuggestionsController({
     mergeSuggestionItems,
   },
   callbacks: {
-    getSearchHistoryItems: () => searchHistoryItems,
+    getSearchHistoryItems: runtimeState.getSearchHistoryItems,
     getAvailableSearchTargets: () => availableSearchTargets,
-    getCurrentSearchTarget: () => currentSearchTarget,
-    setCurrentSearchTarget: (target) => {
-      currentSearchTarget = target;
-    },
+    getCurrentSearchTarget: runtimeState.getCurrentSearchTarget,
+    setCurrentSearchTarget: runtimeState.setCurrentSearchTarget,
     resolveSearchTarget,
     syncSearchTargetShell: () => {
       searchTargetController.syncShell();
@@ -301,17 +258,11 @@ suggestionsController = createSuggestionsController({
 });
 
 searchTargetController = createSearchTargetController({
-  elements: {
-    searchTargetTrigger,
-    searchTargetLabel,
-    searchTargetMenu,
-  },
+  elements: controllerElements.searchTarget,
   callbacks: {
     getAvailableSearchTargets: () => availableSearchTargets,
-    getCurrentSearchTarget: () => currentSearchTarget,
-    setCurrentSearchTarget: (target) => {
-      currentSearchTarget = target;
-    },
+    getCurrentSearchTarget: runtimeState.getCurrentSearchTarget,
+    setCurrentSearchTarget: runtimeState.setCurrentSearchTarget,
     resolveSearchTarget,
     hideAiSearchPreview,
     clearSearchStatus: () => {
@@ -325,12 +276,7 @@ searchTargetController = createSearchTargetController({
 });
 
 startupController = createStartupController({
-  elements: {
-    searchInput,
-    searchFrame,
-    searchOutline,
-    searchOutlineRect,
-  },
+  elements: controllerElements.startup,
   callbacks: {
     focusSearchInputIfIdle,
   },
@@ -344,18 +290,7 @@ startupController = createStartupController({
 });
 
 interactionsController = createInteractionsController({
-  elements: {
-    searchForm,
-    searchInput,
-    aiToggleButton,
-    aiSearchPreviewAction,
-    aiSearchPreviewSecondaryAction,
-    aiSearchPreviewSuggestions,
-    aiSearchPreviewWebsitesList,
-    searchTargetTrigger,
-    searchTargetMenu,
-    searchSuggestions,
-  },
+  elements: controllerElements.interactions,
   controllers: {
     aiPreviewController,
     suggestionsController,
@@ -370,7 +305,7 @@ interactionsController = createInteractionsController({
     runDefaultSearchFlow,
     getStoredSearchSettings: getHomepageSearchSettings,
     focusSearchInput: () => {
-      searchInput.focus();
+      search.input.focus();
     },
   },
   deps: {
@@ -379,7 +314,7 @@ interactionsController = createInteractionsController({
 });
 interactionsController.bind();
 
-openAiSidebarButton?.addEventListener("click", () => {
+ai.openSidebarButton?.addEventListener("click", () => {
   void openAiSidebar();
 });
 
@@ -395,7 +330,7 @@ syncRenderedSearchUi();
 searchTargetController.syncShell();
 aiPreviewController.renderIndicator();
 void readSearchHistory(extensionApi).then((items) => {
-  searchHistoryItems = Array.isArray(items) ? [...items] : [];
+  runtimeState.setSearchHistoryItems(items);
 });
 startupController.initialize({ prefersReducedMotion });
 
