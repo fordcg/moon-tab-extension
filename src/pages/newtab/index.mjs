@@ -31,7 +31,10 @@ import { loadWidgetLayout } from "./widgets/layout-state.mjs";
 
 const elements = getNewtabDomRefs();
 const registeredWidgets = listWidgets();
-void loadWidgetLayout({ registryItems: registeredWidgets }).catch(() => null);
+const widgetLayoutPreload = loadWidgetLayout({ registryItems: registeredWidgets }).catch((error) => {
+  console.warn("Failed to preload widget layout.", error);
+  return null;
+});
 const { search, ai, controllerElements } = elements;
 
 const SEARCH_TRACE_DURATION = 1280;

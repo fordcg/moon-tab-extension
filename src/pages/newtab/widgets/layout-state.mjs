@@ -85,6 +85,15 @@ const orderIdsByPreference = (itemIds, registryOrderIds) => {
   return orderedIds;
 };
 
+const resolveDefaultOrderedWidgetIds = (registryItems = []) => {
+  const { defaultVisibleIds, registryOrderIds } = createRegistryIndex(registryItems);
+  if (defaultVisibleIds.length === 0) {
+    return [...DEFAULT_WIDGET_ORDER];
+  }
+
+  return orderIdsByPreference(defaultVisibleIds, registryOrderIds);
+};
+
 const loadStoredLayout = async () => {
   const storageArea = getStorageArea();
   if (!storageArea?.get) {
@@ -95,9 +104,9 @@ const loadStoredLayout = async () => {
   return result?.[WIDGET_LAYOUT_STORAGE_KEY] ?? null;
 };
 
-export const createDefaultWidgetLayout = () => ({
+export const createDefaultWidgetLayout = ({ registryItems } = {}) => ({
   version: WIDGET_LAYOUT_VERSION,
-  orderedWidgetIds: [...DEFAULT_WIDGET_ORDER],
+  orderedWidgetIds: resolveDefaultOrderedWidgetIds(registryItems),
   hiddenWidgetIds: [],
   widgetPrefs: {},
 });
@@ -109,7 +118,7 @@ export const normalizeWidgetLayout = ({ layout, registryItems }) => {
     defaultVisibleIds,
     registryOrderIds,
   } = createRegistryIndex(registryItems);
-  const fallbackLayout = createDefaultWidgetLayout();
+  const fallbackLayout = createDefaultWidgetLayout({ registryItems });
   const sourceLayout = isPlainObject(layout) ? layout : fallbackLayout;
 
   const storedHiddenWidgetIds = dedupeKnownIds(sourceLayout.hiddenWidgetIds, knownIds).filter(
