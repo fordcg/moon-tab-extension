@@ -387,6 +387,73 @@ def read_background_foundation_state(page: Page) -> dict:
     return background_state if isinstance(background_state, dict) else {}
 
 
+def read_illustrated_stage_state(page: Page) -> dict:
+    state = page.evaluate(
+        """() => {
+            const requiredAssets = [
+                'bg-ambient',
+                'cloud-ribbon',
+                'pet-duo',
+                'pet-left',
+                'pet-right',
+                'pet-mini',
+                'paw-accent',
+                'fish-accent',
+                'bone-accent',
+                'star-sparkle',
+                'cloud-puff',
+                'tape-sticker',
+            ];
+            const requiredBubbles = ['left', 'center', 'right'];
+            const assetElements = requiredAssets.map((name) => document.querySelector(`[data-stage-asset="${name}"]`));
+            const bubbleElements = requiredBubbles.map((name) => document.querySelector(`[data-stage-bubble="${name}"]`));
+            const allImages = [...assetElements, ...bubbleElements].filter(Boolean);
+            const widgetSlots = Object.fromEntries(
+                Array.from(document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-id]'))
+                    .map((card) => [card.getAttribute('data-widget-id'), card.getAttribute('data-widget-slot')])
+            );
+            const decor = document.querySelector('.homepage-stage__decor');
+            return {
+                stage_present: document.querySelectorAll('#homepage-stage').length === 1,
+                stage_asset_count: assetElements.filter(Boolean).length,
+                stage_bubble_count: bubbleElements.filter(Boolean).length,
+                stage_assets_loaded: allImages.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0),
+                stage_decor_noninteractive: decor ? getComputedStyle(decor).pointerEvents === 'none' : false,
+                widget_slots: widgetSlots,
+                search_slot_center: widgetSlots.search === 'center',
+                calendar_slot_right_lower: widgetSlots.calendar === 'right-lower',
+                quicksites_slot_lower_center: widgetSlots.quicksites === 'lower-center',
+            };
+        }"""
+    )
+    return state if isinstance(state, dict) else {}
+
+
+def read_mobile_stage_state(page: Page, extension_url: str) -> dict:
+    page.set_viewport_size({"width": 390, "height": 844})
+    open_extension_page(page, extension_url)
+    wait_for_widget_runtime_ready(page)
+    state = page.evaluate(
+        """() => {
+            const stage = document.querySelector('#homepage-stage');
+            const stageRect = stage?.getBoundingClientRect();
+            const cards = Array.from(document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-slot]'));
+            const visibleCards = cards.filter((card) => {
+                const styles = getComputedStyle(card);
+                return styles.display !== 'none' && styles.visibility !== 'hidden';
+            });
+            const bubbles = Array.from(document.querySelectorAll('[data-stage-bubble]'));
+            return {
+                stage_width_fits_viewport: Boolean(stageRect) && stageRect.width <= window.innerWidth,
+                visible_card_count: visibleCards.length,
+                visible_cards_relative: visibleCards.every((card) => getComputedStyle(card).position === 'relative'),
+                decorative_bubbles_hidden: bubbles.every((bubble) => getComputedStyle(bubble).display === 'none'),
+            };
+        }"""
+    )
+    return state if isinstance(state, dict) else {}
+
+
 
 def read_search_outline_alignment_state(page: Page) -> dict:
     alignment_state = page.evaluate(
@@ -473,6 +540,17 @@ def assert_required_checks(result: dict) -> None:
         ("background_layer_noninteractive", result["background_layer_noninteractive"]),
         ("background_has_texture_overlay", result["background_has_texture_overlay"]),
         ("background_has_focus_overlay", result["background_has_focus_overlay"]),
+        ("illustrated_stage_present", result["illustrated_stage"].get("stage_present")),
+        ("illustrated_stage_assets_present", result["illustrated_stage"].get("stage_asset_count") == 12),
+        ("illustrated_stage_bubbles_present", result["illustrated_stage"].get("stage_bubble_count") == 3),
+        ("illustrated_stage_assets_loaded", result["illustrated_stage"].get("stage_assets_loaded")),
+        ("illustrated_stage_decor_noninteractive", result["illustrated_stage"].get("stage_decor_noninteractive")),
+        ("illustrated_search_slot_center", result["illustrated_stage"].get("search_slot_center")),
+        ("illustrated_calendar_slot_right_lower", result["illustrated_stage"].get("calendar_slot_right_lower")),
+        ("illustrated_quicksites_slot_lower_center", result["illustrated_stage"].get("quicksites_slot_lower_center")),
+        ("mobile_stage_width_fits_viewport", result["mobile_stage"].get("stage_width_fits_viewport")),
+        ("mobile_stage_cards_relative", result["mobile_stage"].get("visible_cards_relative")),
+        ("mobile_stage_bubbles_hidden", result["mobile_stage"].get("decorative_bubbles_hidden")),
         ("search_outline_visible", result["search_outline_alignment"].get("outlineVisible")),
         ("search_outline_svg_box_aligned", result["search_outline_alignment"].get("svgBoxAligned")),
         ("search_outline_x_aligned", result["search_outline_alignment"].get("xAligned")),
@@ -538,6 +616,8 @@ def main() -> None:
         "background_layer_noninteractive": False,
         "background_has_texture_overlay": False,
         "background_has_focus_overlay": False,
+        "illustrated_stage": {},
+        "mobile_stage": {},
         "search_input_enabled": False,
         "settings_opened": False,
         "settings_closed": False,
@@ -687,6 +767,7 @@ def main() -> None:
                 result["background_layer_noninteractive"] = result["background_foundation"].get("layerPointerEvents") == "none"
                 result["background_has_texture_overlay"] = result["background_foundation"].get("layerBeforeBackgroundImage") != "none"
                 result["background_has_focus_overlay"] = result["background_foundation"].get("layerAfterBackgroundImage") != "none"
+                result["illustrated_stage"] = read_illustrated_stage_state(page)
                 result["search_input_enabled"] = page.locator("#search-input").is_enabled()
                 result["search_frame"] = page.locator(".outline-search-frame").evaluate(
                     "(element) => { const rect = element.getBoundingClientRect(); return { width: rect.width, height: rect.height }; }"
@@ -704,6 +785,11 @@ def main() -> None:
                 page.wait_for_load_state("networkidle")
                 page.screenshot(path=str(SCREENSHOT_AFTER_HOVER_PATH), full_page=True)
                 page.screenshot(path=str(SCREENSHOT_PATH), full_page=True)
+
+                mobile_stage_page = context.new_page()
+                result["mobile_stage"] = read_mobile_stage_state(mobile_stage_page, expected_extension_url)
+                mobile_stage_page.close()
+
                 page.locator("#open-settings").click()
                 page.wait_for_selector("body.is-settings-open", timeout=10000)
                 result["settings_opened"] = True
