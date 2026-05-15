@@ -2,6 +2,7 @@ export const createWidgetShell = ({ documentRef, widget, canHide }) => {
   const article = documentRef.createElement("article");
   article.className = "ui-note-card homepage-widget-card";
   article.dataset.widgetId = widget.id;
+  article.dataset.widgetSlot = "stack";
 
   const header = documentRef.createElement("div");
   header.className = "homepage-widget-card-header";

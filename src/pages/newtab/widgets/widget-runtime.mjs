@@ -3,6 +3,16 @@ import { createWidgetShell } from "./widget-shell.mjs";
 const isTemplateElement = (value) => value instanceof HTMLTemplateElement;
 const isHtmlElement = (value) => value instanceof HTMLElement;
 const SHELL_MARKER_ATTRIBUTE = "data-widget-id";
+const DESKTOP_STAGE_SLOT_BY_WIDGET_ID = Object.freeze({
+  search: "center",
+  todo: "left-lower",
+  calendar: "right-lower",
+  quicksites: "lower-center",
+});
+
+const applyStageSlot = ({ article, widgetId }) => {
+  article.dataset.widgetSlot = DESKTOP_STAGE_SLOT_BY_WIDGET_ID[widgetId] ?? "stack";
+};
 
 export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi, elements }) => {
   let currentLayout = null;
@@ -47,6 +57,7 @@ export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi
       widget,
       canHide: widget.canHide,
     });
+    applyStageSlot({ article: card.article, widgetId: widget.id });
     const rendered = widget.render({ documentRef });
     const content = resolveWidgetContent(rendered);
     card.body.appendChild(content);
