@@ -60,13 +60,17 @@
 }
 
 .widget-panel {
-  width: min(100%, 860px);
-  margin: 0.9rem auto 0;
+  position: absolute;
+  top: 0.5rem;
+  right: 0;
+  width: min(320px, calc(100vw - 1rem));
+  margin: 0;
   padding: 0.9rem;
   border: 1px solid rgba(229, 201, 160, 0.82);
   border-radius: var(--radius-widget);
   background: linear-gradient(180deg, #fffdf8 0%, #fff6e9 100%);
   box-shadow: var(--shadow-note);
+  z-index: 5;
 }
 
 .widget-panel-header {
@@ -83,10 +87,49 @@
 
 .widget-panel-status {
   margin-top: 0.75rem;
+  color: var(--ink-tertiary);
+  font-size: 0.84rem;
 }
 
 .widget-panel-list {
+  display: grid;
+  gap: 0.25rem;
   margin-top: 0.75rem;
+}
+
+.widget-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid rgba(229, 201, 160, 0.58);
+}
+
+.widget-panel-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.widget-panel-meta {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.widget-panel-label {
+  color: var(--ink-primary);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.widget-panel-visibility {
+  color: var(--ink-tertiary);
+  font-size: 0.76rem;
+}
+
+.widget-panel-button {
+  flex: 0 0 auto;
 }
 
 .widget-chip-list {

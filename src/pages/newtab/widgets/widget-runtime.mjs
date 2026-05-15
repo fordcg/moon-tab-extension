@@ -7,6 +7,13 @@ const SHELL_MARKER_ATTRIBUTE = "data-widget-id";
 export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi, elements }) => {
   let currentLayout = null;
   const widgetCards = new Map();
+  const widgetRegistryById = new Map(registryItems.map((item) => [item.id, item]));
+  const closePanelButton = documentRef.getElementById("close-widget-panel");
+
+  const isWidgetVisible = (widgetId) =>
+    Boolean(currentLayout) &&
+    currentLayout.orderedWidgetIds.includes(widgetId) &&
+    !currentLayout.hiddenWidgetIds.includes(widgetId);
 
   const sanitizeWidgetContent = (contentRoot) => {
     const nestedShells = contentRoot.querySelectorAll(`[${SHELL_MARKER_ATTRIBUTE}]`);
@@ -53,18 +60,92 @@ export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi
         return;
       }
 
-      currentLayout = await layoutStateApi.hideWidget({
-        layout: currentLayout,
+      await applyLayoutMutation({
         widgetId: widget.id,
-        registryItems,
+        mutator: layoutStateApi.hideWidget,
       });
-      render();
     });
     widgetCards.set(widget.id, card);
     return card;
   };
 
-  const render = () => {
+  const renderPanelStatus = (hiddenWidgets) => {
+    if (!(elements.panelStatus instanceof HTMLElement)) {
+      return;
+    }
+
+    if (hiddenWidgets.length === 0) {
+      elements.panelStatus.hidden = false;
+      elements.panelStatus.textContent = "所有可选组件已显示。";
+      return;
+    }
+
+    elements.panelStatus.hidden = false;
+    elements.panelStatus.textContent = `已隐藏 ${hiddenWidgets.length} 个组件，可在这里恢复。`;
+  };
+
+  const renderPanel = () => {
+    if (!(elements.panelList instanceof HTMLElement) || !currentLayout) {
+      return;
+    }
+
+    elements.panelList.replaceChildren();
+
+    const hiddenWidgetIdSet = new Set(currentLayout.hiddenWidgetIds);
+    const hiddenWidgets = [];
+
+    for (const widget of registryItems) {
+      if (widget.core) {
+        continue;
+      }
+
+      if (hiddenWidgetIdSet.has(widget.id)) {
+        hiddenWidgets.push(widget);
+      }
+
+      const row = documentRef.createElement("div");
+      row.className = "widget-panel-row";
+      row.dataset.widgetId = widget.id;
+
+      const meta = documentRef.createElement("div");
+      meta.className = "widget-panel-meta";
+
+      const label = documentRef.createElement("span");
+      label.className = "widget-panel-label";
+      label.textContent = widget.title;
+
+      const visibility = documentRef.createElement("span");
+      visibility.className = "widget-panel-visibility";
+
+      const button = documentRef.createElement("button");
+      button.type = "button";
+      button.className = "ui-btn-secondary widget-panel-button";
+
+      if (hiddenWidgetIdSet.has(widget.id)) {
+        visibility.textContent = "已隐藏";
+        button.dataset.widgetPanelAction = "restore";
+        button.dataset.widgetId = widget.id;
+        button.textContent = "恢复";
+      } else if (isWidgetVisible(widget.id)) {
+        visibility.textContent = "已显示";
+        button.disabled = true;
+        button.textContent = "已添加";
+      } else {
+        visibility.textContent = "未显示";
+        button.dataset.widgetPanelAction = "restore";
+        button.dataset.widgetId = widget.id;
+        button.textContent = "添加";
+      }
+
+      meta.append(label, visibility);
+      row.append(meta, button);
+      elements.panelList.appendChild(row);
+    }
+
+    renderPanelStatus(hiddenWidgets);
+  };
+
+  const renderWidgets = () => {
     if (!(elements.root instanceof HTMLElement) || !currentLayout) {
       return;
     }
@@ -78,7 +159,7 @@ export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi
         continue;
       }
 
-      const widget = registryItems.find((item) => item.id === widgetId);
+      const widget = widgetRegistryById.get(widgetId);
       if (!widget) {
         continue;
       }
@@ -103,6 +184,58 @@ export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi
     }
   };
 
+  const render = () => {
+    renderWidgets();
+    renderPanel();
+  };
+
+  const applyLayoutMutation = async ({ widgetId, mutator }) => {
+    if (!currentLayout || typeof mutator !== "function") {
+      return;
+    }
+
+    currentLayout = await mutator({
+      layout: currentLayout,
+      widgetId,
+      registryItems,
+    });
+    render();
+  };
+
+  const setPanelOpen = (open) => {
+    if (!(elements.panel instanceof HTMLElement) || !(elements.panelTrigger instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    elements.panel.hidden = !open;
+    elements.panelTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+
+  elements.panelTrigger?.addEventListener("click", () => {
+    renderPanel();
+    setPanelOpen(elements.panel?.hidden ?? true);
+  });
+
+  closePanelButton?.addEventListener("click", () => {
+    setPanelOpen(false);
+  });
+
+  elements.panelList?.addEventListener("click", async (event) => {
+    const actionButton =
+      event.target instanceof Element
+        ? event.target.closest("[data-widget-panel-action='restore']")
+        : null;
+
+    if (!(actionButton instanceof HTMLElement)) {
+      return;
+    }
+
+    await applyLayoutMutation({
+      widgetId: actionButton.getAttribute("data-widget-id") ?? "",
+      mutator: layoutStateApi.restoreWidget,
+    });
+  });
+
   const mount = async () => {
     try {
       currentLayout = await layoutStateApi.loadWidgetLayout({ registryItems });
@@ -115,6 +248,7 @@ export const createWidgetRuntime = ({ documentRef, registryItems, layoutStateApi
     }
 
     render();
+    setPanelOpen(false);
   };
 
   return {

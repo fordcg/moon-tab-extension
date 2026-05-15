@@ -34,6 +34,16 @@
     padding: 0.62rem 0.68rem;
   }
 
+  .widget-panel {
+    top: 4rem;
+    right: 0.25rem;
+    width: min(320px, calc(100vw - 1.5rem));
+  }
+
+  .widget-panel-row {
+    align-items: flex-start;
+  }
+
   .homepage-title {
     font-size: clamp(1.45rem, 5.6vw, 1.9rem);
   }
@@ -139,6 +149,22 @@
 
   .widget-note-bullet {
     display: none;
+  }
+
+  .widget-panel {
+    top: 4.7rem;
+    right: 0;
+    width: min(100%, calc(100vw - 0.75rem));
+    padding: 0.82rem;
+  }
+
+  .widget-panel-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .widget-panel-button {
+    width: 100%;
   }
 
   .homepage-pet {

@@ -85,13 +85,19 @@ const orderIdsByPreference = (itemIds, registryOrderIds) => {
   return orderedIds;
 };
 
+const resolvePreferredWidgetOrderIds = (registryItems = []) => {
+  const { registryOrderIds } = createRegistryIndex(registryItems);
+  return orderIdsByPreference(registryOrderIds, registryOrderIds);
+};
+
 const resolveDefaultOrderedWidgetIds = (registryItems = []) => {
-  const { defaultVisibleIds, registryOrderIds } = createRegistryIndex(registryItems);
+  const { defaultVisibleIds } = createRegistryIndex(registryItems);
+  const preferredOrderIds = resolvePreferredWidgetOrderIds(registryItems);
   if (defaultVisibleIds.length === 0) {
-    return [...DEFAULT_WIDGET_ORDER];
+    return preferredOrderIds;
   }
 
-  return orderIdsByPreference(defaultVisibleIds, registryOrderIds);
+  return preferredOrderIds.filter((itemId) => defaultVisibleIds.includes(itemId));
 };
 
 const loadStoredLayout = async () => {
@@ -185,13 +191,13 @@ export const saveWidgetLayout = async (layout) => {
 const getRegistryItemById = (widgetId, registryItems = []) =>
   registryItems.find((item) => item.id === widgetId) ?? null;
 
-const insertWidgetIdByRegistryOrder = ({ orderedWidgetIds, widgetId, registryItems }) => {
+const insertWidgetIdByPreferredOrder = ({ orderedWidgetIds, widgetId, registryItems }) => {
   if (orderedWidgetIds.includes(widgetId)) {
     return [...orderedWidgetIds];
   }
 
-  const registryOrderIds = registryItems.map((item) => item.id);
-  const widgetOrderIndex = registryOrderIds.indexOf(widgetId);
+  const preferredOrderIds = resolvePreferredWidgetOrderIds(registryItems);
+  const widgetOrderIndex = preferredOrderIds.indexOf(widgetId);
 
   if (widgetOrderIndex === -1) {
     return [...orderedWidgetIds, widgetId];
@@ -201,7 +207,7 @@ const insertWidgetIdByRegistryOrder = ({ orderedWidgetIds, widgetId, registryIte
 
   for (let index = 0; index < nextOrderedWidgetIds.length; index += 1) {
     const currentId = nextOrderedWidgetIds[index];
-    const currentOrderIndex = registryOrderIds.indexOf(currentId);
+    const currentOrderIndex = preferredOrderIds.indexOf(currentId);
     if (currentOrderIndex > widgetOrderIndex) {
       nextOrderedWidgetIds.splice(index, 0, widgetId);
       return nextOrderedWidgetIds;
@@ -240,7 +246,7 @@ export const restoreWidget = async ({ layout, widgetId, registryItems }) => {
     layout: {
       ...layout,
       hiddenWidgetIds: (layout?.hiddenWidgetIds ?? []).filter((itemId) => itemId !== widgetId),
-      orderedWidgetIds: insertWidgetIdByRegistryOrder({
+      orderedWidgetIds: insertWidgetIdByPreferredOrder({
         orderedWidgetIds: layout?.orderedWidgetIds ?? [],
         widgetId,
         registryItems,
