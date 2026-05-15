@@ -1,3 +1,74 @@
+@media (max-width: 980px) {
+  .homepage-stage {
+    width: min(100%, 760px);
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .homepage-stage__decor {
+    overflow: hidden;
+  }
+
+  .homepage-stage__bubble,
+  .homepage-stage__asset--pet-left,
+  .homepage-stage__asset--pet-right,
+  .homepage-stage__asset--pet-mini,
+  .homepage-stage__asset--paw,
+  .homepage-stage__asset--fish,
+  .homepage-stage__asset--bone,
+  .homepage-stage__asset--star,
+  .homepage-stage__asset--cloud-puff,
+  .homepage-stage__asset--tape {
+    display: none;
+  }
+
+  .homepage-stage__asset--pet-duo {
+    top: 0.5rem;
+    left: 0.8rem;
+    width: 86px;
+    opacity: 0.52;
+  }
+
+  .homepage-stage__asset--cloud-ribbon {
+    width: 220px;
+    opacity: 0.28;
+  }
+
+  .homepage-focus-shell {
+    width: min(100%, calc(100vw - 1rem));
+  }
+
+  .homepage-title-band {
+    width: min(100%, 680px);
+    margin-bottom: 0.72rem;
+    padding-inline: 0.15rem;
+  }
+
+  .homepage-widget-root {
+    min-height: 0;
+  }
+
+  .homepage-widget-card[data-widget-slot] {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-width: none;
+    transform: none;
+  }
+
+  .homepage-widget-card[data-widget-slot="center"] {
+    left: auto;
+    top: auto;
+    width: 100%;
+  }
+
+  .homepage-widget-card[data-widget-slot="left-lower"],
+  .homepage-widget-card[data-widget-slot="right-lower"],
+  .homepage-widget-card[data-widget-slot="lower-center"] {
+    width: 100%;
+  }
+}
+
 @media (max-width: 760px) {
   .homepage-hero {
     padding-top: 1rem;

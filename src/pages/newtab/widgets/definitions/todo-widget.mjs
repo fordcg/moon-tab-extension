@@ -6,10 +6,15 @@ export const todoWidgetDefinition = {
   defaultVisible: true,
   render: ({ documentRef }) => {
     const section = documentRef.createElement("section");
-    section.className = "widget-note-block";
+    section.className = "widget-note widget-note--todo";
+
+    const sticker = documentRef.createElement("img");
+    sticker.className = "widget-note__sticker";
+    sticker.src = "./assets/widgets/todo-sticker.png";
+    sticker.alt = "";
 
     const list = documentRef.createElement("div");
-    list.className = "widget-note-list";
+    list.className = "widget-note__list widget-note-list";
 
     const entries = [
       "确认今天要搜索的主题",
@@ -34,7 +39,7 @@ export const todoWidgetDefinition = {
       list.appendChild(item);
     }
 
-    section.appendChild(list);
+    section.append(sticker, list);
     return section;
   },
 };

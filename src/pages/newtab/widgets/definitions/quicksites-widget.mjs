@@ -6,10 +6,15 @@ export const quicksitesWidgetDefinition = {
   defaultVisible: true,
   render: ({ documentRef }) => {
     const section = documentRef.createElement("section");
-    section.className = "widget-quicksites";
+    section.className = "widget-note widget-note--quicksites widget-quicksites";
+
+    const sticker = documentRef.createElement("img");
+    sticker.className = "widget-note__sticker";
+    sticker.src = "./assets/widgets/quicksites-sticker.png";
+    sticker.alt = "";
 
     const list = documentRef.createElement("div");
-    list.className = "widget-chip-list";
+    list.className = "widget-note__list widget-chip-list";
 
     const quicksites = [
       { label: "GitHub", href: "https://github.com/" },
@@ -28,7 +33,7 @@ export const quicksitesWidgetDefinition = {
       list.appendChild(link);
     }
 
-    section.appendChild(list);
+    section.append(sticker, list);
     return section;
   },
 };

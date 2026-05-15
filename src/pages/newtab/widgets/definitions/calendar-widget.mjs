@@ -6,10 +6,15 @@ export const calendarWidgetDefinition = {
   defaultVisible: true,
   render: ({ documentRef }) => {
     const section = documentRef.createElement("section");
-    section.className = "widget-note-block";
+    section.className = "widget-note widget-note--calendar";
+
+    const sticker = documentRef.createElement("img");
+    sticker.className = "widget-note__sticker";
+    sticker.src = "./assets/widgets/calendar-sticker.png";
+    sticker.alt = "";
 
     const list = documentRef.createElement("div");
-    list.className = "widget-note-list";
+    list.className = "widget-note__list widget-note-list";
 
     const entries = [
       { label: "今天", value: "15:30 设计评审" },
@@ -33,7 +38,7 @@ export const calendarWidgetDefinition = {
       list.appendChild(item);
     }
 
-    section.appendChild(list);
+    section.append(sticker, list);
     return section;
   },
 };
