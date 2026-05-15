@@ -66,10 +66,11 @@ The page should read as quiet and tactile, not glossy, neon, geometric, or app-d
 The desktop layout should default to a staged composition:
 
 - `search`: centered and dominant
-- `todo`: floating on the left side
-- `calendar`: floating on the right side
+- `todo`: floating on the left side and slightly lower than the search title line
+- `calendar`: floating on the right side and slightly lower than the search title line
 - `quicksites`: smaller floating card below the search card
-- title and decorative prompt bubbles: above and around the search card
+- title: visually attached to the upper edge of the search card rather than separated into a conventional header strip
+- decorative prompt bubbles: placed upper-left, upper-center, and upper-right around the search card
 
 This should feel intentionally composed, not like a grid of equal cards.
 
@@ -86,8 +87,11 @@ The redesign should be bitmap-led, with generated assets integrated into the exi
    - diffuse glow
    - soft atmospheric haze
 
-2. Pet duo badge
-   - rounded cat and dog faces
+2. Animal character set
+   - rounded cat and dog faces for the hero title area
+   - a left-side peeking cat near the todo widget
+   - a right-side companion animal near the calendar widget
+   - an optional mini paired animal sticker near the lower quicksites area
    - close in spirit to the provided example
    - softer and more polished than the current SVG treatment
 
@@ -100,7 +104,16 @@ The redesign should be bitmap-led, with generated assets integrated into the exi
    - small sparkles or light flecks
    - soft corner accents
 
-5. Widget ornaments
+5. Small decorative accents
+   - paw print accent
+   - fish-shaped accent
+   - bone or toy accent
+   - star sparkle accent
+   - cloud puff accent
+   - paper tape or sticker-corner accent
+   - all accents should remain sparse and supportive rather than dense
+
+6. Widget ornaments
    - small bitmap sticker details for todo, calendar, and quicksites
    - used as accents, not as full-card screenshots
 
@@ -108,9 +121,18 @@ The redesign should be bitmap-led, with generated assets integrated into the exi
 
 - `src/pages/newtab/assets/hero/desktop-bg-ambient.png`
 - `src/pages/newtab/assets/hero/pet-duo-badge.png`
+- `src/pages/newtab/assets/hero/pet-left-peek.png`
+- `src/pages/newtab/assets/hero/pet-right-buddy.png`
+- `src/pages/newtab/assets/hero/pet-mini-pair.png`
 - `src/pages/newtab/assets/hero/cloud-ribbon.png`
 - `src/pages/newtab/assets/hero/hint-bubble-1.png`
 - `src/pages/newtab/assets/hero/hint-bubble-2.png`
+- `src/pages/newtab/assets/hero/paw-accent.png`
+- `src/pages/newtab/assets/hero/fish-accent.png`
+- `src/pages/newtab/assets/hero/bone-accent.png`
+- `src/pages/newtab/assets/hero/star-sparkle.png`
+- `src/pages/newtab/assets/hero/cloud-puff.png`
+- `src/pages/newtab/assets/hero/tape-sticker.png`
 - `src/pages/newtab/assets/widgets/todo-sticker.png`
 - `src/pages/newtab/assets/widgets/calendar-sticker.png`
 - `src/pages/newtab/assets/widgets/quicksites-sticker.png`
@@ -134,9 +156,20 @@ The widget runtime remains the source of truth for widget presence, but the defa
 Desktop default anchors:
 
 - search: center
-- todo: left-middle
-- calendar: right-middle
+- todo: left-lower beside the search card
+- calendar: right-lower beside the search card
 - quicksites: lower center
+- title: upper-left aligned with the search card
+- prompt bubbles: top-left, top-center, top-right
+
+Desktop composition relationships should intentionally echo the reference:
+
+1. The search card owns the full visual center.
+2. The title sits close to the search card instead of behaving like a distant page header.
+3. The todo widget sits near the lower-left shoulder of the search card.
+4. The calendar widget sits near the lower-right shoulder of the search card.
+5. The quicksites widget reads like a small attached note centered below the search card.
+6. Decorative bubbles and ambient ribbons frame the composition without covering controls.
 
 Behavior rules:
 
@@ -144,6 +177,7 @@ Behavior rules:
 2. Hidden companion widgets disappear from their anchored position.
 3. Restored widgets return to their default anchored position.
 4. If runtime order changes, desktop stage classes can still map widget ids to named visual slots.
+5. Hidden side widgets should leave composed negative space rather than trigger dense auto-packing.
 
 This preserves the runtime contract while allowing a curated first-screen composition.
 
@@ -232,10 +266,18 @@ Should resemble a small favorites card:
 The current title band should be reworked into a lighter illustrated header cluster:
 
 - bitmap pet duo badge near the title
+- additional companion animal accents near the side widgets
 - title aligned close to the search card
 - two or three floating decorative prompt bubbles
 
 These bubbles are decorative first. They do not need to become new interactive product features in this redesign.
+
+Animal and decorative assets should follow these constraints:
+
+- they support the hero scene without overpowering the search card
+- they stay in the same warm cream, oat, apricot, and honey palette family
+- they should feel polished and cute, but not childish or toy-store loud
+- decoration density should stay restrained; empty space is preferred over clutter
 
 ## Widget Panel Design
 
