@@ -14,143 +14,225 @@
   <body>
     <main class="homepage-shell">
       <section class="homepage-hero" aria-label="新标签页搜索">
-        <div id="homepage-bubble-layer" class="homepage-paper-glow" aria-hidden="true"></div>
-
-        <div class="settings-modal-host">
-          <div id="settings-backdrop" class="settings-backdrop" aria-hidden="true"></div>
-
-          <section
-            id="settings-popup"
-            class="settings-popup"
-            role="dialog"
-            aria-modal="true"
+        <section id="homepage-stage" class="homepage-stage" aria-label="主页搜索区域">
+          <div
+            id="homepage-bubble-layer"
+            class="homepage-stage__ambient homepage-paper-glow"
             aria-hidden="true"
-            aria-labelledby="settings-title"
-            aria-describedby="settings-description"
-            tabindex="-1"
-            inert
-          >
-            <div class="settings-popup-header">
-              <div>
-                <p class="settings-popup-eyebrow">设置</p>
-                <h2 id="settings-title" class="settings-popup-title">AI 搜索增强</h2>
-                <p id="settings-description" class="settings-popup-description">管理接口地址、鉴权和模型配置。</p>
-              </div>
-              <button id="close-settings" class="settings-trigger settings-close-button" type="button" aria-label="关闭设置">
-                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                  <path d="M6 6l12 12"></path>
-                  <path d="M18 6 6 18"></path>
-                </svg>
-              </button>
-            </div>
+          ></div>
 
-            <form id="settings-form" class="settings-form" autocomplete="off">
-              <div class="settings-scroll-area">
-                <section class="settings-section" aria-labelledby="settings-api-section-title">
-                  <div class="settings-section-header">
-                    <h3 id="settings-api-section-title" class="settings-section-title">搜索接口</h3>
-                    <p class="settings-section-description">接口地址、鉴权和模型将用于生成 AI 增强搜索结果。</p>
-                  </div>
+          <div class="homepage-stage__decor" aria-hidden="true">
+            <img
+              data-stage-asset="bg-ambient"
+              class="homepage-stage__asset homepage-stage__asset--bg"
+              src="./assets/hero/desktop-bg-ambient.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="cloud-ribbon"
+              class="homepage-stage__asset homepage-stage__asset--cloud-ribbon"
+              src="./assets/hero/cloud-ribbon.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="pet-duo"
+              class="homepage-stage__asset homepage-stage__asset--pet-duo"
+              src="./assets/hero/pet-duo-badge.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="pet-left"
+              class="homepage-stage__asset homepage-stage__asset--pet-left"
+              src="./assets/hero/pet-left-peek.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="pet-right"
+              class="homepage-stage__asset homepage-stage__asset--pet-right"
+              src="./assets/hero/pet-right-buddy.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="pet-mini"
+              class="homepage-stage__asset homepage-stage__asset--pet-mini"
+              src="./assets/hero/pet-mini-pair.png"
+              alt=""
+            />
+            <img
+              data-stage-bubble="left"
+              class="homepage-stage__asset homepage-stage__bubble homepage-stage__bubble--left"
+              src="./assets/hero/hint-bubble-1.png"
+              alt=""
+            />
+            <img
+              data-stage-bubble="center"
+              class="homepage-stage__asset homepage-stage__bubble homepage-stage__bubble--center"
+              src="./assets/hero/hint-bubble-2.png"
+              alt=""
+            />
+            <img
+              data-stage-bubble="right"
+              class="homepage-stage__asset homepage-stage__bubble homepage-stage__bubble--right"
+              src="./assets/hero/hint-bubble-1.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="paw-accent"
+              class="homepage-stage__asset homepage-stage__asset--paw"
+              src="./assets/hero/paw-accent.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="fish-accent"
+              class="homepage-stage__asset homepage-stage__asset--fish"
+              src="./assets/hero/fish-accent.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="bone-accent"
+              class="homepage-stage__asset homepage-stage__asset--bone"
+              src="./assets/hero/bone-accent.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="star-sparkle"
+              class="homepage-stage__asset homepage-stage__asset--star"
+              src="./assets/hero/star-sparkle.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="cloud-puff"
+              class="homepage-stage__asset homepage-stage__asset--cloud-puff"
+              src="./assets/hero/cloud-puff.png"
+              alt=""
+            />
+            <img
+              data-stage-asset="tape-sticker"
+              class="homepage-stage__asset homepage-stage__asset--tape"
+              src="./assets/hero/tape-sticker.png"
+              alt=""
+            />
+          </div>
 
-                  <div class="settings-inline-switch">
-                    <div class="settings-switch-copy">
-                      <p class="settings-switch-title">启用 AI 搜索增强</p>
-                      <p class="settings-switch-description">开启后会先生成 AI 增强搜索方案，再执行搜索或打开站点。</p>
-                    </div>
-                    <label class="settings-switch-control" for="ai-search-enabled">
-                      <input id="ai-search-enabled" class="settings-switch-input" type="checkbox" />
-                      <span class="settings-switch-track" aria-hidden="true">
-                        <span class="settings-switch-thumb"></span>
-                      </span>
-                    </label>
-                  </div>
+          <div class="settings-modal-host">
+            <div id="settings-backdrop" class="settings-backdrop" aria-hidden="true"></div>
 
-                  <div id="ai-config-state-card" class="settings-section" data-state="unconfigured" aria-live="polite">
-                    <div class="settings-section-header">
-                      <h3 class="settings-section-title">AI 配置状态</h3>
-                      <p class="settings-section-description">保存配置后需要单独测试，测试通过后才能启用 AI 搜索增强。</p>
-                    </div>
-                    <p id="ai-config-state-label" class="settings-note">未配置</p>
-                    <p id="ai-config-state-message" class="settings-note">请先完整填写接口地址、API Key 和模型，然后保存设置。</p>
-                  </div>
-
-                  <label class="settings-label" for="search-api-endpoint">搜索接口地址</label>
-                  <input id="search-api-endpoint" class="settings-input" type="url" inputmode="url" placeholder="https://api.example.com 或 https://api.example.com/v1/chat/completions" />
-                  <p class="settings-note">可填基地址或完整 <code>/v1/chat/completions</code> 地址，扩展会自动补全。</p>
-                  <p class="settings-note">建议返回 JSON 决策：<code>mode + query/url</code>，可选 <code>websites</code>。</p>
-
-                  <label class="settings-label" for="search-api-key">API Key</label>
-                  <input id="search-api-key" class="settings-input" type="password" placeholder="可选" />
-                  <p class="settings-note">填写后会发送 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
-
-                  <label class="settings-label" for="search-api-model">模型名称</label>
-                  <input id="search-api-model" class="settings-input" type="text" placeholder="例如 gpt-4o-mini" />
-                  <p class="settings-note">使用 <code>/v1/chat/completions</code> 时必须填写。</p>
-
-                  <div class="settings-model-tools">
-                    <button id="fetch-models" class="settings-secondary-button" type="button">获取模型</button>
-                    <select id="search-api-model-select" class="settings-input settings-select" aria-label="选择模型">
-                      <option value="">选择模型后自动填入</option>
-                    </select>
-                  </div>
-                </section>
-              </div>
-
-              <div class="settings-panel-footer">
-                <p id="settings-status" class="settings-status" role="status" aria-live="polite" hidden></p>
-                <div class="settings-actions">
-                  <button id="test-search-api-connection" class="settings-secondary-button" type="button">测试连接</button>
-                  <button id="save-settings" class="settings-save-button" type="submit">保存设置</button>
-                </div>
-              </div>
-            </form>
-          </section>
-        </div>
-
-        <section class="homepage-focus-shell layout-newtab-hero" aria-label="主页搜索区域">
-          <header class="homepage-title-band" aria-label="主题标题">
-            <div class="homepage-pet-pair" aria-hidden="true">
-              <div class="homepage-pet homepage-pet-cat">
-                <span class="homepage-pet-ear homepage-pet-ear-left"></span>
-                <span class="homepage-pet-ear homepage-pet-ear-right"></span>
-                <span class="homepage-pet-eye homepage-pet-eye-left"></span>
-                <span class="homepage-pet-eye homepage-pet-eye-right"></span>
-                <span class="homepage-pet-mouth"></span>
-              </div>
-              <div class="homepage-pet homepage-pet-dog">
-                <span class="homepage-pet-ear homepage-pet-ear-left"></span>
-                <span class="homepage-pet-ear homepage-pet-ear-right"></span>
-                <span class="homepage-pet-eye homepage-pet-eye-left"></span>
-                <span class="homepage-pet-eye homepage-pet-eye-right"></span>
-                <span class="homepage-pet-mouth"></span>
-              </div>
-            </div>
-
-            <div class="homepage-title-copy">
-              <p class="homepage-title-kicker">猫狗搭子新标签页</p>
-              <h1 class="homepage-title">今天想找点什么？</h1>
-            </div>
-
-            <button
-              id="open-widget-panel"
-              class="ui-btn-secondary homepage-widget-trigger"
-              type="button"
-              aria-haspopup="dialog"
-              aria-expanded="false"
+            <section
+              id="settings-popup"
+              class="settings-popup"
+              role="dialog"
+              aria-modal="true"
+              aria-hidden="true"
+              aria-labelledby="settings-title"
+              aria-describedby="settings-description"
+              tabindex="-1"
+              inert
             >
-              添加组件
-            </button>
-          </header>
+              <div class="settings-popup-header">
+                <div>
+                  <p class="settings-popup-eyebrow">设置</p>
+                  <h2 id="settings-title" class="settings-popup-title">AI 搜索增强</h2>
+                  <p id="settings-description" class="settings-popup-description">管理接口地址、鉴权和模型配置。</p>
+                </div>
+                <button id="close-settings" class="settings-trigger settings-close-button" type="button" aria-label="关闭设置">
+                  <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                    <path d="M6 6l12 12"></path>
+                    <path d="M18 6 6 18"></path>
+                  </svg>
+                </button>
+              </div>
 
-          <div id="widget-root" class="homepage-widget-root" aria-live="polite"></div>
+              <form id="settings-form" class="settings-form" autocomplete="off">
+                <div class="settings-scroll-area">
+                  <section class="settings-section" aria-labelledby="settings-api-section-title">
+                    <div class="settings-section-header">
+                      <h3 id="settings-api-section-title" class="settings-section-title">搜索接口</h3>
+                      <p class="settings-section-description">接口地址、鉴权和模型将用于生成 AI 增强搜索结果。</p>
+                    </div>
 
-          <section id="widget-panel" class="widget-panel" aria-label="组件面板" hidden>
-            <div class="widget-panel-header">
-              <h2 class="widget-panel-title">添加组件</h2>
-              <button id="close-widget-panel" class="ui-btn-icon" type="button" aria-label="关闭组件面板">×</button>
-            </div>
-            <div id="widget-panel-status" class="widget-panel-status" hidden></div>
-            <div id="widget-panel-list" class="widget-panel-list"></div>
+                    <div class="settings-inline-switch">
+                      <div class="settings-switch-copy">
+                        <p class="settings-switch-title">启用 AI 搜索增强</p>
+                        <p class="settings-switch-description">开启后会先生成 AI 增强搜索方案，再执行搜索或打开站点。</p>
+                      </div>
+                      <label class="settings-switch-control" for="ai-search-enabled">
+                        <input id="ai-search-enabled" class="settings-switch-input" type="checkbox" />
+                        <span class="settings-switch-track" aria-hidden="true">
+                          <span class="settings-switch-thumb"></span>
+                        </span>
+                      </label>
+                    </div>
+
+                    <div id="ai-config-state-card" class="settings-section" data-state="unconfigured" aria-live="polite">
+                      <div class="settings-section-header">
+                        <h3 class="settings-section-title">AI 配置状态</h3>
+                        <p class="settings-section-description">保存配置后需要单独测试，测试通过后才能启用 AI 搜索增强。</p>
+                      </div>
+                      <p id="ai-config-state-label" class="settings-note">未配置</p>
+                      <p id="ai-config-state-message" class="settings-note">请先完整填写接口地址、API Key 和模型，然后保存设置。</p>
+                    </div>
+
+                    <label class="settings-label" for="search-api-endpoint">搜索接口地址</label>
+                    <input id="search-api-endpoint" class="settings-input" type="url" inputmode="url" placeholder="https://api.example.com 或 https://api.example.com/v1/chat/completions" />
+                    <p class="settings-note">可填基地址或完整 <code>/v1/chat/completions</code> 地址，扩展会自动补全。</p>
+                    <p class="settings-note">建议返回 JSON 决策：<code>mode + query/url</code>，可选 <code>websites</code>。</p>
+
+                    <label class="settings-label" for="search-api-key">API Key</label>
+                    <input id="search-api-key" class="settings-input" type="password" placeholder="可选" />
+                    <p class="settings-note">填写后会发送 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
+
+                    <label class="settings-label" for="search-api-model">模型名称</label>
+                    <input id="search-api-model" class="settings-input" type="text" placeholder="例如 gpt-4o-mini" />
+                    <p class="settings-note">使用 <code>/v1/chat/completions</code> 时必须填写。</p>
+
+                    <div class="settings-model-tools">
+                      <button id="fetch-models" class="settings-secondary-button" type="button">获取模型</button>
+                      <select id="search-api-model-select" class="settings-input settings-select" aria-label="选择模型">
+                        <option value="">选择模型后自动填入</option>
+                      </select>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="settings-panel-footer">
+                  <p id="settings-status" class="settings-status" role="status" aria-live="polite" hidden></p>
+                  <div class="settings-actions">
+                    <button id="test-search-api-connection" class="settings-secondary-button" type="button">测试连接</button>
+                    <button id="save-settings" class="settings-save-button" type="submit">保存设置</button>
+                  </div>
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <section class="homepage-focus-shell layout-newtab-hero" aria-label="主页搜索区域">
+            <header class="homepage-title-band" aria-label="主题标题">
+              <div class="homepage-title-copy">
+                <p class="homepage-title-kicker">猫狗搭子新标签页</p>
+                <h1 class="homepage-title">今天想找点什么？</h1>
+              </div>
+
+              <button
+                id="open-widget-panel"
+                class="ui-btn-secondary homepage-widget-trigger"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >
+                添加组件
+              </button>
+            </header>
+
+            <div id="widget-root" class="homepage-widget-root" aria-live="polite"></div>
+
+            <section id="widget-panel" class="widget-panel" aria-label="组件面板" hidden>
+              <div class="widget-panel-header">
+                <h2 class="widget-panel-title">添加组件</h2>
+                <button id="close-widget-panel" class="ui-btn-icon" type="button" aria-label="关闭组件面板">×</button>
+              </div>
+              <div id="widget-panel-status" class="widget-panel-status" hidden></div>
+              <div id="widget-panel-list" class="widget-panel-list"></div>
+            </section>
           </section>
         </section>
       </section>
