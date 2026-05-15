@@ -13,6 +13,50 @@ const getStorageArea = () => {
 
 const isPlainObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const areStringArraysEqual = (left, right) => {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+};
+
+const areWidgetPrefsEqual = (left, right) => {
+  if (!isPlainObject(left) || !isPlainObject(right)) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (!areStringArraysEqual(leftKeys, rightKeys)) {
+    return false;
+  }
+
+  return leftKeys.every((widgetId) => {
+    const leftPrefs = left[widgetId];
+    const rightPrefs = right[widgetId];
+    if (!isPlainObject(leftPrefs) || !isPlainObject(rightPrefs)) {
+      return false;
+    }
+
+    const leftPrefKeys = Object.keys(leftPrefs);
+    const rightPrefKeys = Object.keys(rightPrefs);
+    if (!areStringArraysEqual(leftPrefKeys, rightPrefKeys)) {
+      return false;
+    }
+
+    return leftPrefKeys.every((prefKey) => leftPrefs[prefKey] === rightPrefs[prefKey]);
+  });
+};
+
+const areWidgetLayoutsEqual = (left, right) =>
+  isPlainObject(left)
+  && isPlainObject(right)
+  && left.version === right.version
+  && areStringArraysEqual(left.orderedWidgetIds, right.orderedWidgetIds)
+  && areStringArraysEqual(left.hiddenWidgetIds, right.hiddenWidgetIds)
+  && areWidgetPrefsEqual(left.widgetPrefs, right.widgetPrefs);
+
 const createRegistryIndex = (registryItems = []) => {
   const items = [];
   const itemIds = new Set();
@@ -175,7 +219,17 @@ export const normalizeWidgetLayout = ({ layout, registryItems }) => {
 
 export const loadWidgetLayout = async ({ registryItems }) => {
   const layout = await loadStoredLayout();
-  return normalizeWidgetLayout({ layout, registryItems });
+  const normalizedLayout = normalizeWidgetLayout({ layout, registryItems });
+
+  if (!areWidgetLayoutsEqual(layout, normalizedLayout)) {
+    try {
+      await saveWidgetLayout(normalizedLayout);
+    } catch (_error) {
+      // Preserve runtime recovery even if the normalization rewrite cannot be persisted.
+    }
+  }
+
+  return normalizedLayout;
 };
 
 export const saveWidgetLayout = async (layout) => {

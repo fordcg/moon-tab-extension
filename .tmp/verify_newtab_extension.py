@@ -148,6 +148,17 @@ def seed_widget_layout(page: Page, layout: dict) -> None:
     )
 
 
+def read_widget_layout_storage(page: Page) -> dict | None:
+    layout = page.evaluate(
+        """() => new Promise((resolve) => {
+            chrome.storage.local.get(['newtabWidgetLayout'], (items) => {
+                resolve(items?.newtabWidgetLayout ?? null);
+            });
+        })"""
+    )
+    return layout if isinstance(layout, dict) else None
+
+
 def read_visible_suggestions(page: Page) -> tuple[bool, list[str], bool, int]:
     suggestions = page.locator("#search-suggestions .search-suggestion-item")
     suggestion_count = suggestions.count()
@@ -623,6 +634,19 @@ def main() -> None:
                 result["extension_id"] = service_worker.url.split("/")[2]
                 expected_extension_url = f"chrome-extension://{result['extension_id']}/src/pages/newtab/index.html"
 
+                seed_page = context.new_page()
+                open_extension_page(seed_page, expected_extension_url)
+                seed_widget_layout(
+                    seed_page,
+                    {
+                        "version": 1,
+                        "orderedWidgetIds": ["search", "search", "ghost", "calendar"],
+                        "hiddenWidgetIds": ["search", "ghost", "todo"],
+                        "widgetPrefs": "invalid",
+                    },
+                )
+                seed_page.close()
+
                 page = context.new_page()
                 attach_loggers(page, result)
 
@@ -639,9 +663,17 @@ def main() -> None:
                 wait_for_widget_runtime_ready(page)
                 widget_runtime = read_widget_runtime_state(page)
                 result["widget_runtime"] = widget_runtime
+                result["widget_layout_storage"] = read_widget_layout_storage(page)
                 assert widget_runtime["widget_root_present"], "expected #widget-root mount"
                 assert widget_runtime["add_button_present"], "expected add-widget trigger"
                 assert "search" in widget_runtime["visible_widget_ids"], "expected search core widget to be rendered"
+                assert "ghost" not in widget_runtime["visible_widget_ids"], "expected unknown widget removal"
+                assert result["widget_layout_storage"] == {
+                    "version": 1,
+                    "orderedWidgetIds": ["search", "calendar", "quicksites"],
+                    "hiddenWidgetIds": ["todo"],
+                    "widgetPrefs": {},
+                }, "expected malformed widget layout storage rewrite"
 
                 wait_for_extension_ready(page)
 
