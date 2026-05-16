@@ -1,606 +1,6 @@
-import json
-import shutil
-import tempfile
-from pathlib import Path
+import time
 
-from playwright.sync_api import Error, Page, TimeoutError, sync_playwright
-
-
-ROOT = Path(__file__).resolve().parent.parent
-EXTENSION_PATH = str(ROOT)
-SCREENSHOT_PATH = ROOT / ".tmp" / "newtab-homepage-qa.png"
-SCREENSHOT_BEFORE_HOVER_PATH = ROOT / ".tmp" / "newtab-homepage-before-hover.png"
-SCREENSHOT_AFTER_HOVER_PATH = ROOT / ".tmp" / "newtab-homepage-after-hover.png"
-
-
-def attach_loggers(page: Page, store: dict) -> None:
-    store.setdefault("console", [])
-    store.setdefault("page_errors", [])
-
-    page.on(
-        "console",
-        lambda message: store["console"].append(
-            {
-                "type": message.type,
-                "text": message.text,
-            }
-        ),
-    )
-    page.on("pageerror", lambda error: store["page_errors"].append(str(error)))
-
-
-def wait_for_extension_ready(page: Page) -> None:
-    page.wait_for_selector("#search-input", timeout=15000)
-    page.wait_for_selector("#homepage-bubble-layer", timeout=15000)
-    page.wait_for_function(
-        """() => {
-            const input = document.querySelector('#search-input');
-            const layer = document.querySelector('#homepage-bubble-layer');
-            return Boolean(input && !input.disabled && layer);
-        }""",
-        timeout=15000,
-    )
-
-
-def wait_for_widget_runtime_ready(page: Page, timeout: int = 10000) -> None:
-    try:
-        page.wait_for_function(
-            """() => Boolean(
-                document.querySelector('#widget-root')
-                && document.querySelector('#open-widget-panel')
-            )""",
-            timeout=timeout,
-        )
-    except TimeoutError:
-        pass
-
-
-def open_extension_page(page: Page, extension_url: str) -> None:
-    page.goto(extension_url, wait_until="domcontentloaded")
-    page.wait_for_load_state("networkidle")
-    wait_for_extension_ready(page)
-
-def wait_for_redirect_or_extension_ready(page: Page, timeout: int = 15000) -> None:
-    try:
-        page.wait_for_url("chrome-extension://**", timeout=timeout)
-    except TimeoutError:
-        pass
-
-
-
-def wait_for_default_search(page: Page, timeout: int = 15000) -> bool:
-    try:
-        page.wait_for_url("**bing.com/search**", timeout=timeout)
-        return True
-    except TimeoutError:
-        return "bing.com/search" in page.url
-
-
-
-def read_search_target_controls(page: Page) -> tuple[str, bool, bool, bool, bool]:
-    current_search_target = ""
-    github_target_available = False
-    target_trigger_present = False
-    target_menu_present = False
-    suggestions_shell_present = False
-
-    target_trigger = page.locator("#search-target-trigger")
-    target_menu = page.locator("#search-target-menu")
-    suggestions_shell = page.locator("#search-suggestions")
-    target_label = page.locator("#search-target-label")
-
-    target_trigger_present = target_trigger.count() > 0
-    target_menu_present = target_menu.count() > 0
-    suggestions_shell_present = suggestions_shell.count() > 0
-
-    if target_label.count() > 0:
-        current_search_target = target_label.first.inner_text().strip()
-
-    github_option = page.locator("#search-target-menu [data-target-id='github']")
-    github_target_available = github_option.count() > 0
-
-    return (
-        current_search_target,
-        github_target_available,
-        target_trigger_present,
-        target_menu_present,
-        suggestions_shell_present,
-    )
-
-def read_widget_runtime_state(page: Page) -> dict:
-    state = page.evaluate(
-        """() => {
-            const widgetRoot = document.querySelector('#widget-root');
-            const addButton = document.querySelector('#open-widget-panel');
-            const panel = document.querySelector('#widget-panel');
-            const isRenderedVisible = (element) => {
-                if (!(element instanceof HTMLElement) || element.hidden) {
-                    return false;
-                }
-
-                const styles = getComputedStyle(element);
-                if (styles.display === 'none' || styles.visibility === 'hidden') {
-                    return false;
-                }
-
-                return element.offsetParent !== null || element.getClientRects().length > 0;
-            };
-            const cards = Array.from(
-                document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-id]')
-            ).filter((card) => isRenderedVisible(card));
-            return {
-                widget_root_present: Boolean(widgetRoot),
-                add_button_present: Boolean(addButton),
-                panel_present: Boolean(panel),
-                visible_widget_ids: cards.map((card) => card.getAttribute('data-widget-id')).filter(Boolean),
-            };
-        }"""
-    )
-    return state if isinstance(state, dict) else {}
-
-
-def seed_widget_layout(page: Page, layout: dict) -> None:
-    page.evaluate(
-        """(nextLayout) => new Promise((resolve) => {
-            chrome.storage.local.set({ newtabWidgetLayout: nextLayout }, resolve);
-        })""",
-        layout,
-    )
-
-
-def read_widget_layout_storage(page: Page) -> dict | None:
-    layout = page.evaluate(
-        """() => new Promise((resolve) => {
-            chrome.storage.local.get(['newtabWidgetLayout'], (items) => {
-                resolve(items?.newtabWidgetLayout ?? null);
-            });
-        })"""
-    )
-    return layout if isinstance(layout, dict) else None
-
-
-def read_visible_suggestions(page: Page) -> tuple[bool, list[str], bool, int]:
-    suggestions = page.locator("#search-suggestions .search-suggestion-item")
-    suggestion_count = suggestions.count()
-    suggestion_texts = [suggestions.nth(index).inner_text().strip() for index in range(suggestion_count)]
-    quick_action_visible = any(text.startswith("用 ") for text in suggestion_texts)
-    shell_visible = page.locator("#search-suggestions").is_visible() if page.locator("#search-suggestions").count() > 0 else False
-    highlighted_index = page.evaluate(
-        """() => {
-            const items = Array.from(document.querySelectorAll('#search-suggestions .search-suggestion-item'));
-            return items.findIndex((item) => item.dataset.highlighted === 'true');
-        }"""
-    )
-    return shell_visible and suggestion_count > 0, suggestion_texts, quick_action_visible, int(highlighted_index)
-
-
-def wait_for_suggestions_visible(page: Page, timeout: int = 5000) -> tuple[bool, list[str], bool, int]:
-    page.wait_for_selector("#search-suggestions .search-suggestion-item", state="visible", timeout=timeout)
-    return read_visible_suggestions(page)
-
-
-def wait_for_suggestion_text(page: Page, expected_text: str, timeout: int = 5000) -> None:
-    page.locator("#search-suggestions .search-suggestion-item", has_text=expected_text).first.wait_for(
-        state="visible",
-        timeout=timeout,
-    )
-
-
-def enable_fake_ai_preview(page: Page) -> None:
-    page.add_init_script(
-        """
-        (() => {
-            const fakeEndpoint = 'https://mock-search.local/v1/chat/completions';
-            const fakeDecision = {
-                choices: [
-                    {
-                        message: {
-                            content: JSON.stringify({
-                                mode: 'search',
-                                target: 'moon tab refined vertical query',
-                                summary: '测试用 AI 细化搜索词。',
-                                websites: [
-                                    {
-                                        title: 'Moon Tab Docs',
-                                        url: 'https://example.com/docs',
-                                        description: '测试站点',
-                                    },
-                                ],
-                            }),
-                        },
-                    },
-                ],
-            };
-
-            const originalFetch = window.fetch.bind(window);
-            window.fetch = async (input, init) => {
-                const url = typeof input === 'string' ? input : input?.url ?? '';
-                if (url === fakeEndpoint) {
-                    return {
-                        ok: true,
-                        status: 200,
-                        text: async () => JSON.stringify(fakeDecision),
-                    };
-                }
-
-                return originalFetch(input, init);
-            };
-
-            if (globalThis.chrome?.permissions) {
-                globalThis.chrome.permissions.contains = (_permissions, callback) => callback(true);
-                globalThis.chrome.permissions.request = (_permissions, callback) => callback(true);
-            }
-        })();
-        """
-    )
-
-    page.evaluate(
-        """async () => {
-            const fakeEndpoint = 'https://mock-search.local/v1/chat/completions';
-
-            if (chrome?.permissions) {
-                chrome.permissions.contains = (_permissions, callback) => callback(true);
-                chrome.permissions.request = (_permissions, callback) => callback(true);
-            }
-
-            if (chrome?.storage?.local) {
-                await new Promise((resolve) => {
-                    chrome.storage.local.set(
-                        {
-                            searchApiEndpoint: fakeEndpoint,
-                            searchApiKey: 'mock-key',
-                            searchApiModel: 'mock-model',
-                            aiSearchEnabled: true,
-                            searchRuntimeConfigState: 'valid',
-                            searchRuntimeLastTestStatus: 'passed',
-                            searchRuntimeLastTestMessage: 'mock connection ok',
-                            searchRuntimeLastTestAt: '2026-04-03T00:00:00.000Z',
-                            searchRuntimeLastRuntimeErrorMessage: '',
-                            searchRuntimeLastRuntimeErrorAt: '',
-                        },
-                        resolve,
-                    );
-                });
-            }
-        }"""
-    )
-
-
-def enable_remote_suggestion_success(page: Page) -> None:
-    page.add_init_script(
-        """
-        (() => {
-            const remoteSuggestionPrefix = 'https://api.bing.com/osjson.aspx';
-            const originalFetch = window.fetch.bind(window);
-            window.fetch = async (input, init) => {
-                const url = typeof input === 'string' ? input : input?.url ?? '';
-                if (url.startsWith(remoteSuggestionPrefix)) {
-                    return {
-                        ok: true,
-                        status: 200,
-                        json: async () => [
-                            new URL(url).searchParams.get('query') ?? '',
-                            ['moon tab remote alpha', 'moon tab remote beta'],
-                        ],
-                    };
-                }
-
-                return originalFetch(input, init);
-            };
-        })();
-        """
-    )
-
-
-def enable_remote_suggestion_failure(page: Page) -> None:
-    page.add_init_script(
-        """
-        (() => {
-            const remoteSuggestionPrefix = 'https://api.bing.com/osjson.aspx';
-            const originalFetch = window.fetch.bind(window);
-            window.fetch = async (input, init) => {
-                const url = typeof input === 'string' ? input : input?.url ?? '';
-                if (url.startsWith(remoteSuggestionPrefix)) {
-                    throw new Error('mock remote suggestion failure');
-                }
-
-                return originalFetch(input, init);
-            };
-        })();
-        """
-    )
-
-
-def seed_search_history(page: Page, history_items: list[str]) -> None:
-    page.evaluate(
-        """async (items) => {
-            if (!chrome?.storage?.local) {
-                return;
-            }
-
-            await new Promise((resolve) => {
-                chrome.storage.local.set({ searchHistory: items }, resolve);
-            });
-        }""",
-        history_items,
-    )
-
-
-def read_extension_storage(page: Page) -> dict:
-    extension_storage = page.evaluate(
-        """async () => {
-            const storageArea = chrome.storage?.local;
-            if (!storageArea?.get) {
-                return { searchHistory: [] };
-            }
-
-            return await new Promise((resolve) => {
-                chrome.storage.local.get(
-                    {
-                        searchHistory: [],
-                        searchApiEndpoint: '',
-                        searchApiKey: '',
-                        searchApiModel: '',
-                        aiSearchEnabled: false,
-                    },
-                    (items) => {
-                        if (chrome.runtime?.lastError) {
-                            resolve({ searchHistory: [] });
-                            return;
-                        }
-
-                        resolve(items);
-                    },
-                );
-            });
-        }"""
-    )
-    return extension_storage if isinstance(extension_storage, dict) else {}
-
-
-def read_background_foundation_state(page: Page) -> dict:
-    background_state = page.evaluate(
-        """() => {
-            const layer = document.querySelector('#homepage-bubble-layer');
-            const bodyStyle = getComputedStyle(document.body);
-            const bodyBefore = getComputedStyle(document.body, '::before');
-            const bodyAfter = getComputedStyle(document.body, '::after');
-            const layerBefore = layer ? getComputedStyle(layer, '::before') : null;
-            const layerAfter = layer ? getComputedStyle(layer, '::after') : null;
-            const runtimeHandleKey = "__" + "HOMEPAGE_BUBBLE_LAYER" + "__";
-
-            return {
-                layerPresent: Boolean(layer),
-                hasCanvas: Boolean(layer?.querySelector('canvas')),
-                hasRuntimeHandle: Boolean(window[runtimeHandleKey]),
-                bodyBackgroundImage: bodyStyle.backgroundImage,
-                bodyBeforeBackgroundImage: bodyBefore.backgroundImage,
-                bodyAfterBackgroundImage: bodyAfter.backgroundImage,
-                layerBeforeBackgroundImage: layerBefore ? layerBefore.backgroundImage : 'none',
-                layerAfterBackgroundImage: layerAfter ? layerAfter.backgroundImage : 'none',
-                layerPointerEvents: layer ? getComputedStyle(layer).pointerEvents : 'missing',
-                layerOpacity: layer ? getComputedStyle(layer).opacity : 'missing',
-                layerFilter: layer ? getComputedStyle(layer).filter : 'missing',
-            };
-        }"""
-    )
-    return background_state if isinstance(background_state, dict) else {}
-
-
-def read_illustrated_stage_state(page: Page) -> dict:
-    state = page.evaluate(
-        """() => {
-            const requiredAssets = [
-                'bg-ambient',
-                'cloud-ribbon',
-                'pet-duo',
-                'pet-left',
-                'pet-right',
-                'pet-mini',
-                'paw-accent',
-                'fish-accent',
-                'bone-accent',
-                'star-sparkle',
-                'cloud-puff',
-                'tape-sticker',
-            ];
-            const requiredBubbles = ['left', 'center', 'right'];
-            const assetElements = requiredAssets.map((name) => document.querySelector(`[data-stage-asset="${name}"]`));
-            const bubbleElements = requiredBubbles.map((name) => document.querySelector(`[data-stage-bubble="${name}"]`));
-            const allImages = [...assetElements, ...bubbleElements].filter(Boolean);
-            const widgetSlots = Object.fromEntries(
-                Array.from(document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-id]'))
-                    .map((card) => [card.getAttribute('data-widget-id'), card.getAttribute('data-widget-slot')])
-            );
-            const decor = document.querySelector('.homepage-stage__decor');
-            return {
-                stage_present: document.querySelectorAll('#homepage-stage').length === 1,
-                stage_asset_count: assetElements.filter(Boolean).length,
-                stage_bubble_count: bubbleElements.filter(Boolean).length,
-                stage_assets_loaded: allImages.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0),
-                stage_decor_noninteractive: decor ? getComputedStyle(decor).pointerEvents === 'none' : false,
-                widget_slots: widgetSlots,
-                search_slot_center: widgetSlots.search === 'center',
-                calendar_slot_right_lower: widgetSlots.calendar === 'right-lower',
-                quicksites_slot_lower_center: widgetSlots.quicksites === 'lower-center',
-            };
-        }"""
-    )
-    return state if isinstance(state, dict) else {}
-
-
-def read_mobile_stage_state(page: Page, extension_url: str) -> dict:
-    page.set_viewport_size({"width": 390, "height": 844})
-    open_extension_page(page, extension_url)
-    wait_for_widget_runtime_ready(page)
-    state = page.evaluate(
-        """() => {
-            const stage = document.querySelector('#homepage-stage');
-            const stageRect = stage?.getBoundingClientRect();
-            const cards = Array.from(document.querySelectorAll('#widget-root .homepage-widget-card[data-widget-slot]'));
-            const visibleCards = cards.filter((card) => {
-                const styles = getComputedStyle(card);
-                return styles.display !== 'none' && styles.visibility !== 'hidden';
-            });
-            const bubbles = Array.from(document.querySelectorAll('[data-stage-bubble]'));
-            return {
-                stage_width_fits_viewport: Boolean(stageRect) && stageRect.width <= window.innerWidth,
-                visible_card_count: visibleCards.length,
-                visible_cards_relative: visibleCards.every((card) => getComputedStyle(card).position === 'relative'),
-                decorative_bubbles_hidden: bubbles.every((bubble) => getComputedStyle(bubble).display === 'none'),
-            };
-        }"""
-    )
-    return state if isinstance(state, dict) else {}
-
-
-
-def read_search_outline_alignment_state(page: Page) -> dict:
-    alignment_state = page.evaluate(
-        """() => {
-            const frame = document.querySelector('.outline-search-frame');
-            const outlineSvg = document.querySelector('.outline-search-outline');
-            const outline = document.querySelector('.outline-search-outline-rect');
-            if (!(frame instanceof HTMLElement) || !(outlineSvg instanceof SVGSVGElement) || !(outline instanceof SVGRectElement)) {
-                return {
-                    framePresent: frame instanceof HTMLElement,
-                    outlineSvgPresent: outlineSvg instanceof SVGSVGElement,
-                    outlinePresent: outline instanceof SVGRectElement,
-                };
-            }
-
-            const frameRect = frame.getBoundingClientRect();
-            const outlineSvgRect = outlineSvg.getBoundingClientRect();
-            const frameStyles = getComputedStyle(frame);
-            const frameBorderWidth = Number.parseFloat(frameStyles.borderTopWidth) || 0;
-            const frameRadius = Number.parseFloat(frameStyles.borderTopLeftRadius) || 0;
-            const outlineX = Number.parseFloat(outline.getAttribute('x') || '0');
-            const outlineY = Number.parseFloat(outline.getAttribute('y') || '0');
-            const outlineWidth = Number.parseFloat(outline.getAttribute('width') || '0');
-            const outlineHeight = Number.parseFloat(outline.getAttribute('height') || '0');
-            const outlineRadius = Number.parseFloat(outline.getAttribute('rx') || '0');
-            const outlineStyles = getComputedStyle(outline);
-            const outlineStrokeWidth = Number.parseFloat(outlineStyles.strokeWidth) || 0;
-            const outlineStroke = outlineStyles.stroke;
-            const expectedInset = frameBorderWidth / 2;
-            const expectedWidth = Math.max(0, frameRect.width - frameBorderWidth);
-            const expectedHeight = Math.max(0, frameRect.height - frameBorderWidth);
-            const expectedRadius = Math.max(0, frameRadius - frameBorderWidth / 2);
-            const epsilon = 0.75;
-            const svgBoxLeftAligned = Math.abs(outlineSvgRect.left - frameRect.left) <= epsilon;
-            const svgBoxTopAligned = Math.abs(outlineSvgRect.top - frameRect.top) <= epsilon;
-            const svgBoxWidthAligned = Math.abs(outlineSvgRect.width - frameRect.width) <= epsilon;
-            const svgBoxHeightAligned = Math.abs(outlineSvgRect.height - frameRect.height) <= epsilon;
-
-            return {
-                framePresent: true,
-                outlineSvgPresent: true,
-                outlinePresent: true,
-                frameBorderWidth,
-                frameBorderColor: frameStyles.borderTopColor,
-                frameBorderStyle: frameStyles.borderTopStyle,
-                frameWidth: frameRect.width,
-                frameHeight: frameRect.height,
-                frameRadius,
-                outlineSvgLeft: outlineSvgRect.left,
-                outlineSvgTop: outlineSvgRect.top,
-                outlineSvgWidth: outlineSvgRect.width,
-                outlineSvgHeight: outlineSvgRect.height,
-                outlineX,
-                outlineY,
-                outlineWidth,
-                outlineHeight,
-                outlineRadius,
-                svgBoxLeftAligned,
-                svgBoxTopAligned,
-                svgBoxWidthAligned,
-                svgBoxHeightAligned,
-                svgBoxAligned: svgBoxLeftAligned && svgBoxTopAligned && svgBoxWidthAligned && svgBoxHeightAligned,
-                xAligned: Math.abs(outlineX - expectedInset) <= epsilon,
-                yAligned: Math.abs(outlineY - expectedInset) <= epsilon,
-                widthAligned: Math.abs(outlineWidth - expectedWidth) <= epsilon,
-                heightAligned: Math.abs(outlineHeight - expectedHeight) <= epsilon,
-                radiusAligned: Math.abs(outlineRadius - expectedRadius) <= epsilon,
-                outlineVisible: outlineStrokeWidth > 0 && outlineStroke !== 'rgba(0, 0, 0, 0)',
-                frameBorderVisible: frameStyles.borderTopStyle !== 'none' && frameBorderWidth > 0 && frameStyles.borderTopColor !== 'rgba(0, 0, 0, 0)',
-            };
-        }"""
-    )
-    return alignment_state if isinstance(alignment_state, dict) else {}
-
-
-def assert_required_checks(result: dict) -> None:
-    required_checks = [
-        ("redirect_ok", result["redirect_ok"] or result["extension_page_open_ok"]),
-        ("extension_page_open_ok", result["extension_page_open_ok"]),
-        ("search_input_enabled", result["search_input_enabled"]),
-        ("background_layer_present", result["background_layer_present"]),
-        ("background_has_no_canvas", result["background_has_no_canvas"]),
-        ("background_has_no_runtime_handle", result["background_has_no_runtime_handle"]),
-        ("background_layer_noninteractive", result["background_layer_noninteractive"]),
-        ("background_has_texture_overlay", result["background_has_texture_overlay"]),
-        ("background_has_focus_overlay", result["background_has_focus_overlay"]),
-        ("illustrated_stage_present", result["illustrated_stage"].get("stage_present")),
-        ("illustrated_stage_assets_present", result["illustrated_stage"].get("stage_asset_count") == 12),
-        ("illustrated_stage_bubbles_present", result["illustrated_stage"].get("stage_bubble_count") == 3),
-        ("illustrated_stage_assets_loaded", result["illustrated_stage"].get("stage_assets_loaded")),
-        ("illustrated_stage_decor_noninteractive", result["illustrated_stage"].get("stage_decor_noninteractive")),
-        ("illustrated_search_slot_center", result["illustrated_stage"].get("search_slot_center")),
-        ("illustrated_calendar_slot_right_lower", result["illustrated_stage"].get("calendar_slot_right_lower")),
-        ("illustrated_quicksites_slot_lower_center", result["illustrated_stage"].get("quicksites_slot_lower_center")),
-        ("mobile_stage_width_fits_viewport", result["mobile_stage"].get("stage_width_fits_viewport")),
-        ("mobile_stage_cards_relative", result["mobile_stage"].get("visible_cards_relative")),
-        ("mobile_stage_bubbles_hidden", result["mobile_stage"].get("decorative_bubbles_hidden")),
-        ("search_outline_visible", result["search_outline_alignment"].get("outlineVisible")),
-        ("search_outline_svg_box_aligned", result["search_outline_alignment"].get("svgBoxAligned")),
-        ("search_outline_x_aligned", result["search_outline_alignment"].get("xAligned")),
-        ("search_outline_y_aligned", result["search_outline_alignment"].get("yAligned")),
-        ("search_outline_width_aligned", result["search_outline_alignment"].get("widthAligned")),
-        ("search_outline_height_aligned", result["search_outline_alignment"].get("heightAligned")),
-        ("search_outline_radius_aligned", result["search_outline_alignment"].get("radiusAligned")),
-        ("widget_root_present", result["widget_runtime"].get("widget_root_present")),
-        ("widget_add_button_present", result["widget_runtime"].get("add_button_present")),
-        ("widget_search_visible", "search" in result["widget_runtime"].get("visible_widget_ids", [])),
-        ("settings_opened", result["settings_opened"]),
-        ("settings_closed", result["settings_closed"]),
-        ("widget_hide_restore_ok", result["widget_hide_restore_ok"]),
-        ("default_search_ok", result["default_search_ok"]),
-        ("current_search_target", result["current_search_target"] == "Bing"),
-        ("target_trigger_present", result["target_trigger_present"]),
-        ("target_menu_present", result["target_menu_present"]),
-        ("suggestions_shell_present", result["suggestions_shell_present"]),
-        ("suggestions_visible", result["suggestions_visible"]),
-        ("quick_action_suggestion_visible", result["quick_action_suggestion_visible"]),
-        ("suggestions_highlight_moves", result["suggestions_highlight_moves"]),
-        ("tab_completes_query_only", result["tab_completes_query_only"]),
-        ("escape_dismisses_suggestions", result["escape_dismisses_suggestions"]),
-        ("outside_click_dismisses_suggestions", result["outside_click_dismisses_suggestions"]),
-        ("outside_click_dismisses_target_menu", result["outside_click_dismisses_target_menu"]),
-        ("enter_without_selection_uses_current_target", result["enter_without_selection_uses_current_target"]),
-        ("clicked_suggestion_executes", result["clicked_suggestion_executes"]),
-        ("direct_url_precedence_ok", result["direct_url_precedence_ok"]),
-        ("github_target_available", result["github_target_available"]),
-        ("preview_generated", result["preview_generated"]),
-        ("preview_primary_action_label", bool(result["preview_primary_action_label"])),
-        ("preview_hidden_after_switch", result["preview_hidden_after_switch"]),
-        ("vertical_target_after_switch", result["vertical_target_after_switch"] == "GitHub"),
-        ("vertical_target_bypass_ok", result["vertical_target_bypass_ok"]),
-        ("ai_runtime_invalid_skips_preview", result["ai_runtime_invalid_skips_preview"]),
-        ("search_history_contains_query", result["search_history_contains_query"]),
-        ("last_search_query", result["last_search_query"] == "moon tab invalid runtime"),
-        ("fallback_suggestions_visible_after_remote_failure", result["fallback_suggestions_visible_after_remote_failure"]),
-        ("fallback_history_visible_after_remote_failure", result["fallback_history_visible_after_remote_failure"]),
-        ("fallback_quick_action_visible_after_remote_failure", result["fallback_quick_action_visible_after_remote_failure"]),
-        ("remote_suggestion_visible_after_remote_success", result["remote_suggestion_visible_after_remote_success"]),
-    ]
-
-    result["required_checks"] = [
-        {"name": name, "passed": bool(passed)} for name, passed in required_checks
-    ]
-
-    for name, passed in required_checks:
-        assert passed, f"smoke check failed: {name}"
-
+from newtab_verifier_support import *
 
 def main() -> None:
     result = {
@@ -618,11 +18,73 @@ def main() -> None:
         "background_has_focus_overlay": False,
         "illustrated_stage": {},
         "mobile_stage": {},
+        "widget_transform": {},
+        "widget_transform_interaction": {},
+        "todo_manager": {},
+        "widget_edit_modules_present": (
+            (ROOT / "src" / "pages" / "newtab" / "widgets" / "widget-edit-mode.mjs").exists()
+            and (ROOT / "src" / "pages" / "newtab" / "widgets" / "widget-transform.mjs").exists()
+        ),
         "search_input_enabled": False,
         "settings_opened": False,
         "settings_closed": False,
+        "game_deck_entry_present": False,
+        "game_deck_opened": False,
+        "game_deck_title_visible": False,
+        "game_deck_return_visible": False,
+        "game_deck_return_icon_button": False,
+        "game_deck_return_icon_centered": False,
+        "game_deck_search_visible": False,
+        "game_deck_status_visible": False,
+        "game_deck_start_visible": False,
+        "game_deck_paused_by_default": False,
+        "game_deck_pause_mountain_decor_visible": False,
+        "game_deck_world_mountain_hidden_while_paused": False,
+        "game_deck_world_mountain_removed_after_start": False,
+        "game_deck_no_vertical_scroll": False,
+        "game_deck_kicker_below_topbar": False,
+        "game_deck_started": False,
+        "game_deck_pause_title_hidden_after_start": False,
+        "game_deck_world_scrolls_horizontally": False,
+        "game_deck_world_draggable_horizontally": False,
+        "game_deck_search_static_during_world_scroll": False,
+        "game_deck_single_grid_layer_while_playing": False,
+        "game_deck_ground_line_present": False,
+        "game_deck_ground_line_two_cm_from_bottom": False,
+        "game_deck_ore_mountain_present": False,
+        "game_deck_ore_count_hidden_until_hover": False,
+        "game_deck_ore_tooltip_follows_cursor": False,
+        "game_deck_ore_cursor_is_mining": False,
+        "game_deck_ore_has_no_ridge_lines": False,
+        "game_deck_ore_base_open_and_aligned": False,
+        "game_deck_ore_click_decreases_count": False,
+        "game_deck_ore_outside_click_does_not_mine": False,
+        "game_deck_ore_click_spawns_chips": False,
+        "game_deck_ore_chips_disappear": False,
+        "game_deck_ore_click_spawns_rock_drop": False,
+        "game_deck_ore_rock_parabolic": False,
+        "game_deck_ore_all_rocks_land_above_ground": False,
+        "game_deck_ore_landed_rock_blocks_mining_click": False,
+        "game_deck_ore_stage_changes_as_resource_drops": False,
+        "game_deck_ore_mountain_taller": False,
+        "game_deck_ore_rocks_use_images": False,
+        "game_deck_ore_rocks_pile_near_base": False,
+        "game_deck_ore_rocks_do_not_overlap_visibly": False,
+        "game_deck_boot_commands_visible": False,
+        "game_deck_return_commands_visible": False,
+        "game_deck_boot_terminal_unframed": False,
+        "game_deck_boot_terminal_has_levels": False,
+        "game_deck_boot_terminal_centered": False,
+        "game_deck_boot_terminal_game_related": False,
+        "game_deck_boot_all_commands_visible_before_nav": False,
+        "game_deck_boot_transition_duration_ms": 0,
+        "game_deck_interface_not_cyber": False,
+        "game_deck_monochrome_line_style": False,
+        "game_deck_mountain_line_art": False,
+        "game_deck_returned_to_pet_page": False,
         "default_search_ok": False,
         "widget_runtime": {},
+        "homepage_manage_menu": {},
         "widget_hide_restore_ok": False,
         "current_search_target": "",
         "target_trigger_present": False,
@@ -721,7 +183,7 @@ def main() -> None:
                     {
                         "version": 1,
                         "orderedWidgetIds": ["search", "search", "ghost", "calendar"],
-                        "hiddenWidgetIds": ["search", "ghost", "todo"],
+                        "hiddenWidgetIds": ["search", "ghost"],
                         "widgetPrefs": "invalid",
                     },
                 )
@@ -745,13 +207,12 @@ def main() -> None:
                 result["widget_runtime"] = widget_runtime
                 result["widget_layout_storage"] = read_widget_layout_storage(page)
                 assert widget_runtime["widget_root_present"], "expected #widget-root mount"
-                assert widget_runtime["add_button_present"], "expected add-widget trigger"
                 assert "search" in widget_runtime["visible_widget_ids"], "expected search core widget to be rendered"
                 assert "ghost" not in widget_runtime["visible_widget_ids"], "expected unknown widget removal"
                 assert result["widget_layout_storage"] == {
                     "version": 1,
-                    "orderedWidgetIds": ["search", "calendar", "quicksites"],
-                    "hiddenWidgetIds": ["todo"],
+                    "orderedWidgetIds": ["search", "calendar", "quicksites", "todo"],
+                    "hiddenWidgetIds": [],
                     "widgetPrefs": {},
                 }, "expected malformed widget layout storage rewrite"
 
@@ -759,6 +220,746 @@ def main() -> None:
 
                 result["direct_page_url"] = page.url
                 result["extension_page_open_ok"] = page.url.startswith(expected_extension_url)
+
+                page.evaluate("() => { const menu = document.querySelector('#homepage-manage-menu'); if (menu) menu.open = true; }")
+                result["game_deck_entry_present"] = page.locator("#open-game-deck").count() == 1
+                assert result["game_deck_entry_present"], "expected #open-game-deck management menu action"
+                transition_started_at = time.perf_counter()
+                page.locator("#open-game-deck").click()
+                page.wait_for_selector(".page-transition-overlay__command", timeout=1000)
+                result["game_deck_boot_commands_visible"] = 5 <= page.locator(".page-transition-overlay__command").count() <= 8
+                result["game_deck_boot_terminal_unframed"] = page.evaluate(
+                    """() => {
+                        const overlay = document.querySelector('.page-transition-overlay');
+                        const frame = document.querySelector('.page-transition-overlay__frame');
+                        const label = document.querySelector('.page-transition-overlay__label');
+                        const rect = overlay?.getBoundingClientRect();
+                        return Boolean(overlay)
+                            && !frame
+                            && !label
+                            && rect
+                            && Math.abs(rect.width - window.innerWidth) <= 2
+                            && Math.abs(rect.height - window.innerHeight) <= 2;
+                    }"""
+                )
+                result["game_deck_boot_terminal_has_levels"] = page.evaluate(
+                    """() => {
+                        const commands = Array.from(document.querySelectorAll('.page-transition-overlay__command'));
+                        const levels = new Set(commands.map((command) => command.dataset.level).filter(Boolean));
+                        return levels.has('info') && levels.has('success') && levels.has('alert');
+                    }"""
+                )
+                result["game_deck_boot_terminal_centered"] = page.evaluate(
+                    """() => {
+                        const commands = document.querySelector('.page-transition-overlay__commands');
+                        const rect = commands?.getBoundingClientRect();
+                        if (!rect) {
+                            return false;
+                        }
+
+                        const centerDeltaX = Math.abs((rect.left + rect.width / 2) - window.innerWidth / 2);
+                        const centerDeltaY = Math.abs((rect.top + rect.height / 2) - window.innerHeight / 2);
+                        return centerDeltaX <= 12 && centerDeltaY <= 16;
+                    }"""
+                )
+                result["game_deck_boot_terminal_game_related"] = page.evaluate(
+                    """() => {
+                        const text = Array.from(document.querySelectorAll('.page-transition-overlay__command'))
+                            .map((command) => command.textContent ?? '')
+                            .join(' ')
+                            .toLowerCase();
+                        return ['game', 'deck', 'save', 'sprite', 'level', 'controller', 'asset']
+                            .filter((keyword) => text.includes(keyword)).length >= 4;
+                    }"""
+                )
+                assert result["game_deck_boot_commands_visible"], "expected 5 to 8 terminal command lines during game deck transition"
+                assert result["game_deck_boot_terminal_unframed"], "expected unframed full-screen terminal transition"
+                assert result["game_deck_boot_terminal_has_levels"], "expected info, success, and alert terminal command levels"
+                assert result["game_deck_boot_terminal_centered"], "expected terminal command block centered on screen"
+                assert result["game_deck_boot_terminal_game_related"], "expected terminal commands to relate to game loading"
+                page.wait_for_timeout(2600)
+                result["game_deck_boot_all_commands_visible_before_nav"] = page.evaluate(
+                    """() => {
+                        const commands = Array.from(document.querySelectorAll('.page-transition-overlay__command'));
+                        return commands.length > 0
+                            && commands.every((command) => getComputedStyle(command).opacity === '1');
+                    }"""
+                )
+                assert result["game_deck_boot_all_commands_visible_before_nav"], "expected every terminal command visible before navigation"
+                page.wait_for_url("**/src/pages/game/index.html", timeout=10000)
+                result["game_deck_boot_transition_duration_ms"] = round((time.perf_counter() - transition_started_at) * 1000)
+                assert 2700 <= result["game_deck_boot_transition_duration_ms"] <= 3600, "expected game deck transition to load for about 3 seconds"
+                result["game_deck_opened"] = page.url.endswith("/src/pages/game/index.html")
+                page.wait_for_selector("h1:has-text('GAME DECK')", timeout=10000)
+                result["game_deck_title_visible"] = page.locator("h1", has_text="GAME DECK").is_visible()
+                result["game_deck_return_visible"] = page.locator("#return-pet-page").is_visible()
+                result["game_deck_return_icon_button"] = page.evaluate(
+                    """() => {
+                        const button = document.querySelector('#return-pet-page');
+                        const rect = button?.getBoundingClientRect();
+                        if (!button || !rect) {
+                            return false;
+                        }
+
+                        return button.getAttribute('aria-label') === '返回宠物页'
+                            && !button.textContent.includes('返回宠物页')
+                            && rect.width <= 54
+                            && rect.height <= 54
+                            && getComputedStyle(button).backgroundColor === 'rgb(255, 255, 255)';
+                    }"""
+                )
+                result["game_deck_return_icon_centered"] = page.evaluate(
+                    """() => {
+                        const button = document.querySelector('#return-pet-page');
+                        const icon = button?.querySelector('.game-deck-back__icon');
+                        const buttonRect = button?.getBoundingClientRect();
+                        const iconRect = icon?.getBoundingClientRect();
+                        if (!buttonRect || !iconRect) {
+                            return false;
+                        }
+
+                        const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+                        const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+                        const iconCenterX = iconRect.left + iconRect.width / 2;
+                        const iconCenterY = iconRect.top + iconRect.height / 2;
+                        return Math.abs(buttonCenterX - iconCenterX) <= 1
+                            && Math.abs(buttonCenterY - iconCenterY) <= 1;
+                    }"""
+                )
+                result["game_deck_search_visible"] = page.locator("#game-search-input").is_visible()
+                result["game_deck_status_visible"] = page.locator(".game-deck-state", has_text="PAUSED").is_visible()
+                result["game_deck_start_visible"] = page.locator("#start-game").is_visible()
+                result["game_deck_paused_by_default"] = page.evaluate(
+                    "() => document.body.dataset.gameState === 'paused'"
+                )
+                result["game_deck_pause_mountain_decor_visible"] = page.locator(".game-pause-mountain").is_visible()
+                result["game_deck_world_mountain_hidden_while_paused"] = page.locator(".game-world .game-mountain").is_hidden()
+                result["game_deck_no_vertical_scroll"] = page.evaluate(
+                    "() => document.documentElement.scrollHeight <= window.innerHeight + 1"
+                )
+                result["game_deck_kicker_below_topbar"] = page.evaluate(
+                    """() => {
+                        const topbar = document.querySelector('.game-deck-topbar');
+                        const kicker = document.querySelector('.game-deck-kicker');
+                        const topbarRect = topbar?.getBoundingClientRect();
+                        const kickerRect = kicker?.getBoundingClientRect();
+                        if (!topbarRect || !kickerRect) {
+                            return false;
+                        }
+
+                        return kickerRect.top >= topbarRect.bottom + 24;
+                    }"""
+                )
+                result["game_deck_interface_not_cyber"] = page.evaluate(
+                    """() => {
+                        const body = window.getComputedStyle(document.body);
+                        return !document.querySelector('.game-scanlines')
+                            && !body.backgroundImage.includes('0, 255, 65')
+                            && !body.backgroundImage.includes('0, 243, 255');
+                    }"""
+                )
+                result["game_deck_monochrome_line_style"] = page.evaluate(
+                    """() => {
+                        const root = getComputedStyle(document.documentElement);
+                        const body = getComputedStyle(document.body);
+                        const topbar = getComputedStyle(document.querySelector('.game-deck-topbar'));
+                        const title = getComputedStyle(document.querySelector('.game-deck-title h1'));
+                        return root.getPropertyValue('--game-primary').trim() === '#000'
+                            && root.getPropertyValue('--game-bg').trim() === '#fff'
+                            && topbar.borderTopColor === 'rgb(0, 0, 0)'
+                            && title.textShadow === 'none'
+                            && body.backgroundImage.includes('linear-gradient');
+                    }"""
+                )
+                assert result["game_deck_opened"], "expected game deck page to open"
+                assert result["game_deck_title_visible"], "expected GAME DECK title"
+                assert result["game_deck_return_visible"], "expected return-to-pet-page button"
+                assert result["game_deck_return_icon_button"], "expected compact icon-only return button"
+                assert result["game_deck_return_icon_centered"], "expected return icon centered in button"
+                assert result["game_deck_search_visible"], "expected game deck search input"
+                assert result["game_deck_status_visible"], "expected paused game deck status"
+                assert result["game_deck_start_visible"], "expected start game button on pause screen"
+                assert result["game_deck_paused_by_default"], "expected game deck to be paused by default"
+                assert result["game_deck_pause_mountain_decor_visible"], "expected mountain decoration on pause screen"
+                assert result["game_deck_world_mountain_hidden_while_paused"], "expected world mountain hidden on pause screen"
+                assert result["game_deck_no_vertical_scroll"], "expected game deck page to avoid vertical scroll"
+                assert result["game_deck_kicker_below_topbar"], "expected GAME SPACE below the fixed topbar area"
+                assert result["game_deck_interface_not_cyber"], "expected game deck page interface to avoid cyber terminal styling"
+                assert result["game_deck_monochrome_line_style"], "expected black-white line art game deck interface"
+                page.locator("#start-game").click()
+                result["game_deck_started"] = page.evaluate(
+                    "() => document.body.dataset.gameState === 'playing'"
+                )
+                result["game_deck_pause_title_hidden_after_start"] = page.locator(".game-deck-title").is_hidden()
+                result["game_deck_world_mountain_removed_after_start"] = page.evaluate(
+                    "() => document.querySelector('.game-world .game-mountain') === null"
+                )
+                result["game_deck_no_vertical_scroll"] = page.evaluate(
+                    "() => document.documentElement.scrollHeight <= window.innerHeight + 1"
+                )
+                result["game_deck_world_scrolls_horizontally"] = page.evaluate(
+                    """() => {
+                        const scene = document.querySelector('.game-scene');
+                        const world = document.querySelector('.game-world');
+                        if (!scene || !world) {
+                            return false;
+                        }
+
+                        const sceneStyle = getComputedStyle(scene);
+                        return scene.scrollWidth > scene.clientWidth + 300
+                            && world.getBoundingClientRect().width > window.innerWidth * 1.6
+                            && ['auto', 'scroll'].includes(sceneStyle.overflowX);
+                    }"""
+                )
+                result["game_deck_world_draggable_horizontally"] = page.evaluate(
+                    """async () => {
+                        const scene = document.querySelector('.game-scene');
+                        if (!scene || scene.scrollWidth <= scene.clientWidth) {
+                            return false;
+                        }
+
+                        scene.scrollLeft = 320;
+                        const rect = scene.getBoundingClientRect();
+                        const startX = rect.left + rect.width * 0.52;
+                        const startY = rect.top + rect.height * 0.5;
+                        const before = scene.scrollLeft;
+
+                        scene.dispatchEvent(new PointerEvent('pointerdown', {
+                            bubbles: true,
+                            pointerId: 7,
+                            pointerType: 'mouse',
+                            clientX: startX,
+                            clientY: startY,
+                            button: 0,
+                            buttons: 1,
+                        }));
+                        scene.dispatchEvent(new PointerEvent('pointermove', {
+                            bubbles: true,
+                            pointerId: 7,
+                            pointerType: 'mouse',
+                            clientX: startX - 160,
+                            clientY: startY,
+                            buttons: 1,
+                        }));
+                        scene.dispatchEvent(new PointerEvent('pointerup', {
+                            bubbles: true,
+                            pointerId: 7,
+                            pointerType: 'mouse',
+                            clientX: startX - 160,
+                            clientY: startY,
+                            button: 0,
+                            buttons: 0,
+                        }));
+
+                        await new Promise((resolve) => requestAnimationFrame(resolve));
+                        return scene.scrollLeft > before + 80;
+                    }"""
+                )
+                result["game_deck_search_static_during_world_scroll"] = page.evaluate(
+                    """() => {
+                        const scene = document.querySelector('.game-scene');
+                        const search = document.querySelector('.game-search');
+                        if (!scene || !search) {
+                            return false;
+                        }
+
+                        const before = search.getBoundingClientRect().left;
+                        scene.scrollLeft = 360;
+                        const after = search.getBoundingClientRect().left;
+                        return scene.scrollLeft > 0 && Math.abs(before - after) <= 1;
+                    }"""
+                )
+                result["game_deck_single_grid_layer_while_playing"] = page.evaluate(
+                    """() => {
+                        const world = document.querySelector('.game-world');
+                        const bodyBackground = getComputedStyle(document.body).backgroundImage;
+                        const worldBackground = world ? getComputedStyle(world).backgroundImage : '';
+                        return bodyBackground === 'none'
+                            && worldBackground.includes('linear-gradient');
+                    }"""
+                )
+                result["game_deck_ground_line_present"] = page.locator(".game-ground-line").is_visible()
+                result["game_deck_ground_line_two_cm_from_bottom"] = page.evaluate(
+                    """() => {
+                        const line = document.querySelector('.game-ground-line');
+                        const world = document.querySelector('.game-world');
+                        const lineRect = line?.getBoundingClientRect();
+                        const worldRect = world?.getBoundingClientRect();
+                        if (!lineRect || !worldRect) {
+                            return false;
+                        }
+
+                        const cssPxPerCm = 96 / 2.54;
+                        const distance = worldRect.bottom - (lineRect.top + lineRect.height / 2);
+                        return Math.abs(distance - (2 * cssPxPerCm)) <= 3
+                            && lineRect.width >= worldRect.width - 2
+                            && lineRect.height >= 2;
+                    }"""
+                )
+                result["game_deck_ore_mountain_present"] = page.locator(".ore-mountain").is_visible()
+                result["game_deck_ore_count_hidden_until_hover"] = page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        const tooltip = document.querySelector('.ore-mountain__tooltip');
+                        if (!mountain || !target || !tooltip) {
+                            return false;
+                        }
+
+                        const hiddenBefore = getComputedStyle(tooltip).opacity === '0';
+                        const rect = target.getBoundingClientRect();
+                        const x = rect.left + rect.width * 0.62;
+                        const y = rect.top + rect.height * 0.45;
+                        target.dispatchEvent(new PointerEvent('pointerenter', {
+                            bubbles: true,
+                            pointerId: 21,
+                            pointerType: 'mouse',
+                            clientX: x,
+                            clientY: y,
+                        }));
+                        target.dispatchEvent(new PointerEvent('pointermove', {
+                            bubbles: true,
+                            pointerId: 21,
+                            pointerType: 'mouse',
+                            clientX: x,
+                            clientY: y,
+                        }));
+                        await new Promise((resolve) => requestAnimationFrame(resolve));
+                        const visibleOnHover = getComputedStyle(tooltip).opacity === '1'
+                            && tooltip.textContent?.trim() === '100';
+                        target.dispatchEvent(new PointerEvent('pointerleave', {
+                            bubbles: true,
+                            pointerId: 21,
+                            pointerType: 'mouse',
+                            clientX: x,
+                            clientY: y,
+                        }));
+                        await new Promise((resolve) => setTimeout(resolve, 150));
+                        const hiddenAfter = getComputedStyle(tooltip).opacity === '0';
+                        return hiddenBefore && visibleOnHover && hiddenAfter;
+                    }"""
+                )
+                result["game_deck_ore_tooltip_follows_cursor"] = page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        const tooltip = document.querySelector('.ore-mountain__tooltip');
+                        if (!mountain || !target || !tooltip) {
+                            return false;
+                        }
+
+                        const rect = target.getBoundingClientRect();
+                        const x = rect.left + rect.width * 0.48;
+                        const y = rect.top + rect.height * 0.34;
+                        target.dispatchEvent(new PointerEvent('pointerenter', {
+                            bubbles: true,
+                            pointerId: 22,
+                            pointerType: 'mouse',
+                            clientX: x,
+                            clientY: y,
+                        }));
+                        target.dispatchEvent(new PointerEvent('pointermove', {
+                            bubbles: true,
+                            pointerId: 22,
+                            pointerType: 'mouse',
+                            clientX: x,
+                            clientY: y,
+                        }));
+                        await new Promise((resolve) => requestAnimationFrame(resolve));
+                        const tooltipRect = tooltip.getBoundingClientRect();
+                        return tooltipRect.left >= x + 8
+                            && tooltipRect.left <= x + 52
+                            && tooltipRect.top <= y + 8
+                            && tooltipRect.bottom >= y - 56;
+                    }"""
+                )
+                result["game_deck_ore_cursor_is_mining"] = page.evaluate(
+                    """() => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        return mountain ? getComputedStyle(mountain).cursor === 'crosshair' : false;
+                    }"""
+                )
+                result["game_deck_ore_has_no_ridge_lines"] = page.evaluate(
+                    "() => document.querySelectorAll('.ore-mountain__crack').length === 0"
+                )
+                result["game_deck_ore_base_open_and_aligned"] = page.evaluate(
+                    """() => {
+                        const art = document.querySelector('.ore-mountain__art');
+                        const ground = document.querySelector('.game-ground-line');
+                        const visibleShape = Array.from(document.querySelectorAll('.ore-mountain__shape')).find((shape) => {
+                            const style = getComputedStyle(shape);
+                            return Number.parseFloat(style.opacity) > 0.5;
+                        });
+                        const artRect = art?.getBoundingClientRect();
+                        const groundRect = ground?.getBoundingClientRect();
+                        const pathData = visibleShape?.getAttribute('d') ?? '';
+                        if (!artRect || !groundRect || !visibleShape) {
+                            return false;
+                        }
+
+                        return !/[zZ]/.test(pathData)
+                            && Math.abs(artRect.bottom - groundRect.top) <= 6;
+                    }"""
+                )
+                result["game_deck_ore_outside_click_does_not_mine"] = page.evaluate(
+                    """() => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        if (!mountain) {
+                            return false;
+                        }
+
+                        const beforeOre = Number(mountain.dataset.ore);
+                        const beforeRocks = document.querySelectorAll('.ore-rock-drop').length;
+                        const rect = mountain.getBoundingClientRect();
+                        const clickX = rect.left + rect.width * 0.08;
+                        const clickY = rect.top + rect.height * 0.14;
+                        const hit = document.elementFromPoint(clickX, clickY);
+
+                        if (hit && (hit === mountain || hit.closest('.ore-mountain__shape'))) {
+                            return false;
+                        }
+
+                        if (hit) {
+                            hit.dispatchEvent(new PointerEvent('pointerdown', {
+                                bubbles: true,
+                                pointerId: 30,
+                                pointerType: 'mouse',
+                                clientX: clickX,
+                                clientY: clickY,
+                                button: 0,
+                                buttons: 1,
+                            }));
+                            hit.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                clientX: clickX,
+                                clientY: clickY,
+                            }));
+                        }
+
+                        return Number(mountain.dataset.ore) === beforeOre
+                            && document.querySelectorAll('.ore-rock-drop').length === beforeRocks;
+                    }"""
+                )
+                result["game_deck_ore_click_decreases_count"] = page.evaluate(
+                    """() => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        if (!mountain || !target) {
+                            return false;
+                        }
+
+                        const before = Number(mountain.dataset.ore);
+                        const rect = target.getBoundingClientRect();
+                        target.dispatchEvent(new PointerEvent('pointerdown', {
+                            bubbles: true,
+                            pointerId: 11,
+                            pointerType: 'mouse',
+                            clientX: rect.left + rect.width * 0.55,
+                            clientY: rect.top + rect.height * 0.55,
+                            button: 0,
+                            buttons: 1,
+                        }));
+                        target.dispatchEvent(new PointerEvent('pointerup', {
+                            bubbles: true,
+                            pointerId: 11,
+                            pointerType: 'mouse',
+                            clientX: rect.left + rect.width * 0.55,
+                            clientY: rect.top + rect.height * 0.55,
+                            button: 0,
+                            buttons: 0,
+                        }));
+                        target.dispatchEvent(new MouseEvent('click', {
+                            bubbles: true,
+                            clientX: rect.left + rect.width * 0.55,
+                            clientY: rect.top + rect.height * 0.55,
+                        }));
+
+                        return mountain.dataset.ore === String(before - 1)
+                            && /剩余 99/.test(mountain.getAttribute('aria-label') ?? '');
+                    }"""
+                )
+                result["game_deck_ore_click_spawns_chips"] = page.evaluate(
+                    "() => document.querySelectorAll('.ore-chip').length >= 2 && document.querySelectorAll('.ore-chip').length <= 4"
+                )
+                result["game_deck_ore_click_spawns_rock_drop"] = page.evaluate(
+                    "() => document.querySelectorAll('.ore-rock-drop').length === 1"
+                )
+                result["game_deck_ore_rock_parabolic"] = page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        if (!mountain || !target) {
+                            return false;
+                        }
+
+                        const beforeCount = document.querySelectorAll('.ore-rock-drop').length;
+                        const rect = target.getBoundingClientRect();
+                        target.dispatchEvent(new MouseEvent('click', {
+                            bubbles: true,
+                            clientX: rect.left + rect.width * 0.52,
+                            clientY: rect.top + rect.height * 0.46,
+                        }));
+
+                        const rocks = Array.from(document.querySelectorAll('.ore-rock-drop'));
+                        const rock = rocks[rocks.length - 1];
+                        if (!rock || rocks.length !== beforeCount + 1) {
+                            return false;
+                        }
+
+                        const startTop = rock.getBoundingClientRect().top;
+                        await new Promise((resolve) => setTimeout(resolve, 140));
+                        const riseTop = rock.getBoundingClientRect().top;
+                        await new Promise((resolve) => setTimeout(resolve, 320));
+                        const fallTop = rock.getBoundingClientRect().top;
+                        return riseTop < startTop - 4 && fallTop > riseTop + 4;
+                    }"""
+                )
+                result["game_deck_ore_all_rocks_land_above_ground"] = page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        const ground = document.querySelector('.game-ground-line');
+                        if (!mountain || !target || !ground) {
+                            return false;
+                        }
+
+                        const rect = target.getBoundingClientRect();
+                        for (const ratio of [0.34, 0.56, 0.78]) {
+                            target.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                clientX: rect.left + rect.width * ratio,
+                                clientY: rect.top + rect.height * 0.72,
+                            }));
+                        }
+
+                        await new Promise((resolve) => setTimeout(resolve, 2200));
+                        const rocks = Array.from(document.querySelectorAll('.ore-rock-drop'));
+                        const groundRect = ground.getBoundingClientRect();
+                        if (rocks.length < 4) {
+                            return false;
+                        }
+
+                        return rocks.every((rock) => {
+                            const rockRect = rock.getBoundingClientRect();
+                            const centerY = rockRect.top + rockRect.height / 2;
+                            return centerY <= groundRect.top + 40
+                                && rockRect.bottom <= groundRect.top + rockRect.height * 0.82;
+                        });
+                    }"""
+                )
+                result["game_deck_ore_chips_disappear"] = page.evaluate(
+                    """async () => {
+                        await new Promise((resolve) => setTimeout(resolve, 40));
+                        return document.querySelectorAll('.ore-chip').length === 0;
+                    }"""
+                )
+                result["game_deck_ore_landed_rock_blocks_mining_click"] = page.evaluate(
+                    """() => {
+                        const rocks = Array.from(document.querySelectorAll('.ore-rock-drop'));
+                        const rock = rocks.at(-1);
+                        const mountain = document.querySelector('.ore-mountain');
+                        if (!rock || !mountain) {
+                            return false;
+                        }
+
+                        const beforeOre = Number(mountain.dataset.ore);
+                        const rect = rock.getBoundingClientRect();
+                        const clickX = rect.left + rect.width / 2;
+                        const clickY = rect.top + rect.height / 2;
+                        const hit = document.elementFromPoint(clickX, clickY);
+                        if (!hit || hit === rock || rock.contains(hit)) {
+                            return false;
+                        }
+
+                        hit.dispatchEvent(new PointerEvent('pointerdown', {
+                            bubbles: true,
+                            pointerId: 29,
+                            pointerType: 'mouse',
+                            clientX: clickX,
+                            clientY: clickY,
+                            button: 0,
+                            buttons: 1,
+                        }));
+                        hit.dispatchEvent(new MouseEvent('click', {
+                            bubbles: true,
+                            clientX: clickX,
+                            clientY: clickY,
+                        }));
+
+                        return Number(mountain.dataset.ore) === beforeOre - 1;
+                    }"""
+                )
+                result["game_deck_ore_stage_changes_as_resource_drops"] = page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        if (!mountain || !target) {
+                            return false;
+                        }
+
+                        const beforeOre = Number(mountain.dataset.ore);
+                        const initialStage = mountain.dataset.stage;
+                        const rect = target.getBoundingClientRect();
+                        for (let i = 0; i < 25; i += 1) {
+                            target.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                clientX: rect.left + rect.width * 0.5,
+                                clientY: rect.top + rect.height * 0.6,
+                            }));
+                        }
+
+                        await new Promise((resolve) => requestAnimationFrame(resolve));
+                        return Number(mountain.dataset.ore) === beforeOre - 25
+                            && mountain.dataset.stage !== initialStage
+                            && mountain.dataset.stage === '4';
+                    }"""
+                )
+                assert result["game_deck_started"], "expected start button to switch game deck to playing"
+                assert result["game_deck_pause_title_hidden_after_start"], "expected pause title hidden after starting game"
+                assert result["game_deck_world_mountain_removed_after_start"], "expected old mountain removed from playing world"
+                assert result["game_deck_no_vertical_scroll"], "expected playing game deck to avoid vertical scroll"
+                assert result["game_deck_world_scrolls_horizontally"], "expected playing game world to scroll horizontally"
+                assert result["game_deck_world_draggable_horizontally"], "expected playing game world to drag horizontally"
+                assert result["game_deck_search_static_during_world_scroll"], "expected search bar to stay fixed while world scrolls"
+                assert result["game_deck_single_grid_layer_while_playing"], "expected a single grid layer while playing"
+                assert result["game_deck_ground_line_present"], "expected ground line in playing world"
+                assert result["game_deck_ground_line_two_cm_from_bottom"], "expected ground line 2cm from bottom"
+                assert result["game_deck_ore_mountain_present"], "expected ore mountain in playing world"
+                assert result["game_deck_ore_count_hidden_until_hover"], "expected ore amount hidden until hovering the mountain"
+                assert result["game_deck_ore_tooltip_follows_cursor"], "expected ore amount tooltip to appear near the cursor"
+                assert result["game_deck_ore_cursor_is_mining"], "expected ore mountain to use mining cursor"
+                assert result["game_deck_ore_has_no_ridge_lines"], "expected ore mountain without ridge lines"
+                assert result["game_deck_ore_base_open_and_aligned"], "expected ore mountain base open and aligned to ground"
+                assert result["game_deck_ore_outside_click_does_not_mine"], "expected clicks outside mountain silhouette not to mine"
+                assert result["game_deck_ore_click_decreases_count"], "expected mining click to decrease ore count"
+                assert result["game_deck_ore_click_spawns_chips"], "expected mining click to spawn 2-4 chip particles"
+                assert result["game_deck_ore_chips_disappear"], "expected chip particles to disappear quickly"
+                assert result["game_deck_ore_click_spawns_rock_drop"], "expected mining click to spawn one rock drop"
+                assert result["game_deck_ore_rock_parabolic"], "expected rock drop to follow a parabolic path"
+                assert result["game_deck_ore_all_rocks_land_above_ground"], "expected physics rocks to settle near ground without sinking through it"
+                assert result["game_deck_ore_landed_rock_blocks_mining_click"], "expected the noninteractive rock layer not to block further mining clicks"
+                assert result["game_deck_ore_stage_changes_as_resource_drops"], "expected mountain stage to change as ore drops"
+                result["game_deck_ore_mountain_taller"] = page.evaluate(
+                    """() => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const rect = mountain?.getBoundingClientRect();
+                        if (!rect) {
+                            return false;
+                        }
+
+                        return rect.height >= 220 && rect.width >= 340;
+                    }"""
+                )
+
+                result["game_deck_ore_rocks_use_images"] = page.evaluate(
+                    """() => {
+                        const sprite = document.querySelector('.ore-rock-drop__sprite');
+                        if (!(sprite instanceof HTMLImageElement)) {
+                            return false;
+                        }
+
+                        return sprite.currentSrc.includes('ore-pebble-')
+                            && sprite.naturalWidth > 0
+                            && sprite.naturalHeight > 0;
+                    }"""
+                )
+
+                result["game_deck_ore_rocks_pile_near_base"] = page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        const ground = document.querySelector('.game-ground-line');
+                        if (!mountain || !target || !ground) {
+                            return false;
+                        }
+
+                        const initialRockCount = document.querySelectorAll('.ore-rock-drop').length;
+                        const rect = target.getBoundingClientRect();
+                        for (let index = 0; index < 8; index += 1) {
+                            target.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                clientX: rect.left + rect.width * 0.58,
+                                clientY: rect.top + rect.height * 0.44,
+                            }));
+                            await new Promise((resolve) => setTimeout(resolve, 60));
+                        }
+
+                        const deadline = performance.now() + 4500;
+                        let lastRockCount = -1;
+                        let stableFrames = 0;
+
+                        while (performance.now() < deadline) {
+                            const rocks = Array.from(document.querySelectorAll('.ore-rock-drop')).slice(initialRockCount);
+                            if (rocks.length >= 6) {
+                                const groundRect = ground.getBoundingClientRect();
+                                const settled = rocks.filter((rock) => {
+                                    const rockRect = rock.getBoundingClientRect();
+                                    return Math.abs(rockRect.bottom - groundRect.top) <= 42;
+                                });
+
+                                if (rocks.length === lastRockCount) {
+                                    stableFrames += 1;
+                                } else {
+                                    stableFrames = 0;
+                                    lastRockCount = rocks.length;
+                                }
+
+                                if (settled.length >= 5 && stableFrames >= 2) {
+                                    const xs = settled.map((rock) => rock.getBoundingClientRect().left);
+                                    const spread = Math.max(...xs) - Math.min(...xs);
+                                    return spread <= 260;
+                                }
+                            }
+
+                            await new Promise((resolve) => requestAnimationFrame(resolve));
+                        }
+
+                        return false;
+                    }"""
+                )
+
+                result["game_deck_ore_rocks_do_not_overlap_visibly"] = page.evaluate(
+                    """() => {
+                        const rocks = Array.from(document.querySelectorAll('.ore-rock-drop'));
+                        if (rocks.length < 4) {
+                            return false;
+                        }
+
+                        for (let i = 0; i < rocks.length; i += 1) {
+                            const rectA = rocks[i].getBoundingClientRect();
+                            const ax = rectA.left + rectA.width / 2;
+                            const ay = rectA.top + rectA.height / 2;
+                            const radiusA = Math.min(rectA.width, rectA.height) / 2;
+
+                            for (let j = i + 1; j < rocks.length; j += 1) {
+                                const rectB = rocks[j].getBoundingClientRect();
+                                const bx = rectB.left + rectB.width / 2;
+                                const by = rectB.top + rectB.height / 2;
+                                const radiusB = Math.min(rectB.width, rectB.height) / 2;
+                                const distance = Math.hypot(ax - bx, ay - by);
+                                if (distance < Math.min(radiusA, radiusB) * 0.66) {
+                                    return false;
+                                }
+                            }
+                        }
+
+                        return true;
+                    }"""
+                )
+
+                assert result["game_deck_ore_mountain_taller"], "expected ore mountain to be about 60% taller than the current version"
+                assert result["game_deck_ore_rocks_use_images"], "expected dropped rocks to use ore sprite images"
+                assert result["game_deck_ore_rocks_pile_near_base"], "expected dropped rocks to settle into a compact pile near the mountain base"
+                assert result["game_deck_ore_rocks_do_not_overlap_visibly"], "expected piled rocks not to visually pass through each other"
+
+                page.locator("#return-pet-page").click()
+                page.wait_for_selector(".page-transition-overlay__command", timeout=1000)
+                result["game_deck_return_commands_visible"] = page.locator(".page-transition-overlay__command").count() >= 3
+                assert result["game_deck_return_commands_visible"], "expected boot command decorations during return transition"
+                page.wait_for_url("**/src/pages/newtab/index.html", timeout=10000)
+                page.wait_for_selector("#homepage-stage", timeout=10000)
+                result["game_deck_returned_to_pet_page"] = page.locator("#homepage-stage").is_visible()
+                assert result["game_deck_returned_to_pet_page"], "expected return to pet newtab page"
 
                 result["background_foundation"] = read_background_foundation_state(page)
                 result["background_layer_present"] = bool(result["background_foundation"].get("layerPresent"))
@@ -768,6 +969,10 @@ def main() -> None:
                 result["background_has_texture_overlay"] = result["background_foundation"].get("layerBeforeBackgroundImage") != "none"
                 result["background_has_focus_overlay"] = result["background_foundation"].get("layerAfterBackgroundImage") != "none"
                 result["illustrated_stage"] = read_illustrated_stage_state(page)
+                result["homepage_manage_menu"] = read_homepage_manage_menu_interaction_state(page)
+                result["widget_transform"] = read_widget_transform_state(page)
+                result["widget_transform_interaction"] = exercise_widget_transform_controls(page)
+                result["todo_manager"] = exercise_todo_manager(page, expected_extension_url)
                 result["search_input_enabled"] = page.locator("#search-input").is_enabled()
                 result["search_frame"] = page.locator(".outline-search-frame").evaluate(
                     "(element) => { const rect = element.getBoundingClientRect(); return { width: rect.width, height: rect.height }; }"
@@ -790,6 +995,7 @@ def main() -> None:
                 result["mobile_stage"] = read_mobile_stage_state(mobile_stage_page, expected_extension_url)
                 mobile_stage_page.close()
 
+                page.evaluate("() => { const menu = document.querySelector('#homepage-manage-menu'); if (menu) menu.open = true; }")
                 page.locator("#open-settings").click()
                 page.wait_for_selector("body.is-settings-open", timeout=10000)
                 result["settings_opened"] = True
@@ -801,15 +1007,26 @@ def main() -> None:
                 assert page.locator(quicksites_widget_selector).count() > 0, (
                     "expected quicksites widget card in #widget-root for hide/restore smoke scenario"
                 )
+                page.evaluate("() => { const menu = document.querySelector('#homepage-manage-menu'); if (menu) menu.open = true; }")
+                page.locator("#toggle-widget-edit-mode").click()
+                page.wait_for_function(
+                    "() => document.querySelector('#widget-root')?.dataset.widgetEditMode === 'true'",
+                    timeout=10000,
+                )
                 page.locator(quicksites_hide_selector).click()
                 page.wait_for_function(
                     "() => !document.querySelector(\"#widget-root .homepage-widget-card[data-widget-id='quicksites']\")",
                     timeout=10000,
                 )
-                page.locator("#open-widget-panel").click()
+                page.wait_for_selector("#widget-panel:not([hidden])", timeout=5000)
                 page.locator("[data-widget-panel-action='restore'][data-widget-id='quicksites']").click()
                 page.wait_for_function(
                     "() => Boolean(document.querySelector(\"#widget-root .homepage-widget-card[data-widget-id='quicksites']\"))",
+                    timeout=10000,
+                )
+                page.locator("#save-widget-layout").click()
+                page.wait_for_function(
+                    "() => document.querySelector('#widget-root')?.dataset.widgetEditMode === 'false' && document.querySelector('#widget-panel')?.hidden",
                     timeout=10000,
                 )
                 result["widget_hide_restore_ok"] = True
