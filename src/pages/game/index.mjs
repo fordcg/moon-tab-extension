@@ -236,6 +236,7 @@ const setupOreMountain = () => {
     pulseMountain();
     spawnOreChips(point);
     ensureOrePhysics();
+    orePhysics?.refresh();
     orePhysics?.spawnRock(point);
     if (lastPointer) {
       showOreTooltip(lastPointer.x, lastPointer.y);
@@ -362,6 +363,7 @@ startButton?.addEventListener("click", () => {
   }
 
   ensureOrePhysics();
+  orePhysics?.refresh();
   scheduleOrePhysicsRefresh();
 });
 
