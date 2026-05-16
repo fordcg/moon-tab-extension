@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>GAME DECK</title>
+    <link rel="stylesheet" href="./index.css" />
+  </head>
+  <body data-game-state="paused">
+    <main class="game-deck-shell" aria-label="游戏空间">
+      <header class="game-deck-topbar">
+        <button id="return-pet-page" class="game-deck-back" type="button" aria-label="返回宠物页">
+          <svg
+            class="game-deck-back__icon"
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M15 6L9 12L15 18" />
+            <path d="M10 12H21" />
+          </svg>
+        </button>
+
+        <form id="game-search-form" class="game-search" autocomplete="off">
+          <label class="game-search__label" for="game-search-input">搜索</label>
+          <input
+            id="game-search-input"
+            class="game-search__input"
+            name="q"
+            type="search"
+            placeholder="SEARCH WEB"
+          />
+          <button class="game-search__button" type="submit">RUN</button>
+        </form>
+
+        <div class="game-deck-status" aria-live="polite">
+          <time id="game-clock" class="game-deck-clock">00:00:00</time>
+          <span class="game-deck-state">PAUSED</span>
+        </div>
+      </header>
+
+      <section class="game-deck-title" aria-labelledby="game-deck-title">
+        <p class="game-deck-kicker">GAME SPACE</p>
+        <h1 id="game-deck-title">GAME DECK</h1>
+        <svg
+          class="game-pause-mountain"
+          viewBox="0 0 640 260"
+          role="img"
+          aria-label="黑白线条山装饰"
+        >
+          <path
+            class="game-mountain__outline"
+            d="M38 224L146 118L198 158L304 36L414 154L476 98L602 224Z"
+          />
+          <path class="game-mountain__ridge" d="M304 36L276 134L318 116L344 182" />
+          <path class="game-mountain__ridge" d="M146 118L168 178L198 158L226 224" />
+          <path class="game-mountain__ridge" d="M476 98L458 168L414 154L382 224" />
+          <path class="game-mountain__ridge" d="M38 224H602" />
+          <path class="game-mountain__snow" d="M274 70L304 36L337 72L319 64L304 84L291 62Z" />
+        </svg>
+        <button id="start-game" class="game-start-button" type="button">START</button>
+      </section>
+
+      <section class="game-scene" aria-label="游戏场景">
+        <div class="game-world">
+          <div class="game-ground-line" aria-hidden="true"></div>
+          <div class="ore-rock-layer" aria-hidden="true"></div>
+          <button
+            class="ore-mountain"
+            type="button"
+            data-ore="100"
+            data-stage="5"
+            aria-label="采集石山，剩余 100"
+          >
+            <span class="ore-mountain__tooltip" aria-hidden="true">100</span>
+            <svg class="ore-mountain__art" viewBox="0 0 420 290" aria-hidden="true">
+              <path
+                class="ore-mountain__hitbox ore-mountain__hitbox--5"
+                d="M20 286C48 272 82 258 122 253C160 248 190 236 213 210C231 190 246 164 260 146C279 145 299 159 320 183C342 208 367 220 390 220C404 220 414 240 420 286L420 286L20 286Z"
+              />
+              <path
+                class="ore-mountain__hitbox ore-mountain__hitbox--4"
+                d="M26 286C54 274 88 264 128 260C163 257 193 246 216 224C234 207 249 185 262 171C280 172 299 184 319 203C339 221 361 232 384 236C398 239 410 252 418 286L418 286L26 286Z"
+              />
+              <path
+                class="ore-mountain__hitbox ore-mountain__hitbox--3"
+                d="M34 286C64 277 97 270 136 268C171 266 200 258 223 241C242 228 257 211 270 199C286 201 302 210 320 224C340 239 360 249 381 254C396 258 408 266 416 286L416 286L34 286Z"
+              />
+              <path
+                class="ore-mountain__hitbox ore-mountain__hitbox--2"
+                d="M44 286C76 281 110 278 148 277C181 276 210 271 235 261C256 253 273 242 288 236C304 238 320 246 338 255C356 264 376 272 396 277C404 279 411 282 416 286L416 286L44 286Z"
+              />
+              <path
+                class="ore-mountain__hitbox ore-mountain__hitbox--1"
+                d="M58 286C92 283 127 281 164 280C197 279 229 277 261 274C292 271 323 273 354 277C384 280 405 282 418 286L418 286L58 286Z"
+              />
+              <path
+                class="ore-mountain__shape ore-mountain__shape--5"
+                d="M20 286C48 272 82 258 122 253C160 248 190 236 213 210C231 190 246 164 260 146C279 145 299 159 320 183C342 208 367 220 390 220C404 220 414 240 420 286"
+              />
+              <path
+                class="ore-mountain__shape ore-mountain__shape--4"
+                d="M26 286C54 274 88 264 128 260C163 257 193 246 216 224C234 207 249 185 262 171C280 172 299 184 319 203C339 221 361 232 384 236C398 239 410 252 418 286"
+              />
+              <path
+                class="ore-mountain__shape ore-mountain__shape--3"
+                d="M34 286C64 277 97 270 136 268C171 266 200 258 223 241C242 228 257 211 270 199C286 201 302 210 320 224C340 239 360 249 381 254C396 258 408 266 416 286"
+              />
+              <path
+                class="ore-mountain__shape ore-mountain__shape--2"
+                d="M44 286C76 281 110 278 148 277C181 276 210 271 235 261C256 253 273 242 288 236C304 238 320 246 338 255C356 264 376 272 396 277C404 279 411 282 416 286"
+              />
+              <path
+                class="ore-mountain__shape ore-mountain__shape--1"
+                d="M58 286C92 283 127 281 164 280C197 279 229 277 261 274C292 271 323 273 354 277C384 280 405 282 418 286"
+              />
+            </svg>
+          </button>
+        </div>
+      </section>
+    </main>
+    <script src="./vendor/matter.min.js"></script>
+    <script type="module" src="./index.mjs"></script>
+  </body>
+</html>
