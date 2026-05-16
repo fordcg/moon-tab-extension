@@ -16,6 +16,7 @@ const gameStateLabel = document.querySelector(".game-deck-state");
 const extensionApi = typeof chrome !== "undefined" ? chrome : null;
 const initialOreCount = 100;
 let orePhysics = null;
+let orePhysicsRefreshFrame = 0;
 
 const formatTime = (date) =>
   new Intl.DateTimeFormat("zh-CN", {
@@ -59,6 +60,31 @@ const ensureOrePhysics = () => {
     worldElement: gameWorld,
     groundElement: groundLine,
     mountainElement: oreMountain,
+  });
+};
+
+const destroyOrePhysics = () => {
+  if (orePhysicsRefreshFrame) {
+    window.cancelAnimationFrame(orePhysicsRefreshFrame);
+    orePhysicsRefreshFrame = 0;
+  }
+
+  orePhysics?.destroy();
+  orePhysics = null;
+};
+
+const scheduleOrePhysicsRefresh = () => {
+  if (!orePhysics) {
+    return;
+  }
+
+  if (orePhysicsRefreshFrame) {
+    return;
+  }
+
+  orePhysicsRefreshFrame = window.requestAnimationFrame(() => {
+    orePhysicsRefreshFrame = 0;
+    orePhysics?.refresh();
   });
 };
 
@@ -243,7 +269,6 @@ const setupOreMountain = () => {
     target.addEventListener("click", mine);
   }
 
-  ensureOrePhysics();
   updateOreMountainState(initialOreCount);
 };
 
@@ -337,8 +362,12 @@ startButton?.addEventListener("click", () => {
   }
 
   ensureOrePhysics();
-  orePhysics?.refresh();
+  scheduleOrePhysicsRefresh();
 });
+
+window.addEventListener("resize", scheduleOrePhysicsRefresh);
+window.addEventListener("pageshow", scheduleOrePhysicsRefresh);
+window.addEventListener("pagehide", destroyOrePhysics, { once: true });
 
 if (gameScene instanceof HTMLElement) {
   setupSceneDrag(gameScene);
