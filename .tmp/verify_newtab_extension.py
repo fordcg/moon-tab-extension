@@ -2135,34 +2135,50 @@ def main() -> None:
                 result["game_deck_ore_landed_rock_blocks_mining_click"] = page.evaluate(
                     """() => {
                         const rocks = Array.from(document.querySelectorAll('.ore-rock-drop'));
-                        const rock = rocks.at(-1);
                         const mountain = document.querySelector('.ore-mountain');
-                        if (!rock || !mountain) {
+                        if (!mountain || rocks.length === 0) {
                             return false;
                         }
 
                         const beforeOre = Number(mountain.dataset.ore);
-                        const rect = rock.getBoundingClientRect();
-                        const clickX = rect.left + rect.width / 2;
-                        const clickY = rect.top + rect.height / 2;
-                        const hit = document.elementFromPoint(clickX, clickY);
-                        if (!hit || hit === rock || rock.contains(hit)) {
+                        const candidates = rocks
+                            .map((rock) => {
+                                const rect = rock.getBoundingClientRect();
+                                const clickX = rect.left + rect.width / 2;
+                                const clickY = rect.top + rect.height / 2;
+                                const hit = document.elementFromPoint(clickX, clickY);
+                                return {
+                                    rock,
+                                    hit,
+                                    clickX,
+                                    clickY,
+                                };
+                            })
+                            .filter(({ rock, hit }) =>
+                                hit
+                                && hit !== rock
+                                && !rock.contains(hit)
+                                && hit.closest('.ore-mountain') === mountain
+                            );
+
+                        const candidate = candidates[candidates.length - 1];
+                        if (!candidate) {
                             return false;
                         }
 
-                        hit.dispatchEvent(new PointerEvent('pointerdown', {
+                        candidate.hit.dispatchEvent(new PointerEvent('pointerdown', {
                             bubbles: true,
                             pointerId: 29,
                             pointerType: 'mouse',
-                            clientX: clickX,
-                            clientY: clickY,
+                            clientX: candidate.clickX,
+                            clientY: candidate.clickY,
                             button: 0,
                             buttons: 1,
                         }));
-                        hit.dispatchEvent(new MouseEvent('click', {
+                        candidate.hit.dispatchEvent(new MouseEvent('click', {
                             bubbles: true,
-                            clientX: clickX,
-                            clientY: clickY,
+                            clientX: candidate.clickX,
+                            clientY: candidate.clickY,
                         }));
 
                         return Number(mountain.dataset.ore) === beforeOre - 1;
