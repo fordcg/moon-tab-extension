@@ -1,11 +1,3 @@
-const MatterApi = globalThis.Matter;
-
-if (!MatterApi) {
-  throw new Error("Matter.js is not available on globalThis");
-}
-
-const { Engine, Bodies, Body, Composite } = MatterApi;
-
 const ROCK_TEXTURES = [
   new URL("./assets/rocks/source/ore-pebble-01.png", import.meta.url).href,
   new URL("./assets/rocks/source/ore-pebble-02.png", import.meta.url).href,
@@ -14,6 +6,43 @@ const ROCK_TEXTURES = [
 
 const FIXED_DT = 1000 / 60;
 const DEFAULT_MAX_ROCKS = 100;
+const WORLD_STATE_BY_ELEMENT = new WeakMap();
+
+const GROUND_BODY_WIDTH_MARGIN = 400;
+const GROUND_BODY_HEIGHT = 36;
+const GROUND_BODY_VERTICAL_OFFSET = 18;
+const SETTLING_SLOPE_WIDTH = 220;
+const SETTLING_SLOPE_HEIGHT = 20;
+const SETTLING_SLOPE_OFFSET_X = 92;
+const SETTLING_SLOPE_OFFSET_Y = -18;
+const SETTLING_SLOPE_ANGLE = -0.09;
+const SETTLING_BACKSTOP_WIDTH = 18;
+const SETTLING_BACKSTOP_HEIGHT = 120;
+const SETTLING_BACKSTOP_OFFSET_X = 198;
+const SETTLING_BACKSTOP_OFFSET_Y = -58;
+const MOUNTAIN_BASE_RATIO = 0.76;
+const INITIAL_RISE_X_SPEED_MIN = 3.4;
+const INITIAL_RISE_X_SPEED_MAX = 5.1;
+const INITIAL_RISE_Y_SPEED_MIN = -4.2;
+const INITIAL_RISE_Y_SPEED_MAX = -2.8;
+const INITIAL_ANGULAR_VELOCITY_MIN = -0.08;
+const INITIAL_ANGULAR_VELOCITY_MAX = 0.08;
+const ROCK_RESTITUTION = 0.18;
+const ROCK_FRICTION = 0.72;
+const ROCK_FRICTION_AIR = 0.018;
+const ROCK_DENSITY = 0.0026;
+const ROCK_SLEEP_THRESHOLD = 30;
+const ROCK_SLOP = 0.08;
+const ROCK_RADIUS_MIN = 15;
+const ROCK_RADIUS_MAX = 22;
+const ROCK_SCALE_MIN = 0.92;
+const ROCK_SCALE_MAX = 1.16;
+const STATIC_FRICTION = 0.88;
+const STATIC_RESTITUTION = 0.08;
+const SLOPE_FRICTION = 0.94;
+const SLOPE_RESTITUTION = 0.04;
+const BACKSTOP_FRICTION = 0.9;
+const BACKSTOP_RESTITUTION = 0.04;
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 
@@ -26,6 +55,12 @@ export const createRockPhysics = ({
   mountainElement,
   maxRocks = DEFAULT_MAX_ROCKS,
 }) => {
+  const MatterApi = globalThis.Matter;
+
+  if (!MatterApi) {
+    throw new Error("Matter.js is not available on globalThis");
+  }
+
   if (!(worldElement instanceof HTMLElement)) {
     throw new Error("worldElement is required");
   }
@@ -38,13 +73,28 @@ export const createRockPhysics = ({
     throw new Error("mountainElement is required");
   }
 
+  const existingState = WORLD_STATE_BY_ELEMENT.get(worldElement);
+  if (existingState && !existingState.destroyed) {
+    return existingState.controls;
+  }
+
+  const { Engine, Bodies, Body, Composite } = MatterApi;
   const engine = Engine.create({ enableSleeping: true });
   engine.gravity.y = 1.04;
 
-  const rockLayer = document.createElement("div");
-  rockLayer.className = "ore-rock-layer";
-  rockLayer.setAttribute("aria-hidden", "true");
-  worldElement.append(rockLayer);
+  const rockLayer =
+    worldElement.querySelector(":scope > .ore-rock-layer") ??
+    document.createElement("div");
+
+  if (!(rockLayer instanceof HTMLElement)) {
+    throw new Error("rock layer could not be created");
+  }
+
+  if (!rockLayer.isConnected) {
+    rockLayer.className = "ore-rock-layer";
+    rockLayer.setAttribute("aria-hidden", "true");
+    worldElement.append(rockLayer);
+  }
 
   const state = {
     rockLayer,
@@ -53,11 +103,17 @@ export const createRockPhysics = ({
     statics: [],
     rafId: 0,
     lastNow: performance.now(),
+    destroyed: false,
+    controls: null,
   };
+
+  WORLD_STATE_BY_ELEMENT.set(worldElement, state);
 
   const removeRock = (rock) => {
     Composite.remove(engine.world, rock.body);
-    rock.element.remove();
+    if (rock.element.isConnected) {
+      rock.element.remove();
+    }
     state.rocks = state.rocks.filter((entry) => entry !== rock);
   };
 
@@ -80,6 +136,10 @@ export const createRockPhysics = ({
   };
 
   const syncRock = (rock) => {
+    if (!rock.element.isConnected) {
+      return;
+    }
+
     const size = rock.radius * 2;
     rock.element.style.width = `${size}px`;
     rock.element.style.height = `${size}px`;
@@ -90,6 +150,10 @@ export const createRockPhysics = ({
   };
 
   const rebuildStatics = () => {
+    if (state.destroyed) {
+      return;
+    }
+
     for (const body of state.statics) {
       Composite.remove(engine.world, body);
     }
@@ -100,42 +164,43 @@ export const createRockPhysics = ({
     const groundRect = groundElement.getBoundingClientRect();
     const mountainRect = mountainElement.getBoundingClientRect();
     const groundTop = groundRect.top - worldRect.top;
-    const mountainBaseX = mountainRect.left - worldRect.left + mountainRect.width * 0.76;
+    const mountainBaseX =
+      mountainRect.left - worldRect.left + mountainRect.width * MOUNTAIN_BASE_RATIO;
 
     const groundBody = Bodies.rectangle(
       worldElement.offsetWidth / 2,
-      groundTop + 18,
-      worldElement.offsetWidth + 400,
-      36,
+      groundTop + GROUND_BODY_VERTICAL_OFFSET,
+      worldElement.offsetWidth + GROUND_BODY_WIDTH_MARGIN,
+      GROUND_BODY_HEIGHT,
       {
         isStatic: true,
-        friction: 0.88,
-        restitution: 0.08,
+        friction: STATIC_FRICTION,
+        restitution: STATIC_RESTITUTION,
       },
     );
 
     const settlingSlope = Bodies.rectangle(
-      mountainBaseX + 92,
-      groundTop - 18,
-      220,
-      20,
+      mountainBaseX + SETTLING_SLOPE_OFFSET_X,
+      groundTop + SETTLING_SLOPE_OFFSET_Y,
+      SETTLING_SLOPE_WIDTH,
+      SETTLING_SLOPE_HEIGHT,
       {
         isStatic: true,
-        angle: -0.09,
-        friction: 0.94,
-        restitution: 0.04,
+        angle: SETTLING_SLOPE_ANGLE,
+        friction: SLOPE_FRICTION,
+        restitution: SLOPE_RESTITUTION,
       },
     );
 
     const settlingBackstop = Bodies.rectangle(
-      mountainBaseX + 198,
-      groundTop - 58,
-      18,
-      120,
+      mountainBaseX + SETTLING_BACKSTOP_OFFSET_X,
+      groundTop + SETTLING_BACKSTOP_OFFSET_Y,
+      SETTLING_BACKSTOP_WIDTH,
+      SETTLING_BACKSTOP_HEIGHT,
       {
         isStatic: true,
-        friction: 0.9,
-        restitution: 0.04,
+        friction: BACKSTOP_FRICTION,
+        restitution: BACKSTOP_RESTITUTION,
       },
     );
 
@@ -144,15 +209,19 @@ export const createRockPhysics = ({
   };
 
   const spawnRock = ({ x, y }) => {
-    const radius = randomBetween(15, 22);
-    const scale = randomBetween(0.92, 1.16);
+    if (state.destroyed) {
+      return;
+    }
+
+    const radius = randomBetween(ROCK_RADIUS_MIN, ROCK_RADIUS_MAX);
+    const scale = randomBetween(ROCK_SCALE_MIN, ROCK_SCALE_MAX);
     const body = Bodies.circle(x, y, radius, {
-      restitution: 0.18,
-      friction: 0.72,
-      frictionAir: 0.018,
-      density: 0.0026,
-      sleepThreshold: 30,
-      slop: 0.08,
+      restitution: ROCK_RESTITUTION,
+      friction: ROCK_FRICTION,
+      frictionAir: ROCK_FRICTION_AIR,
+      density: ROCK_DENSITY,
+      sleepThreshold: ROCK_SLEEP_THRESHOLD,
+      slop: ROCK_SLOP,
     });
 
     const element = document.createElement("span");
@@ -169,10 +238,13 @@ export const createRockPhysics = ({
     rockLayer.append(element);
 
     Body.setVelocity(body, {
-      x: randomBetween(3.4, 5.1),
-      y: randomBetween(-4.2, -2.8),
+      x: randomBetween(INITIAL_RISE_X_SPEED_MIN, INITIAL_RISE_X_SPEED_MAX),
+      y: randomBetween(INITIAL_RISE_Y_SPEED_MIN, INITIAL_RISE_Y_SPEED_MAX),
     });
-    Body.setAngularVelocity(body, randomBetween(-0.08, 0.08));
+    Body.setAngularVelocity(
+      body,
+      randomBetween(INITIAL_ANGULAR_VELOCITY_MIN, INITIAL_ANGULAR_VELOCITY_MAX),
+    );
 
     const rock = {
       body,
@@ -190,6 +262,10 @@ export const createRockPhysics = ({
   };
 
   const tick = (now) => {
+    if (state.destroyed) {
+      return;
+    }
+
     const delta = Math.min(32, now - state.lastNow || FIXED_DT);
     state.lastNow = now;
     Engine.update(engine, delta);
@@ -202,14 +278,21 @@ export const createRockPhysics = ({
   };
 
   rebuildStatics();
-  state.rafId = requestAnimationFrame(tick);
-
-  return {
+  const controls = {
     spawnRock,
     refresh() {
+      if (state.destroyed) {
+        return;
+      }
+
       rebuildStatics();
     },
     destroy() {
+      if (state.destroyed) {
+        return;
+      }
+
+      state.destroyed = true;
       cancelAnimationFrame(state.rafId);
       for (const rock of [...state.rocks]) {
         removeRock(rock);
@@ -217,7 +300,15 @@ export const createRockPhysics = ({
       for (const body of state.statics) {
         Composite.remove(engine.world, body);
       }
-      rockLayer.remove();
+      if (rockLayer.isConnected) {
+        rockLayer.remove();
+      }
+      WORLD_STATE_BY_ELEMENT.delete(worldElement);
     },
   };
+
+  state.controls = controls;
+  state.rafId = requestAnimationFrame(tick);
+
+  return controls;
 };
