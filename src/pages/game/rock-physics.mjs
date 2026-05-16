@@ -85,12 +85,13 @@ export const createRockPhysics = ({
   const rockLayer =
     worldElement.querySelector(":scope > .ore-rock-layer") ??
     document.createElement("div");
+  const ownsRockLayer = !rockLayer.isConnected;
 
   if (!(rockLayer instanceof HTMLElement)) {
     throw new Error("rock layer could not be created");
   }
 
-  if (!rockLayer.isConnected) {
+  if (ownsRockLayer) {
     rockLayer.className = "ore-rock-layer";
     rockLayer.setAttribute("aria-hidden", "true");
     worldElement.append(rockLayer);
@@ -300,7 +301,10 @@ export const createRockPhysics = ({
       for (const body of state.statics) {
         Composite.remove(engine.world, body);
       }
-      if (rockLayer.isConnected) {
+      if (state.rockLayer.isConnected) {
+        state.rockLayer.replaceChildren();
+      }
+      if (ownsRockLayer && rockLayer.isConnected) {
         rockLayer.remove();
       }
       WORLD_STATE_BY_ELEMENT.delete(worldElement);
