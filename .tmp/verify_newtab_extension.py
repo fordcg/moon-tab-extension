@@ -1448,6 +1448,8 @@ def main() -> None:
         "game_deck_ore_rocks_use_images": False,
         "game_deck_ore_rocks_pile_near_base": False,
         "game_deck_ore_rocks_do_not_overlap_visibly": False,
+        "game_deck_miner_stays_at_mountain": False,
+        "game_deck_hauler_clears_visible_rocks": False,
         "game_deck_boot_commands_visible": False,
         "game_deck_return_commands_visible": False,
         "game_deck_boot_terminal_unframed": False,
@@ -2318,7 +2320,7 @@ def main() -> None:
                             return false;
                         }
 
-                        return sprite.currentSrc.includes('ore-pebble-')
+                        return sprite.currentSrc.includes('ore-pebble.png')
                             && sprite.naturalWidth > 0
                             && sprite.naturalHeight > 0;
                     }"""
@@ -2352,12 +2354,88 @@ def main() -> None:
                         return true;
                     }"""
                 )
+
+                result["game_deck_miner_stays_at_mountain"] = rock_page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const miner = document.querySelector('.game-worker[data-role="miner"]');
+                        if (!mountain || !miner) {
+                            return false;
+                        }
+
+                        const mountainRect = mountain.getBoundingClientRect();
+                        const miningX = mountainRect.left + mountainRect.width * 0.6;
+                        const deadline = performance.now() + 3400;
+                        let previousOre = Number(mountain.dataset.ore || '0');
+                        let oreDrops = 0;
+                        let maxDeviation = 0;
+
+                        while (performance.now() < deadline) {
+                            const minerRect = miner.getBoundingClientRect();
+                            const minerX = minerRect.left + minerRect.width / 2;
+                            maxDeviation = Math.max(maxDeviation, Math.abs(minerX - miningX));
+
+                            const currentOre = Number(mountain.dataset.ore || '0');
+                            if (currentOre < previousOre) {
+                                oreDrops += previousOre - currentOre;
+                            }
+                            previousOre = currentOre;
+
+                            await new Promise((resolve) => requestAnimationFrame(resolve));
+                        }
+
+                        return oreDrops >= 2 && maxDeviation <= 56;
+                    }"""
+                )
+
+                result["game_deck_hauler_clears_visible_rocks"] = rock_page.evaluate(
+                    """async () => {
+                        const mountain = document.querySelector('.ore-mountain');
+                        const target = mountain?.querySelector(`.ore-mountain__hitbox--${mountain.dataset.stage}`);
+                        const stored = document.querySelector('#stored-ore-count');
+                        if (!mountain || !target || !stored) {
+                            return false;
+                        }
+
+                        const rect = target.getBoundingClientRect();
+                        for (let index = 0; index < 6; index += 1) {
+                            target.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                clientX: rect.left + rect.width * 0.58,
+                                clientY: rect.top + rect.height * 0.44,
+                            }));
+                            await new Promise((resolve) => setTimeout(resolve, 50));
+                        }
+
+                        const deadline = performance.now() + 6500;
+                        let previousRockCount = document.querySelectorAll('.ore-rock-drop').length;
+                        let sawRockCountDrop = false;
+                        let sawStoredIncrease = Number(stored.textContent || '0') > 0;
+
+                        while (performance.now() < deadline) {
+                            const currentRockCount = document.querySelectorAll('.ore-rock-drop').length;
+                            const storedCount = Number(stored.textContent || '0');
+                            if (currentRockCount < previousRockCount) {
+                                sawRockCountDrop = true;
+                            }
+                            if (storedCount > 0) {
+                                sawStoredIncrease = true;
+                            }
+                            previousRockCount = currentRockCount;
+                            await new Promise((resolve) => requestAnimationFrame(resolve));
+                        }
+
+                        return sawStoredIncrease && sawRockCountDrop;
+                    }"""
+                )
                 rock_page.close()
 
                 assert result["game_deck_ore_mountain_taller"], "expected ore mountain to be about 60% taller than the current version"
                 assert result["game_deck_ore_rocks_use_images"], "expected dropped rocks to use ore sprite images"
                 assert result["game_deck_ore_rocks_pile_near_base"], "expected dropped rocks to settle into a compact pile near the mountain base"
                 assert result["game_deck_ore_rocks_do_not_overlap_visibly"], "expected piled rocks not to visually pass through each other"
+                assert result["game_deck_miner_stays_at_mountain"], "expected autonomous miner to stay at the mountain while ore remains"
+                assert result["game_deck_hauler_clears_visible_rocks"], "expected hauler pickups to remove visible ground rocks as ore is stored"
 
                 page.locator("#return-pet-page").click()
                 page.wait_for_selector(".page-transition-overlay__command", timeout=1000)

@@ -20,6 +20,7 @@ import {
   mergeSuggestionItems,
 } from "./helpers/search-suggestions.mjs";
 import { getNewtabDomRefs } from "./dom-refs.mjs";
+import { runPageTransition } from "../../shared/page-transition.mjs";
 import { createAiPreviewController } from "./ai-preview-controller.mjs";
 import { createSuggestionsController } from "./suggestions-controller.mjs";
 import { createSearchTargetController } from "./search-target-controller.mjs";
@@ -329,6 +330,59 @@ interactionsController.bind();
 
 ai.openSidebarButton?.addEventListener("click", () => {
   void openAiSidebar();
+});
+
+const openGameDeckButton = document.getElementById("open-game-deck");
+openGameDeckButton?.addEventListener("click", () => {
+  const gameDeckUrl = extensionApi?.runtime?.getURL
+    ? extensionApi.runtime.getURL("src/pages/game/index.html")
+    : "./../game/index.html";
+
+  void runPageTransition({
+    documentRef: document,
+    windowRef: window,
+    label: "INITIALIZING GAME DECK",
+    mode: "enter-game",
+    onComplete: () => {
+      window.location.href = gameDeckUrl;
+    },
+  });
+});
+
+const homepageManageMenu = document.getElementById("homepage-manage-menu");
+const closeHomepageManageMenu = () => {
+  if (homepageManageMenu instanceof HTMLDetailsElement) {
+    homepageManageMenu.open = false;
+  }
+};
+
+document.addEventListener("click", (event) => {
+  if (!(homepageManageMenu instanceof HTMLDetailsElement) || !homepageManageMenu.open) {
+    return;
+  }
+
+  if (event.target instanceof Node && homepageManageMenu.contains(event.target)) {
+    return;
+  }
+
+  closeHomepageManageMenu();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeHomepageManageMenu();
+  }
+});
+
+homepageManageMenu?.addEventListener("click", (event) => {
+  const actionButton =
+    event.target instanceof Element
+      ? event.target.closest(".homepage-manage-item")
+      : null;
+
+  if (actionButton) {
+    window.requestAnimationFrame(closeHomepageManageMenu);
+  }
 });
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");

@@ -1,0 +1,8 @@
+.edge-profile*/
+*-temp.json
+*.log
+.superpowers/
+.tmp/pw-debug-profile/
+.tmp/*.png
+tmp/
+.worktrees/

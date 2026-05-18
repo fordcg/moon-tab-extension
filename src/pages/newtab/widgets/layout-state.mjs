@@ -312,3 +312,27 @@ export const restoreWidget = async ({ layout, widgetId, registryItems }) => {
   await saveWidgetLayout(nextLayout);
   return nextLayout;
 };
+
+export const updateWidgetPrefs = async ({ layout, widgetId, widgetPrefs, registryItems }) => {
+  const widget = getRegistryItemById(widgetId, registryItems);
+  if (!widget || !isPlainObject(widgetPrefs)) {
+    return normalizeWidgetLayout({ layout, registryItems });
+  }
+
+  const nextLayout = normalizeWidgetLayout({
+    layout: {
+      ...layout,
+      widgetPrefs: {
+        ...(isPlainObject(layout?.widgetPrefs) ? layout.widgetPrefs : {}),
+        [widgetId]: {
+          ...(isPlainObject(layout?.widgetPrefs?.[widgetId]) ? layout.widgetPrefs[widgetId] : {}),
+          ...widgetPrefs,
+        },
+      },
+    },
+    registryItems,
+  });
+
+  await saveWidgetLayout(nextLayout);
+  return nextLayout;
+};

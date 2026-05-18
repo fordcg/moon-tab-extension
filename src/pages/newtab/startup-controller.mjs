@@ -99,9 +99,9 @@ export const createStartupController = ({ elements, callbacks, config }) => {
 
   const initialize = ({ prefersReducedMotion }) => {
     applySearchReadyState();
+    syncSearchOutline();
 
     if (prefersReducedMotion.matches) {
-      syncSearchOutline();
       setOutlineComplete();
       applyReducedMotionReadyState();
       return;

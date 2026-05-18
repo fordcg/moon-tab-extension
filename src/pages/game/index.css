@@ -374,6 +374,7 @@ body[data-game-state="playing"] .game-scene::-webkit-scrollbar-thumb {
   place-items: center;
   min-width: min(100%, 760px);
   min-height: 100%;
+  isolation: isolate;
 }
 
 body[data-game-state="playing"] .game-world {
@@ -399,13 +400,95 @@ body[data-game-state="playing"] .game-world {
   height: 3px;
   background: #000;
   pointer-events: none;
+  z-index: 1;
+}
+
+.game-ore-pile,
+.game-storage {
+  position: absolute;
+  bottom: calc(2cm + 10px);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  color: #000;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.game-ore-pile {
+  left: clamp(700px, 43vw, 900px);
+}
+
+.game-storage {
+  left: clamp(960px, 58vw, 1220px);
+}
+
+.game-ore-pile::before,
+.game-storage::before {
+  content: "";
+  display: block;
+}
+
+.game-ore-pile::before {
+  width: 58px;
+  height: 16px;
+  border-bottom: 2px solid #000;
+  border-radius: 999px;
+  box-shadow:
+    -16px 7px 0 -4px #000,
+    -2px 4px 0 -4px #000,
+    14px 9px 0 -4px #000;
+  opacity: 0.84;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.game-ore-pile[data-has-ore="false"]::before {
+  opacity: 0.28;
+  transform: scale(0.9);
+}
+
+.game-storage::before {
+  width: 74px;
+  height: 42px;
+  border: 2px solid #000;
+  background:
+    linear-gradient(#000 0 0) center 12px / 46px 2px no-repeat,
+    linear-gradient(#000 0 0) center 22px / 46px 2px no-repeat,
+    linear-gradient(#000 0 0) center bottom / 46px 2px no-repeat;
+  box-shadow: 8px 8px 0 #000;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.game-storage[data-active="true"]::before {
+  transform: translate(-1px, -1px);
+  box-shadow: 10px 10px 0 #000;
+}
+
+.game-resource__label {
+  color: var(--game-muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.game-resource__value {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.game-worker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
 }
 
 .ore-mountain {
   position: absolute;
-  left: clamp(124px, 14vw, 244px);
-  bottom: calc(2cm + 3px);
-  width: clamp(360px, 32vw, 460px);
+  left: clamp(136px, 14vw, 248px);
+  bottom: calc(2cm + 1px);
+  width: clamp(500px, 36vw, 620px);
   padding: 0;
   border: 0;
   background: transparent;
@@ -415,6 +498,7 @@ body[data-game-state="playing"] .game-world {
   transform-origin: 50% 100%;
   touch-action: manipulation;
   pointer-events: none;
+  z-index: 5;
 }
 
 .ore-mountain[data-mining="true"] {
@@ -461,6 +545,186 @@ body[data-game-state="playing"] .game-world {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 4;
+}
+
+.game-worker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 56px;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  will-change: left, top, transform;
+}
+
+.game-worker__rig {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.game-worker__shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  width: 24px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.14);
+  transform: translateX(-50%);
+}
+
+.game-worker__head {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #000;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateX(-50%);
+}
+
+.game-worker__torso {
+  position: absolute;
+  left: 50%;
+  top: 19px;
+  width: 14px;
+  height: 15px;
+  border: 2px solid #000;
+  background: #fff;
+  transform: translateX(-50%);
+}
+
+.game-worker__arm,
+.game-worker__leg {
+  position: absolute;
+  width: 3px;
+  border-radius: 999px;
+  background: #000;
+}
+
+.game-worker__arm {
+  top: 21px;
+  height: 15px;
+  transform-origin: 50% 2px;
+}
+
+.game-worker__arm--rear {
+  left: 11px;
+}
+
+.game-worker__arm--front {
+  left: 20px;
+}
+
+.game-worker__leg {
+  top: 34px;
+  height: 18px;
+  transform-origin: 50% 2px;
+}
+
+.game-worker__leg--rear {
+  left: 13px;
+}
+
+.game-worker__leg--front {
+  left: 18px;
+}
+
+.game-worker__tool {
+  position: absolute;
+  left: 19px;
+  top: 25px;
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: #000;
+  transform-origin: 3px 50%;
+}
+
+.game-worker__tool::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -5px;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid #000;
+  border-right: 2px solid #000;
+  transform: rotate(44deg);
+}
+
+.game-worker__load {
+  position: absolute;
+  left: 19px;
+  top: 15px;
+  width: 12px;
+  height: 10px;
+  border: 2px solid #000;
+  background: #fff;
+  opacity: 0;
+  transform: translateX(6px);
+  transition: opacity 120ms ease;
+}
+
+.game-worker[data-role="hauler"][data-carry="1"] .game-worker__load {
+  opacity: 1;
+}
+
+.game-worker[data-role="hauler"] .game-worker__tool {
+  display: none;
+}
+
+.game-worker[data-role="miner"] .game-worker__load {
+  display: none;
+}
+
+.game-worker[data-state="idle"] .game-worker__rig {
+  animation: worker-idle 1.6s ease-in-out infinite;
+}
+
+.game-worker[data-state="walk"] .game-worker__rig {
+  animation: worker-bounce 420ms linear infinite;
+}
+
+.game-worker[data-state="walk"] .game-worker__leg--front,
+.game-worker[data-state="walk"] .game-worker__arm--rear {
+  animation: worker-swing-front 420ms ease-in-out infinite;
+}
+
+.game-worker[data-state="walk"] .game-worker__leg--rear,
+.game-worker[data-state="walk"] .game-worker__arm--front {
+  animation: worker-swing-back 420ms ease-in-out infinite;
+}
+
+.game-worker[data-state="mine"] .game-worker__tool,
+.game-worker[data-state="mine"] .game-worker__arm--front {
+  animation: worker-mine 520ms ease-in-out infinite;
+}
+
+.game-worker[data-state="mine"] .game-worker__arm--rear {
+  animation: worker-mine-rear 520ms ease-in-out infinite;
+}
+
+.game-worker[data-state="pickup"] .game-worker__rig,
+.game-worker[data-state="drop"] .game-worker__rig,
+.game-worker[data-state="unload"] .game-worker__rig {
+  animation: worker-stoop 340ms ease-in-out infinite alternate;
+}
+
+.game-worker[data-state="pickup"] .game-worker__arm--front,
+.game-worker[data-state="drop"] .game-worker__arm--front,
+.game-worker[data-state="unload"] .game-worker__arm--front {
+  animation: worker-reach 340ms ease-in-out infinite alternate;
+}
+
+.game-worker[data-state="walk"][data-carry="1"] .game-worker__load {
+  opacity: 1;
 }
 
 .ore-mountain__hitbox {
@@ -490,7 +754,7 @@ body[data-game-state="playing"] .game-world {
 }
 
 .ore-mountain__shape {
-  stroke-width: 4;
+  stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0;
@@ -534,6 +798,8 @@ body[data-game-state="playing"] .game-world {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  transform: scale(1.1);
+  transform-origin: center;
   user-select: none;
   -webkit-user-drag: none;
   filter: none;
@@ -664,6 +930,96 @@ body[data-game-state="playing"] .game-world {
   }
 }
 
+@keyframes worker-idle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes worker-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes worker-swing-front {
+  0%,
+  100% {
+    transform: rotate(16deg);
+  }
+
+  50% {
+    transform: rotate(-18deg);
+  }
+}
+
+@keyframes worker-swing-back {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+
+  50% {
+    transform: rotate(16deg);
+  }
+}
+
+@keyframes worker-mine {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+
+  42% {
+    transform: rotate(44deg);
+  }
+
+  68% {
+    transform: rotate(58deg);
+  }
+}
+
+@keyframes worker-mine-rear {
+  0%,
+  100% {
+    transform: rotate(8deg);
+  }
+
+  50% {
+    transform: rotate(-18deg);
+  }
+}
+
+@keyframes worker-stoop {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(2px);
+  }
+}
+
+@keyframes worker-reach {
+  0% {
+    transform: rotate(8deg);
+  }
+
+  100% {
+    transform: rotate(52deg);
+  }
+}
+
 @media (max-width: 820px) {
   .game-deck-shell {
     grid-template-rows: auto minmax(0, 1fr);
@@ -690,9 +1046,17 @@ body[data-game-state="playing"] .game-world {
     width: min(58vw, 260px);
   }
 
+  .game-ore-pile {
+    left: 66vw;
+  }
+
+  .game-storage {
+    left: 88vw;
+  }
+
   .ore-mountain {
-    left: 92px;
-    width: min(72vw, 360px);
+    left: 84px;
+    width: min(88vw, 430px);
   }
 }
 

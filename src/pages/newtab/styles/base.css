@@ -11,6 +11,11 @@ html {
   background: var(--surface-page);
 }
 
+html,
+body {
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, auto;
+}
+
 body {
   position: relative;
   margin: 0;
@@ -20,6 +25,14 @@ body {
   background:
     radial-gradient(circle at 50% -4%, rgba(255, 225, 158, 0.34) 0%, rgba(255, 225, 158, 0.06) 18%, rgba(255, 225, 158, 0) 38%),
     linear-gradient(180deg, var(--surface-page) 0%, var(--surface-page-alt) 100%);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
 }
 
 body::before {
@@ -46,14 +59,15 @@ body::before {
   min-height: 100vh;
   display: grid;
   place-items: start center;
-  padding: clamp(1.8rem, 5vh, 3.2rem) 1.25rem 2rem;
+  padding: 0;
 }
 
 .homepage-stage {
   position: relative;
   isolation: isolate;
-  width: min(100%, 1200px);
-  min-height: calc(100vh - clamp(3.8rem, 8vh, 5.2rem));
+  width: 100%;
+  min-height: 100vh;
+  padding: clamp(1.8rem, 5vh, 3.2rem) 1.25rem 2rem;
 }
 
 .homepage-stage img[alt=""] {
@@ -67,7 +81,7 @@ body::before {
 
 .homepage-stage__ambient,
 .homepage-stage__decor {
-  position: absolute;
+  position: fixed;
   inset: 0;
 }
 
@@ -96,6 +110,7 @@ body::before {
 .homepage-focus-shell {
   position: relative;
   width: var(--homepage-search-shell-width);
+  margin-inline: auto;
   padding: 0;
   border: 0;
   border-radius: 0;

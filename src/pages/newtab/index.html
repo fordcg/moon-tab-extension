@@ -35,12 +35,6 @@
               alt=""
             />
             <img
-              data-stage-asset="pet-duo"
-              class="homepage-stage__asset homepage-stage__asset--pet-duo"
-              src="./assets/hero/pet-duo-badge.png"
-              alt=""
-            />
-            <img
               data-stage-asset="pet-left"
               class="homepage-stage__asset homepage-stage__asset--pet-left"
               src="./assets/hero/pet-left-peek.png"
@@ -56,60 +50,6 @@
               data-stage-asset="pet-mini"
               class="homepage-stage__asset homepage-stage__asset--pet-mini"
               src="./assets/hero/pet-mini-pair.png"
-              alt=""
-            />
-            <img
-              data-stage-bubble="left"
-              class="homepage-stage__asset homepage-stage__bubble homepage-stage__bubble--left"
-              src="./assets/hero/hint-bubble-1.png"
-              alt=""
-            />
-            <img
-              data-stage-bubble="center"
-              class="homepage-stage__asset homepage-stage__bubble homepage-stage__bubble--center"
-              src="./assets/hero/hint-bubble-2.png"
-              alt=""
-            />
-            <img
-              data-stage-bubble="right"
-              class="homepage-stage__asset homepage-stage__bubble homepage-stage__bubble--right"
-              src="./assets/hero/hint-bubble-1.png"
-              alt=""
-            />
-            <img
-              data-stage-asset="paw-accent"
-              class="homepage-stage__asset homepage-stage__asset--paw"
-              src="./assets/hero/paw-accent.png"
-              alt=""
-            />
-            <img
-              data-stage-asset="fish-accent"
-              class="homepage-stage__asset homepage-stage__asset--fish"
-              src="./assets/hero/fish-accent.png"
-              alt=""
-            />
-            <img
-              data-stage-asset="bone-accent"
-              class="homepage-stage__asset homepage-stage__asset--bone"
-              src="./assets/hero/bone-accent.png"
-              alt=""
-            />
-            <img
-              data-stage-asset="star-sparkle"
-              class="homepage-stage__asset homepage-stage__asset--star"
-              src="./assets/hero/star-sparkle.png"
-              alt=""
-            />
-            <img
-              data-stage-asset="cloud-puff"
-              class="homepage-stage__asset homepage-stage__asset--cloud-puff"
-              src="./assets/hero/cloud-puff.png"
-              alt=""
-            />
-            <img
-              data-stage-asset="tape-sticker"
-              class="homepage-stage__asset homepage-stage__asset--tape"
-              src="./assets/hero/tape-sticker.png"
               alt=""
             />
           </div>
@@ -206,33 +146,67 @@
           </div>
 
           <section class="homepage-focus-shell layout-newtab-hero" aria-label="主页搜索区域">
-            <header class="homepage-title-band" aria-label="主题标题">
-              <div class="homepage-title-copy">
-                <p class="homepage-title-kicker">猫狗搭子新标签页</p>
-                <h1 class="homepage-title">今天想找点什么？</h1>
-              </div>
-
-              <button
-                id="open-widget-panel"
-                class="ui-btn-secondary homepage-widget-trigger"
-                type="button"
-                aria-haspopup="dialog"
-                aria-expanded="false"
+            <details id="homepage-manage-menu" class="homepage-manage-menu">
+              <summary
+                id="homepage-manage-trigger"
+                class="ui-btn-icon homepage-manage-trigger"
+                aria-label="打开页面管理菜单"
               >
-                添加组件
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path d="M5 7h14"></path>
+                  <path d="M5 12h14"></path>
+                  <path d="M5 17h14"></path>
+                </svg>
+              </summary>
+
+              <div class="homepage-manage-popover" role="group" aria-label="页面管理">
+                <button
+                  id="toggle-widget-edit-mode"
+                  class="homepage-manage-item homepage-widget-edit-trigger"
+                  type="button"
+                  aria-pressed="false"
+                >
+                  编辑布局
+                </button>
+                <button
+                  id="open-game-deck"
+                  class="homepage-manage-item"
+                  type="button"
+                  aria-label="打开游戏空间"
+                >
+                  游戏空间
+                </button>
+                <button
+                  id="open-ai-sidebar"
+                  class="settings-trigger homepage-manage-item search-ai-sidebar-trigger"
+                  type="button"
+                  aria-label="打开 AI 助手侧边栏"
+                >
+                  AI 侧栏
+                </button>
+                <button
+                  id="open-settings"
+                  class="settings-trigger homepage-manage-item"
+                  type="button"
+                  aria-label="打开设置"
+                >
+                  设置
+                </button>
+              </div>
+            </details>
+
+            <section id="widget-panel" class="widget-panel" data-widget-edit-surface="true" aria-label="组件面板" hidden>
+              <div id="widget-panel-list" class="widget-panel-list"></div>
+              <button id="save-widget-layout" class="ui-btn-icon widget-panel-save" type="button" aria-label="保存布局" title="保存布局">
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path d="M5 5h11l3 3v11H5z"></path>
+                  <path d="M8 5v6h8"></path>
+                  <path d="M8 19v-5h8v5"></path>
+                </svg>
               </button>
-            </header>
+            </section>
 
             <div id="widget-root" class="homepage-widget-root" aria-live="polite"></div>
-
-            <section id="widget-panel" class="widget-panel" aria-label="组件面板" hidden>
-              <div class="widget-panel-header">
-                <h2 class="widget-panel-title">添加组件</h2>
-                <button id="close-widget-panel" class="ui-btn-icon" type="button" aria-label="关闭组件面板">×</button>
-              </div>
-              <div id="widget-panel-status" class="widget-panel-status" hidden></div>
-              <div id="widget-panel-list" class="widget-panel-list"></div>
-            </section>
           </section>
         </section>
       </section>
@@ -249,50 +223,26 @@
 
             <div class="outline-search-frame-inner">
               <div class="search-control-rail widget-search-shell__top">
-                <p class="search-card-badge">便签搜索</p>
-                <div class="search-shell-actions ui-toolbar-group" role="group" aria-label="搜索操作">
+                <button
+                  id="search-target-trigger"
+                  type="button"
+                  class="search-target-trigger"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls="search-target-menu"
+                >
+                  <span class="search-target-chip-label">目标</span>
+                  <span id="search-target-label">Bing</span>
+                </button>
+                <div class="search-shell-actions" role="group" aria-label="搜索操作">
                   <button id="ai-toggle-btn" type="button" class="ai-toggle-btn ui-btn-primary" aria-label="切换AI增强搜索" aria-pressed="false">
                     <span class="ai-toggle-icon" aria-hidden="true">AI</span>
-                    <span class="ai-toggle-text">AI增强搜索</span>
-                  </button>
-                  <button id="open-ai-sidebar" class="settings-trigger search-settings-trigger search-ai-sidebar-trigger ui-btn-secondary" type="button" aria-label="打开 AI 助手侧边栏">
-                    <span class="search-settings-trigger-icon" aria-hidden="true">侧栏</span>
-                    <span class="search-settings-trigger-label visually-hidden">打开 AI 助手侧边栏</span>
-                  </button>
-                  <button id="open-settings" class="settings-trigger search-settings-trigger ui-btn-icon" type="button" aria-label="打开设置">
-                    <span class="search-settings-trigger-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                        <path d="M4 6.5h7.2"></path>
-                        <path d="M16.8 6.5H20"></path>
-                        <circle cx="14" cy="6.5" r="1.85"></circle>
-                        <path d="M4 12h2.8"></path>
-                        <path d="M12.8 12H20"></path>
-                        <circle cx="9.8" cy="12" r="1.85"></circle>
-                        <path d="M4 17.5h8.4"></path>
-                        <path d="M18 17.5h2"></path>
-                        <circle cx="15.2" cy="17.5" r="1.85"></circle>
-                      </svg>
-                    </span>
-                    <span class="search-settings-trigger-label visually-hidden">设置面板</span>
                   </button>
                 </div>
               </div>
 
               <div class="search-main-row">
                 <div class="search-input-stack widget-search-shell__input">
-                  <div class="search-entry-row widget-search-shell__target-row">
-                    <button
-                      id="search-target-trigger"
-                      type="button"
-                      class="search-target-trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-controls="search-target-menu"
-                    >
-                      <span class="search-target-chip-label">目标</span>
-                      <span id="search-target-label">Bing</span>
-                    </button>
-                  </div>
                   <input id="search-input" name="q" type="search" placeholder="例如：设计灵感、github.com、今天适合看的东西" disabled aria-disabled="true" />
                   <p class="search-input-hint">支持直接打开网址，也支持 AI 先帮你整理搜索方向。</p>
                 </div>

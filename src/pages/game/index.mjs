@@ -1,4 +1,5 @@
 import { createRockPhysics } from "./rock-physics.mjs";
+import { createWorkerSimulation } from "./workers.mjs";
 import { runPageTransition } from "../../shared/page-transition.mjs";
 
 const clock = document.getElementById("game-clock");
@@ -12,10 +13,21 @@ const oreMountain = document.querySelector(".ore-mountain");
 const oreTooltip = oreMountain?.querySelector(".ore-mountain__tooltip");
 const oreHitTargets = oreMountain ? Array.from(oreMountain.querySelectorAll(".ore-mountain__hitbox")) : [];
 const groundLine = document.querySelector(".game-ground-line");
+const groundOreCount = document.getElementById("ground-ore-count");
+const storedOreCount = document.getElementById("stored-ore-count");
+const orePile = document.querySelector(".game-ore-pile");
+const storageZone = document.querySelector(".game-storage");
+const workerLayer = document.querySelector(".game-worker-layer");
 const gameStateLabel = document.querySelector(".game-deck-state");
 const extensionApi = typeof chrome !== "undefined" ? chrome : null;
 const initialOreCount = 100;
+const resourceState = {
+  oreRemaining: initialOreCount,
+  groundOre: 0,
+  storedOre: 0,
+};
 let orePhysics = null;
+let workerSimulation = null;
 let orePhysicsRefreshFrame = 0;
 
 const formatTime = (date) =>
@@ -63,7 +75,37 @@ const ensureOrePhysics = () => {
   });
 };
 
-const destroyOrePhysics = () => {
+const ensureWorkerSimulation = () => {
+  if (
+    workerSimulation
+    || !(workerLayer instanceof HTMLElement)
+    || !(gameWorld instanceof HTMLElement)
+    || !(groundLine instanceof HTMLElement)
+    || !(oreMountain instanceof HTMLButtonElement)
+    || !(orePile instanceof HTMLElement)
+    || !(storageZone instanceof HTMLElement)
+  ) {
+    return;
+  }
+
+  workerSimulation = createWorkerSimulation({
+    layerElement: workerLayer,
+    worldElement: gameWorld,
+    groundElement: groundLine,
+    mountainElement: oreMountain,
+    pileElement: orePile,
+    storageElement: storageZone,
+    getOreRemaining: () => resourceState.oreRemaining,
+    getGroundOre: () => resourceState.groundOre,
+    mineMountain: (point) => mineMountainAtPoint(point, { depositToGround: true }),
+    dropGroundOre: (amount) => addGroundOre(amount),
+    pickupGroundOre: (amount) => pickupGroundOre(amount),
+    pickupGroundRock: (point) => orePhysics?.pickupRock(point),
+    storeOre: (amount) => storeOre(amount),
+  });
+};
+
+const destroyWorldSystems = () => {
   if (orePhysicsRefreshFrame) {
     window.cancelAnimationFrame(orePhysicsRefreshFrame);
     orePhysicsRefreshFrame = 0;
@@ -71,10 +113,12 @@ const destroyOrePhysics = () => {
 
   orePhysics?.destroy();
   orePhysics = null;
+  workerSimulation?.destroy();
+  workerSimulation = null;
 };
 
 const scheduleOrePhysicsRefresh = () => {
-  if (!orePhysics) {
+  if (!orePhysics && !workerSimulation) {
     return;
   }
 
@@ -85,6 +129,7 @@ const scheduleOrePhysicsRefresh = () => {
   orePhysicsRefreshFrame = window.requestAnimationFrame(() => {
     orePhysicsRefreshFrame = 0;
     orePhysics?.refresh();
+    workerSimulation?.refresh();
   });
 };
 
@@ -113,6 +158,7 @@ const updateOreMountainState = (oreRemaining) => {
     return;
   }
 
+  resourceState.oreRemaining = oreRemaining;
   oreMountain.dataset.ore = String(oreRemaining);
   oreMountain.dataset.stage = String(getOreStage(oreRemaining));
   oreMountain.disabled = oreRemaining <= 0;
@@ -135,6 +181,55 @@ const pulseMountain = () => {
 };
 
 pulseMountain.timeoutId = 0;
+
+const syncResourceState = () => {
+  if (groundOreCount instanceof HTMLElement) {
+    groundOreCount.textContent = String(resourceState.groundOre);
+  }
+
+  if (storedOreCount instanceof HTMLElement) {
+    storedOreCount.textContent = String(resourceState.storedOre);
+  }
+
+  if (orePile instanceof HTMLElement) {
+    orePile.dataset.hasOre = resourceState.groundOre > 0 ? "true" : "false";
+  }
+
+  if (storageZone instanceof HTMLElement) {
+    storageZone.dataset.active = resourceState.storedOre > 0 ? "true" : "false";
+  }
+};
+
+const addGroundOre = (amount = 1) => {
+  if (amount <= 0) {
+    return 0;
+  }
+
+  resourceState.groundOre += amount;
+  syncResourceState();
+  return amount;
+};
+
+const pickupGroundOre = (amount = 1) => {
+  const taken = Math.min(amount, resourceState.groundOre);
+  if (taken <= 0) {
+    return 0;
+  }
+
+  resourceState.groundOre -= taken;
+  syncResourceState();
+  return taken;
+};
+
+const storeOre = (amount = 1) => {
+  if (amount <= 0) {
+    return 0;
+  }
+
+  resourceState.storedOre += amount;
+  syncResourceState();
+  return amount;
+};
 
 const positionOreTooltip = (clientX, clientY) => {
   if (!(oreMountain instanceof HTMLElement) || !(oreTooltip instanceof HTMLElement)) {
@@ -200,6 +295,29 @@ const spawnOreChips = (origin) => {
   }
 };
 
+const mineMountainAtPoint = (point, { depositToGround = true, tooltipPoint = null } = {}) => {
+  if (!isPlaying() || resourceState.oreRemaining <= 0) {
+    return false;
+  }
+
+  updateOreMountainState(resourceState.oreRemaining - 1);
+  pulseMountain();
+  spawnOreChips(point);
+  ensureOrePhysics();
+  orePhysics?.refresh();
+  orePhysics?.spawnRock(point);
+
+  if (depositToGround) {
+    addGroundOre(1);
+  }
+
+  if (tooltipPoint) {
+    showOreTooltip(tooltipPoint.x, tooltipPoint.y);
+  }
+
+  return true;
+};
+
 const setupOreMountain = () => {
   if (!(oreMountain instanceof HTMLButtonElement)) {
     return;
@@ -219,11 +337,6 @@ const setupOreMountain = () => {
       return;
     }
 
-    const oreRemaining = Number(oreMountain.dataset.ore ?? initialOreCount);
-    if (oreRemaining <= 0) {
-      return;
-    }
-
     event.preventDefault();
     event.stopPropagation();
 
@@ -232,15 +345,10 @@ const setupOreMountain = () => {
       event.clientY || lastPointer?.y,
     );
 
-    updateOreMountainState(oreRemaining - 1);
-    pulseMountain();
-    spawnOreChips(point);
-    ensureOrePhysics();
-    orePhysics?.refresh();
-    orePhysics?.spawnRock(point);
-    if (lastPointer) {
-      showOreTooltip(lastPointer.x, lastPointer.y);
-    }
+    mineMountainAtPoint(point, {
+      depositToGround: true,
+      tooltipPoint: lastPointer,
+    });
   };
 
   for (const target of oreHitTargets) {
@@ -271,6 +379,7 @@ const setupOreMountain = () => {
   }
 
   updateOreMountainState(initialOreCount);
+  syncResourceState();
 };
 
 const setupSceneDrag = (scene) => {
@@ -363,13 +472,16 @@ startButton?.addEventListener("click", () => {
   }
 
   ensureOrePhysics();
+  ensureWorkerSimulation();
   orePhysics?.refresh();
+  workerSimulation?.refresh();
+  workerSimulation?.start();
   scheduleOrePhysicsRefresh();
 });
 
 window.addEventListener("resize", scheduleOrePhysicsRefresh);
 window.addEventListener("pageshow", scheduleOrePhysicsRefresh);
-window.addEventListener("pagehide", destroyOrePhysics, { once: true });
+window.addEventListener("pagehide", destroyWorldSystems, { once: true });
 
 if (gameScene instanceof HTMLElement) {
   setupSceneDrag(gameScene);

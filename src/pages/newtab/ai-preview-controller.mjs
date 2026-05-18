@@ -476,7 +476,7 @@ export const createAiPreviewController = ({ elements, callbacks, deps, config = 
       }
     } catch (error) {
       hidePreview();
-      setSearchStatus("AI 搜索增强暂时不可用，已切换为普通搜索。", "neutral");
+      setSearchStatus("AI增强搜索暂时不可用，已切换为普通搜索。", "neutral");
       shouldRunFallbackSearch = true;
     } finally {
       setPending(false);
@@ -801,7 +801,7 @@ export const createAiPreviewController = ({ elements, callbacks, deps, config = 
 
     if (aiToggleButton instanceof HTMLButtonElement) {
       aiToggleButton.setAttribute("aria-pressed", isAiSearchEnabled ? "true" : "false");
-      aiToggleButton.setAttribute("aria-label", isAiSearchActivating ? "AI搜索增强启用中" : isAiSearchEnabled ? "关闭AI搜索增强" : "开启AI搜索增强");
+      aiToggleButton.setAttribute("aria-label", isAiSearchActivating ? "AI增强搜索启用中" : isAiSearchEnabled ? "关闭AI增强搜索" : "开启AI增强搜索");
     }
 
     if (state === "searching") {
@@ -811,8 +811,8 @@ export const createAiPreviewController = ({ elements, callbacks, deps, config = 
     }
 
     if (state === "activating") {
-      aiSearchIndicatorText.textContent = "AI 搜索增强启用中…";
-      aiSearchIndicator.setAttribute("aria-label", "AI 搜索增强启用中");
+      aiSearchIndicatorText.textContent = "AI增强搜索启用中…";
+      aiSearchIndicator.setAttribute("aria-label", "AI增强搜索启用中");
       return;
     }
 

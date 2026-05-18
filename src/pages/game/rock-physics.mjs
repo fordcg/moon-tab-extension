@@ -1,8 +1,4 @@
-const ROCK_TEXTURES = [
-  new URL("./assets/rocks/source/ore-pebble-01.png", import.meta.url).href,
-  new URL("./assets/rocks/source/ore-pebble-02.png", import.meta.url).href,
-  new URL("./assets/rocks/source/ore-pebble-03.png", import.meta.url).href,
-];
+const ROCK_TEXTURE = new URL("./assets/rocks/source/ore-pebble.png", import.meta.url).href;
 
 const FIXED_DT = 1000 / 60;
 const DEFAULT_MAX_ROCKS = 100;
@@ -11,43 +7,40 @@ const WORLD_STATE_BY_ELEMENT = new WeakMap();
 const GROUND_BODY_WIDTH_MARGIN = 400;
 const GROUND_BODY_HEIGHT = 36;
 const GROUND_BODY_VERTICAL_OFFSET = 18;
-const SETTLING_SLOPE_WIDTH = 220;
-const SETTLING_SLOPE_HEIGHT = 20;
-const SETTLING_SLOPE_OFFSET_X = 92;
-const SETTLING_SLOPE_OFFSET_Y = -18;
-const SETTLING_SLOPE_ANGLE = -0.09;
-const SETTLING_BACKSTOP_WIDTH = 18;
-const SETTLING_BACKSTOP_HEIGHT = 120;
-const SETTLING_BACKSTOP_OFFSET_X = 198;
-const SETTLING_BACKSTOP_OFFSET_Y = -58;
-const MOUNTAIN_BASE_RATIO = 0.76;
-const INITIAL_RISE_X_SPEED_MIN = 3.4;
-const INITIAL_RISE_X_SPEED_MAX = 5.1;
-const INITIAL_RISE_Y_SPEED_MIN = -4.2;
-const INITIAL_RISE_Y_SPEED_MAX = -2.8;
-const INITIAL_ANGULAR_VELOCITY_MIN = -0.08;
-const INITIAL_ANGULAR_VELOCITY_MAX = 0.08;
+const SETTLING_SLOPE_WIDTH = 156;
+const SETTLING_SLOPE_HEIGHT = 10;
+const SETTLING_SLOPE_OFFSET_X = 72;
+const SETTLING_SLOPE_OFFSET_Y = 5;
+const SETTLING_SLOPE_ANGLE = 0.08;
+const MOUNTAIN_BASE_RATIO = 0.83;
+const INITIAL_RISE_X_SPEED_MIN = 2.7;
+const INITIAL_RISE_X_SPEED_MAX = 4.1;
+const INITIAL_RISE_Y_SPEED_MIN = -4.5;
+const INITIAL_RISE_Y_SPEED_MAX = -3.1;
+const INITIAL_ANGULAR_VELOCITY_MIN = -0.05;
+const INITIAL_ANGULAR_VELOCITY_MAX = 0.05;
 const ROCK_RESTITUTION = 0.18;
 const ROCK_FRICTION = 0.72;
-const ROCK_FRICTION_AIR = 0.018;
-const ROCK_DENSITY = 0.0026;
-const ROCK_SLEEP_THRESHOLD = 30;
+const ROCK_FRICTION_AIR = 0.01;
+const ROCK_DENSITY = 0.0023;
+const ROCK_SLEEP_THRESHOLD = 90;
 const ROCK_SLOP = 0.08;
-const ROCK_RADIUS_MIN = 15;
-const ROCK_RADIUS_MAX = 22;
-const ROCK_SCALE_MIN = 0.92;
-const ROCK_SCALE_MAX = 1.16;
+const ROCK_WIDTH_MIN = 18;
+const ROCK_WIDTH_MAX = 26;
+const ROCK_HEIGHT_MIN = 12;
+const ROCK_HEIGHT_MAX = 18;
+const ROCK_SCALE_MIN = 0.78;
+const ROCK_SCALE_MAX = 0.92;
+const ROCK_SPAWN_OFFSET_X = 8;
+const ROCK_SPAWN_OFFSET_Y = -10;
+const ROCK_SPAWN_CLEARANCE_TRIES = 8;
+const ROCK_SPAWN_CLEARANCE_STEP_X = 3;
+const ROCK_SPAWN_CLEARANCE_STEP_Y = 10;
 const STATIC_FRICTION = 0.88;
 const STATIC_RESTITUTION = 0.08;
 const SLOPE_FRICTION = 0.94;
 const SLOPE_RESTITUTION = 0.04;
-const BACKSTOP_FRICTION = 0.9;
-const BACKSTOP_RESTITUTION = 0.04;
-
 const randomBetween = (min, max) => min + Math.random() * (max - min);
-
-const pickTexture = () =>
-  ROCK_TEXTURES[Math.floor(Math.random() * ROCK_TEXTURES.length)];
 
 export const createRockPhysics = ({
   worldElement,
@@ -78,9 +71,9 @@ export const createRockPhysics = ({
     return existingState.controls;
   }
 
-  const { Engine, Bodies, Body, Composite } = MatterApi;
+  const { Engine, Bodies, Body, Composite, Query } = MatterApi;
   const engine = Engine.create({ enableSleeping: true });
-  engine.gravity.y = 1.04;
+  engine.gravity.y = 1.1;
 
   const rockLayer =
     worldElement.querySelector(":scope > .ore-rock-layer") ??
@@ -102,8 +95,10 @@ export const createRockPhysics = ({
     engine,
     rocks: [],
     statics: [],
+    groundTop: 0,
     rafId: 0,
     lastNow: performance.now(),
+    accumulator: 0,
     destroyed: false,
     controls: null,
   };
@@ -141,9 +136,8 @@ export const createRockPhysics = ({
       return;
     }
 
-    const size = rock.radius * 2;
-    rock.element.style.width = `${size}px`;
-    rock.element.style.height = `${size}px`;
+    rock.element.style.width = `${rock.width}px`;
+    rock.element.style.height = `${rock.height}px`;
     rock.element.style.left = `${rock.body.position.x}px`;
     rock.element.style.top = `${rock.body.position.y}px`;
     rock.element.style.transform =
@@ -193,19 +187,8 @@ export const createRockPhysics = ({
       },
     );
 
-    const settlingBackstop = Bodies.rectangle(
-      mountainBaseX + SETTLING_BACKSTOP_OFFSET_X,
-      groundTop + SETTLING_BACKSTOP_OFFSET_Y,
-      SETTLING_BACKSTOP_WIDTH,
-      SETTLING_BACKSTOP_HEIGHT,
-      {
-        isStatic: true,
-        friction: BACKSTOP_FRICTION,
-        restitution: BACKSTOP_RESTITUTION,
-      },
-    );
-
-    state.statics = [groundBody, settlingSlope, settlingBackstop];
+    state.statics = [groundBody, settlingSlope];
+    state.groundTop = groundTop;
     Composite.add(engine.world, state.statics);
   };
 
@@ -214,23 +197,43 @@ export const createRockPhysics = ({
       return;
     }
 
-    const radius = randomBetween(ROCK_RADIUS_MIN, ROCK_RADIUS_MAX);
+    const width = randomBetween(ROCK_WIDTH_MIN, ROCK_WIDTH_MAX);
+    const height = randomBetween(ROCK_HEIGHT_MIN, ROCK_HEIGHT_MAX);
     const scale = randomBetween(ROCK_SCALE_MIN, ROCK_SCALE_MAX);
-    const body = Bodies.circle(x, y, radius, {
+    const body = Bodies.rectangle(x, y, width, height, {
       restitution: ROCK_RESTITUTION,
       friction: ROCK_FRICTION,
       frictionAir: ROCK_FRICTION_AIR,
       density: ROCK_DENSITY,
       sleepThreshold: ROCK_SLEEP_THRESHOLD,
       slop: ROCK_SLOP,
+      chamfer: {
+        radius: Math.min(width, height) * 0.46,
+      },
     });
+    const obstacles = [
+      ...state.statics,
+      ...state.rocks.map((rock) => rock.body),
+    ];
+    let spawnX = x + ROCK_SPAWN_OFFSET_X;
+    let spawnY = y + ROCK_SPAWN_OFFSET_Y;
+
+    for (let attempt = 0; attempt < ROCK_SPAWN_CLEARANCE_TRIES; attempt += 1) {
+      Body.setPosition(body, { x: spawnX, y: spawnY });
+      if (Query.collides(body, obstacles).length === 0) {
+        break;
+      }
+
+      spawnX += ROCK_SPAWN_CLEARANCE_STEP_X;
+      spawnY -= Math.max(ROCK_SPAWN_CLEARANCE_STEP_Y, height * 0.72);
+    }
 
     const element = document.createElement("span");
     element.className = "ore-rock-drop";
 
     const sprite = document.createElement("img");
     sprite.className = "ore-rock-drop__sprite";
-    sprite.src = pickTexture();
+    sprite.src = ROCK_TEXTURE;
     sprite.alt = "";
     sprite.decoding = "async";
     sprite.draggable = false;
@@ -251,7 +254,8 @@ export const createRockPhysics = ({
       body,
       element,
       sprite,
-      radius,
+      width,
+      height,
       scale,
       spawnedAt: performance.now(),
     };
@@ -262,14 +266,49 @@ export const createRockPhysics = ({
     recycleSleepingRocks();
   };
 
+  const pickupRock = ({ x } = {}) => {
+    if (state.destroyed || state.rocks.length === 0) {
+      return false;
+    }
+
+    const groundedRocks = state.rocks.filter(
+      (rock) =>
+        rock.body.isSleeping
+        || rock.body.position.y >= state.groundTop - 42,
+    );
+    const candidates = groundedRocks.length > 0 ? groundedRocks : state.rocks;
+    const targetX = Number.isFinite(x) ? x : null;
+    const [rockToRemove] = [...candidates].sort((left, right) => {
+      const leftDistanceX = targetX === null ? 0 : Math.abs(left.body.position.x - targetX);
+      const rightDistanceX = targetX === null ? 0 : Math.abs(right.body.position.x - targetX);
+      const leftDistanceY = Math.abs(left.body.position.y - state.groundTop);
+      const rightDistanceY = Math.abs(right.body.position.y - state.groundTop);
+      const leftScore = leftDistanceX * 1.1 + leftDistanceY - (left.body.isSleeping ? 18 : 0);
+      const rightScore = rightDistanceX * 1.1 + rightDistanceY - (right.body.isSleeping ? 18 : 0);
+      return leftScore - rightScore;
+    });
+
+    if (!rockToRemove) {
+      return false;
+    }
+
+    removeRock(rockToRemove);
+    return true;
+  };
+
   const tick = (now) => {
     if (state.destroyed) {
       return;
     }
 
-    const delta = Math.min(32, now - state.lastNow || FIXED_DT);
+    const delta = Math.min(48, now - state.lastNow || FIXED_DT);
     state.lastNow = now;
-    Engine.update(engine, delta);
+    state.accumulator += delta;
+
+    while (state.accumulator >= FIXED_DT) {
+      Engine.update(engine, FIXED_DT);
+      state.accumulator -= FIXED_DT;
+    }
 
     for (const rock of state.rocks) {
       syncRock(rock);
@@ -281,6 +320,7 @@ export const createRockPhysics = ({
   rebuildStatics();
   const controls = {
     spawnRock,
+    pickupRock,
     refresh() {
       if (state.destroyed) {
         return;

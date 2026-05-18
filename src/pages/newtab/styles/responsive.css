@@ -1,32 +1,19 @@
 @media (max-width: 980px) {
   .homepage-stage {
-    width: min(100%, 760px);
+    width: 100%;
     min-height: auto;
     overflow: visible;
+    padding: 1rem 0.5rem 1.25rem;
   }
 
   .homepage-stage__decor {
     overflow: hidden;
   }
 
-  .homepage-stage__bubble,
   .homepage-stage__asset--pet-left,
   .homepage-stage__asset--pet-right,
-  .homepage-stage__asset--pet-mini,
-  .homepage-stage__asset--paw,
-  .homepage-stage__asset--fish,
-  .homepage-stage__asset--bone,
-  .homepage-stage__asset--star,
-  .homepage-stage__asset--cloud-puff,
-  .homepage-stage__asset--tape {
+  .homepage-stage__asset--pet-mini {
     display: none;
-  }
-
-  .homepage-stage__asset--pet-duo {
-    top: 0.5rem;
-    left: 0.8rem;
-    width: 86px;
-    opacity: 0.52;
   }
 
   .homepage-stage__asset--cloud-ribbon {
@@ -71,29 +58,22 @@
 
 @media (max-width: 760px) {
   .homepage-hero {
-    padding-top: 1rem;
-    padding-bottom: 1.25rem;
+    padding: 0;
   }
 
   .homepage-focus-shell {
     width: min(100%, calc(100vw - 1rem));
   }
 
-  .homepage-title-band {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.7rem;
-    margin-bottom: 0.72rem;
-    padding-inline: 0;
+  .homepage-manage-menu {
+    top: 0.7rem;
+    right: 0.7rem;
   }
 
   .homepage-pet {
     width: 44px;
     height: 44px;
     border-radius: 15px;
-  }
-
-  .homepage-title-copy {
-    text-align: left;
   }
 
   .widget-chip {
@@ -105,23 +85,47 @@
     padding: 0.62rem 0.68rem;
   }
 
+  .todo-manager-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .todo-drawer-toggle {
+    top: -34px;
+    width: 132px;
+    height: 110px;
+  }
+
+  .todo-manager-panel--list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .todo-manager-toolbar {
+    justify-content: stretch;
+  }
+
+  .todo-add-button,
+  .todo-add-new-button {
+    width: 100%;
+  }
+
   .homepage-widget-root {
     gap: 0.75rem;
   }
 
   .widget-panel {
-    top: 3.5rem;
-    left: 0;
-    right: 0;
-    width: auto;
+    left: 50%;
+    right: auto;
+    bottom: 0.75rem;
+    width: min(420px, calc(100vw - 1.4rem));
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .widget-panel-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .widget-panel-row {
-    align-items: flex-start;
-  }
-
-  .homepage-title {
-    font-size: clamp(1.45rem, 5.6vw, 1.9rem);
+    align-items: center;
   }
 
   .homepage-pet-eye {
@@ -129,12 +133,12 @@
   }
 
   .search-control-rail {
-    gap: 0.8rem;
+    gap: 0.6rem;
   }
 
   .search-shell-actions {
     margin-left: auto;
-    gap: 0.55rem;
+    gap: 0.36rem;
   }
 
   .search-input-stack {
@@ -223,24 +227,47 @@
     gap: 0.35rem;
   }
 
+  .todo-task {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .todo-task-meta,
+  .todo-edit-button {
+    grid-column: 2 / 3;
+  }
+
+  .todo-edit-button {
+    grid-row: auto;
+  }
+
+  .todo-manager-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .widget-note-bullet {
     display: none;
   }
 
   .widget-panel {
-    top: 4.7rem;
-    right: 0;
+    left: 50%;
+    right: auto;
+    bottom: 0.55rem;
     width: min(100%, calc(100vw - 0.75rem));
     padding: 0.82rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .widget-panel-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .widget-panel-row {
-    flex-direction: column;
-    align-items: stretch;
+    align-items: center;
   }
 
   .widget-panel-button {
-    width: 100%;
+    width: auto;
   }
 
   .homepage-pet {
@@ -296,17 +323,12 @@
   }
 
   .ui-toolbar-group {
-    width: 100%;
-    justify-content: stretch;
+    width: auto;
+    justify-content: flex-end;
   }
 
-  .ai-toggle-btn,
-  .search-settings-trigger {
-    flex: 1 1 0;
-  }
-
-  .ui-btn-primary {
-    flex: 1 1 auto;
+  .ai-toggle-btn {
+    flex: 0 0 auto;
   }
 
   .search-entry-row {

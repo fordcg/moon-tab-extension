@@ -1,0 +1,293 @@
+body.is-settings-open {
+  overflow: hidden;
+}
+
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(124, 90, 53, 0.24);
+  backdrop-filter: blur(7px);
+  transition: opacity 240ms var(--transition-standard);
+}
+
+.settings-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, calc(-50% + 1rem));
+  width: min(760px, calc(100vw - 2rem));
+  max-height: min(700px, calc(100vh - 2rem));
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-panel);
+  background: linear-gradient(180deg, #fffdf8 0%, #fff5e4 100%);
+  color: var(--ink-primary);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms var(--transition-standard), transform 240ms var(--transition-standard);
+}
+
+body.is-settings-open .settings-backdrop,
+body.is-settings-open .settings-popup {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.is-settings-open .settings-popup {
+  transform: translate(-50%, -50%);
+}
+
+.settings-popup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 1.4rem 1.5rem 1.05rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-popup-eyebrow {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.settings-popup-title {
+  margin: 0.45rem 0 0;
+  font-size: 1.52rem;
+  line-height: 1.24;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.settings-popup-description {
+  margin: 0.5rem 0 0;
+  color: var(--ink-secondary);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.settings-close-button {
+  flex-shrink: 0;
+}
+
+.settings-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.settings-scroll-area {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 1.35rem 1.5rem 0;
+}
+
+.settings-section {
+  border: 1px solid var(--line-soft);
+  border-radius: 22px;
+  padding: 1.2rem;
+  background: rgba(255, 251, 243, 0.96);
+}
+
+.settings-section + .settings-section {
+  margin-top: 1rem;
+}
+
+.settings-section-header {
+  margin-bottom: 1rem;
+}
+
+.settings-section-title {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 1.04rem;
+  line-height: 1.35;
+}
+
+.settings-section-description {
+  margin: 0.4rem 0 0;
+  color: var(--ink-secondary);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.settings-inline-switch {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  background: #fff7ea;
+}
+
+.settings-switch-copy {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.settings-switch-title {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.settings-switch-description {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.settings-switch-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.settings-switch-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+}
+
+.settings-switch-track {
+  width: 3rem;
+  height: 1.72rem;
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-pill);
+  background: #f6e6c7;
+  position: relative;
+  transition: background-color var(--transition-standard), border-color var(--transition-standard);
+}
+
+.settings-switch-thumb {
+  position: absolute;
+  top: 0.14rem;
+  left: 0.14rem;
+  width: 1.36rem;
+  height: 1.36rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid #f0d8ac;
+  background: #fffdf9;
+  box-shadow: 0 3px 9px rgba(128, 93, 43, 0.18);
+  transition: transform var(--transition-standard), border-color var(--transition-standard), background-color var(--transition-standard);
+}
+
+.settings-switch-input:checked + .settings-switch-track {
+  border-color: #d9a461;
+  background: #f6ca7a;
+}
+
+.settings-switch-input:checked + .settings-switch-track .settings-switch-thumb {
+  transform: translateX(1.24rem);
+  border-color: #edc07a;
+  background: #fff9ef;
+}
+
+.settings-label {
+  display: block;
+  margin-top: 0.9rem;
+  margin-bottom: 0.42rem;
+  color: var(--ink-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.settings-section .settings-label:first-of-type {
+  margin-top: 0;
+}
+
+.settings-input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  background: #fffdf8;
+  color: var(--ink-primary);
+  padding: 0.78rem 0.92rem;
+  font: inherit;
+  font-size: 0.94rem;
+  line-height: 1.4;
+  transition: border-color var(--transition-standard), box-shadow var(--transition-standard), background-color var(--transition-standard);
+}
+
+.settings-input::placeholder {
+  color: var(--ink-soft);
+}
+
+.settings-select {
+  min-width: 0;
+}
+
+.settings-note {
+  margin: 0.38rem 0 0;
+  color: var(--ink-tertiary);
+  font-size: 0.82rem;
+  line-height: 1.56;
+}
+
+.settings-note code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.settings-model-tools {
+  margin-top: 0.82rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.68rem;
+}
+
+.settings-panel-footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem 1.35rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-actions {
+  margin-left: auto;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.68rem;
+}
+
+.ui-btn-primary:focus-visible,
+.ui-btn-secondary:focus-visible,
+.ui-btn-icon:focus-visible,
+.settings-trigger:focus-visible,
+.search-target-trigger:focus-visible,
+.settings-switch-input:focus-visible + .settings-switch-track,
+.settings-input:focus-visible,
+.settings-save-button:focus-visible,
+.settings-secondary-button:focus-visible,
+.ai-toggle-btn:focus-visible,
+.ai-search-preview-button:focus-visible,
+.ai-search-preview-button-secondary:focus-visible,
+.ai-search-preview-suggestion:focus-visible,
+.ai-search-preview-website-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}

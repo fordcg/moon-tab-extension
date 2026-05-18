@@ -79,6 +79,12 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+.search-control-rail .search-target-trigger {
+  flex: 0 0 auto;
+  width: 104px;
+  height: 48px;
+}
+
 .search-card-badge {
   margin: 0;
   padding: 0.24rem 0.56rem;
@@ -93,7 +99,7 @@
 .search-shell-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0;
 }
 
 .ui-toolbar-group {
@@ -120,7 +126,7 @@
   justify-content: center;
   gap: 0.4rem;
   padding: 0.68rem 0.86rem;
-  cursor: pointer;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
   transition:
     color var(--transition-standard),
     background-color var(--transition-standard),
@@ -177,8 +183,11 @@
 }
 
 .ai-toggle-btn {
-  min-width: 102px;
-  padding-inline: 0.92rem;
+  width: 104px;
+  height: 48px;
+  min-height: 48px;
+  border-radius: 999px;
+  padding: 0;
 }
 
 .ai-toggle-icon {
@@ -194,7 +203,6 @@
   font-size: 0.76rem;
 }
 
-.ai-toggle-text,
 .search-settings-trigger-icon {
   font-size: 0.84rem;
   line-height: 1;
@@ -203,7 +211,7 @@
 
 .search-settings-trigger {
   min-width: 0;
-  padding-inline: 0.78rem;
+  padding-inline: 0.68rem;
 }
 
 .ui-btn-icon {
@@ -233,7 +241,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  min-height: 40px;
+  min-height: 48px;
   width: fit-content;
   border: 1px solid var(--line-soft);
   border-radius: 999px;
@@ -241,7 +249,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   color: var(--ink-primary);
   text-align: left;
   padding: 0.52rem 0.78rem 0.52rem 0.82rem;
-  cursor: pointer;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
   font: inherit;
   transition:
     background-color var(--transition-standard),
@@ -281,8 +289,8 @@ body.is-ai-search-activating .ai-toggle-icon {
 .widget-search-shell__input {
   display: grid;
   align-content: center;
-  gap: 0.52rem;
-  padding: 0.96rem 1.18rem 1.08rem;
+  gap: 0.46rem;
+  padding: 1.1rem 1.18rem 1.12rem;
 }
 
 .search-entry-row,
@@ -314,7 +322,7 @@ body.is-ai-search-activating .ai-toggle-icon {
 }
 
 .outline-search-form input:disabled {
-  cursor: default;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, default;
 }
 
 .search-input-hint {
@@ -444,7 +452,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   line-height: 1.35;
   text-align: left;
   padding: 0.8rem 0.86rem;
-  cursor: pointer;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
 }
 
 .search-target-menu-item:hover,

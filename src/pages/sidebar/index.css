@@ -1,20 +1,24 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: #f7f2e8;
-  color: #2f261d;
-  --sidebar-bg-top: #f6f1e7;
-  --sidebar-bg-bottom: #ede4d4;
-  --sidebar-surface: rgba(255, 250, 242, 0.86);
-  --sidebar-surface-strong: rgba(255, 247, 236, 0.94);
-  --sidebar-border: rgba(132, 102, 72, 0.16);
-  --sidebar-border-strong: rgba(132, 102, 72, 0.24);
-  --sidebar-text-soft: rgba(100, 76, 51, 0.72);
-  --sidebar-accent: rgba(122, 90, 54, 0.96);
-  --sidebar-accent-soft: rgba(122, 90, 54, 0.12);
-  --sidebar-success: rgba(82, 133, 89, 0.94);
-  --sidebar-error: rgba(164, 70, 82, 0.94);
-  --sidebar-warning: rgba(185, 125, 62, 0.94);
+  background: #060b14;
+  color: #e7edf7;
+  --sidebar-bg-top: #09111d;
+  --sidebar-bg-bottom: #050a12;
+  --sidebar-surface: rgba(13, 21, 35, 0.92);
+  --sidebar-surface-strong: rgba(18, 28, 45, 0.96);
+  --sidebar-surface-raised: rgba(24, 37, 58, 0.98);
+  --sidebar-border: rgba(120, 162, 224, 0.18);
+  --sidebar-border-strong: rgba(120, 162, 224, 0.3);
+  --sidebar-text-soft: rgba(165, 181, 205, 0.74);
+  --sidebar-text-muted: rgba(129, 148, 176, 0.72);
+  --sidebar-accent: #7bdcff;
+  --sidebar-accent-strong: #9ef3ff;
+  --sidebar-accent-soft: rgba(123, 220, 255, 0.16);
+  --sidebar-success: rgba(122, 230, 174, 0.96);
+  --sidebar-error: rgba(255, 120, 138, 0.96);
+  --sidebar-warning: rgba(255, 196, 92, 0.96);
+  --sidebar-shadow: 0 18px 40px rgba(2, 6, 14, 0.42);
 }
 
 * {
@@ -28,10 +32,12 @@ body {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(152, 175, 232, 0.16), transparent 32%),
-    radial-gradient(circle at 100% 12%, rgba(110, 129, 173, 0.12), transparent 28%),
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(58, 91, 144, 0.2), transparent 30%),
+    radial-gradient(circle at 100% 12%, rgba(49, 126, 164, 0.14), transparent 26%),
     linear-gradient(180deg, var(--sidebar-bg-top) 0%, var(--sidebar-bg-bottom) 100%);
+  background-color: #060b14;
+  color: #e7edf7;
 }
 
 button,
@@ -91,10 +97,10 @@ body.sidebar-busy {
   flex: 0 0 auto;
   min-width: 64px;
   padding: 9px 12px;
-  border-color: rgba(132, 102, 72, 0.2);
-  background: rgba(255, 250, 242, 0.92);
-  color: rgba(63, 47, 32, 0.9);
-  box-shadow: 0 8px 16px rgba(92, 66, 38, 0.1);
+  border-color: var(--sidebar-border);
+  background: rgba(22, 34, 52, 0.94);
+  color: rgba(227, 237, 252, 0.92);
+  box-shadow: 0 8px 18px rgba(2, 7, 15, 0.28);
 }
 
 .sidebar-icon-button:hover,
@@ -111,32 +117,32 @@ body.sidebar-busy {
 .sidebar-quick-action {
   min-height: 32px;
   padding: 6px 10px;
-  border-color: rgba(132, 102, 72, 0.16);
-  background: rgba(255, 248, 238, 0.94);
-  color: rgba(72, 54, 36, 0.88);
+  border-color: rgba(106, 144, 204, 0.18);
+  background: rgba(19, 31, 48, 0.94);
+  color: rgba(221, 232, 247, 0.88);
   font-size: 0.8rem;
   line-height: 1.3;
 }
 
 .sidebar-quick-action:hover,
 .sidebar-quick-action:focus-visible {
-  border-color: rgba(132, 102, 72, 0.24);
-  background: rgba(251, 238, 217, 0.97);
+  border-color: rgba(123, 220, 255, 0.3);
+  background: rgba(24, 40, 62, 0.98);
 }
 
 .sidebar-empty-suggestion {
   padding: 8px 11px;
-  border-color: rgba(132, 102, 72, 0.16);
-  background: rgba(255, 249, 241, 0.94);
-  color: rgba(81, 61, 41, 0.84);
+  border-color: rgba(106, 144, 204, 0.18);
+  background: rgba(20, 31, 47, 0.96);
+  color: rgba(214, 228, 247, 0.84);
   font-size: 0.8rem;
   line-height: 1.38;
 }
 
 .sidebar-empty-suggestion:hover,
 .sidebar-empty-suggestion:focus-visible {
-  border-color: rgba(132, 102, 72, 0.24);
-  background: rgba(252, 241, 224, 0.98);
+  border-color: rgba(123, 220, 255, 0.32);
+  background: rgba(26, 40, 60, 0.98);
 }
 
 .sidebar-message-row {
@@ -162,30 +168,30 @@ body.sidebar-busy {
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(108, 81, 53, 0.56);
+  color: rgba(133, 154, 186, 0.56);
 }
 
 .sidebar-message-bubble {
   max-width: min(94%, 42ch);
-  padding: 14px 16px;
-  border-radius: 24px;
+  padding: 12px 14px;
+  border-radius: 18px;
   white-space: pre-wrap;
-  line-height: 1.76;
+  line-height: 1.68;
   word-break: break-word;
-  color: rgba(58, 43, 29, 0.92);
+  color: rgba(227, 236, 247, 0.92);
 }
 
 .sidebar-message-row[data-role="user"] .sidebar-message-bubble {
-  background: rgba(240, 226, 198, 0.94);
-  border: 1px solid rgba(150, 116, 74, 0.26);
+  background: rgba(15, 53, 77, 0.92);
+  border: 1px solid rgba(89, 180, 216, 0.24);
 }
 
 .sidebar-message-row[data-role="assistant"] .sidebar-message-bubble {
-  background: rgba(255, 251, 245, 0.98);
-  border: 1px solid rgba(133, 103, 72, 0.24);
+  background: rgba(18, 28, 44, 0.98);
+  border: 1px solid rgba(91, 126, 177, 0.22);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.74),
-    0 8px 16px rgba(105, 75, 43, 0.08);
+    inset 0 1px 0 rgba(178, 213, 255, 0.08),
+    0 10px 22px rgba(1, 5, 12, 0.28);
 }
 
 .sidebar-message-row[data-sidebar-message-kind="tool_result"] {
@@ -200,15 +206,15 @@ body.sidebar-busy {
   width: min(100%, 47ch);
   max-width: min(100%, 47ch);
   padding: 12px 14px 13px;
-  border-radius: 20px;
+  border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 250, 242, 0.99), rgba(249, 239, 222, 0.95)),
-    rgba(255, 247, 236, 0.97);
-  border: 1px solid rgba(142, 107, 71, 0.26);
+    linear-gradient(180deg, rgba(18, 29, 45, 0.99), rgba(13, 22, 35, 0.95)),
+    rgba(15, 24, 38, 0.97);
+  border: 1px solid rgba(106, 144, 204, 0.22);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.66),
-    inset 0 0 0 1px rgba(174, 136, 90, 0.09),
-    0 12px 24px rgba(103, 75, 43, 0.11);
+    inset 0 1px 0 rgba(178, 213, 255, 0.08),
+    inset 0 0 0 1px rgba(123, 220, 255, 0.05),
+    0 12px 24px rgba(1, 5, 12, 0.24);
 }
 
 .sidebar-tool-receipt-head {
@@ -224,20 +230,20 @@ body.sidebar-busy {
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: rgba(203, 178, 141, 0.38);
-  color: rgba(95, 67, 35, 0.9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: rgba(123, 220, 255, 0.18);
+  color: rgba(177, 242, 255, 0.94);
+  box-shadow: inset 0 1px 0 rgba(187, 236, 255, 0.14);
 }
 
 .sidebar-tool-receipt-label {
-  color: rgba(116, 84, 52, 0.72);
+  color: rgba(156, 178, 210, 0.72);
   font-size: 0.68rem;
   font-weight: 540;
   letter-spacing: 0.04em;
 }
 
 .sidebar-tool-receipt-text {
-  color: rgba(72, 53, 35, 0.84);
+  color: rgba(216, 229, 246, 0.84);
   line-height: 1.62;
 }
 
@@ -252,20 +258,20 @@ body.sidebar-busy {
   height: 10px;
   margin-left: 8px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.18));
+  background: linear-gradient(90deg, rgba(123, 220, 255, 0.18), rgba(123, 220, 255, 0.44), rgba(123, 220, 255, 0.18));
 }
 
 .sidebar-form.is-busy {
-  box-shadow: inset 0 0 0 1px rgba(132, 102, 72, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(123, 220, 255, 0.14);
 }
 
 .sidebar-input-shell {
-  border-radius: 24px;
-  border: 1px solid rgba(132, 102, 72, 0.22);
-  background: rgba(255, 251, 246, 0.98);
+  border-radius: 18px;
+  border: 1px solid rgba(91, 126, 177, 0.24);
+  background: rgba(11, 18, 31, 0.94);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.84),
-    0 8px 18px rgba(116, 82, 47, 0.09);
+    inset 0 1px 0 rgba(181, 215, 255, 0.06),
+    0 8px 18px rgba(1, 5, 12, 0.22);
 }
 
 .sidebar-input {
@@ -273,17 +279,18 @@ body.sidebar-busy {
   min-height: 92px;
   resize: vertical;
   border: 0;
-  border-radius: 24px;
+  border-radius: 18px;
   background: transparent;
   padding: 16px 18px;
+  color: rgba(232, 240, 252, 0.94);
 }
 
 .sidebar-input::placeholder {
-  color: rgba(106, 78, 50, 0.62);
+  color: rgba(132, 151, 178, 0.62);
 }
 
 .sidebar-input:focus-visible {
-  outline: 2px solid rgba(142, 106, 65, 0.28);
+  outline: 2px solid rgba(123, 220, 255, 0.34);
   outline-offset: -1px;
 }
 
@@ -295,7 +302,7 @@ body.sidebar-busy {
 .sidebar-feedback {
   margin: 0;
   min-height: 1.4em;
-  color: rgba(104, 77, 49, 0.7);
+  color: rgba(143, 162, 188, 0.72);
   font-size: 0.8rem;
   line-height: 1.45;
 }
@@ -319,16 +326,19 @@ body.sidebar-busy {
   flex: 0 0 auto;
   min-width: 88px;
   padding: 11px 16px;
-  border-color: rgba(95, 69, 39, 0.2);
-  background: linear-gradient(180deg, rgba(126, 89, 49, 0.98), rgba(88, 61, 34, 0.98));
-  color: #fff9f0;
-  box-shadow: 0 10px 22px rgba(89, 62, 34, 0.22);
+  border-color: rgba(136, 241, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(99, 244, 255, 0.98), rgba(44, 166, 255, 0.96));
+  color: rgba(240, 251, 255, 0.98);
+  box-shadow:
+    0 0 0 1px rgba(180, 247, 255, 0.2) inset,
+    0 10px 26px rgba(36, 152, 255, 0.28);
 }
 
 .sidebar-submit:hover,
 .sidebar-submit:focus-visible {
-  border-color: rgba(95, 69, 39, 0.28);
-  background: linear-gradient(180deg, rgba(139, 98, 55, 0.99), rgba(96, 67, 38, 0.99));
+  border-color: rgba(181, 247, 255, 0.32);
+  background: linear-gradient(180deg, rgba(132, 248, 255, 0.99), rgba(56, 182, 255, 0.99));
 }
 
 body.sidebar-busy .sidebar-input,
@@ -374,11 +384,12 @@ body.sidebar-busy .sidebar-icon-button,
   gap: 8px;
   min-height: 100vh;
   padding: 12px 12px 14px;
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(207, 178, 136, 0.22) 0%, rgba(207, 178, 136, 0) 48%),
-    radial-gradient(110% 90% at 100% 0%, rgba(219, 197, 160, 0.18) 0%, rgba(219, 197, 160, 0) 44%),
-    linear-gradient(90deg, rgba(191, 160, 127, 0.2) 0%, rgba(191, 160, 127, 0.12) 12px, rgba(191, 160, 127, 0) 26px),
-    linear-gradient(180deg, rgba(248, 241, 229, 0.985) 0%, rgba(236, 223, 201, 0.98) 100%);
+  background-image:
+    radial-gradient(120% 120% at 0% 0%, rgba(67, 106, 168, 0.16) 0%, rgba(67, 106, 168, 0) 46%),
+    radial-gradient(110% 90% at 100% 0%, rgba(38, 162, 216, 0.12) 0%, rgba(38, 162, 216, 0) 42%),
+    linear-gradient(180deg, rgba(15, 24, 38, 0.98) 0%, rgba(8, 14, 24, 0.98) 100%);
+  background-color: rgba(10, 16, 28, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(120, 162, 224, 0.06);
 }
 
 .sidebar-topbar {
@@ -386,15 +397,16 @@ body.sidebar-busy .sidebar-icon-button,
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 9px 4px 10px;
-  border: 1px solid rgba(142, 111, 79, 0.19);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 245, 0.975), rgba(248, 238, 221, 0.93));
+  padding: 8px 10px 9px;
+  border: 1px solid rgba(91, 126, 177, 0.2);
+  border-radius: 12px;
+  background-color: rgba(16, 25, 39, 0.9);
+  background-image: linear-gradient(180deg, rgba(21, 33, 51, 0.98), rgba(14, 23, 36, 0.92));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.74),
-    0 10px 22px rgba(108, 78, 45, 0.08);
+    inset 0 1px 0 rgba(183, 217, 255, 0.08),
+    0 10px 22px rgba(1, 5, 12, 0.28);
   opacity: 1;
+  color: rgba(229, 237, 249, 0.92);
 }
 
 .sidebar-topbar-main {
@@ -405,7 +417,7 @@ body.sidebar-busy .sidebar-icon-button,
 
 .sidebar-topbar-eyebrow {
   margin: 0;
-  color: rgba(120, 89, 58, 0.66);
+  color: rgba(132, 151, 178, 0.66);
   font-size: 0.64rem;
   font-weight: 500;
   letter-spacing: 0.2em;
@@ -428,16 +440,15 @@ body.sidebar-busy .sidebar-icon-button,
 
 .sidebar-topbar-title {
   margin: 0;
-  color: rgba(62, 46, 31, 0.88);
+  color: rgba(233, 241, 252, 0.9);
   font-size: 0.88rem;
   font-weight: 510;
   line-height: 1.3;
-  letter-spacing: -0.02em;
 }
 
 .sidebar-topbar-url {
   margin: 0;
-  color: rgba(109, 83, 54, 0.7);
+  color: rgba(143, 162, 188, 0.72);
   font-size: 0.72rem;
   line-height: 1.38;
   word-break: break-word;
@@ -447,11 +458,11 @@ body.sidebar-busy .sidebar-icon-button,
   min-width: auto;
   min-height: 30px;
   padding: 5px 10px;
-  border-color: rgba(132, 102, 72, 0.18);
+  border-color: rgba(106, 144, 204, 0.18);
   border-radius: 999px;
   align-self: start;
-  background: rgba(255, 251, 244, 0.93);
-  color: rgba(75, 56, 37, 0.9);
+  background: rgba(21, 33, 51, 0.96);
+  color: rgba(224, 235, 249, 0.9);
   box-shadow: none;
 }
 
@@ -462,16 +473,16 @@ body.sidebar-busy .sidebar-icon-button,
   min-height: 26px;
   max-width: 100%;
   padding: 5px 9px;
-  border: 1px solid rgba(139, 106, 73, 0.18);
+  border: 1px solid rgba(95, 131, 181, 0.22);
   border-radius: 999px;
-  background: rgba(255, 249, 239, 0.92);
-  color: rgba(75, 56, 37, 0.86);
+  background: rgba(12, 20, 33, 0.88);
+  color: rgba(210, 225, 244, 0.86);
   font-size: 0.72rem;
   line-height: 1.2;
 }
 
 .sidebar-status-pill[data-status-tone="ai"] {
-  background: rgba(249, 236, 214, 0.92);
+  background: rgba(16, 28, 43, 0.92);
 }
 
 .sidebar-status-pill[data-status-tone="ai"][data-status-state="degraded"] .sidebar-status-dot {
@@ -490,21 +501,22 @@ body.sidebar-busy .sidebar-icon-button,
   align-content: start;
   gap: 10px;
   padding: 14px 14px 12px;
-  border: 1px solid rgba(140, 108, 74, 0.3);
+  border: 1px solid rgba(94, 129, 178, 0.28);
   border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 245, 0.97), rgba(247, 236, 219, 0.93)),
-    radial-gradient(circle at 0 0, rgba(214, 184, 150, 0.28), transparent 42%);
+  background-image:
+    linear-gradient(180deg, rgba(18, 28, 44, 0.97), rgba(11, 19, 31, 0.93)),
+    radial-gradient(circle at 0 0, rgba(76, 130, 208, 0.18), transparent 42%);
+  background-color: rgba(15, 24, 38, 0.96);
   backdrop-filter: blur(14px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    inset 0 0 0 1px rgba(174, 136, 90, 0.08),
-    0 12px 24px rgba(104, 74, 42, 0.11);
+    inset 0 1px 0 rgba(183, 217, 255, 0.08),
+    inset 0 0 0 1px rgba(123, 220, 255, 0.05),
+    0 12px 24px rgba(1, 5, 12, 0.22);
 }
 
 .sidebar-state-kicker {
   margin: 0;
-  color: rgba(116, 85, 54, 0.7);
+  color: rgba(149, 171, 200, 0.72);
   font-size: 0.68rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -512,35 +524,34 @@ body.sidebar-busy .sidebar-icon-button,
 
 .sidebar-state-title {
   margin: 0;
-  color: rgba(58, 44, 30, 0.92);
+  color: rgba(231, 239, 250, 0.94);
   font-size: 1.05rem;
   line-height: 1.3;
-  letter-spacing: -0.025em;
 }
 
 .sidebar-state-description {
   margin: 0;
-  color: rgba(79, 59, 38, 0.82);
+  color: rgba(189, 204, 225, 0.84);
   font-size: 0.84rem;
   line-height: 1.6;
 }
 
 .sidebar-state-card[data-sidebar-state-variant="locked"] {
   background:
-    linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(247, 236, 219, 0.9)),
-    radial-gradient(circle at 0 0, rgba(214, 184, 150, 0.24), transparent 42%);
+    linear-gradient(180deg, rgba(18, 28, 44, 0.96), rgba(11, 19, 31, 0.9)),
+    radial-gradient(circle at 0 0, rgba(76, 130, 208, 0.18), transparent 42%);
 }
 
 .sidebar-state-card[data-sidebar-state-variant="error"] {
   background:
-    linear-gradient(180deg, rgba(255, 248, 245, 0.96), rgba(249, 231, 225, 0.9)),
-    radial-gradient(circle at 0 0, rgba(216, 138, 128, 0.22), transparent 40%);
+    linear-gradient(180deg, rgba(38, 18, 29, 0.96), rgba(27, 12, 21, 0.9)),
+    radial-gradient(circle at 0 0, rgba(255, 120, 138, 0.18), transparent 40%);
 }
 
 .sidebar-state-card[data-sidebar-state-variant="degraded"] {
   background:
-    linear-gradient(180deg, rgba(255, 249, 243, 0.96), rgba(249, 237, 217, 0.9)),
-    radial-gradient(circle at 0 0, rgba(218, 174, 117, 0.24), transparent 40%);
+    linear-gradient(180deg, rgba(40, 32, 12, 0.96), rgba(30, 24, 10, 0.9)),
+    radial-gradient(circle at 0 0, rgba(255, 196, 92, 0.18), transparent 40%);
 }
 
 .sidebar-state-list {
@@ -548,14 +559,14 @@ body.sidebar-busy .sidebar-icon-button,
   padding-left: 1rem;
   display: grid;
   gap: 6px;
-  color: rgba(86, 64, 40, 0.76);
+  color: rgba(189, 204, 225, 0.78);
   font-size: 0.78rem;
   line-height: 1.5;
 }
 
 .sidebar-state-footnote {
   margin: -2px 0 0;
-  color: rgba(112, 83, 54, 0.64);
+  color: rgba(145, 164, 191, 0.66);
   font-size: 0.72rem;
   line-height: 1.45;
 }
@@ -564,8 +575,8 @@ body.sidebar-busy .sidebar-icon-button,
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: rgba(138, 102, 64, 0.78);
-  box-shadow: 0 0 0 2px rgba(243, 227, 201, 0.62);
+  background: rgba(123, 220, 255, 0.86);
+  box-shadow: 0 0 0 2px rgba(123, 220, 255, 0.16);
   flex: 0 0 auto;
 }
 
@@ -593,16 +604,16 @@ body.sidebar-busy .sidebar-icon-button,
 }
 
 .sidebar-primary-button {
-  border-color: rgba(108, 79, 46, 0.2);
-  background: linear-gradient(180deg, rgba(127, 91, 51, 0.96), rgba(88, 62, 35, 0.96));
-  color: rgba(255, 250, 242, 0.97);
-  box-shadow: 0 10px 18px rgba(92, 63, 33, 0.2);
+  border-color: rgba(136, 241, 255, 0.24);
+  background: linear-gradient(180deg, rgba(99, 244, 255, 0.96), rgba(44, 166, 255, 0.94));
+  color: rgba(241, 251, 255, 0.98);
+  box-shadow: 0 10px 18px rgba(34, 145, 240, 0.22);
 }
 
 .sidebar-secondary-button {
-  border-color: rgba(132, 102, 72, 0.18);
-  background: rgba(255, 251, 244, 0.94);
-  color: rgba(79, 59, 39, 0.86);
+  border-color: rgba(106, 144, 204, 0.18);
+  background: rgba(22, 34, 52, 0.94);
+  color: rgba(213, 227, 246, 0.88);
 }
 
 .sidebar-primary-button:hover,
@@ -624,12 +635,12 @@ body.sidebar-busy .sidebar-icon-button,
 .sidebar-inline-state {
   padding: 11px 13px;
   border-radius: 18px;
-  border: 1px solid rgba(138, 105, 71, 0.22);
+  border: 1px solid rgba(94, 129, 178, 0.22);
   background:
-    linear-gradient(180deg, rgba(255, 251, 244, 0.96), rgba(247, 236, 218, 0.9));
+    linear-gradient(180deg, rgba(18, 28, 44, 0.96), rgba(11, 19, 31, 0.9));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 10px 20px rgba(101, 71, 39, 0.08);
+    inset 0 1px 0 rgba(183, 217, 255, 0.08),
+    0 10px 20px rgba(1, 5, 12, 0.18);
 }
 
 .sidebar-inline-state .sidebar-state-title {
@@ -679,17 +690,19 @@ body.sidebar-busy .sidebar-icon-button,
 .sidebar-messages {
   min-height: 0;
   min-block-size: clamp(300px, 56vh, 520px);
-  padding: 22px 18px;
+  padding: 18px 16px;
   overflow-y: auto;
-  border: 1px solid rgba(139, 107, 73, 0.2);
-  border-radius: 30px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(224, 194, 158, 0.24), transparent 40%),
-    linear-gradient(180deg, rgba(255, 251, 245, 0.975), rgba(247, 236, 218, 0.935));
+  border: 1px solid rgba(91, 126, 177, 0.18);
+  border-radius: 18px;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(47, 117, 169, 0.15), transparent 38%),
+    linear-gradient(180deg, rgba(15, 24, 38, 0.96), rgba(9, 15, 25, 0.92));
+  background-color: rgba(12, 19, 31, 0.86);
   backdrop-filter: blur(16px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.76),
-    0 18px 34px rgba(109, 77, 43, 0.11);
+    inset 0 1px 0 rgba(183, 217, 255, 0.06),
+    0 18px 34px rgba(1, 5, 12, 0.28);
+  color: rgba(220, 232, 246, 0.9);
 }
 
 .sidebar-empty-state {
@@ -701,7 +714,7 @@ body.sidebar-busy .sidebar-icon-button,
 
 .sidebar-empty-kicker {
   margin: 0;
-  color: rgba(117, 88, 58, 0.66);
+  color: rgba(136, 156, 184, 0.68);
   font-size: 0.72rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -709,7 +722,7 @@ body.sidebar-busy .sidebar-icon-button,
 
 .sidebar-empty-title {
   margin: 0;
-  color: rgba(57, 43, 29, 0.92);
+  color: rgba(232, 240, 251, 0.94);
   font-size: 1.06rem;
   line-height: 1.34;
 }
@@ -717,7 +730,7 @@ body.sidebar-busy .sidebar-icon-button,
 .sidebar-empty-description {
   margin: 0;
   max-width: 34ch;
-  color: rgba(84, 63, 40, 0.82);
+  color: rgba(188, 203, 224, 0.84);
   font-size: 0.88rem;
   line-height: 1.7;
 }
@@ -731,14 +744,16 @@ body.sidebar-busy .sidebar-icon-button,
 .sidebar-form {
   display: grid;
   gap: 12px;
-  padding: 13px;
-  border: 1px solid rgba(141, 108, 74, 0.2);
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255, 250, 243, 0.97), rgba(247, 235, 216, 0.93));
+  padding: 12px;
+  border: 1px solid rgba(91, 126, 177, 0.18);
+  border-radius: 16px;
+  background-color: rgba(14, 22, 35, 0.84);
+  background-image: linear-gradient(180deg, rgba(16, 25, 40, 0.97), rgba(10, 17, 28, 0.93));
   backdrop-filter: blur(16px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.78),
-    0 14px 28px rgba(109, 77, 43, 0.11);
+    inset 0 1px 0 rgba(183, 217, 255, 0.06),
+    0 14px 28px rgba(1, 5, 12, 0.24);
+  color: rgba(224, 235, 249, 0.9);
 }
 
 .sidebar-form[data-composer-enabled="false"] {
@@ -746,7 +761,7 @@ body.sidebar-busy .sidebar-icon-button,
 }
 
 .sidebar-form[data-composer-enabled="false"] .sidebar-input-shell {
-  background: rgba(243, 231, 214, 0.8);
+  background: rgba(12, 18, 28, 0.78);
 }
 
 .sidebar-form[data-composer-enabled="false"] .sidebar-input,
@@ -760,13 +775,13 @@ body.sidebar-busy .sidebar-icon-button,
   display: grid;
   gap: 8px;
   padding: 14px 16px 14px 18px;
-  border: 1px solid rgba(141, 108, 74, 0.16);
+  border: 1px solid rgba(91, 126, 177, 0.16);
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(255, 249, 241, 0.95), rgba(246, 234, 216, 0.9));
+    linear-gradient(180deg, rgba(15, 24, 38, 0.95), rgba(10, 17, 28, 0.9));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.68),
-    0 10px 24px rgba(109, 77, 43, 0.1);
+    inset 0 1px 0 rgba(183, 217, 255, 0.06),
+    0 10px 24px rgba(1, 5, 12, 0.22);
   opacity: 0.9;
   overflow: hidden;
 }
@@ -776,7 +791,7 @@ body.sidebar-busy .sidebar-icon-button,
   inset: 14px auto 14px 17px;
   width: 2px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(156, 112, 66, 0.58), rgba(156, 112, 66, 0.12));
+  background: linear-gradient(180deg, rgba(123, 220, 255, 0.58), rgba(123, 220, 255, 0.12));
   opacity: 0.56;
   pointer-events: none;
 }
@@ -791,14 +806,14 @@ body.sidebar-busy .sidebar-icon-button,
   max-width: 100%;
   margin-left: 12px;
   padding: 5px 12px 5px 11px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(248, 239, 224, 0.92));
-  color: rgba(78, 57, 36, 0.84);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(18, 28, 44, 0.96), rgba(12, 20, 32, 0.92));
+  color: rgba(210, 225, 244, 0.84);
   font-size: 0.76rem;
   line-height: 1.35;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    0 8px 18px rgba(109, 77, 43, 0.08);
+    inset 0 1px 0 rgba(183, 217, 255, 0.06),
+    0 8px 18px rgba(1, 5, 12, 0.2);
 }
 
 .sidebar-trace-copy {
@@ -807,11 +822,11 @@ body.sidebar-busy .sidebar-icon-button,
 }
 
 .sidebar-trace-text {
-  color: rgba(75, 55, 35, 0.84);
+  color: rgba(214, 228, 247, 0.86);
 }
 
 .sidebar-trace-meta {
-  color: rgba(117, 89, 58, 0.66);
+  color: rgba(136, 156, 184, 0.68);
   font-size: 0.67rem;
   letter-spacing: 0.02em;
 }
@@ -821,8 +836,8 @@ body.sidebar-busy .sidebar-icon-button,
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: rgba(140, 100, 58, 0.9);
-  box-shadow: 0 0 8px rgba(140, 100, 58, 0.24);
+  background: rgba(123, 220, 255, 0.9);
+  box-shadow: 0 0 8px rgba(123, 220, 255, 0.24);
   flex: 0 0 auto;
 }
 
@@ -855,7 +870,7 @@ body.sidebar-busy .sidebar-icon-button,
 
   .sidebar-form,
   .sidebar-messages {
-    border-radius: 22px;
+    border-radius: 16px;
   }
 
   .sidebar-form-controls {

@@ -1,0 +1,323 @@
+.ai-loading-overlay {
+  position: static;
+  height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-standard), height var(--transition-standard), margin-top var(--transition-standard);
+}
+
+body.is-ai-search-searching .ai-loading-overlay,
+body.is-ai-search-activating .ai-loading-overlay {
+  height: 0.92rem;
+  margin-top: 0.72rem;
+  opacity: 1;
+}
+
+.ai-loading-geometry {
+  display: block;
+  width: 100%;
+  height: 0.92rem;
+}
+
+.geo-track {
+  stroke: rgba(212, 171, 117, 0.35);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.geo-scan {
+  stroke: rgba(245, 178, 127, 0.95);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  animation: ai-line-scan 1700ms linear infinite;
+}
+
+.geo-node {
+  fill: #fffaf1;
+  stroke: rgba(212, 171, 117, 0.9);
+  stroke-width: 1;
+}
+
+.geo-node-1 {
+  animation: ai-node-pulse 1700ms ease-in-out infinite;
+}
+
+.geo-node-2 {
+  animation: ai-node-pulse 1700ms ease-in-out infinite 460ms;
+}
+
+.search-status,
+.settings-status {
+  min-height: 1.35rem;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.search-status {
+  color: var(--ink-secondary);
+}
+
+.settings-status {
+  color: var(--ink-secondary);
+}
+
+.search-status[data-tone="error"],
+.settings-status[data-tone="error"] {
+  color: var(--danger-ink);
+}
+
+.ai-search-preview {
+  width: 100%;
+  border: 1px solid var(--line-toolbar);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fff7eb 100%);
+  box-shadow: var(--shadow-note);
+  overflow: hidden;
+}
+
+.ai-search-preview-content {
+  padding: 1rem;
+}
+
+.ai-search-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: 0.72rem;
+}
+
+.ai-search-preview-header-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.ai-search-preview-kicker {
+  margin: 0;
+  padding: 0.34rem 0.62rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 233, 190, 0.72);
+  color: var(--ink-secondary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-search-preview-intent {
+  margin: 0;
+  padding: 0.34rem 0.76rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 248, 236, 0.95);
+  color: var(--ink-secondary);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.ai-search-preview-summary {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 0.97rem;
+  line-height: 1.8;
+}
+
+.ai-search-preview-query-map {
+  margin-top: 0.95rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  background: var(--surface-card);
+}
+
+.ai-search-preview-query-item {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 0.7rem;
+  padding: 0.65rem 0;
+}
+
+.ai-search-preview-query-item + .ai-search-preview-query-item {
+  border-top: 1px dashed var(--line-soft);
+}
+
+.ai-search-preview-target-label,
+.ai-search-preview-related-label {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-search-preview-target {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.62;
+  word-break: break-word;
+}
+
+.ai-search-preview-related {
+  margin-top: 0.94rem;
+}
+
+.ai-search-preview-websites-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.ai-search-preview-website-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  background: var(--surface-card);
+  padding: 0.92rem;
+}
+
+.ai-search-preview-website-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.ai-search-preview-website-title {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.ai-search-preview-website-host {
+  margin: 0.16rem 0 0;
+  color: var(--ink-tertiary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.ai-search-preview-website-description {
+  margin: 0.56rem 0 0;
+  color: var(--ink-secondary);
+  font-size: 0.87rem;
+  line-height: 1.65;
+}
+
+.ai-search-preview-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.ai-search-preview-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.settings-save-button,
+.settings-secondary-button,
+.ai-search-preview-button,
+.ai-search-preview-button-secondary,
+.ai-search-preview-suggestion,
+.ai-search-preview-website-button {
+  min-height: 44px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
+  transition:
+    background-color var(--transition-standard),
+    color var(--transition-standard),
+    border-color var(--transition-standard),
+    transform var(--transition-standard),
+    opacity var(--transition-standard),
+    box-shadow var(--transition-standard);
+}
+
+.settings-save-button,
+.ai-search-preview-button,
+.ai-search-preview-website-button {
+  background: linear-gradient(180deg, #ffd788 0%, #f1bf6b 100%);
+  border-color: #e0b05f;
+  color: var(--ink-on-accent);
+  box-shadow: 0 8px 16px rgba(201, 153, 76, 0.18);
+  padding: 0.68rem 1.12rem;
+}
+
+.settings-secondary-button,
+.ai-search-preview-button-secondary,
+.ai-search-preview-suggestion {
+  background: #fff8ec;
+  border-color: var(--line-soft);
+  color: var(--ink-secondary);
+  padding: 0.62rem 1rem;
+}
+
+.settings-save-button:hover,
+.settings-secondary-button:hover,
+.ai-search-preview-button:hover,
+.ai-search-preview-button-secondary:hover,
+.ai-search-preview-suggestion:hover,
+.ai-search-preview-website-button:hover {
+  transform: translateY(-1px);
+}
+
+.settings-save-button:hover,
+.ai-search-preview-button:hover,
+.ai-search-preview-website-button:hover {
+  box-shadow: 0 12px 18px rgba(201, 153, 76, 0.22);
+}
+
+.settings-secondary-button:hover,
+.ai-search-preview-button-secondary:hover,
+.ai-search-preview-suggestion:hover {
+  background: #fff1d3;
+  border-color: var(--line-mid);
+}
+
+.settings-save-button:active,
+.settings-secondary-button:active,
+.ai-search-preview-button:active,
+.ai-search-preview-button-secondary:active,
+.ai-search-preview-suggestion:active,
+.ai-search-preview-website-button:active {
+  transform: translateY(1px);
+}
+
+.settings-save-button:disabled,
+.settings-secondary-button:disabled,
+.ai-search-preview-button:disabled,
+.ai-search-preview-button-secondary:disabled,
+.ai-search-preview-suggestion:disabled,
+.ai-search-preview-website-button:disabled {
+  opacity: 0.66;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, progress;
+}
+
+.ai-search-preview-button,
+.ai-search-preview-button-secondary {
+  padding: 0.66rem 1.06rem;
+  font-size: 0.9rem;
+}
+
+.ai-search-preview-suggestion {
+  font-size: 0.84rem;
+  line-height: 1.3;
+}
+
+.ai-search-preview-website-button {
+  flex-shrink: 0;
+  padding: 0.55rem 0.86rem;
+  font-size: 0.84rem;
+}

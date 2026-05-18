@@ -34,10 +34,12 @@ export const getNewtabDomRefs = () => {
   };
   const widgetRuntime = {
     root: document.getElementById("widget-root"),
+    editTrigger: document.getElementById("toggle-widget-edit-mode"),
     panelTrigger: document.getElementById("open-widget-panel"),
     panel: document.getElementById("widget-panel"),
     panelList: document.getElementById("widget-panel-list"),
     panelStatus: document.getElementById("widget-panel-status"),
+    saveTrigger: document.getElementById("save-widget-layout"),
   };
 
   return {

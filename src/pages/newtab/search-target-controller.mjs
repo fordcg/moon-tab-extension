@@ -50,9 +50,12 @@ export const createSearchTargetController = ({ elements, callbacks }) => {
     }
   };
 
-  const syncShell = () => {
-    const activeTarget = resolveSearchTarget(getCurrentSearchTarget()?.id);
-    setCurrentSearchTarget(activeTarget);
+  const syncShell = (target = getCurrentSearchTarget()) => {
+    const currentTarget = getCurrentSearchTarget();
+    const activeTarget = resolveSearchTarget(target?.id ?? currentTarget?.id);
+    if (activeTarget?.id !== currentTarget?.id) {
+      setCurrentSearchTarget(activeTarget);
+    }
 
     if (searchTargetLabel instanceof HTMLElement) {
       searchTargetLabel.textContent = activeTarget.label;
@@ -86,8 +89,11 @@ export const createSearchTargetController = ({ elements, callbacks }) => {
       return false;
     }
 
-    setCurrentSearchTarget(resolveSearchTarget(target.dataset.targetId));
-    syncShell();
+    const nextTarget = resolveSearchTarget(target.dataset.targetId);
+    if (nextTarget?.id !== getCurrentSearchTarget()?.id) {
+      setCurrentSearchTarget(nextTarget);
+    }
+    syncShell(nextTarget);
     return true;
   };
 

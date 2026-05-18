@@ -65,55 +65,77 @@
       <section class="game-scene" aria-label="游戏场景">
         <div class="game-world">
           <div class="game-ground-line" aria-hidden="true"></div>
+          <div
+            class="game-ore-pile"
+            aria-live="polite"
+            data-miner-anchor-offset-x="-22"
+            data-hauler-anchor-offset-x="16"
+          >
+            <span class="game-resource__label">GROUND</span>
+            <strong id="ground-ore-count" class="game-resource__value">0</strong>
+          </div>
+          <div
+            class="game-storage"
+            aria-live="polite"
+            data-wait-anchor-offset-x="-26"
+            data-unload-anchor-offset-x="0"
+          >
+            <span class="game-resource__label">STORED</span>
+            <strong id="stored-ore-count" class="game-resource__value">0</strong>
+          </div>
+          <div class="game-worker-layer" aria-hidden="true"></div>
           <div class="ore-rock-layer" aria-hidden="true"></div>
           <button
             class="ore-mountain"
             type="button"
             data-ore="100"
             data-stage="5"
+            data-mine-stand-ratio="0.6"
+            data-mine-effect-x-ratio="0.63"
+            data-mine-effect-y-ratio="0.56"
             aria-label="采集石山，剩余 100"
           >
             <span class="ore-mountain__tooltip" aria-hidden="true">100</span>
-            <svg class="ore-mountain__art" viewBox="0 0 420 290" aria-hidden="true">
+            <svg class="ore-mountain__art" viewBox="0 0 680 360" aria-hidden="true">
               <path
                 class="ore-mountain__hitbox ore-mountain__hitbox--5"
-                d="M20 286C48 272 82 258 122 253C160 248 190 236 213 210C231 190 246 164 260 146C279 145 299 159 320 183C342 208 367 220 390 220C404 220 414 240 420 286L420 286L20 286Z"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
               />
               <path
                 class="ore-mountain__hitbox ore-mountain__hitbox--4"
-                d="M26 286C54 274 88 264 128 260C163 257 193 246 216 224C234 207 249 185 262 171C280 172 299 184 319 203C339 221 361 232 384 236C398 239 410 252 418 286L418 286L26 286Z"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
               />
               <path
                 class="ore-mountain__hitbox ore-mountain__hitbox--3"
-                d="M34 286C64 277 97 270 136 268C171 266 200 258 223 241C242 228 257 211 270 199C286 201 302 210 320 224C340 239 360 249 381 254C396 258 408 266 416 286L416 286L34 286Z"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
               />
               <path
                 class="ore-mountain__hitbox ore-mountain__hitbox--2"
-                d="M44 286C76 281 110 278 148 277C181 276 210 271 235 261C256 253 273 242 288 236C304 238 320 246 338 255C356 264 376 272 396 277C404 279 411 282 416 286L416 286L44 286Z"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
               />
               <path
                 class="ore-mountain__hitbox ore-mountain__hitbox--1"
-                d="M58 286C92 283 127 281 164 280C197 279 229 277 261 274C292 271 323 273 354 277C384 280 405 282 418 286L418 286L58 286Z"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
               />
               <path
                 class="ore-mountain__shape ore-mountain__shape--5"
-                d="M20 286C48 272 82 258 122 253C160 248 190 236 213 210C231 190 246 164 260 146C279 145 299 159 320 183C342 208 367 220 390 220C404 220 414 240 420 286"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
               />
               <path
                 class="ore-mountain__shape ore-mountain__shape--4"
-                d="M26 286C54 274 88 264 128 260C163 257 193 246 216 224C234 207 249 185 262 171C280 172 299 184 319 203C339 221 361 232 384 236C398 239 410 252 418 286"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
               />
               <path
                 class="ore-mountain__shape ore-mountain__shape--3"
-                d="M34 286C64 277 97 270 136 268C171 266 200 258 223 241C242 228 257 211 270 199C286 201 302 210 320 224C340 239 360 249 381 254C396 258 408 266 416 286"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
               />
               <path
                 class="ore-mountain__shape ore-mountain__shape--2"
-                d="M44 286C76 281 110 278 148 277C181 276 210 271 235 261C256 253 273 242 288 236C304 238 320 246 338 255C356 264 376 272 396 277C404 279 411 282 416 286"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
               />
               <path
                 class="ore-mountain__shape ore-mountain__shape--1"
-                d="M58 286C92 283 127 281 164 280C197 279 229 277 261 274C292 271 323 273 354 277C384 280 405 282 418 286"
+                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
               />
             </svg>
           </button>

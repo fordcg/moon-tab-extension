@@ -1,0 +1,73 @@
+@keyframes ai-line-scan {
+  0% {
+    transform: translateX(-140px);
+  }
+
+  100% {
+    transform: translateX(860px);
+  }
+}
+
+@keyframes ai-node-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.46;
+  }
+
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+@keyframes pet-float {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(-3px);
+  }
+}
+
+.homepage-pet {
+  animation: pet-float 3.2s ease-in-out infinite alternate;
+}
+
+.homepage-pet-dog {
+  animation-duration: 3.8s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .homepage-focus-shell,
+  .settings-trigger,
+  .settings-backdrop,
+  .settings-popup,
+  .settings-switch-track,
+  .settings-switch-thumb,
+  .settings-input,
+  .settings-save-button,
+  .settings-secondary-button,
+  .outline-search-frame,
+  .ui-toolbar-group,
+  .ui-btn-primary,
+  .ui-btn-secondary,
+  .ui-btn-icon,
+  .ai-toggle-btn,
+  .ai-loading-overlay,
+  .ai-search-preview-button,
+  .ai-search-preview-button-secondary,
+  .ai-search-preview-suggestion,
+  .ai-search-preview-website-button,
+  .homepage-pet {
+    transition: none;
+    animation: none;
+  }
+
+  .geo-scan,
+  .geo-node-1,
+  .geo-node-2 {
+    animation: none;
+  }
+}
