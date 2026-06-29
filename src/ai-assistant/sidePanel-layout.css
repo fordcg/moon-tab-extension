@@ -604,6 +604,74 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   gap: 0.125rem;
 }
 
+.sidepanel-move-conversation {
+  align-items: center;
+  background: var(--sidepanel-control);
+  border: 1px solid var(--sidepanel-line-soft);
+  border-radius: 0.875rem;
+  display: grid;
+  gap: 0.625rem;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+}
+
+.sidepanel-move-conversation-icon {
+  background:
+    linear-gradient(currentColor 0 0) left top 0.125rem / 0.875rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left top 0.4375rem / 0.5625rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left top 0.75rem / 0.875rem 0.125rem no-repeat;
+  color: var(--sidepanel-ink);
+  height: 1rem;
+  opacity: 0.82;
+  width: 1rem;
+}
+
+.sidepanel-move-conversation-title {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidepanel-move-conversation-button {
+  background: var(--sidepanel-blue);
+  border: 0;
+  border-radius: 0.625rem;
+  color: var(--sidepanel-canvas);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  transition: background-color 140ms ease-out, transform 140ms ease-out, opacity 140ms ease-out;
+  white-space: nowrap;
+}
+
+.sidepanel-move-conversation-button:hover,
+.sidepanel-move-conversation-button.is-moving {
+  background: var(--sidepanel-blue-deep);
+}
+
+.sidepanel-move-conversation-button:active {
+  transform: translateY(1px);
+}
+
+.sidepanel-move-conversation-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.sidepanel-move-conversation-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--sidepanel-blue) 24%, transparent);
+  outline-offset: 2px;
+}
+
 .sidepanel-empty-hello {
   color: var(--sidepanel-blue);
   font-size: 1.75rem;

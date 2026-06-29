@@ -61,6 +61,11 @@ const IS_FLOATING_FRAME =
 // 避免两处各写一份字面量、改文案时过滤失效让占位项混进可选列表。
 const MODEL_PLACEHOLDER_TEXT = "未选择模型";
 const RECENT_HISTORY_COMPACT_LIMIT = 5;
+const MOVE_CONVERSATION_TTL_MS = 60 * 60 * 1000;
+const CHAT_DB_NAME = "browser-ai-assistant";
+const CHAT_SESSION_STORE = "chatSessions";
+const TAB_CONVERSATION_STATE_KEY = "sidepanel.tabConversationState.v1";
+const SESSION_TAB_CONTEXTS_KEY = "sidepanel.sessionTabContexts.v1";
 
 let scheduled = false;
 let globalHandlersBound = false;
@@ -102,6 +107,14 @@ let messageListPinnedToBottom = true;
 let messageListScrollTarget = null;
 let messageListScrollRaf = null;
 let regenerateDirectTimer = null;
+let conversationContinuityInFlight = false;
+const conversationContinuityBootstrappedTabs = new Set();
+let currentConversationSessionId = null;
+let moveConversationCandidate = null;
+let moveConversationCandidateSignature = "";
+let lastConversationContinuitySignature = "";
+let lastPersistedSessionContextSignature = "";
+let moveConversationRequestInFlight = false;
 
 // 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
 // textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
@@ -138,6 +151,8 @@ function scheduleEnhancement() {
       enhanceComposerAddTab,
       enhanceComposerFooter,
       enhancePromptUndo,
+      syncTabConversationContinuity,
+      enhanceMoveConversationPrompt,
       syncToolsA11y,
       enhanceNewConversationButton,
       enhanceFloatingWindowButton,
@@ -258,6 +273,718 @@ function showExternalChatNotices() {
   )) {
     notice.classList.remove("sidepanel-warning-inline-hidden");
   }
+}
+
+// ── 新标签页继续对话 / 同标签恢复 ───────────────────────────────
+// 原生侧栏只记一个 activeSessionId，重新打开时会回到最近更新的会话。
+// 这里在外层补一层“浏览器标签页 → 会话”的轻量绑定：
+//   - 同一个标签页聊过后，关闭再打开仍回到原会话；
+//   - 新标签页先落到一条新对话，同时给出 1 小时内最近会话的“移到此处”入口；
+//   - 点击“移到此处”后，把当前标签页合并进该会话的分享标签列表。
+function syncTabConversationContinuity() {
+  const tabKey = getActiveTabKey();
+  const appReady = Boolean(document.querySelector(".app-shell .message-list"));
+  if (!appReady || !tabKey || !activePageTab) {
+    moveConversationCandidate = null;
+    currentConversationSessionId = null;
+    lastConversationContinuitySignature = "";
+    document.querySelector(".sidepanel-move-conversation")?.remove();
+    return;
+  }
+
+  const signature = [
+    tabKey,
+    activePageTab.url || "",
+    getActiveSessionIdFromDom() || "",
+    hasVisibleConversationMessages() ? "messages" : "empty",
+    document.querySelectorAll(".session-title-button").length,
+  ].join("|");
+
+  if (conversationContinuityInFlight || signature === lastConversationContinuitySignature) {
+    return;
+  }
+
+  lastConversationContinuitySignature = signature;
+  conversationContinuityInFlight = true;
+  void syncTabConversationContinuityAsync(tabKey);
+}
+
+async function syncTabConversationContinuityAsync(tabKey) {
+  try {
+    let sessions = await readChatSessions();
+    let state = pruneConversationState(loadTabConversationState(), sessions);
+    let binding = getValidTabBinding(state, tabKey, sessions);
+
+    if (binding) {
+      currentConversationSessionId = binding.sessionId;
+      updateTabBinding(state, tabKey, binding.sessionId, {
+        provisional: Boolean(binding.provisional),
+      });
+      saveTabConversationState(state);
+      await ensureChatSessionSelected(binding.sessionId, sessions);
+      applySessionTabContext(binding.sessionId);
+    } else {
+      currentConversationSessionId = null;
+      delete state.tabBindings[tabKey];
+      if (
+        !conversationContinuityBootstrappedTabs.has(tabKey) &&
+        sessions.some((session) => !session.archived)
+      ) {
+        const created = await createFreshConversationForTab();
+        if (created) {
+          sessions = await readChatSessions();
+          state = pruneConversationState(loadTabConversationState(), sessions);
+          updateTabBinding(state, tabKey, created.id, { provisional: true });
+          saveTabConversationState(state);
+          currentConversationSessionId = created.id;
+          applySessionTabContext(created.id);
+        }
+      }
+      conversationContinuityBootstrappedTabs.add(tabKey);
+    }
+
+    sessions = await readChatSessions();
+    state = pruneConversationState(loadTabConversationState(), sessions);
+    captureVisibleConversationActivity(state, tabKey, sessions);
+    state = pruneConversationState(loadTabConversationState(), sessions);
+
+    const activeSessionId =
+      getValidTabBinding(state, tabKey, sessions)?.sessionId || currentConversationSessionId;
+    moveConversationCandidate = getMoveConversationCandidate(
+      state,
+      sessions,
+      tabKey,
+      activeSessionId,
+    );
+    moveConversationCandidateSignature = moveConversationCandidate
+      ? `${tabKey}|${moveConversationCandidate.sessionId}|${moveConversationCandidate.lastActiveAt}`
+      : "";
+  } catch (error) {
+    console.warn("[sidepanel-layout] conversation continuity failed", error);
+  } finally {
+    conversationContinuityInFlight = false;
+    scheduleEnhancement();
+  }
+}
+
+function enhanceMoveConversationPrompt() {
+  const existing = document.querySelector(".sidepanel-move-conversation");
+  const state = document.querySelector(".sidepanel-empty-state");
+  if (
+    moveConversationCandidate &&
+    Date.now() - moveConversationCandidate.lastActiveAt > MOVE_CONVERSATION_TTL_MS
+  ) {
+    moveConversationCandidate = null;
+    moveConversationCandidateSignature = "";
+  }
+  if (!state || !moveConversationCandidate || hasVisibleConversationMessages()) {
+    existing?.remove();
+    return;
+  }
+
+  if (
+    existing instanceof HTMLElement &&
+    existing.dataset.candidateSignature === moveConversationCandidateSignature
+  ) {
+    return;
+  }
+
+  const prompt = document.createElement("aside");
+  prompt.className = "sidepanel-move-conversation";
+  prompt.dataset.candidateSignature = moveConversationCandidateSignature;
+  prompt.setAttribute("aria-label", "继续最近对话");
+
+  const icon = document.createElement("span");
+  icon.className = "sidepanel-move-conversation-icon";
+  icon.setAttribute("aria-hidden", "true");
+
+  const title = document.createElement("span");
+  title.className = "sidepanel-move-conversation-title";
+  title.textContent = moveConversationCandidate.title || "最近对话";
+  title.title = title.textContent;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "sidepanel-move-conversation-button";
+  button.textContent = "移到此处";
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleMoveConversationClick(button);
+  });
+
+  prompt.append(icon, title, button);
+
+  if (existing) {
+    existing.replaceWith(prompt);
+    return;
+  }
+
+  const anchor = state.querySelector(".sidepanel-empty-copy") || state.firstChild;
+  state.insertBefore(prompt, anchor);
+}
+
+async function handleMoveConversationClick(button) {
+  if (moveConversationRequestInFlight || !moveConversationCandidate) {
+    return;
+  }
+
+  const candidate = moveConversationCandidate;
+  const tabKey = getActiveTabKey();
+  if (!tabKey) {
+    return;
+  }
+
+  moveConversationRequestInFlight = true;
+  button.disabled = true;
+  button.classList.add("is-moving");
+
+  try {
+    const sessions = await readChatSessions();
+    const session = sessions.find((item) => item.id === candidate.sessionId);
+    if (!session) {
+      dismissMoveConversationPrompt(candidate.sessionId);
+      showFloatingToast("这段对话已经不存在", true);
+      return;
+    }
+
+    const state = pruneConversationState(loadTabConversationState(), sessions);
+    const previousBinding = getValidTabBinding(state, tabKey, sessions);
+    mergeCurrentTabIntoSessionContext(candidate.sessionId);
+    updateTabBinding(state, tabKey, candidate.sessionId, { provisional: false });
+    rememberConversationActivity(state, tabKey, session);
+    saveTabConversationState(state);
+
+    if (
+      previousBinding?.provisional &&
+      previousBinding.sessionId &&
+      previousBinding.sessionId !== candidate.sessionId
+    ) {
+      void deleteChatSessionFromDb(previousBinding.sessionId);
+    }
+
+    currentConversationSessionId = candidate.sessionId;
+    moveConversationCandidate = null;
+    moveConversationCandidateSignature = "";
+    applySessionTabContext(candidate.sessionId);
+    restoreCurrentTab(activePageTab?.url || "");
+    await ensureChatSessionSelected(candidate.sessionId, sessions);
+    updateContextBanner();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    showFloatingToast(`移动对话失败：${message}`, true);
+  } finally {
+    moveConversationRequestInFlight = false;
+    button.disabled = false;
+    button.classList.remove("is-moving");
+    scheduleEnhancement();
+  }
+}
+
+function dismissMoveConversationPrompt(sessionId = moveConversationCandidate?.sessionId) {
+  if (!sessionId) {
+    return;
+  }
+  const tabKey = getActiveTabKey();
+  if (tabKey) {
+    const state = loadTabConversationState();
+    state.dismissedMovePrompts[tabKey] = {
+      sessionId,
+      dismissedAt: Date.now(),
+    };
+    saveTabConversationState(state);
+  }
+  moveConversationCandidate = null;
+  moveConversationCandidateSignature = "";
+  document.querySelector(".sidepanel-move-conversation")?.remove();
+}
+
+function getActiveTabKey() {
+  if (!activePageTab) {
+    return "";
+  }
+  if (typeof activePageTab.id === "number" && typeof activePageTab.windowId === "number") {
+    return `tab:${activePageTab.windowId}:${activePageTab.id}`;
+  }
+  return activePageTab.url ? `url:${activePageTab.url}` : "";
+}
+
+function makeActiveTabRecord() {
+  return {
+    tabId: typeof activePageTab?.id === "number" ? activePageTab.id : undefined,
+    windowId: typeof activePageTab?.windowId === "number" ? activePageTab.windowId : undefined,
+    url: activePageTab?.url || "",
+    title: activePageTab?.title || activePageTab?.url || "当前标签页",
+    favIconUrl: activePageTab?.favIconUrl || "",
+  };
+}
+
+function loadTabConversationState() {
+  const fallback = {
+    tabBindings: {},
+    dismissedMovePrompts: {},
+    lastConversation: null,
+  };
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TAB_CONVERSATION_STATE_KEY) || "null");
+    if (!parsed || typeof parsed !== "object") {
+      return fallback;
+    }
+    return {
+      tabBindings:
+        parsed.tabBindings && typeof parsed.tabBindings === "object"
+          ? parsed.tabBindings
+          : {},
+      dismissedMovePrompts:
+        parsed.dismissedMovePrompts && typeof parsed.dismissedMovePrompts === "object"
+          ? parsed.dismissedMovePrompts
+          : {},
+      lastConversation:
+        parsed.lastConversation && typeof parsed.lastConversation === "object"
+          ? parsed.lastConversation
+          : null,
+    };
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function saveTabConversationState(state) {
+  try {
+    localStorage.setItem(TAB_CONVERSATION_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    // localStorage 不可用时，本次页面内状态仍可继续工作。
+  }
+}
+
+function pruneConversationState(state, sessions) {
+  const sessionIds = new Set(sessions.map((session) => session.id));
+  const now = Date.now();
+  state.tabBindings ||= {};
+  state.dismissedMovePrompts ||= {};
+
+  for (const [key, binding] of Object.entries(state.tabBindings)) {
+    if (!binding?.sessionId || !sessionIds.has(binding.sessionId)) {
+      delete state.tabBindings[key];
+    }
+  }
+
+  for (const [key, dismissal] of Object.entries(state.dismissedMovePrompts)) {
+    if (
+      !dismissal?.dismissedAt ||
+      now - Number(dismissal.dismissedAt) > MOVE_CONVERSATION_TTL_MS
+    ) {
+      delete state.dismissedMovePrompts[key];
+    }
+  }
+
+  if (
+    state.lastConversation?.sessionId &&
+    !sessionIds.has(state.lastConversation.sessionId)
+  ) {
+    state.lastConversation = null;
+  }
+
+  saveTabConversationState(state);
+  return state;
+}
+
+function getValidTabBinding(state, tabKey, sessions) {
+  const binding = state.tabBindings?.[tabKey];
+  if (!binding?.sessionId) {
+    return null;
+  }
+  return sessions.some((session) => session.id === binding.sessionId) ? binding : null;
+}
+
+function updateTabBinding(state, tabKey, sessionId, options = {}) {
+  const existing = state.tabBindings?.[tabKey];
+  state.tabBindings ||= {};
+  state.tabBindings[tabKey] = {
+    sessionId,
+    provisional: Boolean(options.provisional),
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
+    tab: makeActiveTabRecord(),
+  };
+}
+
+function rememberConversationActivity(state, tabKey, session) {
+  if (!session || !hasChatSessionMessages(session)) {
+    return;
+  }
+  updateTabBinding(state, tabKey, session.id, { provisional: false });
+  state.lastConversation = {
+    sessionId: session.id,
+    title: getChatSessionTitle(session),
+    lastActiveAt: Date.now(),
+    sessionUpdatedAt: session.updatedAt || Date.now(),
+    tabKey,
+    tab: makeActiveTabRecord(),
+  };
+}
+
+function captureVisibleConversationActivity(state, tabKey, sessions) {
+  if (!hasVisibleConversationMessages()) {
+    return;
+  }
+
+  const activeId = getActiveSessionIdFromDom() || currentConversationSessionId;
+  let session = activeId ? sessions.find((item) => item.id === activeId) : null;
+  if (!session || !hasChatSessionMessages(session)) {
+    session = sessions.find((item) => !item.archived && hasChatSessionMessages(item));
+  }
+  if (!session) {
+    return;
+  }
+
+  currentConversationSessionId = session.id;
+  rememberConversationActivity(state, tabKey, session);
+  saveTabConversationState(state);
+  persistCurrentSessionSharedTabs(session.id);
+}
+
+function getMoveConversationCandidate(state, sessions, tabKey, activeSessionId) {
+  const now = Date.now();
+  const fromLast = resolveStoredLastConversation(state, sessions);
+  const latestSession = sessions.find(
+    (session) => !session.archived && hasChatSessionMessages(session),
+  );
+  const candidates = [fromLast, latestSession && makeCandidateFromSession(latestSession, state)]
+    .filter(Boolean)
+    .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+
+  for (const candidate of candidates) {
+    if (candidate.sessionId === activeSessionId) {
+      continue;
+    }
+    if (candidate.tabKey && candidate.tabKey === tabKey) {
+      continue;
+    }
+    if (now - candidate.lastActiveAt > MOVE_CONVERSATION_TTL_MS) {
+      continue;
+    }
+    const dismissal = state.dismissedMovePrompts?.[tabKey];
+    if (
+      dismissal?.sessionId === candidate.sessionId &&
+      now - Number(dismissal.dismissedAt || 0) <= MOVE_CONVERSATION_TTL_MS
+    ) {
+      continue;
+    }
+    return candidate;
+  }
+
+  return null;
+}
+
+function resolveStoredLastConversation(state, sessions) {
+  const last = state.lastConversation;
+  if (!last?.sessionId) {
+    return null;
+  }
+  const session = sessions.find((item) => item.id === last.sessionId);
+  if (!session || session.archived || !hasChatSessionMessages(session)) {
+    return null;
+  }
+  return {
+    sessionId: session.id,
+    title: last.title || getChatSessionTitle(session),
+    lastActiveAt: Number(last.lastActiveAt || session.updatedAt || 0),
+    tabKey: last.tabKey || findTabKeyForSession(state, session.id),
+  };
+}
+
+function makeCandidateFromSession(session, state) {
+  return {
+    sessionId: session.id,
+    title: getChatSessionTitle(session),
+    lastActiveAt: Number(session.updatedAt || session.createdAt || 0),
+    tabKey: findTabKeyForSession(state, session.id),
+  };
+}
+
+function findTabKeyForSession(state, sessionId) {
+  return (
+    Object.entries(state.tabBindings || {}).find(
+      ([, binding]) => binding?.sessionId === sessionId && !binding.provisional,
+    )?.[0] || ""
+  );
+}
+
+function hasVisibleConversationMessages() {
+  return Boolean(document.querySelector(".message-list .message-entry"));
+}
+
+function hasChatSessionMessages(session) {
+  return Array.isArray(session?.messages) && session.messages.length > 0;
+}
+
+function getChatSessionTitle(session) {
+  const title = session?.titleGenerating ? "生成标题中..." : session?.title;
+  return (title || "新对话").trim() || "新对话";
+}
+
+function getActiveSessionIdFromDom() {
+  const active = document.querySelector(
+    ".session-item-active [data-session-id], .session-item-active[data-session-id]",
+  );
+  if (active instanceof HTMLElement && active.dataset.sessionId) {
+    return active.dataset.sessionId;
+  }
+  return "";
+}
+
+function findSessionButton(sessionId, session = null) {
+  const byId = Array.from(
+    document.querySelectorAll(".session-title-button[data-session-id]"),
+  ).find((button) => button instanceof HTMLElement && button.dataset.sessionId === sessionId);
+  if (byId) {
+    return byId;
+  }
+
+  const title = session ? getChatSessionTitle(session) : "";
+  if (!title) {
+    return null;
+  }
+  return Array.from(document.querySelectorAll(".session-title-button")).find((button) => {
+    const buttonTitle = button.getAttribute("title") || button.textContent?.trim() || "";
+    return buttonTitle === title;
+  });
+}
+
+async function ensureChatSessionSelected(sessionId, sessions = []) {
+  if (!sessionId || getActiveSessionIdFromDom() === sessionId) {
+    return true;
+  }
+
+  const session = sessions.find((item) => item.id === sessionId) || null;
+  let button = findSessionButton(sessionId, session);
+  if (!button) {
+    await revealHistoryForSessionSelection();
+    button = findSessionButton(sessionId, session);
+  }
+  if (!button) {
+    return false;
+  }
+
+  button.click();
+  await waitForDomSettle();
+  closeHistoryDrawer();
+  return true;
+}
+
+async function revealHistoryForSessionSelection() {
+  const trigger = document.querySelector(
+    ".chat-history-trigger, .app-header-icon-button[aria-label='历史记录'], .app-header-icon-button[aria-label='会话历史']",
+  );
+  trigger?.click();
+  await waitForDomSettle();
+}
+
+async function createFreshConversationForTab() {
+  const before = await readChatSessions();
+  const beforeIds = new Set(before.map((session) => session.id));
+  const created = await triggerNativeNewConversation();
+  if (!created) {
+    return null;
+  }
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await waitForDomSettle();
+    const after = await readChatSessions();
+    const fresh =
+      after.find((session) => !beforeIds.has(session.id)) ||
+      after.find((session) => session.updatedAt >= Math.max(0, ...before.map((s) => s.updatedAt || 0)));
+    if (fresh) {
+      return fresh;
+    }
+  }
+  return null;
+}
+
+function loadSessionTabContexts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SESSION_TAB_CONTEXTS_KEY) || "null");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveSessionTabContexts(contexts) {
+  try {
+    localStorage.setItem(SESSION_TAB_CONTEXTS_KEY, JSON.stringify(contexts));
+  } catch (error) {
+    // 忽略持久化失败，当前页面内的 banner 仍可显示。
+  }
+}
+
+function normalizeSharedTab(tab) {
+  if (!tab?.url) {
+    return null;
+  }
+  return {
+    url: tab.url,
+    title: tab.title || tab.url,
+    favIconUrl: tab.favIconUrl || "",
+    tabId: typeof tab.tabId === "number" ? tab.tabId : undefined,
+    windowId: typeof tab.windowId === "number" ? tab.windowId : undefined,
+  };
+}
+
+function applySessionTabContext(sessionId) {
+  const contexts = loadSessionTabContexts();
+  const context = contexts[sessionId];
+  const activeUrl = activePageTab?.url || "";
+  restoreCurrentTab(activeUrl);
+
+  if (!context?.tabs?.length) {
+    userExtraSelectedSnapshot = [];
+    lastPersistedSessionContextSignature = "";
+    return;
+  }
+
+  const tabs = context.tabs.map(normalizeSharedTab).filter(Boolean);
+  userExtraSelectedSnapshot = tabs
+    .filter((tab) => tab.url && tab.url !== activeUrl)
+    .map((tab) => ({
+      url: tab.url,
+      title: tab.title,
+      favIconUrl: tab.favIconUrl || "",
+    }));
+}
+
+function persistCurrentSessionSharedTabs(sessionId = currentConversationSessionId) {
+  if (!sessionId) {
+    return;
+  }
+
+  const sharedTabs = buildSharedTabs().map(normalizeSharedTab).filter(Boolean);
+  const signature = `${sessionId}|${sharedTabs
+    .map((tab) => `${tab.url}\u0001${tab.title}\u0001${tab.favIconUrl}`)
+    .join("\u0002")}`;
+  if (signature === lastPersistedSessionContextSignature) {
+    return;
+  }
+
+  const contexts = loadSessionTabContexts();
+  contexts[sessionId] = {
+    tabs: dedupeSharedTabs(sharedTabs),
+    updatedAt: Date.now(),
+  };
+  saveSessionTabContexts(contexts);
+  lastPersistedSessionContextSignature = signature;
+}
+
+function mergeCurrentTabIntoSessionContext(sessionId) {
+  if (!sessionId || !activePageTab?.url) {
+    return;
+  }
+  const contexts = loadSessionTabContexts();
+  const existing = Array.isArray(contexts[sessionId]?.tabs) ? contexts[sessionId].tabs : [];
+  const next = dedupeSharedTabs([...existing, makeActiveTabRecord()]);
+  contexts[sessionId] = {
+    tabs: next,
+    updatedAt: Date.now(),
+  };
+  saveSessionTabContexts(contexts);
+  lastPersistedSessionContextSignature = "";
+}
+
+function dedupeSharedTabs(tabs) {
+  const result = [];
+  const seen = new Set();
+  for (const tab of tabs.map(normalizeSharedTab).filter(Boolean)) {
+    const key = tab.url || `${tab.windowId}:${tab.tabId}`;
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(tab);
+  }
+  return result.slice(-12);
+}
+
+function openChatDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in globalThis)) {
+      reject(new Error("当前环境不支持 IndexedDB"));
+      return;
+    }
+    const request = indexedDB.open(CHAT_DB_NAME);
+    request.onerror = () => reject(request.error || new Error("打开会话数据库失败"));
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+async function readChatSessions() {
+  let db = null;
+  try {
+    db = await openChatDb();
+    if (!db.objectStoreNames.contains(CHAT_SESSION_STORE)) {
+      db.close();
+      return [];
+    }
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(CHAT_SESSION_STORE, "readonly");
+      const store = transaction.objectStore(CHAT_SESSION_STORE);
+      const request = store.getAll();
+      request.onerror = () => reject(request.error || new Error("读取会话失败"));
+      request.onsuccess = () => {
+        const sessions = Array.isArray(request.result) ? request.result : [];
+        resolve(
+          sessions
+            .map(normalizeChatSession)
+            .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)),
+        );
+      };
+      transaction.oncomplete = () => db.close();
+      transaction.onerror = () => reject(transaction.error || new Error("读取会话失败"));
+    });
+  } catch (error) {
+    try {
+      db?.close();
+    } catch {
+      // ignored
+    }
+    return [];
+  }
+}
+
+async function deleteChatSessionFromDb(sessionId) {
+  let db = null;
+  try {
+    db = await openChatDb();
+    if (!db.objectStoreNames.contains(CHAT_SESSION_STORE)) {
+      db.close();
+      return;
+    }
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(CHAT_SESSION_STORE, "readwrite");
+      transaction.objectStore(CHAT_SESSION_STORE).delete(sessionId);
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error || new Error("删除空对话失败"));
+    });
+  } catch (error) {
+    console.warn("[sidepanel-layout] failed to delete provisional chat session", error);
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      // ignored
+    }
+  }
+}
+
+function normalizeChatSession(session) {
+  return {
+    ...session,
+    id: String(session?.id || ""),
+    title: typeof session?.title === "string" ? session.title : "新对话",
+    archived: Boolean(session?.archived),
+    createdAt: Number(session?.createdAt || 0),
+    updatedAt: Number(session?.updatedAt || session?.createdAt || 0),
+    messages: Array.isArray(session?.messages) ? session.messages : [],
+  };
 }
 
 // 工具开关组改为“点击展开”：注入一个 tune 按钮，点击切换 .is-tools-open。
@@ -1433,7 +2160,6 @@ function enhanceHistoryDrawer() {
     footer.className = "sidepanel-drawer-footer";
     footer.dataset.variant = "recent-menu";
     footer.append(
-      makeDrawerDisabledAction("在新标签页中继续对话", EXTERNAL_TAB_SVG),
       makeBrowserControlDrawerAction(),
       makeAgentToolsDrawerAction(),
       makeDrawerAction("设置和帮助", GEAR_SVG, "设置", {
@@ -2463,6 +3189,7 @@ function updateContextBanner() {
     sharedTabs,
     isMulti,
   );
+  persistCurrentSessionSharedTabs();
 
   // 幂等：若上次渲染的状态完全一致，跳过重建。否则 MutationObserver 会让 banner
   // 每帧重建一次，点击 chevron 时按钮已被替换，click 永远到不了 handler。
@@ -3000,6 +3727,7 @@ function enhanceContextDialog() {
     extras.some((t, i) => t.url !== userExtraSelectedSnapshot[i]?.url)
   ) {
     userExtraSelectedSnapshot = extras;
+    persistCurrentSessionSharedTabs();
   }
 
   const title = dialog.querySelector(".context-dialog-title");
@@ -3253,6 +3981,9 @@ function handlePromptInput() {
   if (promptUndoApplying) {
     return;
   }
+  if (moveConversationCandidate) {
+    dismissMoveConversationPrompt();
+  }
   const editor = promptUndoEditor;
   if (!editor) {
     return;
@@ -3361,6 +4092,9 @@ function fillPrompt(text) {
 
   if (!editor) {
     return;
+  }
+  if (moveConversationCandidate) {
+    dismissMoveConversationPrompt();
   }
 
   // 确保历史已绑定（空状态点击建议时编辑器可能刚挂载），并把替换前的内容压入
