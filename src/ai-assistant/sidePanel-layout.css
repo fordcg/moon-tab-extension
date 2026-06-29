@@ -2483,9 +2483,11 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   border: 1px solid var(--sidepanel-surface-line);
   border-left: 1px solid var(--sidepanel-surface-line);
   border-radius: 0.875rem;
+  bottom: auto;
   box-shadow:
     0 8px 18px rgb(31 41 55 / 24%),
     0 2px 6px rgb(31 41 55 / 18%);
+  height: auto;
   /* 近期菜单高度随 5 条对话 + 更多/底部动作自适应，展开页再单独增高。 */
   max-height: var(--sidepanel-history-compact-max-height);
   overflow: hidden;
@@ -3399,7 +3401,6 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 .drawer-panel.history-drawer.is-history-expanded {
-  height: var(--sidepanel-history-expanded-height);
   max-height: var(--sidepanel-history-expanded-height);
   padding: 0.375rem 0 0.625rem;
 }
@@ -3413,6 +3414,8 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 .drawer-panel.history-drawer .history-dialog-body {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -3427,6 +3430,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
   overflow: visible;
   padding: 0;
   scrollbar-width: none;
+  width: 100%;
 }
 
 .drawer-panel.history-drawer .history-dialog-scroll::-webkit-scrollbar {
@@ -3438,7 +3442,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll {
-  height: 100%;
+  max-height: calc(var(--sidepanel-history-expanded-height) - 3.25rem);
   overflow: auto;
   padding-right: 0.875rem;
 }
@@ -3508,14 +3512,15 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 .history-drawer .session-item-row::before {
-  background: currentColor;
-  border-radius: 999px;
-  box-shadow: 0 -0.25rem 0 currentColor, 0 0.25rem 0 currentColor;
+  background:
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.0625rem / 0.875rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.34375rem / 0.5625rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.625rem / 0.875rem 0.125rem no-repeat;
   content: "";
   flex: 0 0 auto;
-  height: 0.125rem;
+  height: 0.8125rem;
   opacity: 0.88;
-  width: 0.8125rem;
+  width: 1rem;
 }
 
 .history-drawer .session-item-active .session-item-row {
@@ -3686,13 +3691,14 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 .sidepanel-history-more-action::before {
-  color: currentColor;
-  content: "…";
-  flex: 0 0 0.8125rem;
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
+  background:
+    radial-gradient(circle, currentColor 0 0.09375rem, transparent 0.1rem) left 0.0625rem center / 0.25rem 0.25rem no-repeat,
+    radial-gradient(circle, currentColor 0 0.09375rem, transparent 0.1rem) left 0.375rem center / 0.25rem 0.25rem no-repeat,
+    radial-gradient(circle, currentColor 0 0.09375rem, transparent 0.1rem) left 0.6875rem center / 0.25rem 0.25rem no-repeat;
+  content: "";
+  flex: 0 0 1rem;
+  height: 0.8125rem;
+  opacity: 0.9;
 }
 
 .sidepanel-history-more-action::after {
