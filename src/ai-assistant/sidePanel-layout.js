@@ -112,6 +112,9 @@ const PROMPT_EDITOR_SELECTOR =
 // 连续输入在这个静默窗口内合并为一个撤销步，符合常规编辑器手感。
 const PROMPT_UNDO_COALESCE_MS = 350;
 const PROMPT_UNDO_HISTORY_LIMIT = 200;
+// 长用户消息默认收起，避免一条大段 prompt 把对话区顶满；助手回复不默认折叠。
+const LONG_USER_MESSAGE_CHAR_THRESHOLD = 420;
+const LONG_USER_MESSAGE_LINE_THRESHOLD = 8;
 let promptUndoEditor = null;
 let promptUndoStack = [];
 let promptRedoStack = [];
@@ -141,6 +144,7 @@ function scheduleEnhancement() {
       enhanceModelSelectDisplay,
       enhanceSendButton,
       syncAssistantStatus,
+      syncLongMessageDisclosure,
       positionMessagePopovers,
       syncMessageScrollState,
       enhanceHistoryDrawer,
@@ -1143,6 +1147,76 @@ function resetPositionedPopover(popover) {
   popover.style.left = "";
   popover.style.top = "";
   popover.style.width = "";
+}
+
+function syncLongMessageDisclosure() {
+  for (const wrap of document.querySelectorAll(
+    ".message-row-user .message-bubble-wrap",
+  )) {
+    const bubble = wrap.querySelector(".message-bubble");
+    if (!(bubble instanceof HTMLElement)) {
+      continue;
+    }
+
+    const text = bubble.textContent ?? "";
+    const lineCount = text.split(/\r\n|\r|\n/).length;
+    const shouldCollapse =
+      text.trim().length > LONG_USER_MESSAGE_CHAR_THRESHOLD ||
+      lineCount > LONG_USER_MESSAGE_LINE_THRESHOLD;
+    let button = wrap.querySelector(":scope > .message-long-toggle");
+
+    if (!shouldCollapse) {
+      wrap.classList.remove(
+        "message-bubble-wrap-long",
+        "message-bubble-wrap-expanded",
+      );
+      delete wrap.dataset.longExpanded;
+      button?.remove();
+      continue;
+    }
+
+    wrap.classList.add("message-bubble-wrap-long");
+    if (!wrap.dataset.longExpanded) {
+      wrap.dataset.longExpanded = "false";
+    }
+
+    if (!bubble.id) {
+      bubble.id = `sidepanel-message-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+    }
+
+    if (!(button instanceof HTMLButtonElement)) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "message-long-toggle";
+      button.setAttribute("aria-controls", bubble.id);
+      button.addEventListener("click", () => {
+        setLongMessageExpanded(
+          wrap,
+          wrap.dataset.longExpanded !== "true",
+        );
+      });
+      const action = wrap.querySelector(":scope > .message-regenerate-action");
+      wrap.insertBefore(button, action || null);
+    } else if (button.getAttribute("aria-controls") !== bubble.id) {
+      button.setAttribute("aria-controls", bubble.id);
+    }
+
+    setLongMessageExpanded(wrap, wrap.dataset.longExpanded === "true");
+  }
+}
+
+function setLongMessageExpanded(wrap, expanded) {
+  wrap.dataset.longExpanded = String(expanded);
+  wrap.classList.toggle("message-bubble-wrap-expanded", expanded);
+  const button = wrap.querySelector(":scope > .message-long-toggle");
+  if (button instanceof HTMLButtonElement) {
+    const label = expanded ? "收起" : "展开全文";
+    button.textContent = label;
+    button.setAttribute("aria-expanded", String(expanded));
+    button.setAttribute("title", label);
+  }
 }
 
 function syncMessageScrollState() {
