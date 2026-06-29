@@ -31,8 +31,8 @@
 
   --ink-primary: #533a24;
   --ink-secondary: #7a5f45;
-  --ink-tertiary: #9c8062;
-  --ink-soft: #b39574;
+  --ink-tertiary: #7d6242;
+  --ink-soft: #7d6242;
   --ink-on-accent: #6a4622;
   --ink-note-badge: #8a6b47;
 
@@ -53,9 +53,9 @@
   --accent-leaf: #95ba88;
   --accent-blueberry: #90a9d8;
 
-  --focus-ring: rgba(224, 154, 88, 0.38);
-  --danger-ink: #c86464;
-  --success-ink: #6e9b62;
+  --focus-ring: rgba(168, 91, 48, 0.46);
+  --danger-ink: #a83f3f;
+  --success-ink: #4f7a43;
 
   --shadow-shell: 0 20px 44px rgba(151, 112, 66, 0.1);
   --shadow-card: 0 10px 24px rgba(151, 112, 66, 0.1);

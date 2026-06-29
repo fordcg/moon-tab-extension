@@ -276,8 +276,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   color: var(--ink-tertiary);
   font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 #search-target-label {
@@ -314,7 +313,7 @@ body.is-ai-search-activating .ai-toggle-icon {
 }
 
 .outline-search-form input::placeholder {
-  color: #b28f68;
+  color: var(--ink-soft);
 }
 
 .outline-search-form input:focus {
@@ -363,8 +362,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   font-size: 0.73rem;
   font-weight: 700;
   line-height: 1.4;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .outline-search-form {
@@ -473,6 +471,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 0.75rem;
   width: 100%;
   margin-top: 0.16rem;
@@ -486,6 +485,7 @@ body.is-ai-search-activating .ai-toggle-icon {
   color: var(--ink-tertiary);
   font-size: 0.86rem;
   line-height: 1.4;
+  flex: 0 0 auto;
 }
 
 .ai-search-indicator[data-state="off"] {
@@ -511,16 +511,12 @@ body.is-ai-search-activating .ai-toggle-icon {
 
 .ai-search-indicator[data-state="searching"],
 .ai-search-indicator[data-state="activating"] {
-  color: #b77352;
+  color: #8f552f;
 }
 
 .ai-search-indicator[data-state="searching"] .ai-search-indicator-dot,
 .ai-search-indicator[data-state="activating"] .ai-search-indicator-dot {
   background: var(--accent-apricot);
-}
-
-body:not(.is-search-ready) .outline-search-form input {
-  opacity: 0;
 }
 
 .outline-search-frame:focus-within {
@@ -536,7 +532,8 @@ body:not(.is-search-ready) .outline-search-form input {
   margin-inline: auto;
 }
 
-.search-status {
-  width: min(100%, 860px);
-  margin-inline: auto;
+.search-ai-status-line .search-status {
+  flex: 1 1 240px;
+  width: auto;
+  margin: 0;
 }

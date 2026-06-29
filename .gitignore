@@ -1,8 +1,13 @@
 .edge-profile*/
 *-temp.json
 *.log
+*.artifact.json
 .superpowers/
-.tmp/pw-debug-profile/
-.tmp/*.png
+.tmp/
+.impeccable/
+.od-skills/
+browser/
+__pycache__/
+*.pyc
 tmp/
 .worktrees/

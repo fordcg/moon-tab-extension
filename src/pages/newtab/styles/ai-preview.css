@@ -105,8 +105,7 @@ body.is-ai-search-activating .ai-loading-overlay {
   color: var(--ink-secondary);
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .ai-search-preview-intent {
@@ -153,8 +152,7 @@ body.is-ai-search-activating .ai-loading-overlay {
   font-size: 0.74rem;
   font-weight: 700;
   line-height: 1.4;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .ai-search-preview-target {
@@ -170,9 +168,48 @@ body.is-ai-search-activating .ai-loading-overlay {
   margin-top: 0.94rem;
 }
 
+.ai-search-preview-websites {
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.ai-search-preview-related-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.76rem 0.92rem;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
+  list-style: none;
+}
+
+.ai-search-preview-related-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-search-preview-related-summary::after {
+  content: "展开";
+  color: var(--ink-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ai-search-preview-websites[open] .ai-search-preview-related-summary::after {
+  content: "收起";
+}
+
+.ai-search-preview-related-summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--focus-ring);
+}
+
 .ai-search-preview-websites-list {
   display: grid;
   gap: 0.7rem;
+  padding: 0 0.92rem 0.92rem;
 }
 
 .ai-search-preview-website-card {
@@ -224,6 +261,14 @@ body.is-ai-search-activating .ai-loading-overlay {
   gap: 0.6rem;
 }
 
+.ai-search-preview-actions .ai-search-preview-button:not(.ai-search-preview-button-secondary) {
+  flex: 1 1 220px;
+}
+
+.ai-search-preview-button-secondary {
+  flex: 0 1 auto;
+}
+
 .settings-save-button,
 .settings-secondary-button,
 .ai-search-preview-button,
@@ -233,6 +278,9 @@ body.is-ai-search-activating .ai-loading-overlay {
   min-height: 44px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   font-weight: 700;
   cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
@@ -246,8 +294,7 @@ body.is-ai-search-activating .ai-loading-overlay {
 }
 
 .settings-save-button,
-.ai-search-preview-button,
-.ai-search-preview-website-button {
+.ai-search-preview-actions .ai-search-preview-button:not(.ai-search-preview-button-secondary) {
   background: linear-gradient(180deg, #ffd788 0%, #f1bf6b 100%);
   border-color: #e0b05f;
   color: var(--ink-on-accent);
@@ -257,7 +304,8 @@ body.is-ai-search-activating .ai-loading-overlay {
 
 .settings-secondary-button,
 .ai-search-preview-button-secondary,
-.ai-search-preview-suggestion {
+.ai-search-preview-suggestion,
+.ai-search-preview-website-button {
   background: #fff8ec;
   border-color: var(--line-soft);
   color: var(--ink-secondary);
@@ -274,14 +322,14 @@ body.is-ai-search-activating .ai-loading-overlay {
 }
 
 .settings-save-button:hover,
-.ai-search-preview-button:hover,
-.ai-search-preview-website-button:hover {
+.ai-search-preview-actions .ai-search-preview-button:not(.ai-search-preview-button-secondary):hover {
   box-shadow: 0 12px 18px rgba(201, 153, 76, 0.22);
 }
 
 .settings-secondary-button:hover,
 .ai-search-preview-button-secondary:hover,
-.ai-search-preview-suggestion:hover {
+.ai-search-preview-suggestion:hover,
+.ai-search-preview-website-button:hover {
   background: #fff1d3;
   border-color: var(--line-mid);
 }

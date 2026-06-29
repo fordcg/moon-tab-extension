@@ -10,12 +10,7 @@ export const createStartupController = ({ elements, callbacks, config }) => {
   } = config;
 
   const applySearchReadyState = () => {
-    if (searchInput instanceof HTMLInputElement) {
-      searchInput.disabled = false;
-      searchInput.removeAttribute("aria-disabled");
-    }
-
-    document.body.classList.add("is-search-ready");
+    document.body.classList.remove("is-search-enhancing");
     window.requestAnimationFrame(() => {
       focusSearchInputIfIdle();
     });
@@ -112,7 +107,7 @@ export const createStartupController = ({ elements, callbacks, config }) => {
 
   const handleResize = () => {
     const length = syncSearchOutline();
-    if (document.body.classList.contains("is-search-ready") && length) {
+    if (!document.body.classList.contains("is-search-enhancing") && length) {
       setOutlineComplete();
     }
   };
