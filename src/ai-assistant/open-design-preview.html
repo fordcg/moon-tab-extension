@@ -22,7 +22,7 @@
   --sidepanel-control-hover: #eaf0f9;
   --sidepanel-row-hover: #dfe4ed;
   /* 共享行 hover 灰：标签页弹窗 / 设置 tab / 次按钮统一引用，避免散落硬编码 hex。 */
-  --sidepanel-surface: #f7f9fc;
+  --sidepanel-surface: #f0f4f9;
   --sidepanel-surface-line: #dfe5ef;
   --sidepanel-danger: #c0453f;
   --sidepanel-danger-deep: #a23a35;
@@ -31,6 +31,11 @@
   --sidepanel-code-ink: #f7f9fc;
   --sidepanel-focus-ring: rgb(20 95 215 / 24%);
   --sidepanel-shadow: 0 8px 24px rgb(31 41 55 / 8%);
+  --sidepanel-popover-right: 0.75rem;
+  --sidepanel-popover-width: min(20.9375rem, calc(100vw - 1.5rem));
+  --sidepanel-history-compact-max-height: min(26rem, calc(100dvh - 5rem));
+  --sidepanel-history-expanded-height: min(31.25rem, calc(100dvh - 5rem));
+  --sidepanel-settings-dialog-height: min(23.5rem, calc(100dvh - 5rem));
 }
 
 html,
@@ -560,13 +565,13 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   background: var(--sidepanel-canvas);
   gap: 0.875rem;
   overflow-x: hidden;
-  padding: 4.25rem 1rem 1.125rem;
+  padding: 3.5rem 1rem 1.125rem;
   scrollbar-color: color-mix(in srgb, var(--sidepanel-muted) 48%, transparent) transparent;
   scrollbar-gutter: stable;
 }
 
 .message-list-empty-enhanced {
-  padding: 4.25rem 1.5rem 5.5rem;
+  padding: 3.5rem 1.5rem 4.75rem;
 }
 
 .message-list-thinking {
@@ -587,7 +592,7 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 
 .message-list:not(.message-list-empty-enhanced):has(> .ui-muted:only-child) {
   justify-content: flex-end;
-  padding: 4.25rem 1.5rem 5.5rem;
+  padding: 3.5rem 1.5rem 4.75rem;
 }
 
 .message-list:not(.message-list-empty-enhanced) > .ui-muted:only-child {
@@ -630,6 +635,25 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   display: grid;
   gap: 0.75rem;
   justify-items: start;
+}
+
+.sidepanel-empty-notice {
+  background: #fff7f2;
+  border: 1px solid #f0d8cf;
+  border-radius: 0.75rem;
+  color: #8b4a3d;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.45;
+  max-width: 100%;
+  padding: 0.625rem 0.75rem;
+}
+
+.sidepanel-empty-notice a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
 }
 
 .sidepanel-suggestion {
@@ -944,7 +968,7 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   align-items: center;
   display: flex;
   gap: 0.25rem;
-  min-height: 2rem;
+  min-height: 2.25rem;
   position: relative;
 }
 
@@ -953,8 +977,8 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 }
 
 .message-row-user .message-regenerate-action-user {
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.72;
+  pointer-events: auto;
   transition: opacity 160ms ease-out;
 }
 
@@ -974,14 +998,14 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   border-radius: 0.5rem;
   color: var(--sidepanel-muted);
   display: grid;
-  height: 2rem;
+  height: 2.25rem;
   padding: 0;
   place-items: center;
   transition:
     background-color 140ms ease-out,
     color 140ms ease-out,
     opacity 140ms ease-out;
-  width: 2rem;
+  width: 2.25rem;
 }
 
 .message-icon-button:hover {
@@ -1064,7 +1088,18 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   color: var(--sidepanel-ink);
   font-size: 0.8125rem;
   line-height: 1.45;
+  max-width: calc(100vw - 1.5rem);
   padding: 0.75rem;
+}
+
+.sidepanel-positioned-popover {
+  bottom: auto !important;
+  max-height: min(70dvh, calc(100dvh - 6rem));
+  overflow: auto;
+  position: fixed !important;
+  right: auto !important;
+  transform: none !important;
+  z-index: 44;
 }
 
 .message-regenerate-popover p {
@@ -1079,7 +1114,7 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 
 .message-regenerate-cancel,
 .message-regenerate-confirm {
-  min-height: 2rem;
+  min-height: 2.25rem;
   padding: 0.25rem 0.625rem;
 }
 
@@ -1146,9 +1181,9 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   font-size: 0.8125rem;
   line-height: 1.35;
   max-width: 100%;
-  min-height: 1.75rem;
+  min-height: 2rem;
   overflow-wrap: anywhere;
-  padding: 0.1875rem 0.625rem;
+  padding: 0.25rem 0.625rem;
   transition:
     background-color 140ms ease-out,
     border-color 140ms ease-out,
@@ -1168,8 +1203,10 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 }
 
 .message-tool-call-popover {
+  left: 0;
   top: calc(100% + 0.375rem);
-  width: min(82vw, 28rem);
+  transform: none;
+  width: min(calc(100vw - 2rem), 28rem);
 }
 
 .message-tool-call-popover dl,
@@ -1198,8 +1235,10 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   margin: 0.5rem 0 0;
   max-height: 12rem;
   max-width: 100%;
+  overflow-wrap: anywhere;
   overflow: auto;
   padding: 0.625rem;
+  white-space: pre-wrap;
 }
 
 .message-thinking,
@@ -1310,8 +1349,16 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   background: var(--sidepanel-canvas);
   border: 1px solid var(--sidepanel-line);
   border-radius: 0.5rem;
-  height: 100%;
+  flex: 0 0 4rem;
+  height: 4rem;
   overflow: hidden;
+  padding: 0;
+  width: 4rem;
+}
+
+.message-image-preview-strip .image-preview-thumb img {
+  height: 100%;
+  object-fit: cover;
   width: 100%;
 }
 
@@ -2424,6 +2471,11 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   scrollbar-width: thin;
 }
 
+.chat-warning.sidepanel-warning-inline-hidden,
+.chat-failure.sidepanel-warning-inline-hidden {
+  display: none;
+}
+
 .chat-warning::selection,
 .chat-failure::selection {
   background: color-mix(in srgb, #8b4a3d 18%, transparent);
@@ -2437,21 +2489,20 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
 }
 
 .drawer-panel.history-drawer {
-  /* 近期对话抽屉底色：独立淡蓝底 #f0f4f9，不走共享 --sidepanel-surface，避免与设置弹窗等浮层耦合。 */
-  background: #f0f4f9;
+  background: var(--sidepanel-surface);
   border: 1px solid var(--sidepanel-surface-line);
   border-left: 1px solid var(--sidepanel-surface-line);
   border-radius: 0.875rem;
   box-shadow:
-    0 14px 34px rgb(31 41 55 / 16%),
-    0 2px 8px rgb(31 41 55 / 8%);
-  height: min(23.5rem, calc(100dvh - 5rem));
-  max-height: min(23.5rem, calc(100dvh - 5rem));
+    0 8px 18px rgb(31 41 55 / 24%),
+    0 2px 6px rgb(31 41 55 / 18%);
+  /* 近期菜单高度随 5 条对话 + 更多/底部动作自适应，展开页再单独增高。 */
+  max-height: var(--sidepanel-history-compact-max-height);
   overflow: hidden;
   padding: 0.625rem 0;
-  right: 1.5rem;
+  right: var(--sidepanel-popover-right);
   top: 3.875rem;
-  width: min(22.5rem, calc(100vw - 1.5rem));
+  width: var(--sidepanel-popover-width);
 }
 
 body:has(.drawer-panel.history-drawer) .dialog-overlay {
@@ -2497,25 +2548,25 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   border-radius: 0.875rem !important;
   bottom: auto !important;
   box-shadow:
-    0 14px 34px rgb(31 41 55 / 16%),
-    0 2px 8px rgb(31 41 55 / 8%) !important;
+    0 8px 18px rgb(31 41 55 / 24%),
+    0 2px 6px rgb(31 41 55 / 18%) !important;
   color: var(--sidepanel-ink) !important;
   display: flex !important;
   flex-direction: column;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif !important;
   gap: 0 !important;
   left: auto !important;
-  height: min(23.5rem, calc(100dvh - 5rem)) !important;
-  max-height: min(23.5rem, calc(100dvh - 5rem)) !important;
-  max-width: min(22.5rem, calc(100vw - 1.5rem)) !important;
+  height: var(--sidepanel-settings-dialog-height) !important;
+  max-height: var(--sidepanel-settings-dialog-height) !important;
+  max-width: var(--sidepanel-popover-width) !important;
   min-height: 0;
   overflow: hidden !important;
   padding: 0 !important;
   pointer-events: auto;
   position: fixed !important;
-  right: 1.5rem !important;
+  right: var(--sidepanel-popover-right) !important;
   top: 3.875rem !important;
-  width: min(22.5rem, calc(100vw - 1.5rem)) !important;
+  width: var(--sidepanel-popover-width) !important;
   z-index: 50 !important;
 }
 
@@ -3357,11 +3408,14 @@ body:has(.model-settings-dialog) .dialog-overlay {
   flex-direction: column;
 }
 
+.drawer-panel.history-drawer.is-history-expanded {
+  height: var(--sidepanel-history-expanded-height);
+  max-height: var(--sidepanel-history-expanded-height);
+  padding: 0.375rem 0 0.625rem;
+}
+
 .drawer-panel.history-drawer .drawer-header {
-  align-items: center;
-  display: flex;
-  min-height: 2.25rem;
-  padding: 0 1rem 0.375rem;
+  display: none;
 }
 
 .drawer-panel.history-drawer .drawer-icon-button {
@@ -3373,11 +3427,30 @@ body:has(.model-settings-dialog) .dialog-overlay {
   min-height: 0;
 }
 
+.drawer-panel.history-drawer:not(.is-history-expanded) .history-dialog-body {
+  flex: 0 0 auto;
+}
+
 .drawer-panel.history-drawer .history-dialog-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 0;
+  scrollbar-width: none;
+}
+
+.drawer-panel.history-drawer .history-dialog-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.drawer-panel.history-drawer.is-history-expanded .history-dialog-body {
+  overflow: hidden;
+}
+
+.drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll {
+  height: 100%;
+  overflow: auto;
+  padding-right: 0.875rem;
 }
 
 .history-drawer .session-list-compact {
@@ -3388,6 +3461,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
   min-height: 0;
   padding: 0;
   transform: none;
+  width: 100%;
 }
 
 .history-drawer .session-list-header,
@@ -3402,6 +3476,11 @@ body:has(.model-settings-dialog) .dialog-overlay {
   overflow: visible;
 }
 
+.history-drawer.is-history-expanded .session-list-scroll,
+.history-drawer.is-history-expanded .session-folder-stack-scroll {
+  overflow: visible;
+}
+
 .history-drawer .session-folder-stack,
 .history-drawer .session-folder,
 .history-drawer .session-item-stack {
@@ -3411,10 +3490,10 @@ body:has(.model-settings-dialog) .dialog-overlay {
 
 .history-drawer .session-empty {
   color: #7c8795;
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
-  min-height: 2.5rem;
-  padding: 0.5rem 1rem 0.5rem 4.125rem;
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+  min-height: 2.3125rem;
+  padding: 0.5rem 0.9375rem 0.5rem 3.875rem;
 }
 
 .history-drawer .session-item {
@@ -3429,9 +3508,9 @@ body:has(.model-settings-dialog) .dialog-overlay {
   align-items: center;
   color: #24272d;
   display: flex;
-  gap: 0.875rem;
-  min-height: 2.5rem;
-  padding: 0 1rem;
+  gap: 0.8125rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
 }
 
 .history-drawer .session-item-row:hover {
@@ -3446,21 +3525,19 @@ body:has(.model-settings-dialog) .dialog-overlay {
   flex: 0 0 auto;
   height: 0.125rem;
   opacity: 0.88;
-  width: 0.875rem;
+  width: 0.8125rem;
 }
 
 .history-drawer .session-item-active .session-item-row {
-  background: #e4eaf3;
-  outline: 1px solid var(--sidepanel-blue);
-  outline-offset: -1px;
+  background: #e6e8eb;
 }
 
 .history-drawer .session-title-button {
   color: inherit;
   flex: 1 1 auto;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 400;
-  line-height: 1.5rem;
+  line-height: 1.375rem;
   min-width: 0;
 }
 
@@ -3546,6 +3623,143 @@ body:has(.model-settings-dialog) .dialog-overlay {
   color: #fff;
 }
 
+.sidepanel-history-more-header {
+  display: none;
+}
+
+.history-drawer.is-history-expanded .sidepanel-history-more-header {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 2.5rem;
+  padding: 0 0.9375rem 0.25rem;
+}
+
+.sidepanel-history-back {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #24272d;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.5rem;
+  min-height: 2rem;
+  padding: 0 0.375rem;
+}
+
+.sidepanel-history-back::before {
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  content: "";
+  height: 0.5rem;
+  transform: rotate(-45deg);
+  width: 0.5rem;
+}
+
+.sidepanel-history-back:hover,
+.sidepanel-history-back:focus-visible {
+  background: #e9eef6;
+  outline: 0;
+}
+
+.sidepanel-history-back:focus-visible,
+.sidepanel-history-more-action:focus-visible {
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--sidepanel-blue) 24%, transparent);
+}
+
+.sidepanel-history-hidden-compact {
+  display: none !important;
+}
+
+.sidepanel-history-more-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #24272d;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.8125rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
+  text-align: left;
+  width: 100%;
+}
+
+.sidepanel-history-more-action:hover {
+  background: #e9eef6;
+}
+
+.sidepanel-history-more-action::before {
+  color: currentColor;
+  content: "…";
+  flex: 0 0 0.8125rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.sidepanel-history-more-action::after {
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  content: "";
+  height: 0.5rem;
+  margin-left: auto;
+  transform: rotate(45deg);
+  width: 0.5rem;
+}
+
+.history-drawer.is-history-expanded .sidepanel-history-more-action,
+.history-drawer.is-history-expanded .sidepanel-drawer-footer {
+  display: none;
+}
+
+.sidepanel-history-scrollbar {
+  bottom: 0.75rem;
+  position: absolute;
+  right: 0.25rem;
+  top: 3.25rem;
+  width: 0.8125rem;
+  z-index: 3;
+}
+
+.sidepanel-history-scrollbar::before {
+  background: #dfe6f0;
+  border-radius: 999px;
+  bottom: 0.25rem;
+  content: "";
+  left: 50%;
+  position: absolute;
+  top: 0.25rem;
+  transform: translateX(-50%) rotate(0.35deg);
+  width: 0.5625rem;
+}
+
+.sidepanel-history-scrollbar-thumb {
+  background: #c4cedd;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 55%),
+    0 1px 2px rgb(31 41 55 / 10%);
+  cursor: grab;
+  left: 50%;
+  min-height: 1.875rem;
+  position: absolute;
+  transform: translateX(-50%) rotate(-0.5deg);
+  width: 0.5625rem;
+}
+
+.sidepanel-history-scrollbar-thumb.is-dragging {
+  background: #aeb9c9;
+  cursor: grabbing;
+}
+
 .sidepanel-drawer-footer {
   border-top: 1px solid #d7dee8;
   display: grid;
@@ -3562,11 +3776,11 @@ body:has(.model-settings-dialog) .dialog-overlay {
   color: #24272d;
   cursor: pointer;
   display: flex;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 400;
-  gap: 0.875rem;
-  min-height: 2.5rem;
-  padding: 0 1rem;
+  gap: 0.8125rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
   text-align: left;
   width: 100%;
 }
@@ -3592,12 +3806,12 @@ body:has(.model-settings-dialog) .dialog-overlay {
 .sidepanel-drawer-action svg {
   fill: none;
   flex: 0 0 auto;
-  height: 1.25rem;
+  height: 1.1875rem;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2px;
-  width: 1.25rem;
+  width: 1.1875rem;
 }
 
 .sidepanel-drawer-action > span:first-of-type {
@@ -3607,8 +3821,8 @@ body:has(.model-settings-dialog) .dialog-overlay {
 .sidepanel-drawer-action-status {
   color: var(--sidepanel-muted);
   flex: 0 0 auto;
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
+  font-size: 0.765625rem;
+  line-height: 1.1875rem;
   margin-left: auto;
   white-space: nowrap;
 }
@@ -3978,6 +4192,34 @@ body:has(.model-settings-dialog) .dialog-overlay {
   white-space: pre-wrap;
 }
 
+@media (hover: none), (pointer: coarse) {
+  .message-regenerate-action {
+    min-height: 2.75rem;
+  }
+
+  .message-icon-button {
+    height: 2.75rem;
+    width: 2.75rem;
+  }
+
+  .message-tool-call-collapse-toggle,
+  .message-tool-call-trigger {
+    min-height: 2.75rem;
+    padding-inline: 0.875rem;
+  }
+
+  .message-regenerate-popover .message-regenerate-cancel,
+  .message-regenerate-popover .message-regenerate-confirm {
+    min-height: 2.75rem !important;
+    padding-inline: 0.875rem !important;
+  }
+
+  .message-row-user .message-regenerate-action-user {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 @media (width <= 520px) {
   .chat-model-row {
     right: 5.5rem;
@@ -3990,7 +4232,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
   }
 
   .message-list-empty-enhanced {
-    padding-bottom: 4.5rem;
+    padding-bottom: 4rem;
   }
 
   .sidepanel-empty-hello {
@@ -4003,6 +4245,27 @@ body:has(.model-settings-dialog) .dialog-overlay {
 
   .sidepanel-suggestion {
     font-size: 0.875rem;
+  }
+
+  .message-regenerate-action {
+    min-height: 2.75rem;
+  }
+
+  .message-icon-button {
+    height: 2.75rem;
+    width: 2.75rem;
+  }
+
+  .message-tool-call-collapse-toggle,
+  .message-tool-call-trigger {
+    min-height: 2.75rem;
+    padding-inline: 0.875rem;
+  }
+
+  .message-regenerate-popover .message-regenerate-cancel,
+  .message-regenerate-popover .message-regenerate-confirm {
+    min-height: 2.75rem !important;
+    padding-inline: 0.875rem !important;
   }
 
   .context-strip {
@@ -4067,6 +4330,22 @@ body:has(.model-settings-dialog) .dialog-overlay {
   animation: sidepanel-slide-in-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+.drawer-panel.history-drawer.is-history-page-out-left > :not(.sidepanel-history-scrollbar) {
+  animation: sidepanel-slide-out-left 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.drawer-panel.history-drawer.is-history-page-in-right > :not(.sidepanel-history-scrollbar) {
+  animation: sidepanel-slide-in-from-right 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.drawer-panel.history-drawer.is-history-page-out-right > :not(.sidepanel-history-scrollbar) {
+  animation: sidepanel-slide-out-right 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.drawer-panel.history-drawer.is-history-page-in-left > :not(.sidepanel-history-scrollbar) {
+  animation: sidepanel-slide-in-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 .settings-dialog.is-slide-out-right > * {
   animation: sidepanel-slide-out-right 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
@@ -4078,6 +4357,10 @@ body:has(.model-settings-dialog) .dialog-overlay {
 @media (prefers-reduced-motion: reduce) {
   .drawer-panel.history-drawer.is-slide-out-left > *,
   .drawer-panel.history-drawer.is-slide-in-from-left > *,
+  .drawer-panel.history-drawer.is-history-page-out-left > :not(.sidepanel-history-scrollbar),
+  .drawer-panel.history-drawer.is-history-page-in-right > :not(.sidepanel-history-scrollbar),
+  .drawer-panel.history-drawer.is-history-page-out-right > :not(.sidepanel-history-scrollbar),
+  .drawer-panel.history-drawer.is-history-page-in-left > :not(.sidepanel-history-scrollbar),
   .settings-dialog.is-slide-out-right > *,
   .settings-dialog.is-slide-in-from-right > * {
     animation-duration: 0.01ms;
@@ -4100,7 +4383,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
     transition-duration: 0.01ms;
   }
 }
-    </style>
+</style>
     <script data-open-design-inline="preview-chrome-mock.js">
 (() => {
   const existingChrome = globalThis.chrome;
@@ -31608,6 +31891,7 @@ const IS_FLOATING_FRAME =
 // 模型下拉占位文案。enhanceModelSelectDisplay 与 renderModelSelectMenu 共用，
 // 避免两处各写一份字面量、改文案时过滤失效让占位项混进可选列表。
 const MODEL_PLACEHOLDER_TEXT = "未选择模型";
+const RECENT_HISTORY_COMPACT_LIMIT = 5;
 
 let scheduled = false;
 let globalHandlersBound = false;
@@ -31640,10 +31924,27 @@ let dialogSelectionSyncPending = false;
 let pendingSlideIntent = null;
 // 抽屉 ↔ 设置切换进行中标记：防止 Escape + 外部点击 / 连点触发重复切换。
 let slideInProgress = false;
+let historyMoreTransitionInFlight = false;
 const SETTINGS_BACKGROUND_SNAPSHOT_CLASS = "settings-dialog-background-snapshot";
 let newConversationRequestInFlight = false;
 let floatingRequestInFlight = false;
 let floatingToastTimer = null;
+
+// 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
+// textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
+// 一份独立的文本快照历史，拦截 Ctrl/Cmd+Z 与 Ctrl/Cmd+Shift+Z / Ctrl+Y，
+// 通过派发 input 事件把值回灌进 React，保证撤销可靠。
+const PROMPT_EDITOR_SELECTOR =
+  '.prompt-inline-editor-text[contenteditable="true"]';
+// 连续输入在这个静默窗口内合并为一个撤销步，符合常规编辑器手感。
+const PROMPT_UNDO_COALESCE_MS = 350;
+const PROMPT_UNDO_HISTORY_LIMIT = 200;
+let promptUndoEditor = null;
+let promptUndoStack = [];
+let promptRedoStack = [];
+let promptUndoBaseline = "";
+let promptUndoBurstTimer = null;
+let promptUndoApplying = false;
 
 document.body?.classList.toggle("sidepanel-floating-frame", IS_FLOATING_FRAME);
 
@@ -31660,12 +31961,14 @@ function scheduleEnhancement() {
       enhanceComposerTools,
       enhanceComposerAddTab,
       enhanceComposerFooter,
+      enhancePromptUndo,
       syncToolsA11y,
       enhanceNewConversationButton,
       enhanceFloatingWindowButton,
       enhanceModelSelectDisplay,
       enhanceSendButton,
       syncAssistantStatus,
+      positionMessagePopovers,
       enhanceHistoryDrawer,
       enhanceHistorySessionMenus,
       enhanceSettingsDialog,
@@ -31690,6 +31993,7 @@ function runEnhancer(enhancer) {
 function enhanceEmptyState() {
   const list = document.querySelector(".message-list");
   if (!list) {
+    showExternalChatNotices();
     return;
   }
 
@@ -31701,12 +32005,14 @@ function enhanceEmptyState() {
   if (hasMessages || busy || !emptyText) {
     existingState?.remove();
     list.classList.remove("message-list-empty-enhanced");
+    showExternalChatNotices();
     return;
   }
 
   list.classList.add("message-list-empty-enhanced");
 
   if (existingState) {
+    syncEmptyStateNotice(existingState);
     return;
   }
 
@@ -31739,8 +32045,41 @@ function enhanceEmptyState() {
     suggestions.append(button);
   }
 
-  state.append(copy, suggestions);
+  state.append(copy);
+  syncEmptyStateNotice(state);
+  state.append(suggestions);
   list.append(state);
+}
+
+function syncEmptyStateNotice(state) {
+  const noticeSource = document.querySelector(".chat-warning, .chat-failure");
+  let notice = state.querySelector(".sidepanel-empty-notice");
+  if (!noticeSource) {
+    notice?.remove();
+    showExternalChatNotices();
+    return;
+  }
+
+  noticeSource.classList.add("sidepanel-warning-inline-hidden");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.className = "sidepanel-empty-notice";
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    const suggestions = state.querySelector(".sidepanel-empty-suggestions");
+    state.insertBefore(notice, suggestions);
+  }
+
+  notice.classList.toggle("sidepanel-empty-notice-failure", noticeSource.matches(".chat-failure"));
+  notice.replaceChildren(...Array.from(noticeSource.childNodes, (node) => node.cloneNode(true)));
+}
+
+function showExternalChatNotices() {
+  for (const notice of document.querySelectorAll(
+    ".chat-warning.sidepanel-warning-inline-hidden, .chat-failure.sidepanel-warning-inline-hidden",
+  )) {
+    notice.classList.remove("sidepanel-warning-inline-hidden");
+  }
 }
 
 // 工具开关组改为“点击展开”：注入一个 tune 按钮，点击切换 .is-tools-open。
@@ -32497,6 +32836,78 @@ function syncAssistantStatus() {
   }
 }
 
+function positionMessagePopovers() {
+  for (const popover of document.querySelectorAll(".message-regenerate-popover")) {
+    const action = popover.closest(".message-regenerate-action");
+    if (!action) {
+      resetPositionedPopover(popover);
+      continue;
+    }
+    positionAnchoredPopover(popover, action, {
+      align: action.classList.contains("message-regenerate-action-user") ? "right" : "left",
+      maxWidth: 224,
+    });
+  }
+
+  for (const popover of document.querySelectorAll(".message-tool-call-popover")) {
+    const row = popover.closest(".message-tool-call-row");
+    const trigger = row?.querySelector(".message-tool-call-trigger");
+    if (!trigger) {
+      resetPositionedPopover(popover);
+      continue;
+    }
+    positionAnchoredPopover(popover, trigger, {
+      align: "left",
+      maxWidth: 448,
+    });
+  }
+}
+
+function positionAnchoredPopover(popover, anchor, options = {}) {
+  const viewportPadding = 12;
+  const gap = 6;
+  const anchorRect = anchor.getBoundingClientRect();
+  const composerTop =
+    document.querySelector(".chat-composer")?.getBoundingClientRect().top ??
+    window.innerHeight;
+  const bottomLimit = Math.max(viewportPadding, composerTop - 8);
+  const width = Math.max(
+    180,
+    Math.min(options.maxWidth ?? 448, window.innerWidth - viewportPadding * 2),
+  );
+
+  popover.classList.add("sidepanel-positioned-popover");
+  popover.style.width = `${width}px`;
+
+  let left =
+    options.align === "right" ? anchorRect.right - width : anchorRect.left;
+  left = Math.min(
+    Math.max(viewportPadding, left),
+    window.innerWidth - width - viewportPadding,
+  );
+
+  const popoverHeight = popover.getBoundingClientRect().height;
+  const belowTop = anchorRect.bottom + gap;
+  const aboveTop = anchorRect.top - popoverHeight - gap;
+  let top = belowTop;
+
+  if (belowTop + popoverHeight > bottomLimit && aboveTop >= viewportPadding) {
+    top = aboveTop;
+  } else if (belowTop + popoverHeight > bottomLimit) {
+    top = Math.max(viewportPadding, bottomLimit - popoverHeight);
+  }
+
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
+function resetPositionedPopover(popover) {
+  popover.classList.remove("sidepanel-positioned-popover");
+  popover.style.left = "";
+  popover.style.top = "";
+  popover.style.width = "";
+}
+
 function isAssistantBusy() {
   const button = document.querySelector(".composer-actions .ui-button-primary");
   return Boolean(
@@ -32622,7 +33033,12 @@ function enhanceHistoryDrawer() {
     pendingSlideIntent = null;
   }
 
-  drawer.querySelector(".history-dialog-title")?.replaceChildren("近期对话");
+  drawer.querySelector(".history-dialog-title")?.replaceChildren();
+  const mode = getHistoryDrawerMode(drawer);
+  syncHistoryDrawerMode(drawer, mode);
+  ensureHistoryMoreHeader(drawer);
+  syncHistoryCompactItems(drawer);
+  ensureHistoryMoreAction(drawer);
 
   let footer = drawer.querySelector(".sidepanel-drawer-footer");
   if (!footer || footer.dataset.variant !== "recent-menu") {
@@ -32644,6 +33060,257 @@ function enhanceHistoryDrawer() {
   }
 
   syncBrowserControlDrawerAction(drawer);
+  syncHistoryCustomScrollbar(drawer);
+}
+
+function getHistoryDrawerMode(drawer) {
+  return drawer.dataset.sidepanelHistoryMode === "expanded" ? "expanded" : "compact";
+}
+
+function syncHistoryDrawerMode(drawer, mode) {
+  drawer.dataset.sidepanelHistoryMode = mode;
+  drawer.classList.toggle("is-history-expanded", mode === "expanded");
+}
+
+function ensureHistoryMoreHeader(drawer) {
+  let header = drawer.querySelector(".sidepanel-history-more-header");
+  if (header) {
+    return header;
+  }
+
+  header = document.createElement("div");
+  header.className = "sidepanel-history-more-header";
+
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "sidepanel-history-back";
+  back.textContent = "返回";
+  back.setAttribute("aria-label", "返回近期对话菜单");
+  back.addEventListener("click", (event) => {
+    startHistoryModeTransition(drawer, "compact", event);
+  });
+
+  header.append(back);
+  const body = drawer.querySelector(".history-dialog-body");
+  drawer.insertBefore(header, body || drawer.firstChild);
+  return header;
+}
+
+function getHistorySessionItems(drawer) {
+  return Array.from(drawer.querySelectorAll(".history-dialog-scroll .session-item"));
+}
+
+function syncHistoryCompactItems(drawer) {
+  const expanded = getHistoryDrawerMode(drawer) === "expanded";
+  const items = getHistorySessionItems(drawer);
+  items.forEach((item, index) => {
+    item.classList.toggle(
+      "sidepanel-history-hidden-compact",
+      !expanded && index >= RECENT_HISTORY_COMPACT_LIMIT,
+    );
+  });
+}
+
+function ensureHistoryMoreAction(drawer) {
+  const body = drawer.querySelector(".history-dialog-body");
+  if (!body) {
+    return null;
+  }
+
+  const total = getHistorySessionItems(drawer).length;
+  let more = drawer.querySelector(".sidepanel-history-more-action");
+  if (total <= RECENT_HISTORY_COMPACT_LIMIT) {
+    more?.remove();
+    return null;
+  }
+
+  if (!more) {
+    more = document.createElement("button");
+    more.type = "button";
+    more.className = "sidepanel-history-more-action";
+    more.textContent = "更多";
+    more.setAttribute("aria-label", "查看更多近期对话");
+    more.addEventListener("click", (event) => {
+      startHistoryModeTransition(drawer, "expanded", event);
+    });
+  }
+
+  const scroll = drawer.querySelector(".history-dialog-scroll");
+  if (scroll?.parentElement === body && more.previousElementSibling !== scroll) {
+    scroll.after(more);
+  } else if (more.parentElement !== body) {
+    body.append(more);
+  }
+
+  more.hidden = getHistoryDrawerMode(drawer) === "expanded";
+  return more;
+}
+
+function startHistoryModeTransition(drawer, nextMode, triggerEvent = null) {
+  if (!drawer || historyMoreTransitionInFlight || getHistoryDrawerMode(drawer) === nextMode) {
+    return;
+  }
+
+  historyMoreTransitionInFlight = true;
+  const shouldMoveFocus = triggerEvent?.detail === 0;
+  const toExpanded = nextMode === "expanded";
+  const outClass = toExpanded ? "is-history-page-out-left" : "is-history-page-out-right";
+  const inClass = toExpanded ? "is-history-page-in-right" : "is-history-page-in-left";
+
+  drawer.classList.add(outClass);
+  waitForDrawerAnimation(drawer).then(() => {
+    drawer.classList.remove(outClass);
+    syncHistoryDrawerMode(drawer, nextMode);
+    syncHistoryCompactItems(drawer);
+    ensureHistoryMoreAction(drawer);
+    syncHistoryCustomScrollbar(drawer);
+    drawer.classList.add(inClass);
+    requestAnimationFrame(() => syncHistoryCustomScrollbar(drawer));
+
+    waitForDrawerAnimation(drawer).then(() => {
+      drawer.classList.remove(inClass);
+      historyMoreTransitionInFlight = false;
+      if (shouldMoveFocus) {
+        if (nextMode === "expanded") {
+          drawer.querySelector(".sidepanel-history-back")?.focus({ preventScroll: true });
+        } else {
+          drawer.querySelector(".sidepanel-history-more-action")?.focus({ preventScroll: true });
+        }
+      }
+      syncHistoryCustomScrollbar(drawer);
+    });
+  });
+}
+
+function waitForDrawerAnimation(drawer) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const done = () => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      drawer.removeEventListener("animationend", done, true);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 240);
+    drawer.addEventListener("animationend", done, true);
+  });
+}
+
+function getHistoryScrollTarget(drawer) {
+  return drawer.querySelector(".history-dialog-scroll");
+}
+
+function syncHistoryCustomScrollbar(drawer) {
+  const scroll = getHistoryScrollTarget(drawer);
+  const expanded = getHistoryDrawerMode(drawer) === "expanded";
+  let track = drawer.querySelector(".sidepanel-history-scrollbar");
+
+  if (!scroll || !expanded) {
+    if (track) {
+      track.hidden = true;
+    }
+    return;
+  }
+
+  let thumb = track?.querySelector(".sidepanel-history-scrollbar-thumb");
+  if (!track) {
+    track = document.createElement("div");
+    track.className = "sidepanel-history-scrollbar";
+    track.setAttribute("aria-hidden", "true");
+    thumb = document.createElement("div");
+    thumb.className = "sidepanel-history-scrollbar-thumb";
+    track.append(thumb);
+    drawer.append(track);
+  }
+
+  if (!scroll.dataset.sidepanelHistoryScrollbarBound) {
+    scroll.dataset.sidepanelHistoryScrollbarBound = "1";
+    scroll.addEventListener("scroll", () => updateHistoryScrollbar(drawer), {
+      passive: true,
+    });
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(() => updateHistoryScrollbar(drawer)).observe(scroll);
+    }
+  }
+
+  if (thumb && !track.dataset.sidepanelHistoryScrollbarBound) {
+    track.dataset.sidepanelHistoryScrollbarBound = "1";
+    bindHistoryScrollbarDrag(track, thumb, scroll, drawer);
+  }
+
+  requestAnimationFrame(() => updateHistoryScrollbar(drawer));
+}
+
+function updateHistoryScrollbar(drawer) {
+  const scroll = getHistoryScrollTarget(drawer);
+  const track = drawer.querySelector(".sidepanel-history-scrollbar");
+  const thumb = track?.querySelector(".sidepanel-history-scrollbar-thumb");
+  if (!scroll || !track || !thumb || getHistoryDrawerMode(drawer) !== "expanded") {
+    return;
+  }
+
+  const scrollHeight = scroll.scrollHeight;
+  const clientHeight = scroll.clientHeight;
+  if (scrollHeight <= clientHeight + 1) {
+    track.hidden = true;
+    return;
+  }
+
+  track.hidden = false;
+  const trackHeight = track.clientHeight;
+  const thumbHeight = Math.max(30, (clientHeight / scrollHeight) * trackHeight);
+  const maxScroll = scrollHeight - clientHeight;
+  const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+  const thumbTop = maxScroll > 0 ? (scroll.scrollTop / maxScroll) * maxThumbTop : 0;
+  thumb.style.height = `${thumbHeight}px`;
+  thumb.style.top = `${thumbTop}px`;
+}
+
+function bindHistoryScrollbarDrag(track, thumb, scroll, drawer) {
+  let dragging = false;
+  let startY = 0;
+  let startScrollTop = 0;
+
+  thumb.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    dragging = true;
+    startY = event.clientY;
+    startScrollTop = scroll.scrollTop;
+    thumb.setPointerCapture(event.pointerId);
+    thumb.classList.add("is-dragging");
+  });
+
+  thumb.addEventListener("pointermove", (event) => {
+    if (!dragging) {
+      return;
+    }
+    const trackRange = Math.max(1, track.clientHeight - thumb.offsetHeight);
+    const scrollRange = Math.max(1, scroll.scrollHeight - scroll.clientHeight);
+    const dy = event.clientY - startY;
+    scroll.scrollTop = startScrollTop + (dy / trackRange) * scrollRange;
+  });
+
+  const stopDrag = () => {
+    dragging = false;
+    thumb.classList.remove("is-dragging");
+  };
+  thumb.addEventListener("pointerup", stopDrag);
+  thumb.addEventListener("pointercancel", stopDrag);
+
+  track.addEventListener("pointerdown", (event) => {
+    if (event.target === thumb) {
+      return;
+    }
+    const rect = track.getBoundingClientRect();
+    const targetTop = event.clientY - rect.top - thumb.offsetHeight / 2;
+    const trackRange = Math.max(1, track.clientHeight - thumb.offsetHeight);
+    const scrollRange = Math.max(1, scroll.scrollHeight - scroll.clientHeight);
+    scroll.scrollTop = (targetTop / trackRange) * scrollRange;
+    updateHistoryScrollbar(drawer);
+  });
 }
 
 function enhanceHistorySessionMenus() {
@@ -34137,12 +34804,187 @@ function bindTabListeners() {
   chrome.windows?.onFocusChanged?.addListener(() => refreshTabsAndBanner());
 }
 
+// 绑定输入区撤销/重做历史。只绑一次，靠 dataset 标记防止 MutationObserver 反复
+// 重绑；React 重建 contenteditable 节点时重置并重新绑定。
+function enhancePromptUndo() {
+  const editor = document.querySelector(PROMPT_EDITOR_SELECTOR);
+  if (!editor) {
+    // 编辑器卸载（如切到空状态）时清理，避免悬挂引用与脏历史。
+    if (promptUndoEditor) {
+      resetPromptUndoState();
+    }
+    return;
+  }
+  if (editor === promptUndoEditor && editor.dataset.sidepanelUndoBound === "1") {
+    reconcilePromptBaseline();
+    return;
+  }
+  // 新的编辑器节点：重置历史并重新绑定。
+  resetPromptUndoState();
+  promptUndoEditor = editor;
+  promptUndoBaseline = editor.textContent ?? "";
+  editor.dataset.sidepanelUndoBound = "1";
+  editor.addEventListener("input", handlePromptInput);
+  editor.addEventListener("keydown", handlePromptUndoKeydown);
+}
+
+function resetPromptUndoState() {
+  clearTimeout(promptUndoBurstTimer);
+  promptUndoBurstTimer = null;
+  if (promptUndoEditor) {
+    promptUndoEditor.removeEventListener("input", handlePromptInput);
+    promptUndoEditor.removeEventListener("keydown", handlePromptUndoKeydown);
+    delete promptUndoEditor.dataset.sidepanelUndoBound;
+  }
+  promptUndoEditor = null;
+  promptUndoStack = [];
+  promptRedoStack = [];
+  promptUndoBaseline = "";
+  promptUndoApplying = false;
+}
+
+// React 在发送后等场景会直接重写 textContent（不触发 input 事件），导致 baseline
+// 漂移。无进行中的合并窗口且文本与 baseline 不符时，按外部重置处理，避免撤销恢复
+// 已发送内容。
+function reconcilePromptBaseline() {
+  if (promptUndoApplying || promptUndoBurstTimer) {
+    return;
+  }
+  const editor = promptUndoEditor;
+  if (!editor) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  if (current === promptUndoBaseline) {
+    return;
+  }
+  promptUndoStack = [];
+  promptRedoStack = [];
+  promptUndoBaseline = current;
+}
+
+function handlePromptInput() {
+  if (promptUndoApplying) {
+    return;
+  }
+  const editor = promptUndoEditor;
+  if (!editor) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  if (current === promptUndoBaseline) {
+    return;
+  }
+  // 新的编辑分支作废 redo。
+  promptRedoStack = [];
+  // 连续输入合并：静默窗口内只在起点压入一次 baseline，整段输入算一个撤销步。
+  if (promptUndoBurstTimer) {
+    clearTimeout(promptUndoBurstTimer);
+  } else {
+    pushPromptUndoSnapshot(promptUndoBaseline);
+  }
+  promptUndoBurstTimer = setTimeout(() => {
+    promptUndoBurstTimer = null;
+  }, PROMPT_UNDO_COALESCE_MS);
+  promptUndoBaseline = current;
+}
+
+function handlePromptUndoKeydown(event) {
+  const mod = event.ctrlKey || event.metaKey;
+  if (!mod || event.altKey) {
+    return;
+  }
+  const key = event.key.toLowerCase();
+  const isUndo = key === "z" && !event.shiftKey;
+  const isRedo = (key === "z" && event.shiftKey) || key === "y";
+  if (!isUndo && !isRedo) {
+    return;
+  }
+  // 拦截浏览器原生 undo，统一走我们维护的历史。
+  event.preventDefault();
+  event.stopPropagation();
+  if (isUndo) {
+    performPromptUndo();
+  } else {
+    performPromptRedo();
+  }
+}
+
+function pushPromptUndoSnapshot(value) {
+  promptUndoStack.push(value);
+  if (promptUndoStack.length > PROMPT_UNDO_HISTORY_LIMIT) {
+    promptUndoStack.shift();
+  }
+}
+
+function flushPromptBurst() {
+  if (promptUndoBurstTimer) {
+    clearTimeout(promptUndoBurstTimer);
+    promptUndoBurstTimer = null;
+  }
+}
+
+function performPromptUndo() {
+  flushPromptBurst();
+  const editor = promptUndoEditor;
+  if (!editor || promptUndoStack.length === 0) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  const previous = promptUndoStack.pop();
+  promptRedoStack.push(current);
+  applyPromptHistory(previous);
+}
+
+function performPromptRedo() {
+  flushPromptBurst();
+  const editor = promptUndoEditor;
+  if (!editor || promptRedoStack.length === 0) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  const next = promptRedoStack.pop();
+  pushPromptUndoSnapshot(current);
+  applyPromptHistory(next);
+}
+
+// 把历史值回灌进 React 受控编辑器：直接改 textContent 后派发 input 事件，让
+// onInput 同步 value。promptUndoApplying 防止该 input 被当成新编辑记录。
+function applyPromptHistory(value) {
+  const editor = promptUndoEditor;
+  if (!editor) {
+    return;
+  }
+  promptUndoApplying = true;
+  editor.focus();
+  editor.textContent = value;
+  promptUndoBaseline = value;
+  moveCaretToEnd(editor);
+  const event = new InputEvent("input", {
+    bubbles: true,
+    cancelable: true,
+    data: value,
+    inputType: value ? "insertText" : "deleteContentBackward",
+  });
+  editor.dispatchEvent(event);
+  promptUndoApplying = false;
+}
+
 function fillPrompt(text) {
-  const editor = document.querySelector(
-    '.prompt-inline-editor-text[contenteditable="true"]',
-  );
+  const editor = document.querySelector(PROMPT_EDITOR_SELECTOR);
 
   if (!editor) {
+    return;
+  }
+
+  // 确保历史已绑定（空状态点击建议时编辑器可能刚挂载），并把替换前的内容压入
+  // 撤销栈，让 fillPrompt 也可撤销。
+  enhancePromptUndo();
+  if (promptUndoEditor === editor) {
+    flushPromptBurst();
+    pushPromptUndoSnapshot(editor.textContent ?? "");
+    promptRedoStack = [];
+    applyPromptHistory(text);
     return;
   }
 
@@ -34205,6 +35047,16 @@ function bindGlobalHandlers() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      const regenerateCancel = document.querySelector(".message-regenerate-cancel");
+      const expandedToolCall = document.querySelector(
+        '.message-tool-call-trigger[aria-expanded="true"]',
+      );
+      if (regenerateCancel instanceof HTMLButtonElement) {
+        regenerateCancel.click();
+      }
+      if (expandedToolCall instanceof HTMLButtonElement) {
+        expandedToolCall.click();
+      }
       toggleTools(false);
       closeModelMenu();
       if (document.querySelector(".settings-dialog")) {
@@ -34218,8 +35070,15 @@ function bindGlobalHandlers() {
       scheduleEnhancement();
     }
   };
+  const repositionMessageLayers = () => {
+    if (document.querySelector(".message-regenerate-popover, .message-tool-call-popover")) {
+      positionMessagePopovers();
+    }
+  };
   window.addEventListener("scroll", repositionHistoryMenus, true);
   window.addEventListener("resize", repositionHistoryMenus);
+  window.addEventListener("scroll", repositionMessageLayers, true);
+  window.addEventListener("resize", repositionMessageLayers);
 
   // 渠道管理自定义下拉：任意滚动（含设置弹窗内部滚动容器）即收起。
   // 捕获阶段 + 启动期注册，先于 toggleModelMenu 运行时绑的 reposition 触发，
@@ -34272,5 +35131,5 @@ enhancementObserver.observe(document.documentElement || document.body, {
 });
 
 scheduleEnhancement();
-    </script>
+</script>
 </body></html>

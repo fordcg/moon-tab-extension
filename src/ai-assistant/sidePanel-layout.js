@@ -60,6 +60,7 @@ const IS_FLOATING_FRAME =
 // 模型下拉占位文案。enhanceModelSelectDisplay 与 renderModelSelectMenu 共用，
 // 避免两处各写一份字面量、改文案时过滤失效让占位项混进可选列表。
 const MODEL_PLACEHOLDER_TEXT = "未选择模型";
+const RECENT_HISTORY_COMPACT_LIMIT = 5;
 
 let scheduled = false;
 let globalHandlersBound = false;
@@ -92,10 +93,27 @@ let dialogSelectionSyncPending = false;
 let pendingSlideIntent = null;
 // 抽屉 ↔ 设置切换进行中标记：防止 Escape + 外部点击 / 连点触发重复切换。
 let slideInProgress = false;
+let historyMoreTransitionInFlight = false;
 const SETTINGS_BACKGROUND_SNAPSHOT_CLASS = "settings-dialog-background-snapshot";
 let newConversationRequestInFlight = false;
 let floatingRequestInFlight = false;
 let floatingToastTimer = null;
+
+// 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
+// textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
+// 一份独立的文本快照历史，拦截 Ctrl/Cmd+Z 与 Ctrl/Cmd+Shift+Z / Ctrl+Y，
+// 通过派发 input 事件把值回灌进 React，保证撤销可靠。
+const PROMPT_EDITOR_SELECTOR =
+  '.prompt-inline-editor-text[contenteditable="true"]';
+// 连续输入在这个静默窗口内合并为一个撤销步，符合常规编辑器手感。
+const PROMPT_UNDO_COALESCE_MS = 350;
+const PROMPT_UNDO_HISTORY_LIMIT = 200;
+let promptUndoEditor = null;
+let promptUndoStack = [];
+let promptRedoStack = [];
+let promptUndoBaseline = "";
+let promptUndoBurstTimer = null;
+let promptUndoApplying = false;
 
 document.body?.classList.toggle("sidepanel-floating-frame", IS_FLOATING_FRAME);
 
@@ -112,12 +130,14 @@ function scheduleEnhancement() {
       enhanceComposerTools,
       enhanceComposerAddTab,
       enhanceComposerFooter,
+      enhancePromptUndo,
       syncToolsA11y,
       enhanceNewConversationButton,
       enhanceFloatingWindowButton,
       enhanceModelSelectDisplay,
       enhanceSendButton,
       syncAssistantStatus,
+      positionMessagePopovers,
       enhanceHistoryDrawer,
       enhanceHistorySessionMenus,
       enhanceSettingsDialog,
@@ -142,6 +162,7 @@ function runEnhancer(enhancer) {
 function enhanceEmptyState() {
   const list = document.querySelector(".message-list");
   if (!list) {
+    showExternalChatNotices();
     return;
   }
 
@@ -153,12 +174,14 @@ function enhanceEmptyState() {
   if (hasMessages || busy || !emptyText) {
     existingState?.remove();
     list.classList.remove("message-list-empty-enhanced");
+    showExternalChatNotices();
     return;
   }
 
   list.classList.add("message-list-empty-enhanced");
 
   if (existingState) {
+    syncEmptyStateNotice(existingState);
     return;
   }
 
@@ -191,8 +214,41 @@ function enhanceEmptyState() {
     suggestions.append(button);
   }
 
-  state.append(copy, suggestions);
+  state.append(copy);
+  syncEmptyStateNotice(state);
+  state.append(suggestions);
   list.append(state);
+}
+
+function syncEmptyStateNotice(state) {
+  const noticeSource = document.querySelector(".chat-warning, .chat-failure");
+  let notice = state.querySelector(".sidepanel-empty-notice");
+  if (!noticeSource) {
+    notice?.remove();
+    showExternalChatNotices();
+    return;
+  }
+
+  noticeSource.classList.add("sidepanel-warning-inline-hidden");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.className = "sidepanel-empty-notice";
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    const suggestions = state.querySelector(".sidepanel-empty-suggestions");
+    state.insertBefore(notice, suggestions);
+  }
+
+  notice.classList.toggle("sidepanel-empty-notice-failure", noticeSource.matches(".chat-failure"));
+  notice.replaceChildren(...Array.from(noticeSource.childNodes, (node) => node.cloneNode(true)));
+}
+
+function showExternalChatNotices() {
+  for (const notice of document.querySelectorAll(
+    ".chat-warning.sidepanel-warning-inline-hidden, .chat-failure.sidepanel-warning-inline-hidden",
+  )) {
+    notice.classList.remove("sidepanel-warning-inline-hidden");
+  }
 }
 
 // 工具开关组改为“点击展开”：注入一个 tune 按钮，点击切换 .is-tools-open。
@@ -949,6 +1005,78 @@ function syncAssistantStatus() {
   }
 }
 
+function positionMessagePopovers() {
+  for (const popover of document.querySelectorAll(".message-regenerate-popover")) {
+    const action = popover.closest(".message-regenerate-action");
+    if (!action) {
+      resetPositionedPopover(popover);
+      continue;
+    }
+    positionAnchoredPopover(popover, action, {
+      align: action.classList.contains("message-regenerate-action-user") ? "right" : "left",
+      maxWidth: 224,
+    });
+  }
+
+  for (const popover of document.querySelectorAll(".message-tool-call-popover")) {
+    const row = popover.closest(".message-tool-call-row");
+    const trigger = row?.querySelector(".message-tool-call-trigger");
+    if (!trigger) {
+      resetPositionedPopover(popover);
+      continue;
+    }
+    positionAnchoredPopover(popover, trigger, {
+      align: "left",
+      maxWidth: 448,
+    });
+  }
+}
+
+function positionAnchoredPopover(popover, anchor, options = {}) {
+  const viewportPadding = 12;
+  const gap = 6;
+  const anchorRect = anchor.getBoundingClientRect();
+  const composerTop =
+    document.querySelector(".chat-composer")?.getBoundingClientRect().top ??
+    window.innerHeight;
+  const bottomLimit = Math.max(viewportPadding, composerTop - 8);
+  const width = Math.max(
+    180,
+    Math.min(options.maxWidth ?? 448, window.innerWidth - viewportPadding * 2),
+  );
+
+  popover.classList.add("sidepanel-positioned-popover");
+  popover.style.width = `${width}px`;
+
+  let left =
+    options.align === "right" ? anchorRect.right - width : anchorRect.left;
+  left = Math.min(
+    Math.max(viewportPadding, left),
+    window.innerWidth - width - viewportPadding,
+  );
+
+  const popoverHeight = popover.getBoundingClientRect().height;
+  const belowTop = anchorRect.bottom + gap;
+  const aboveTop = anchorRect.top - popoverHeight - gap;
+  let top = belowTop;
+
+  if (belowTop + popoverHeight > bottomLimit && aboveTop >= viewportPadding) {
+    top = aboveTop;
+  } else if (belowTop + popoverHeight > bottomLimit) {
+    top = Math.max(viewportPadding, bottomLimit - popoverHeight);
+  }
+
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
+function resetPositionedPopover(popover) {
+  popover.classList.remove("sidepanel-positioned-popover");
+  popover.style.left = "";
+  popover.style.top = "";
+  popover.style.width = "";
+}
+
 function isAssistantBusy() {
   const button = document.querySelector(".composer-actions .ui-button-primary");
   return Boolean(
@@ -1074,7 +1202,12 @@ function enhanceHistoryDrawer() {
     pendingSlideIntent = null;
   }
 
-  drawer.querySelector(".history-dialog-title")?.replaceChildren("近期对话");
+  drawer.querySelector(".history-dialog-title")?.replaceChildren();
+  const mode = getHistoryDrawerMode(drawer);
+  syncHistoryDrawerMode(drawer, mode);
+  ensureHistoryMoreHeader(drawer);
+  syncHistoryCompactItems(drawer);
+  ensureHistoryMoreAction(drawer);
 
   let footer = drawer.querySelector(".sidepanel-drawer-footer");
   if (!footer || footer.dataset.variant !== "recent-menu") {
@@ -1096,6 +1229,257 @@ function enhanceHistoryDrawer() {
   }
 
   syncBrowserControlDrawerAction(drawer);
+  syncHistoryCustomScrollbar(drawer);
+}
+
+function getHistoryDrawerMode(drawer) {
+  return drawer.dataset.sidepanelHistoryMode === "expanded" ? "expanded" : "compact";
+}
+
+function syncHistoryDrawerMode(drawer, mode) {
+  drawer.dataset.sidepanelHistoryMode = mode;
+  drawer.classList.toggle("is-history-expanded", mode === "expanded");
+}
+
+function ensureHistoryMoreHeader(drawer) {
+  let header = drawer.querySelector(".sidepanel-history-more-header");
+  if (header) {
+    return header;
+  }
+
+  header = document.createElement("div");
+  header.className = "sidepanel-history-more-header";
+
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "sidepanel-history-back";
+  back.textContent = "返回";
+  back.setAttribute("aria-label", "返回近期对话菜单");
+  back.addEventListener("click", (event) => {
+    startHistoryModeTransition(drawer, "compact", event);
+  });
+
+  header.append(back);
+  const body = drawer.querySelector(".history-dialog-body");
+  drawer.insertBefore(header, body || drawer.firstChild);
+  return header;
+}
+
+function getHistorySessionItems(drawer) {
+  return Array.from(drawer.querySelectorAll(".history-dialog-scroll .session-item"));
+}
+
+function syncHistoryCompactItems(drawer) {
+  const expanded = getHistoryDrawerMode(drawer) === "expanded";
+  const items = getHistorySessionItems(drawer);
+  items.forEach((item, index) => {
+    item.classList.toggle(
+      "sidepanel-history-hidden-compact",
+      !expanded && index >= RECENT_HISTORY_COMPACT_LIMIT,
+    );
+  });
+}
+
+function ensureHistoryMoreAction(drawer) {
+  const body = drawer.querySelector(".history-dialog-body");
+  if (!body) {
+    return null;
+  }
+
+  const total = getHistorySessionItems(drawer).length;
+  let more = drawer.querySelector(".sidepanel-history-more-action");
+  if (total <= RECENT_HISTORY_COMPACT_LIMIT) {
+    more?.remove();
+    return null;
+  }
+
+  if (!more) {
+    more = document.createElement("button");
+    more.type = "button";
+    more.className = "sidepanel-history-more-action";
+    more.textContent = "更多";
+    more.setAttribute("aria-label", "查看更多近期对话");
+    more.addEventListener("click", (event) => {
+      startHistoryModeTransition(drawer, "expanded", event);
+    });
+  }
+
+  const scroll = drawer.querySelector(".history-dialog-scroll");
+  if (scroll?.parentElement === body && more.previousElementSibling !== scroll) {
+    scroll.after(more);
+  } else if (more.parentElement !== body) {
+    body.append(more);
+  }
+
+  more.hidden = getHistoryDrawerMode(drawer) === "expanded";
+  return more;
+}
+
+function startHistoryModeTransition(drawer, nextMode, triggerEvent = null) {
+  if (!drawer || historyMoreTransitionInFlight || getHistoryDrawerMode(drawer) === nextMode) {
+    return;
+  }
+
+  historyMoreTransitionInFlight = true;
+  const shouldMoveFocus = triggerEvent?.detail === 0;
+  const toExpanded = nextMode === "expanded";
+  const outClass = toExpanded ? "is-history-page-out-left" : "is-history-page-out-right";
+  const inClass = toExpanded ? "is-history-page-in-right" : "is-history-page-in-left";
+
+  drawer.classList.add(outClass);
+  waitForDrawerAnimation(drawer).then(() => {
+    drawer.classList.remove(outClass);
+    syncHistoryDrawerMode(drawer, nextMode);
+    syncHistoryCompactItems(drawer);
+    ensureHistoryMoreAction(drawer);
+    syncHistoryCustomScrollbar(drawer);
+    drawer.classList.add(inClass);
+    requestAnimationFrame(() => syncHistoryCustomScrollbar(drawer));
+
+    waitForDrawerAnimation(drawer).then(() => {
+      drawer.classList.remove(inClass);
+      historyMoreTransitionInFlight = false;
+      if (shouldMoveFocus) {
+        if (nextMode === "expanded") {
+          drawer.querySelector(".sidepanel-history-back")?.focus({ preventScroll: true });
+        } else {
+          drawer.querySelector(".sidepanel-history-more-action")?.focus({ preventScroll: true });
+        }
+      }
+      syncHistoryCustomScrollbar(drawer);
+    });
+  });
+}
+
+function waitForDrawerAnimation(drawer) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const done = () => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      drawer.removeEventListener("animationend", done, true);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 240);
+    drawer.addEventListener("animationend", done, true);
+  });
+}
+
+function getHistoryScrollTarget(drawer) {
+  return drawer.querySelector(".history-dialog-scroll");
+}
+
+function syncHistoryCustomScrollbar(drawer) {
+  const scroll = getHistoryScrollTarget(drawer);
+  const expanded = getHistoryDrawerMode(drawer) === "expanded";
+  let track = drawer.querySelector(".sidepanel-history-scrollbar");
+
+  if (!scroll || !expanded) {
+    if (track) {
+      track.hidden = true;
+    }
+    return;
+  }
+
+  let thumb = track?.querySelector(".sidepanel-history-scrollbar-thumb");
+  if (!track) {
+    track = document.createElement("div");
+    track.className = "sidepanel-history-scrollbar";
+    track.setAttribute("aria-hidden", "true");
+    thumb = document.createElement("div");
+    thumb.className = "sidepanel-history-scrollbar-thumb";
+    track.append(thumb);
+    drawer.append(track);
+  }
+
+  if (!scroll.dataset.sidepanelHistoryScrollbarBound) {
+    scroll.dataset.sidepanelHistoryScrollbarBound = "1";
+    scroll.addEventListener("scroll", () => updateHistoryScrollbar(drawer), {
+      passive: true,
+    });
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(() => updateHistoryScrollbar(drawer)).observe(scroll);
+    }
+  }
+
+  if (thumb && !track.dataset.sidepanelHistoryScrollbarBound) {
+    track.dataset.sidepanelHistoryScrollbarBound = "1";
+    bindHistoryScrollbarDrag(track, thumb, scroll, drawer);
+  }
+
+  requestAnimationFrame(() => updateHistoryScrollbar(drawer));
+}
+
+function updateHistoryScrollbar(drawer) {
+  const scroll = getHistoryScrollTarget(drawer);
+  const track = drawer.querySelector(".sidepanel-history-scrollbar");
+  const thumb = track?.querySelector(".sidepanel-history-scrollbar-thumb");
+  if (!scroll || !track || !thumb || getHistoryDrawerMode(drawer) !== "expanded") {
+    return;
+  }
+
+  const scrollHeight = scroll.scrollHeight;
+  const clientHeight = scroll.clientHeight;
+  if (scrollHeight <= clientHeight + 1) {
+    track.hidden = true;
+    return;
+  }
+
+  track.hidden = false;
+  const trackHeight = track.clientHeight;
+  const thumbHeight = Math.max(30, (clientHeight / scrollHeight) * trackHeight);
+  const maxScroll = scrollHeight - clientHeight;
+  const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+  const thumbTop = maxScroll > 0 ? (scroll.scrollTop / maxScroll) * maxThumbTop : 0;
+  thumb.style.height = `${thumbHeight}px`;
+  thumb.style.top = `${thumbTop}px`;
+}
+
+function bindHistoryScrollbarDrag(track, thumb, scroll, drawer) {
+  let dragging = false;
+  let startY = 0;
+  let startScrollTop = 0;
+
+  thumb.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    dragging = true;
+    startY = event.clientY;
+    startScrollTop = scroll.scrollTop;
+    thumb.setPointerCapture(event.pointerId);
+    thumb.classList.add("is-dragging");
+  });
+
+  thumb.addEventListener("pointermove", (event) => {
+    if (!dragging) {
+      return;
+    }
+    const trackRange = Math.max(1, track.clientHeight - thumb.offsetHeight);
+    const scrollRange = Math.max(1, scroll.scrollHeight - scroll.clientHeight);
+    const dy = event.clientY - startY;
+    scroll.scrollTop = startScrollTop + (dy / trackRange) * scrollRange;
+  });
+
+  const stopDrag = () => {
+    dragging = false;
+    thumb.classList.remove("is-dragging");
+  };
+  thumb.addEventListener("pointerup", stopDrag);
+  thumb.addEventListener("pointercancel", stopDrag);
+
+  track.addEventListener("pointerdown", (event) => {
+    if (event.target === thumb) {
+      return;
+    }
+    const rect = track.getBoundingClientRect();
+    const targetTop = event.clientY - rect.top - thumb.offsetHeight / 2;
+    const trackRange = Math.max(1, track.clientHeight - thumb.offsetHeight);
+    const scrollRange = Math.max(1, scroll.scrollHeight - scroll.clientHeight);
+    scroll.scrollTop = (targetTop / trackRange) * scrollRange;
+    updateHistoryScrollbar(drawer);
+  });
 }
 
 function enhanceHistorySessionMenus() {
@@ -2589,12 +2973,187 @@ function bindTabListeners() {
   chrome.windows?.onFocusChanged?.addListener(() => refreshTabsAndBanner());
 }
 
+// 绑定输入区撤销/重做历史。只绑一次，靠 dataset 标记防止 MutationObserver 反复
+// 重绑；React 重建 contenteditable 节点时重置并重新绑定。
+function enhancePromptUndo() {
+  const editor = document.querySelector(PROMPT_EDITOR_SELECTOR);
+  if (!editor) {
+    // 编辑器卸载（如切到空状态）时清理，避免悬挂引用与脏历史。
+    if (promptUndoEditor) {
+      resetPromptUndoState();
+    }
+    return;
+  }
+  if (editor === promptUndoEditor && editor.dataset.sidepanelUndoBound === "1") {
+    reconcilePromptBaseline();
+    return;
+  }
+  // 新的编辑器节点：重置历史并重新绑定。
+  resetPromptUndoState();
+  promptUndoEditor = editor;
+  promptUndoBaseline = editor.textContent ?? "";
+  editor.dataset.sidepanelUndoBound = "1";
+  editor.addEventListener("input", handlePromptInput);
+  editor.addEventListener("keydown", handlePromptUndoKeydown);
+}
+
+function resetPromptUndoState() {
+  clearTimeout(promptUndoBurstTimer);
+  promptUndoBurstTimer = null;
+  if (promptUndoEditor) {
+    promptUndoEditor.removeEventListener("input", handlePromptInput);
+    promptUndoEditor.removeEventListener("keydown", handlePromptUndoKeydown);
+    delete promptUndoEditor.dataset.sidepanelUndoBound;
+  }
+  promptUndoEditor = null;
+  promptUndoStack = [];
+  promptRedoStack = [];
+  promptUndoBaseline = "";
+  promptUndoApplying = false;
+}
+
+// React 在发送后等场景会直接重写 textContent（不触发 input 事件），导致 baseline
+// 漂移。无进行中的合并窗口且文本与 baseline 不符时，按外部重置处理，避免撤销恢复
+// 已发送内容。
+function reconcilePromptBaseline() {
+  if (promptUndoApplying || promptUndoBurstTimer) {
+    return;
+  }
+  const editor = promptUndoEditor;
+  if (!editor) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  if (current === promptUndoBaseline) {
+    return;
+  }
+  promptUndoStack = [];
+  promptRedoStack = [];
+  promptUndoBaseline = current;
+}
+
+function handlePromptInput() {
+  if (promptUndoApplying) {
+    return;
+  }
+  const editor = promptUndoEditor;
+  if (!editor) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  if (current === promptUndoBaseline) {
+    return;
+  }
+  // 新的编辑分支作废 redo。
+  promptRedoStack = [];
+  // 连续输入合并：静默窗口内只在起点压入一次 baseline，整段输入算一个撤销步。
+  if (promptUndoBurstTimer) {
+    clearTimeout(promptUndoBurstTimer);
+  } else {
+    pushPromptUndoSnapshot(promptUndoBaseline);
+  }
+  promptUndoBurstTimer = setTimeout(() => {
+    promptUndoBurstTimer = null;
+  }, PROMPT_UNDO_COALESCE_MS);
+  promptUndoBaseline = current;
+}
+
+function handlePromptUndoKeydown(event) {
+  const mod = event.ctrlKey || event.metaKey;
+  if (!mod || event.altKey) {
+    return;
+  }
+  const key = event.key.toLowerCase();
+  const isUndo = key === "z" && !event.shiftKey;
+  const isRedo = (key === "z" && event.shiftKey) || key === "y";
+  if (!isUndo && !isRedo) {
+    return;
+  }
+  // 拦截浏览器原生 undo，统一走我们维护的历史。
+  event.preventDefault();
+  event.stopPropagation();
+  if (isUndo) {
+    performPromptUndo();
+  } else {
+    performPromptRedo();
+  }
+}
+
+function pushPromptUndoSnapshot(value) {
+  promptUndoStack.push(value);
+  if (promptUndoStack.length > PROMPT_UNDO_HISTORY_LIMIT) {
+    promptUndoStack.shift();
+  }
+}
+
+function flushPromptBurst() {
+  if (promptUndoBurstTimer) {
+    clearTimeout(promptUndoBurstTimer);
+    promptUndoBurstTimer = null;
+  }
+}
+
+function performPromptUndo() {
+  flushPromptBurst();
+  const editor = promptUndoEditor;
+  if (!editor || promptUndoStack.length === 0) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  const previous = promptUndoStack.pop();
+  promptRedoStack.push(current);
+  applyPromptHistory(previous);
+}
+
+function performPromptRedo() {
+  flushPromptBurst();
+  const editor = promptUndoEditor;
+  if (!editor || promptRedoStack.length === 0) {
+    return;
+  }
+  const current = editor.textContent ?? "";
+  const next = promptRedoStack.pop();
+  pushPromptUndoSnapshot(current);
+  applyPromptHistory(next);
+}
+
+// 把历史值回灌进 React 受控编辑器：直接改 textContent 后派发 input 事件，让
+// onInput 同步 value。promptUndoApplying 防止该 input 被当成新编辑记录。
+function applyPromptHistory(value) {
+  const editor = promptUndoEditor;
+  if (!editor) {
+    return;
+  }
+  promptUndoApplying = true;
+  editor.focus();
+  editor.textContent = value;
+  promptUndoBaseline = value;
+  moveCaretToEnd(editor);
+  const event = new InputEvent("input", {
+    bubbles: true,
+    cancelable: true,
+    data: value,
+    inputType: value ? "insertText" : "deleteContentBackward",
+  });
+  editor.dispatchEvent(event);
+  promptUndoApplying = false;
+}
+
 function fillPrompt(text) {
-  const editor = document.querySelector(
-    '.prompt-inline-editor-text[contenteditable="true"]',
-  );
+  const editor = document.querySelector(PROMPT_EDITOR_SELECTOR);
 
   if (!editor) {
+    return;
+  }
+
+  // 确保历史已绑定（空状态点击建议时编辑器可能刚挂载），并把替换前的内容压入
+  // 撤销栈，让 fillPrompt 也可撤销。
+  enhancePromptUndo();
+  if (promptUndoEditor === editor) {
+    flushPromptBurst();
+    pushPromptUndoSnapshot(editor.textContent ?? "");
+    promptRedoStack = [];
+    applyPromptHistory(text);
     return;
   }
 
@@ -2657,6 +3216,16 @@ function bindGlobalHandlers() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      const regenerateCancel = document.querySelector(".message-regenerate-cancel");
+      const expandedToolCall = document.querySelector(
+        '.message-tool-call-trigger[aria-expanded="true"]',
+      );
+      if (regenerateCancel instanceof HTMLButtonElement) {
+        regenerateCancel.click();
+      }
+      if (expandedToolCall instanceof HTMLButtonElement) {
+        expandedToolCall.click();
+      }
       toggleTools(false);
       closeModelMenu();
       if (document.querySelector(".settings-dialog")) {
@@ -2670,8 +3239,15 @@ function bindGlobalHandlers() {
       scheduleEnhancement();
     }
   };
+  const repositionMessageLayers = () => {
+    if (document.querySelector(".message-regenerate-popover, .message-tool-call-popover")) {
+      positionMessagePopovers();
+    }
+  };
   window.addEventListener("scroll", repositionHistoryMenus, true);
   window.addEventListener("resize", repositionHistoryMenus);
+  window.addEventListener("scroll", repositionMessageLayers, true);
+  window.addEventListener("resize", repositionMessageLayers);
 
   // 渠道管理自定义下拉：任意滚动（含设置弹窗内部滚动容器）即收起。
   // 捕获阶段 + 启动期注册，先于 toggleModelMenu 运行时绑的 reposition 触发，
