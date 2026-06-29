@@ -695,6 +695,14 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   min-height: 2rem;
 }
 
+.message-bubble-wrap-thinking .sidepanel-thinking {
+  margin: 0.125rem 0 0.375rem;
+}
+
+.message-bubble-wrap-thinking .message-regenerate-action-assistant {
+  display: none;
+}
+
 .sidepanel-thinking-dots {
   background: var(--sidepanel-blue);
   border-radius: 999px;
@@ -1104,6 +1112,11 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 
 .message-regenerate-popover p {
   margin: 0;
+}
+
+body.sidepanel-regenerate-direct-pending .message-regenerate-popover {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .message-regenerate-popover-actions {
@@ -2448,6 +2461,52 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   border-top-color: currentColor;
   height: 1rem;
   width: 1rem;
+}
+
+.composer-actions .ui-button-primary[data-stop-generation="true"] {
+  background: var(--sidepanel-blue-deep);
+}
+
+.composer-actions .ui-button-primary[data-stop-generation="true"]::before {
+  animation: none;
+  background: currentColor;
+  border: 0;
+  border-radius: 0.1875rem;
+  height: 0.8125rem;
+  width: 0.8125rem;
+}
+
+.sidepanel-jump-latest {
+  align-items: center;
+  background: var(--sidepanel-canvas);
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 999px;
+  bottom: 7.25rem;
+  box-shadow: var(--sidepanel-shadow);
+  color: var(--sidepanel-ink);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  gap: 0.375rem;
+  left: 50%;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 24;
+}
+
+.sidepanel-jump-latest[hidden] {
+  display: none;
+}
+
+.sidepanel-jump-latest:hover {
+  background: var(--sidepanel-control-hover);
+}
+
+.sidepanel-jump-latest:focus-visible {
+  outline: 3px solid var(--sidepanel-focus-ring);
+  outline-offset: 2px;
 }
 
 @keyframes sidepanel-spin {
@@ -4389,6 +4448,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
     transition-duration: 0.01ms;
   }
 }
+
 </style>
     <script data-open-design-inline="preview-chrome-mock.js">
 (() => {
@@ -25725,11 +25785,18 @@ async function Ra2(e4) {
   if (!globalThis.chrome?.runtime?.connect) return { completed: false };
   let t3 = !!e4.request.enabledToolIds?.length, n3 = t3 ? void 0 : await La2(e4), r3;
   return !t3 && !n3 ? { completed: true } : new Promise((t4) => {
-    let i3 = globalThis.chrome.runtime.connect({ name: `chat.stream` }), a3 = false, o3 = false, s3 = Promise.resolve(), c3 = (e5, n4 = { disconnect: true }) => {
-      a3 || (a3 = true, n4.disconnect && i3.disconnect(), t4(e5));
+    let i3 = globalThis.chrome.runtime.connect({ name: `chat.stream` }), a3 = false, o3 = false, p3, s3 = Promise.resolve(), c3 = (e5, n4 = { disconnect: true }) => {
+      a3 || (a3 = true, globalThis.__sidepanelStopGeneration === p3 && (globalThis.__sidepanelStopGeneration = void 0), n4.disconnect && i3.disconnect(), t4(e5));
     }, l3 = (t5) => (s3 = s3.then(t5).catch(() => {
       e4.set({ failure: { message: `\u6D88\u606F\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5` } });
     }), s3), u3 = async () => n3 || (n3 = await La2(e4), n3);
+    p3 = () => {
+      a3 || (o3 = true, l3(async () => {
+        let t5 = await u3();
+        t5 && await Va2(e4.sessionId, t5.id, `已停止生成`, e4.set, e4.privateMode);
+      }).then(() => c3({ completed: true }, { disconnect: true })));
+    };
+    globalThis.__sidepanelStopGeneration = p3;
     i3.onMessage.addListener((t5) => {
       if (t5.type === `chunk`) {
         l3(async () => {
@@ -26189,7 +26256,8 @@ function wo2(e4, t3) {
   for (let n3 = t3 - 1; n3 >= 0; --n3) if (e4[n3]?.role === `user`) return e4[n3];
 }
 async function To2(e4) {
-  e4.set({ sending: true, failure: void 0 });
+  let sendToken = Symbol(`sidepanel-send`);
+  globalThis.__sidepanelSendToken = sendToken, e4.set({ sending: true, failure: void 0 });
   let n3 = Oa2(e4.state.chatPreferences, e4.session.chatPreferenceOverrides), i3 = on(e4.provider, e4.model, n3), a3 = Date.now(), o3 = { ...e4.session, title: e4.nextTitle, titleGenerating: e4.shouldGenerateTitle, updatedAt: a3, selectedModelId: e4.model.id, messages: e4.nextMessages };
   try {
     e4.privateMode ? e4.set({ privateChatSession: o3 }) : (await ze(o3), e4.set((e5) => ({ activeSessionId: o3.id, chatSessions: Oi2(e5.chatSessions, o3) })));
@@ -26204,7 +26272,19 @@ async function To2(e4) {
       if ((await Ra2({ set: e4.set, sessionId: o3.id, modelId: e4.model.id, endpointType: e4.provider.endpointType, systemPrompt: n3.systemPrompt, contextPrompt: e4.pageContextPrompt, contextMode: e4.state.contextMode, matchedRuleId: e4.state.pageContext.matchedRuleId, privateMode: e4.privateMode, networkContextAttachment: a4.attachment, streamMode: u3, toolAttachments: p3, request: d3 })).completed) return;
       d3.stream = false;
     }
+    let nonStreamStopped = false, stopNonStream;
+    stopNonStream = () => {
+      if (nonStreamStopped) return;
+      nonStreamStopped = true, globalThis.__sidepanelStopGeneration === stopNonStream && (globalThis.__sidepanelStopGeneration = void 0), Promise.resolve().then(async () => {
+        let t3 = Date.now(), r3 = { id: `message-${t3}-assistant-stopped`, role: `assistant`, content: `已停止生成`, createdAt: t3, modelId: e4.model.id, endpointType: e4.provider.endpointType, streamMode: u3, systemPrompt: n3.systemPrompt, contextPrompt: e4.pageContextPrompt, contextMode: e4.state.contextMode, matchedRuleId: e4.state.pageContext.matchedRuleId, networkContextAttachment: a4.attachment, toolAttachments: p3, streaming: false };
+        await Ia2(o3.id, r3, e4.set, e4.privateMode), globalThis.__sidepanelSendToken === sendToken && (globalThis.__sidepanelSendToken = void 0), e4.set({ sending: false, networkContextStatus: void 0 });
+      }).catch(() => {
+        e4.set({ failure: { message: `\u6D88\u606F\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5` } });
+      });
+    }, globalThis.__sidepanelStopGeneration = stopNonStream;
     let m3 = await Hi2(d3);
+    globalThis.__sidepanelStopGeneration === stopNonStream && (globalThis.__sidepanelStopGeneration = void 0);
+    if (nonStreamStopped) return;
     if (!m3) {
       e4.set({ failure: { message: `\u6A21\u578B\u8BF7\u6C42\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5` } });
       return;
@@ -26230,7 +26310,7 @@ async function To2(e4) {
   } catch {
     e4.set({ failure: { message: `\u6D88\u606F\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5` } });
   } finally {
-    e4.set({ sending: false, networkContextStatus: void 0 });
+    globalThis.__sidepanelSendToken === sendToken && (globalThis.__sidepanelSendToken = void 0, e4.set({ sending: false, networkContextStatus: void 0 }));
   }
 }
 function Eo2(e4, t3, n3, r3 = {}) {
@@ -31397,7 +31477,9 @@ function C_({ messages: e4, toolCallDisplayMode: t3, showToolCallProcessInAssist
       h3([]), i3(e5.id, t4, n4);
     }, children: (0, P3.jsx)(P_, {}) })] })] }) : (0, P3.jsxs)(`div`, { className: `message-bubble${e5.role === `user` && e5.promptInvocations?.length ? ` message-bubble-with-prompts` : ``}`, children: [e5.role === `user` && e5.promptInvocations?.length ? (0, P3.jsx)(j_, { prompts: e5.promptInvocations, ariaLabelPrefix: `\u7528\u6237\u6D88\u606F\u63D0\u793A\u8BCD` }) : null, ee3 ? (0, P3.jsx)(Ep, { remarkPlugins: [Ag], children: e5.content }) : null] }), e5.role === `assistant` ? (0, P3.jsx)(T_, { message: e5 }) : null, o4 ? null : (0, P3.jsxs)(`div`, { className: `message-regenerate-action message-regenerate-action-${e5.role}`, children: [e5.role === `user` ? (0, P3.jsx)(`button`, { className: `message-icon-button message-edit-button`, type: `button`, "aria-label": `\u7F16\u8F91\u6D88\u606F`, title: `\u7F16\u8F91\u6D88\u606F`, disabled: a3 || e5.streaming, onClick: () => {
       l3(void 0), d3(e5.id), p3(e5.content), h3(e5.promptInvocations ?? []);
-    }, children: (0, P3.jsx)(N_, {}) }) : null, (0, P3.jsx)(`button`, { className: `message-icon-button message-regenerate-button`, type: `button`, "aria-label": `\u91CD\u65B0\u751F\u6210`, title: `\u91CD\u65B0\u751F\u6210`, disabled: a3 || e5.streaming, onClick: () => l3(e5.id), children: (0, P3.jsx)(M_, {}) }), (0, P3.jsx)(`button`, { className: `message-icon-button message-copy-button`, type: `button`, "aria-label": e5.role === `user` ? `\u590D\u5236\u7528\u6237\u6D88\u606F` : `\u590D\u5236 AI \u6D88\u606F`, title: e5.role === `user` ? `\u590D\u5236\u7528\u6237\u6D88\u606F` : `\u590D\u5236 AI \u6D88\u606F`, onClick: () => void C3(e5), children: (0, P3.jsx)(I_, {}) }), e5.role === `assistant` ? (0, P3.jsx)(`button`, { className: `message-icon-button message-export-image-button`, type: `button`, "aria-label": `\u5BFC\u51FA AI \u6D88\u606F\u56FE\u7247`, title: `\u5BFC\u51FA AI \u6D88\u606F\u56FE\u7247`, onClick: () => void w3(e5), children: (0, P3.jsx)(L_, {}) }) : null, c3 === e5.id ? (0, P3.jsxs)(`div`, { className: `message-regenerate-popover`, role: `dialog`, "aria-label": `\u786E\u8BA4\u91CD\u65B0\u751F\u6210`, ref: b3, children: [(0, P3.jsx)(`p`, { children: `\u91CD\u65B0\u751F\u6210\u4F1A\u4E22\u5F03\u8FD9\u6761\u6D88\u606F\u540E\u9762\u7684\u804A\u5929\u8BB0\u5F55\u3002` }), (0, P3.jsxs)(`div`, { className: `message-regenerate-popover-actions`, children: [(0, P3.jsx)(`button`, { className: `ui-button-secondary message-regenerate-cancel`, type: `button`, onClick: () => l3(void 0), children: `\u53D6\u6D88` }), (0, P3.jsx)(`button`, { className: `ui-button-primary message-regenerate-confirm`, type: `button`, onClick: () => {
+    }, children: (0, P3.jsx)(N_, {}) }) : null, (0, P3.jsx)(`button`, { className: `message-icon-button message-regenerate-button`, type: `button`, "aria-label": `\u91CD\u65B0\u751F\u6210`, title: `\u91CD\u65B0\u751F\u6210`, disabled: a3 || e5.streaming, onClick: () => {
+      l3(void 0), r3(e5.id);
+    }, children: (0, P3.jsx)(M_, {}) }), (0, P3.jsx)(`button`, { className: `message-icon-button message-copy-button`, type: `button`, "aria-label": e5.role === `user` ? `\u590D\u5236\u7528\u6237\u6D88\u606F` : `\u590D\u5236 AI \u6D88\u606F`, title: e5.role === `user` ? `\u590D\u5236\u7528\u6237\u6D88\u606F` : `\u590D\u5236 AI \u6D88\u606F`, onClick: () => void C3(e5), children: (0, P3.jsx)(I_, {}) }), e5.role === `assistant` ? (0, P3.jsx)(`button`, { className: `message-icon-button message-export-image-button`, type: `button`, "aria-label": `\u5BFC\u51FA AI \u6D88\u606F\u56FE\u7247`, title: `\u5BFC\u51FA AI \u6D88\u606F\u56FE\u7247`, onClick: () => void w3(e5), children: (0, P3.jsx)(L_, {}) }) : null, c3 === e5.id ? (0, P3.jsxs)(`div`, { className: `message-regenerate-popover`, role: `dialog`, "aria-label": `\u786E\u8BA4\u91CD\u65B0\u751F\u6210`, ref: b3, children: [(0, P3.jsx)(`p`, { children: `\u91CD\u65B0\u751F\u6210\u4F1A\u4E22\u5F03\u8FD9\u6761\u6D88\u606F\u540E\u9762\u7684\u804A\u5929\u8BB0\u5F55\u3002` }), (0, P3.jsxs)(`div`, { className: `message-regenerate-popover-actions`, children: [(0, P3.jsx)(`button`, { className: `ui-button-secondary message-regenerate-cancel`, type: `button`, onClick: () => l3(void 0), children: `\u53D6\u6D88` }), (0, P3.jsx)(`button`, { className: `ui-button-primary message-regenerate-confirm`, type: `button`, onClick: () => {
       l3(void 0), r3(e5.id);
     }, children: `\u786E\u8BA4\u91CD\u65B0\u751F\u6210` })] })] }) : null, g3?.messageId === e5.id ? (0, P3.jsx)(`span`, { className: `message-action-feedback message-action-feedback-${g3.tone}`, role: `status`, children: g3.text }) : null] })] })] }) : null, _4 ? (0, P3.jsx)(w_, { records: e5.toolCallRecords, attachments: xt(e5), activeToolCallId: v3, popoverRef: S3, panelCentered: true, onToggle: (e6) => y3((t4) => t4 === e6 ? void 0 : e6) }) : null] }, e5.id);
   }), o3 ? (0, P3.jsxs)(P3.Fragment, { children: [(0, P3.jsx)(`div`, { className: `dialog-overlay`, "aria-hidden": `true` }), (0, P3.jsxs)(`section`, { className: `image-preview-dialog`, role: `dialog`, "aria-modal": `true`, "aria-label": `\u56FE\u7247\u9884\u89C8`, children: [(0, P3.jsx)(`button`, { className: `ui-button-secondary image-preview-close`, type: `button`, "aria-label": `\u5173\u95ED\u56FE\u7247\u9884\u89C8`, onClick: () => s3(void 0), children: `\u5173\u95ED` }), (0, P3.jsx)(`img`, { src: o3.dataUrl, alt: o3.name })] })] }) : null] });
@@ -31935,6 +32017,10 @@ const SETTINGS_BACKGROUND_SNAPSHOT_CLASS = "settings-dialog-background-snapshot"
 let newConversationRequestInFlight = false;
 let floatingRequestInFlight = false;
 let floatingToastTimer = null;
+let messageListPinnedToBottom = true;
+let messageListScrollTarget = null;
+let messageListScrollRaf = null;
+let regenerateDirectTimer = null;
 
 // 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
 // textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
@@ -31975,6 +32061,7 @@ function scheduleEnhancement() {
       enhanceSendButton,
       syncAssistantStatus,
       positionMessagePopovers,
+      syncMessageScrollState,
       enhanceHistoryDrawer,
       enhanceHistorySessionMenus,
       enhanceSettingsDialog,
@@ -32783,7 +32870,7 @@ function enhanceSendButton() {
     return;
   }
   const sending = button.textContent.trim() === "发送中";
-  const label = sending ? "发送中" : "发送";
+  const label = sending ? "停止生成" : "发送";
   if (button.getAttribute("aria-label") !== label) {
     button.setAttribute("aria-label", label);
   }
@@ -32793,6 +32880,17 @@ function enhanceSendButton() {
   const sendingStr = String(sending);
   if (button.dataset.sending !== sendingStr) {
     button.dataset.sending = sendingStr;
+  }
+  button.dataset.stopGeneration = sendingStr;
+
+  // React 在发送中会禁用原按钮；但“停止生成”本身必须可点击。
+  // 只在确认为发送中时解除 disabled，点击会在捕获阶段被 layout.js 拦截，
+  // 不会落到原 onClick 触发二次发送。
+  if (sending && button.disabled) {
+    button.disabled = false;
+    button.setAttribute("aria-disabled", "false");
+  } else if (!sending) {
+    button.removeAttribute("aria-disabled");
   }
 }
 
@@ -32816,10 +32914,17 @@ function syncAssistantStatus() {
   if (!busy) {
     indicator?.remove();
     list.classList.remove("message-list-thinking");
+    list
+      .querySelectorAll(".message-bubble-wrap-thinking")
+      .forEach((wrap) => wrap.classList.remove("message-bubble-wrap-thinking"));
+    document.body.classList.remove("sidepanel-stop-requested");
     return;
   }
 
   list.classList.add("message-list-thinking");
+  list
+    .querySelectorAll(".message-bubble-wrap-thinking")
+    .forEach((wrap) => wrap.classList.remove("message-bubble-wrap-thinking"));
   if (!indicator) {
     indicator = document.createElement("div");
     indicator.className = "sidepanel-thinking";
@@ -32837,9 +32942,54 @@ function syncAssistantStatus() {
 
     indicator.append(dots, text);
   }
-  if (indicator.parentElement !== list) {
+
+  const assistantWrap = findActiveAssistantBubbleWrap(list);
+  if (assistantWrap) {
+    assistantWrap.classList.add("message-bubble-wrap-thinking");
+    const action = assistantWrap.querySelector(".message-regenerate-action-assistant");
+    if (indicator.parentElement !== assistantWrap || indicator.nextElementSibling !== action) {
+      assistantWrap.insertBefore(indicator, action || assistantWrap.firstChild);
+    }
+    return;
+  }
+
+  const lastUserEntry = findLastUserMessageEntry(list);
+  if (lastUserEntry) {
+    if (lastUserEntry.nextSibling !== indicator) {
+      lastUserEntry.after(indicator);
+    }
+  } else if (indicator.parentElement !== list) {
     list.append(indicator);
   }
+}
+
+function findActiveAssistantBubbleWrap(list) {
+  const entries = Array.from(list.querySelectorAll(".message-entry"));
+  const lastUserEntry = findLastUserMessageEntry(list);
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry === lastUserEntry) {
+      break;
+    }
+    const row = entry.querySelector(".message-row:not(.message-row-user)");
+    const wrap = row?.querySelector(".message-bubble-wrap");
+    if (!wrap) {
+      continue;
+    }
+
+    const bubbleText = wrap.querySelector(".message-bubble")?.textContent.trim() ?? "";
+    const thinkingText = wrap.querySelector(".message-thinking")?.textContent.trim() ?? "";
+    const hasVisibleAssistantContent = Boolean(bubbleText || thinkingText);
+    if (!hasVisibleAssistantContent) {
+      return wrap;
+    }
+  }
+  return null;
+}
+
+function findLastUserMessageEntry(list) {
+  const userRows = Array.from(list.querySelectorAll(".message-row-user"));
+  return userRows.at(-1)?.closest(".message-entry") ?? null;
 }
 
 function positionMessagePopovers() {
@@ -32912,6 +33062,81 @@ function resetPositionedPopover(popover) {
   popover.style.left = "";
   popover.style.top = "";
   popover.style.width = "";
+}
+
+function syncMessageScrollState() {
+  const list = document.querySelector(".message-list");
+  if (!(list instanceof HTMLElement)) {
+    messageListScrollTarget = null;
+    return;
+  }
+
+  if (messageListScrollTarget !== list) {
+    messageListScrollTarget = list;
+    messageListPinnedToBottom = isMessageListNearBottom(list);
+    list.addEventListener(
+      "scroll",
+      () => {
+        messageListPinnedToBottom = isMessageListNearBottom(list);
+        updateJumpToLatestButton(list);
+      },
+      { passive: true },
+    );
+  }
+
+  if (messageListPinnedToBottom) {
+    scheduleMessageListScrollToBottom(list);
+  }
+  updateJumpToLatestButton(list);
+}
+
+function isMessageListNearBottom(list) {
+  return list.scrollHeight - list.scrollTop - list.clientHeight < 96;
+}
+
+function scheduleMessageListScrollToBottom(list) {
+  if (messageListScrollRaf) {
+    return;
+  }
+  messageListScrollRaf = requestAnimationFrame(() => {
+    messageListScrollRaf = null;
+    if (messageListScrollTarget !== list) {
+      return;
+    }
+    if (messageListPinnedToBottom) {
+      list.scrollTop = list.scrollHeight;
+      messageListPinnedToBottom = true;
+      updateJumpToLatestButton(list);
+    }
+  });
+}
+
+function updateJumpToLatestButton(list) {
+  const panel = document.querySelector(".chat-panel");
+  if (!panel) {
+    return;
+  }
+
+  let button = panel.querySelector(".sidepanel-jump-latest");
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "sidepanel-jump-latest";
+    button.textContent = "跳到最新";
+    button.addEventListener("click", () => {
+      const currentList = document.querySelector(".message-list");
+      if (currentList instanceof HTMLElement) {
+        currentList.scrollTop = currentList.scrollHeight;
+        messageListPinnedToBottom = true;
+        updateJumpToLatestButton(currentList);
+      }
+    });
+    panel.append(button);
+  }
+
+  const hidden = isMessageListNearBottom(list);
+  button.hidden = hidden;
+  button.setAttribute("aria-hidden", String(hidden));
 }
 
 function isAssistantBusy() {
@@ -35026,6 +35251,9 @@ function bindGlobalHandlers() {
   }
   globalHandlersBound = true;
 
+  document.addEventListener("click", handleStopGenerationClick, true);
+  document.addEventListener("click", handleRegenerateDirectClick);
+
   // 点击当前弹窗和触发器以外区域时收起，保持工具/模型菜单关闭方式一致。
   document.addEventListener("click", (event) => {
     const target = event.target;
@@ -35125,6 +35353,66 @@ function bindGlobalHandlers() {
   });
 }
 
+function handleStopGenerationClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest(".composer-actions .ui-button-primary");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  if (button.dataset.sending !== "true") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  requestStopGeneration();
+}
+
+function requestStopGeneration() {
+  const stop = globalThis.__sidepanelStopGeneration;
+  if (typeof stop === "function") {
+    stop();
+  }
+  const live = ensureLiveRegion();
+  live.textContent = "正在停止生成";
+  document.body.classList.add("sidepanel-stop-requested");
+}
+
+function handleRegenerateDirectClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest(".message-regenerate-button");
+  if (!(button instanceof HTMLButtonElement) || button.disabled) {
+    return;
+  }
+  if (regenerateDirectTimer) {
+    window.clearTimeout(regenerateDirectTimer);
+  }
+
+  const action = button.closest(".message-regenerate-action");
+  const hadConfirmBeforeClick = Boolean(
+    action?.querySelector(".message-regenerate-confirm"),
+  );
+  document.body.classList.add("sidepanel-regenerate-direct-pending");
+  regenerateDirectTimer = window.setTimeout(() => {
+    regenerateDirectTimer = null;
+    const confirm = !hadConfirmBeforeClick
+      ? action?.querySelector(".message-regenerate-confirm") ??
+        document.querySelector(".message-regenerate-confirm")
+      : null;
+    if (confirm instanceof HTMLButtonElement) {
+      confirm.click();
+    }
+    document.body.classList.remove("sidepanel-regenerate-direct-pending");
+  }, 0);
+}
+
 bindGlobalHandlers();
 bindTabListeners();
 
@@ -35137,5 +35425,7 @@ enhancementObserver.observe(document.documentElement || document.body, {
 });
 
 scheduleEnhancement();
+
+
 </script>
 </body></html>

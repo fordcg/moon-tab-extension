@@ -98,6 +98,10 @@ const SETTINGS_BACKGROUND_SNAPSHOT_CLASS = "settings-dialog-background-snapshot"
 let newConversationRequestInFlight = false;
 let floatingRequestInFlight = false;
 let floatingToastTimer = null;
+let messageListPinnedToBottom = true;
+let messageListScrollTarget = null;
+let messageListScrollRaf = null;
+let regenerateDirectTimer = null;
 
 // 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
 // textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
@@ -138,6 +142,7 @@ function scheduleEnhancement() {
       enhanceSendButton,
       syncAssistantStatus,
       positionMessagePopovers,
+      syncMessageScrollState,
       enhanceHistoryDrawer,
       enhanceHistorySessionMenus,
       enhanceSettingsDialog,
@@ -946,7 +951,7 @@ function enhanceSendButton() {
     return;
   }
   const sending = button.textContent.trim() === "发送中";
-  const label = sending ? "发送中" : "发送";
+  const label = sending ? "停止生成" : "发送";
   if (button.getAttribute("aria-label") !== label) {
     button.setAttribute("aria-label", label);
   }
@@ -956,6 +961,17 @@ function enhanceSendButton() {
   const sendingStr = String(sending);
   if (button.dataset.sending !== sendingStr) {
     button.dataset.sending = sendingStr;
+  }
+  button.dataset.stopGeneration = sendingStr;
+
+  // React 在发送中会禁用原按钮；但“停止生成”本身必须可点击。
+  // 只在确认为发送中时解除 disabled，点击会在捕获阶段被 layout.js 拦截，
+  // 不会落到原 onClick 触发二次发送。
+  if (sending && button.disabled) {
+    button.disabled = false;
+    button.setAttribute("aria-disabled", "false");
+  } else if (!sending) {
+    button.removeAttribute("aria-disabled");
   }
 }
 
@@ -979,10 +995,17 @@ function syncAssistantStatus() {
   if (!busy) {
     indicator?.remove();
     list.classList.remove("message-list-thinking");
+    list
+      .querySelectorAll(".message-bubble-wrap-thinking")
+      .forEach((wrap) => wrap.classList.remove("message-bubble-wrap-thinking"));
+    document.body.classList.remove("sidepanel-stop-requested");
     return;
   }
 
   list.classList.add("message-list-thinking");
+  list
+    .querySelectorAll(".message-bubble-wrap-thinking")
+    .forEach((wrap) => wrap.classList.remove("message-bubble-wrap-thinking"));
   if (!indicator) {
     indicator = document.createElement("div");
     indicator.className = "sidepanel-thinking";
@@ -1000,9 +1023,54 @@ function syncAssistantStatus() {
 
     indicator.append(dots, text);
   }
-  if (indicator.parentElement !== list) {
+
+  const assistantWrap = findActiveAssistantBubbleWrap(list);
+  if (assistantWrap) {
+    assistantWrap.classList.add("message-bubble-wrap-thinking");
+    const action = assistantWrap.querySelector(".message-regenerate-action-assistant");
+    if (indicator.parentElement !== assistantWrap || indicator.nextElementSibling !== action) {
+      assistantWrap.insertBefore(indicator, action || assistantWrap.firstChild);
+    }
+    return;
+  }
+
+  const lastUserEntry = findLastUserMessageEntry(list);
+  if (lastUserEntry) {
+    if (lastUserEntry.nextSibling !== indicator) {
+      lastUserEntry.after(indicator);
+    }
+  } else if (indicator.parentElement !== list) {
     list.append(indicator);
   }
+}
+
+function findActiveAssistantBubbleWrap(list) {
+  const entries = Array.from(list.querySelectorAll(".message-entry"));
+  const lastUserEntry = findLastUserMessageEntry(list);
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry === lastUserEntry) {
+      break;
+    }
+    const row = entry.querySelector(".message-row:not(.message-row-user)");
+    const wrap = row?.querySelector(".message-bubble-wrap");
+    if (!wrap) {
+      continue;
+    }
+
+    const bubbleText = wrap.querySelector(".message-bubble")?.textContent.trim() ?? "";
+    const thinkingText = wrap.querySelector(".message-thinking")?.textContent.trim() ?? "";
+    const hasVisibleAssistantContent = Boolean(bubbleText || thinkingText);
+    if (!hasVisibleAssistantContent) {
+      return wrap;
+    }
+  }
+  return null;
+}
+
+function findLastUserMessageEntry(list) {
+  const userRows = Array.from(list.querySelectorAll(".message-row-user"));
+  return userRows.at(-1)?.closest(".message-entry") ?? null;
 }
 
 function positionMessagePopovers() {
@@ -1075,6 +1143,81 @@ function resetPositionedPopover(popover) {
   popover.style.left = "";
   popover.style.top = "";
   popover.style.width = "";
+}
+
+function syncMessageScrollState() {
+  const list = document.querySelector(".message-list");
+  if (!(list instanceof HTMLElement)) {
+    messageListScrollTarget = null;
+    return;
+  }
+
+  if (messageListScrollTarget !== list) {
+    messageListScrollTarget = list;
+    messageListPinnedToBottom = isMessageListNearBottom(list);
+    list.addEventListener(
+      "scroll",
+      () => {
+        messageListPinnedToBottom = isMessageListNearBottom(list);
+        updateJumpToLatestButton(list);
+      },
+      { passive: true },
+    );
+  }
+
+  if (messageListPinnedToBottom) {
+    scheduleMessageListScrollToBottom(list);
+  }
+  updateJumpToLatestButton(list);
+}
+
+function isMessageListNearBottom(list) {
+  return list.scrollHeight - list.scrollTop - list.clientHeight < 96;
+}
+
+function scheduleMessageListScrollToBottom(list) {
+  if (messageListScrollRaf) {
+    return;
+  }
+  messageListScrollRaf = requestAnimationFrame(() => {
+    messageListScrollRaf = null;
+    if (messageListScrollTarget !== list) {
+      return;
+    }
+    if (messageListPinnedToBottom) {
+      list.scrollTop = list.scrollHeight;
+      messageListPinnedToBottom = true;
+      updateJumpToLatestButton(list);
+    }
+  });
+}
+
+function updateJumpToLatestButton(list) {
+  const panel = document.querySelector(".chat-panel");
+  if (!panel) {
+    return;
+  }
+
+  let button = panel.querySelector(".sidepanel-jump-latest");
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "sidepanel-jump-latest";
+    button.textContent = "跳到最新";
+    button.addEventListener("click", () => {
+      const currentList = document.querySelector(".message-list");
+      if (currentList instanceof HTMLElement) {
+        currentList.scrollTop = currentList.scrollHeight;
+        messageListPinnedToBottom = true;
+        updateJumpToLatestButton(currentList);
+      }
+    });
+    panel.append(button);
+  }
+
+  const hidden = isMessageListNearBottom(list);
+  button.hidden = hidden;
+  button.setAttribute("aria-hidden", String(hidden));
 }
 
 function isAssistantBusy() {
@@ -3189,6 +3332,9 @@ function bindGlobalHandlers() {
   }
   globalHandlersBound = true;
 
+  document.addEventListener("click", handleStopGenerationClick, true);
+  document.addEventListener("click", handleRegenerateDirectClick);
+
   // 点击当前弹窗和触发器以外区域时收起，保持工具/模型菜单关闭方式一致。
   document.addEventListener("click", (event) => {
     const target = event.target;
@@ -3286,6 +3432,66 @@ function bindGlobalHandlers() {
     const closeBtn = dialog.querySelector(".context-dialog-close");
     closeBtn?.click();
   });
+}
+
+function handleStopGenerationClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest(".composer-actions .ui-button-primary");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  if (button.dataset.sending !== "true") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  requestStopGeneration();
+}
+
+function requestStopGeneration() {
+  const stop = globalThis.__sidepanelStopGeneration;
+  if (typeof stop === "function") {
+    stop();
+  }
+  const live = ensureLiveRegion();
+  live.textContent = "正在停止生成";
+  document.body.classList.add("sidepanel-stop-requested");
+}
+
+function handleRegenerateDirectClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest(".message-regenerate-button");
+  if (!(button instanceof HTMLButtonElement) || button.disabled) {
+    return;
+  }
+  if (regenerateDirectTimer) {
+    window.clearTimeout(regenerateDirectTimer);
+  }
+
+  const action = button.closest(".message-regenerate-action");
+  const hadConfirmBeforeClick = Boolean(
+    action?.querySelector(".message-regenerate-confirm"),
+  );
+  document.body.classList.add("sidepanel-regenerate-direct-pending");
+  regenerateDirectTimer = window.setTimeout(() => {
+    regenerateDirectTimer = null;
+    const confirm = !hadConfirmBeforeClick
+      ? action?.querySelector(".message-regenerate-confirm") ??
+        document.querySelector(".message-regenerate-confirm")
+      : null;
+    if (confirm instanceof HTMLButtonElement) {
+      confirm.click();
+    }
+    document.body.classList.remove("sidepanel-regenerate-direct-pending");
+  }, 0);
 }
 
 bindGlobalHandlers();
