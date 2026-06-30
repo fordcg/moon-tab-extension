@@ -4,6 +4,8 @@
 import "./newtab-redirect.js";
 import "../ai-assistant/background/index.js";
 
+installModelCallDiagnostics();
+
 const SIDE_PANEL_PATH = "src/ai-assistant/index.html";
 const FLOATING_ASSISTANT_PATH = "src/ai-assistant/index.html?floating=1";
 const FLOATING_OPEN_TYPE = "sidepanelFloating.openCurrentTab";
@@ -292,4 +294,296 @@ async function disableGlobalSidePanelFallback() {
   } catch (error) {
     // 旧版浏览器或测试环境不支持 sidePanel.setOptions 时，不阻断其它后台逻辑。
   }
+}
+
+function installModelCallDiagnostics() {
+  const originalFetch = globalThis.fetch;
+  if (typeof originalFetch !== "function" || globalThis.__moonTabModelDiagnosticsInstalled) {
+    return;
+  }
+
+  globalThis.__moonTabModelDiagnosticsInstalled = true;
+  const fetchImpl = originalFetch.bind(globalThis);
+  globalThis.fetch = (input, init) => {
+    if (!isModelDiagnosticsRequest(input, init)) {
+      return fetchImpl(input, init);
+    }
+    return captureModelDiagnosticsFetch(fetchImpl, input, init);
+  };
+}
+
+function isModelDiagnosticsRequest(input, init) {
+  const url = resolveDiagnosticsFetchUrl(input);
+  const method = String(init?.method || input?.method || "GET").toUpperCase();
+  if (!url || method !== "POST") {
+    return false;
+  }
+
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return (
+      path.endsWith("/chat/completions") ||
+      path.endsWith("/messages") ||
+      path.endsWith("/responses") ||
+      path.includes(":generatecontent") ||
+      path.includes(":streamgeneratecontent")
+    );
+  } catch (_error) {
+    return /\/(chat\/completions|messages|responses)(?:$|[?#/])/i.test(url);
+  }
+}
+
+async function captureModelDiagnosticsFetch(fetchImpl, input, init) {
+  const startedAt = Date.now();
+  const request = buildModelDiagnosticsRequest(input, init);
+  const baseRecord = {
+    id: `model-${startedAt}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: "model-call",
+    status: "pending",
+    startedAt,
+    request,
+    model: typeof request.body?.model === "string" ? request.body.model : "",
+    promptSummary: summarizeModelDiagnosticsPrompt(request.body),
+  };
+
+  postModelDiagnostic(fetchImpl, baseRecord);
+
+  try {
+    const response = await fetchImpl(input, init);
+    const responseBase = {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: redactDiagnosticsHeaders(response.headers),
+    };
+
+    response.clone().text().then((text) => {
+      const completedAt = Date.now();
+      const bodySnapshot = parseDiagnosticsBody(text);
+      postModelDiagnostic(fetchImpl, {
+        ...baseRecord,
+        status: response.ok ? "success" : "error",
+        completedAt,
+        durationMs: completedAt - startedAt,
+        response: { ...responseBase, ...bodySnapshot },
+        responseSummary: summarizeModelDiagnosticsResponse(bodySnapshot.body),
+      });
+    }).catch((error) => {
+      const completedAt = Date.now();
+      postModelDiagnostic(fetchImpl, {
+        ...baseRecord,
+        status: response.ok ? "success" : "error",
+        completedAt,
+        durationMs: completedAt - startedAt,
+        response: {
+          ...responseBase,
+          bodyText: `[响应正文读取失败] ${formatDiagnosticsError(error)}`,
+        },
+      });
+    });
+
+    return response;
+  } catch (error) {
+    const completedAt = Date.now();
+    postModelDiagnostic(fetchImpl, {
+      ...baseRecord,
+      status: "error",
+      completedAt,
+      durationMs: completedAt - startedAt,
+      errorMessage: redactDiagnosticsText(formatDiagnosticsError(error), 1200),
+    });
+    throw error;
+  }
+}
+
+function postModelDiagnostic(fetchImpl, record) {
+  try {
+    void fetchImpl("http://127.0.0.1:17334/model-diagnostics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(record),
+    }).catch(() => undefined);
+  } catch (_error) {
+    // 诊断服务未启动或被拦截时不影响真实模型调用。
+  }
+}
+
+function buildModelDiagnosticsRequest(input, init) {
+  return {
+    url: resolveDiagnosticsFetchUrl(input),
+    method: String(init?.method || input?.method || "GET").toUpperCase(),
+    headers: redactDiagnosticsHeaders(mergeDiagnosticsHeaders(input?.headers, init?.headers)),
+    ...parseDiagnosticsBody(extractDiagnosticsBodyText(input, init)),
+  };
+}
+
+function parseDiagnosticsBody(text) {
+  if (typeof text !== "string" || !text) {
+    return {};
+  }
+
+  const truncated = truncateDiagnosticsText(text, 30000);
+  try {
+    return {
+      body: redactDiagnosticsValue(JSON.parse(truncated.text)),
+      truncated: truncated.truncated,
+    };
+  } catch (_error) {
+    return {
+      bodyText: redactDiagnosticsText(truncated.text, 30000),
+      truncated: truncated.truncated,
+    };
+  }
+}
+
+function extractDiagnosticsBodyText(input, init) {
+  const body = init?.body;
+  if (typeof body === "string") {
+    return body;
+  }
+  if (body instanceof URLSearchParams) {
+    return body.toString();
+  }
+  if (body && typeof body === "object" && body.constructor?.name === "FormData") {
+    return "[FormData 请求体未展开]";
+  }
+  return typeof input?.body === "string" ? input.body : "";
+}
+
+function resolveDiagnosticsFetchUrl(input) {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return typeof input?.url === "string" ? input.url : "";
+}
+
+function mergeDiagnosticsHeaders(...headersList) {
+  const headers = [];
+  for (const headersLike of headersList) {
+    if (!headersLike) {
+      continue;
+    }
+
+    try {
+      new Headers(headersLike).forEach((value, name) => headers.push({ name, value }));
+      continue;
+    } catch (_error) {
+      // 继续兼容普通对象和数组形式。
+    }
+
+    if (Array.isArray(headersLike)) {
+      for (const item of headersLike) {
+        if (Array.isArray(item)) {
+          headers.push({ name: item[0], value: item[1] });
+        } else if (item && typeof item === "object") {
+          headers.push({ name: item.name, value: item.value });
+        }
+      }
+    } else if (typeof headersLike === "object") {
+      for (const [name, value] of Object.entries(headersLike)) {
+        headers.push({ name, value });
+      }
+    }
+  }
+  return headers;
+}
+
+function redactDiagnosticsHeaders(headersLike) {
+  return Object.fromEntries(
+    mergeDiagnosticsHeaders(headersLike)
+      .filter((header) => header?.name)
+      .map((header) => {
+        const name = String(header.name);
+        return [
+          name,
+          isDiagnosticsSensitiveKey(name)
+            ? "[已脱敏]"
+            : redactDiagnosticsText(String(header.value ?? ""), 1000),
+        ];
+      }),
+  );
+}
+
+function redactDiagnosticsValue(value, depth = 0, key = "") {
+  if (isDiagnosticsSensitiveKey(key)) {
+    return "[已脱敏]";
+  }
+  if (depth > 8) {
+    return "[层级过深]";
+  }
+  if (value == null || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return redactDiagnosticsText(value, 6000);
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 120).map((item) => redactDiagnosticsValue(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 180)
+        .map(([itemKey, itemValue]) => [itemKey, redactDiagnosticsValue(itemValue, depth + 1, itemKey)]),
+    );
+  }
+  return String(value);
+}
+
+function summarizeModelDiagnosticsPrompt(body) {
+  if (!body || typeof body !== "object") {
+    return "";
+  }
+
+  const messages = Array.isArray(body.messages) ? body.messages : Array.isArray(body.input) ? body.input : [];
+  const roles = messages
+    .map((message) => (message && typeof message === "object" ? message.role : ""))
+    .filter(Boolean);
+  const tools = Array.isArray(body.tools) ? `，工具 ${body.tools.length} 个` : "";
+  return messages.length
+    ? `${messages.length} 条消息${roles.length ? `（${roles.join(" → ")}）` : ""}${tools}`
+    : tools.replace(/^，/, "");
+}
+
+function summarizeModelDiagnosticsResponse(body) {
+  if (!body || typeof body !== "object") {
+    return "";
+  }
+
+  const message = Array.isArray(body.choices) ? body.choices[0]?.message : undefined;
+  if (typeof message?.content === "string") {
+    return truncateDiagnosticsText(message.content, 700).text;
+  }
+  if (Array.isArray(message?.tool_calls)) {
+    return `模型返回 ${message.tool_calls.length} 个工具调用。`;
+  }
+  if (typeof body.content === "string") {
+    return truncateDiagnosticsText(body.content, 700).text;
+  }
+  return "";
+}
+
+function isDiagnosticsSensitiveKey(key) {
+  return /(^|[-_])(token|secret|password|passwd|pwd|authorization|auth|api[-_]?key|session|jwt|credential|client[-_]?secret|refresh[-_]?token|access[-_]?token|cookie|set-cookie)([-_]|$)/i.test(String(key || ""));
+}
+
+function redactDiagnosticsText(text, limit = 6000) {
+  const redacted = String(text ?? "")
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, (_match, scheme) => `${scheme} [已脱敏]`)
+    .replace(/((?:token|secret|password|passwd|pwd|apiKey|api_key|authorization|session|jwt|cookie)\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s&,;}]+)/gi, (_match, prefix) => `${prefix}[已脱敏]`);
+  return truncateDiagnosticsText(redacted, limit).text;
+}
+
+function truncateDiagnosticsText(text, limit) {
+  const value = String(text ?? "");
+  return value.length <= limit
+    ? { text: value, truncated: false }
+    : { text: `${value.slice(0, limit)}…[已截断]`, truncated: true };
+}
+
+function formatDiagnosticsError(error) {
+  return error instanceof Error && error.message ? error.message : String(error);
 }

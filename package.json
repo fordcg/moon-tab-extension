@@ -4,7 +4,8 @@
   "private": true,
   "description": "Moon Tab Chrome MV3 extension with new tab search, game page, and Browser AI Assistant side panel.",
   "scripts": {
-    "test": "node scripts/run_unit_tests.mjs"
+    "test": "node scripts/run_unit_tests.mjs",
+    "model-diagnostics": "node scripts/model_diagnostics_sink.mjs"
   },
   "engines": {
     "node": ">=20"
