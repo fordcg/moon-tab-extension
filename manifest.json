@@ -28,9 +28,6 @@
     "service_worker": "src/background/service-worker.js",
     "type": "module"
   },
-  "side_panel": {
-    "default_path": "src/ai-assistant/index.html"
-  },
   "devtools_page": "src/ai-assistant/devtools.html",
   "commands": {
     "open-side-panel": {

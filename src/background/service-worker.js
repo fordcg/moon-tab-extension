@@ -4,10 +4,15 @@
 import "./newtab-redirect.js";
 import "../ai-assistant/background/index.js";
 
+const SIDE_PANEL_PATH = "src/ai-assistant/index.html";
 const FLOATING_ASSISTANT_PATH = "src/ai-assistant/index.html?floating=1";
 const FLOATING_OPEN_TYPE = "sidepanelFloating.openCurrentTab";
 const FLOATING_CONTENT_OPEN_TYPE = "sidepanelFloating.open";
 const SIDE_PANEL_CLOSE_TYPE = "sidePanel.close";
+
+void disableGlobalSidePanelFallback();
+chrome.runtime.onInstalled.addListener(disableGlobalSidePanelFallback);
+chrome.runtime.onStartup.addListener(disableGlobalSidePanelFallback);
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== "object" || message.type !== FLOATING_OPEN_TYPE) {
@@ -114,4 +119,15 @@ function isFloatingSupportedUrl(url) {
 function isMissingContentScriptError(error) {
   const message = error instanceof Error ? error.message : String(error);
   return /Receiving end does not exist|Could not establish connection/i.test(message);
+}
+
+async function disableGlobalSidePanelFallback() {
+  try {
+    await chrome.sidePanel?.setOptions?.({
+      path: SIDE_PANEL_PATH,
+      enabled: false,
+    });
+  } catch (error) {
+    // 旧版浏览器或测试环境不支持 sidePanel.setOptions 时，不阻断其它后台逻辑。
+  }
 }

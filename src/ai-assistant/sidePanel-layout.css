@@ -25,7 +25,7 @@
   --sidepanel-popover-width: min(20.9375rem, calc(100vw - 1.5rem));
   --sidepanel-history-compact-max-height: min(26rem, calc(100dvh - 5rem));
   --sidepanel-history-expanded-height: min(31.25rem, calc(100dvh - 5rem));
-  --sidepanel-settings-dialog-height: min(23.5rem, calc(100dvh - 5rem));
+  --sidepanel-settings-dialog-height: min(32rem, calc(100dvh - 5rem));
 }
 
 html,
@@ -2927,6 +2927,9 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
 .settings-dialog > .mx-auto,
 .settings-dialog > .grid,
 .settings-dialog .mx-auto.grid {
+  /* grid 默认 align-content 会把行在多余高度里拉伸，短内容 tab（提取规则/提示词）
+     于是在 tab 栏和标题之间留出大段空隙。锚到顶部，让内容自然从上往下排。 */
+  align-content: start !important;
   flex: 1 1 auto;
   gap: 0.125rem !important;
   margin: 0 !important;
@@ -2952,6 +2955,13 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   gap: 0.125rem !important;
   margin: 0;
   padding: 0 0 0.5rem;
+  /* 5 个 tab 在窄侧栏里排不下时横向滚动；隐藏滚动条避免占位，选中项由
+     JS scrollIntoView 兜进可视区。 */
+  scrollbar-width: none;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-dialog .settings-tabs-scroll button {
@@ -2962,7 +2972,8 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   font-size: 0.8125rem !important;
   font-weight: 500 !important;
   min-height: 2.25rem;
-  padding: 0.375rem 0.625rem !important;
+  padding: 0.375rem 0.5rem !important;
+  white-space: nowrap;
 }
 
 .settings-dialog .settings-tabs-scroll button:hover,
@@ -3377,6 +3388,217 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   padding: 0 !important;
   position: absolute !important;
   width: 1px !important;
+}
+
+/* 端点地址 / API Key 行内清空按钮：label 是 [文案 / 输入框] 两行 grid，把按钮
+   绝对定位到输入框右侧。输入框右内边距留给按钮，避免文字压到 x 下面。 */
+.settings-dialog .sidepanel-channel-clearable {
+  position: relative;
+}
+
+.settings-dialog .sidepanel-channel-clearable > input.ui-input {
+  padding-right: 2.25rem !important;
+}
+
+.settings-dialog .sidepanel-channel-clear {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.375rem !important;
+  bottom: 0.375rem;
+  color: var(--sidepanel-muted) !important;
+  cursor: pointer;
+  display: grid;
+  height: 1.625rem !important;
+  justify-content: center;
+  min-height: 0 !important;
+  padding: 0 !important;
+  place-items: center;
+  position: absolute;
+  right: 0.375rem;
+  width: 1.625rem !important;
+}
+
+.settings-dialog .sidepanel-channel-clear[hidden] {
+  display: none !important;
+}
+
+.settings-dialog .sidepanel-channel-clear::before {
+  background: currentColor;
+  content: "";
+  display: block;
+  height: 0.875rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 0.875rem 0.875rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 0.875rem 0.875rem no-repeat;
+  width: 0.875rem;
+}
+
+.settings-dialog .sidepanel-channel-clear:hover {
+  background: var(--sidepanel-row-hover) !important;
+  color: var(--sidepanel-ink) !important;
+}
+
+.settings-dialog .sidepanel-channel-clear:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--sidepanel-blue) 36%, transparent) !important;
+  outline-offset: 1px;
+}
+
+/* ── 提取规则 / 提示词 tab ──────────────────────────────────────
+   这两屏走 React bundle 的原生 Tailwind 卡片（article / .prompt-template-card）。
+   上面的扁平化规则会把卡面 bg-canvas 抹成透明、把选中 border-primary 降成
+   hairline-soft，于是列表项失去卡片感、选中态不可辨。这里按 aria-label / 卡片类
+   重新接管，恢复与渠道列表同一套“白底卡片 + 蓝描边选中”语言。 */
+
+/* 段落标题行（标题 + 新增按钮）同排，标题加重。 */
+.settings-dialog section[aria-label="提取规则"] > div:first-child > h3,
+.settings-dialog section[aria-label="提示词"] > div:first-child > h3 {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+}
+
+/* 列表项卡片：白底 hairline 圆角，hover 抬底，与渠道列表项一致。 */
+.settings-dialog section[aria-label="提取规则"] article,
+.settings-dialog .prompt-template-card {
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.625rem !important;
+  box-shadow: none !important;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out;
+}
+
+.settings-dialog section[aria-label="提取规则"] article:hover,
+.settings-dialog .prompt-template-card:hover {
+  background: var(--sidepanel-control-hover) !important;
+}
+
+/* 选中项（匹配当前页 / 正在编辑）：蓝描边 + 淡蓝底，对齐渠道选中语言。 */
+.settings-dialog section[aria-label="提取规则"] article[class*="--color-primary"],
+.settings-dialog .prompt-template-card[class*="--color-primary"] {
+  background: var(--sidepanel-blue-soft) !important;
+  border-color: var(--sidepanel-blue) !important;
+}
+
+/* 卡片标题 / 预览：标题加重，副行（URL / 内容预览）弱化并单行截断。 */
+.settings-dialog section[aria-label="提取规则"] article .text-sm.font-medium,
+.settings-dialog .prompt-template-card .text-sm.font-medium {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+}
+
+.settings-dialog section[aria-label="提取规则"] article .ui-muted,
+.settings-dialog .prompt-template-card .prompt-template-preview {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+}
+
+/* 上移 / 下移小按钮：从透明次按钮里区分出来，给浅控件底，成组靠右。 */
+.settings-dialog section[aria-label="提取规则"] article .ui-button-secondary {
+  background: var(--sidepanel-control) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+  min-height: 1.875rem !important;
+  padding: 0.25rem 0.5rem !important;
+}
+
+.settings-dialog section[aria-label="提取规则"] article .ui-button-secondary:hover {
+  background: var(--sidepanel-control-hover) !important;
+}
+
+/* 草稿编辑区：顶部分隔线统一成 hairline，与详情字段分带。 */
+.settings-dialog section[aria-label="提取规则"] article .border-t,
+.settings-dialog .prompt-template-card .border-t {
+  border-color: var(--sidepanel-line) !important;
+}
+
+/* 规则草稿里的“选择生成模型 / 生成结果”子面板：恢复浅控件底，和输入字段分层。 */
+.settings-dialog section[aria-label="提取规则"] article [class*="surface-soft"] {
+  background: var(--sidepanel-control) !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  border-radius: 0.5rem !important;
+}
+
+.settings-dialog section[aria-label="提取规则"] article [class*="surface-soft"] [class*="color-ink"] {
+  background: var(--sidepanel-canvas) !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+}
+
+/* 校验 / 错误文案：上面的 .settings-dialog p 会把所有 <p> 染成 muted，连错误也被抹平。
+   这里按语义恢复成红色 notice 左竖条，与渠道详情错误同语言。 */
+.settings-dialog section[aria-label="提取规则"] p[class*="color-error"],
+.settings-dialog section[aria-label="提示词"] p[class*="color-error"] {
+  background: var(--sidepanel-danger-soft) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: inset 3px 0 0 var(--sidepanel-danger) !important;
+  color: var(--sidepanel-danger-deep) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.25rem !important;
+  margin: 0 !important;
+  padding: 0.4375rem 0.625rem !important;
+}
+
+/* 空状态（暂无提示词）：扁平化把它抹成透明，这里做成虚线占位 notice。
+   bundle 里它是直接挂在 section 下的 <p>。 */
+.settings-dialog section[aria-label="提示词"] > p[class*="surface-soft"] {
+  background: var(--sidepanel-control) !important;
+  border: 1px dashed var(--sidepanel-line) !important;
+  border-radius: 0.625rem !important;
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.8125rem !important;
+  padding: 0.75rem !important;
+  text-align: center;
+}
+
+/* 草稿保存 / 取消按钮行：主按钮蓝、取消走次按钮。 */
+.settings-dialog section[aria-label="提取规则"] article .ui-button-primary,
+.settings-dialog .prompt-template-card .ui-button-primary {
+  background: var(--sidepanel-blue) !important;
+  border-color: transparent !important;
+  color: var(--sidepanel-canvas) !important;
+}
+
+.settings-dialog section[aria-label="提取规则"] article .ui-button-primary:hover:not(:disabled),
+.settings-dialog .prompt-template-card .ui-button-primary:hover:not(:disabled) {
+  background: var(--sidepanel-blue-deep) !important;
+}
+
+/* ── 聊天偏好 tab ───────────────────────────────────────────────
+   多为 textarea / 开关行 / 工具分组，generic 规则已覆盖大部分。这里补两处：
+   textarea 最小高度对齐 bundle 的 min-h-32/40，工具分组标题层级。 */
+.settings-dialog section[aria-label="聊天偏好"] textarea {
+  line-height: 1.375rem !important;
+  min-height: 4.5rem !important;
+}
+
+.settings-dialog section[aria-label="聊天偏好"] .chat-preference-tool-group-title {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+}
+
+/* ── 同步设置 tab ───────────────────────────────────────────────
+   说明 / 明文警告 / 开关行 / WebDAV·S3 字段。扁平化把说明和警告都抹成透明，
+   这里把它们恢复成 notice 卡片：说明走中性灰，明文备份警告走 warning 暖色，
+   语义不被吞掉。bundle 里说明 / 警告都是直接挂在 section 下的 <p>。 */
+.settings-dialog section[aria-label="同步设置"] > p[class*="surface-soft"] {
+  background: var(--sidepanel-control) !important;
+  border: 1px solid var(--sidepanel-line-soft) !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.25rem !important;
+  padding: 0.5rem 0.625rem !important;
+}
+
+/* 明文备份警告：暖底 + 左竖条，从普通说明里区分出来。 */
+.settings-dialog section[aria-label="同步设置"] > p[class*="color-warning"] {
+  background: #fff7f2 !important;
+  border-color: #f0d8cf !important;
+  box-shadow: inset 3px 0 0 #d08a52 !important;
+  color: #8b4a3d !important;
 }
 
 /* 模型/恢复设置弹窗：对齐输入区工具浮层的白底、hairline、2.25rem 控件网格。 */

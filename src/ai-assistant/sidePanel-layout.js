@@ -54,8 +54,14 @@ const FLOATING_WINDOW_SVG =
   '<rect x="4" y="5" width="16" height="14" rx="3"></rect>' +
   '<path d="M7.5 9.75h9M7.5 13.5h6"></path></svg>';
 
-const IS_FLOATING_FRAME =
-  new URLSearchParams(window.location.search).get("floating") === "1";
+const SIDE_PANEL_URL_PARAMS = new URLSearchParams(window.location.search);
+const IS_FLOATING_FRAME = SIDE_PANEL_URL_PARAMS.get("floating") === "1";
+const INITIAL_PANEL_TAB_ID = parseIntegerParam(
+  SIDE_PANEL_URL_PARAMS.get("tabId") || SIDE_PANEL_URL_PARAMS.get("sidePanelTabId"),
+);
+const INITIAL_PANEL_WINDOW_ID = parseIntegerParam(
+  SIDE_PANEL_URL_PARAMS.get("windowId") || SIDE_PANEL_URL_PARAMS.get("sidePanelWindowId"),
+);
 
 // 模型下拉占位文案。enhanceModelSelectDisplay 与 renderModelSelectMenu 共用，
 // 避免两处各写一份字面量、改文案时过滤失效让占位项混进可选列表。
@@ -71,7 +77,8 @@ let scheduled = false;
 let globalHandlersBound = false;
 let tabsBound = false;
 let enhancementObserver = null;
-let myWindowId = null;
+let myWindowId = INITIAL_PANEL_WINDOW_ID;
+let panelTabId = INITIAL_PANEL_TAB_ID;
 let cachedTabs = [];
 let activePageTab = null;
 let lastAssistantBusy = false;
@@ -115,7 +122,11 @@ let moveConversationCandidateSignature = "";
 let lastConversationContinuitySignature = "";
 let lastPersistedSessionContextSignature = "";
 let moveConversationRequestInFlight = false;
-let tabSwitchCloseRequested = false;
+// 记录最近一次 mousedown 是否落在设置弹窗内。用于外部点击关闭判定：
+// 在输入框里按下后拖到弹窗外松开（全选拖拽），或点删除按钮后该元素被 React
+// 同步移出 DOM，click 的 target 会落在弹窗外，误判成“点了外面”。只要起点在
+// 弹窗内就视为弹窗内交互，不关闭。
+let pointerDownInsideSettingsDialog = false;
 
 // 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
 // textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
@@ -137,6 +148,14 @@ let promptUndoBurstTimer = null;
 let promptUndoApplying = false;
 
 document.body?.classList.toggle("sidepanel-floating-frame", IS_FLOATING_FRAME);
+
+function parseIntegerParam(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
 
 function scheduleEnhancement() {
   if (scheduled) {
@@ -166,8 +185,10 @@ function scheduleEnhancement() {
       enhanceHistoryDrawer,
       enhanceHistorySessionMenus,
       enhanceSettingsDialog,
+      syncSettingsTabsScroll,
       enhanceChannelManager,
       enhanceChannelSelects,
+      enhanceChannelTextInputClear,
       cleanupSettingsBackgroundSnapshot,
       updateContextBanner,
       enhanceContextDialog,
@@ -2826,9 +2847,10 @@ function isRecognizableTabUrl(url) {
   return /^(https?|chrome|chrome-extension|edge|about|file):\/\//i.test(url || "");
 }
 
-// “当前页面” = side panel 所在窗口的活动网页标签页。
-// 锚定 windowId 后，切换标签页 / 同标签页内导航都能立即命中，不再被
-// lastFocusedWindow 启发式或其它窗口的活动标签带偏。
+// “当前页面” = 打开本 side panel 的浏览器标签页。
+// tab-scoped 侧栏隐藏在其它标签页时，页面脚本仍可能收到 tabs 事件；
+// 因此优先用打开时捕获的 panelTabId 做锚点，避免隐藏实例跟随其它标签页
+// 改写“当前页面”与会话绑定。
 function pickActivePageTab(allTabs) {
   const scoped =
     myWindowId === null
@@ -2837,6 +2859,12 @@ function pickActivePageTab(allTabs) {
   const recognizable = scoped.filter((tab) => isRecognizableTabUrl(tab.url));
   if (!recognizable.length) {
     return null;
+  }
+  if (typeof panelTabId === "number") {
+    const anchored = recognizable.find((tab) => tab.id === panelTabId);
+    if (anchored) {
+      return anchored;
+    }
   }
   const active = recognizable.find((tab) => tab.active);
   if (active) {
@@ -3545,6 +3573,41 @@ function enhanceSettingsDialog() {
   panel.insertBefore(header, panel.firstChild);
 }
 
+// 设置分类 tab 栏：5 个 tab 在窄侧栏里排不下会横向滚动，选中项可能落在可视区外。
+// 这里把当前选中的 tab 平滑滚进可视区，并按签名跳过重复滚动，避免每帧抖动。
+function syncSettingsTabsScroll() {
+  const scroller = document.querySelector(
+    ".settings-dialog .settings-tabs-scroll",
+  );
+  if (!scroller) {
+    return;
+  }
+
+  const selected = scroller.querySelector('button[aria-selected="true"]');
+  if (!(selected instanceof HTMLElement)) {
+    return;
+  }
+
+  // 仅在选中项变化时滚动，避免 MutationObserver 每次回调都触发滚动。
+  if (scroller.dataset.sidepanelActiveTab === selected.textContent.trim()) {
+    return;
+  }
+  scroller.dataset.sidepanelActiveTab = selected.textContent.trim();
+
+  const scrollerRect = scroller.getBoundingClientRect();
+  const selectedRect = selected.getBoundingClientRect();
+  if (
+    selectedRect.left < scrollerRect.left ||
+    selectedRect.right > scrollerRect.right
+  ) {
+    selected.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }
+}
+
 // 渠道管理 tab（settings-dialog 内）增强：bundle 里这一屏走原生 Tailwind，
 // 覆盖层只能从外部补语义。这里做三件幂等的小事：
 //   1. 给“删除渠道”加危险样式 + 二次确认，避免误删；
@@ -3722,6 +3785,81 @@ function closeChannelMenus() {
     window.removeEventListener("scroll", modelMenuReposition, true);
     window.removeEventListener("resize", modelMenuReposition);
     modelMenuReposition = null;
+  }
+}
+
+// React 受控 input 清空：原生 value setter 绕过 React 的 value 缓存，再派发 input
+// 事件让 React 收到变更。直接改 input.value React 不会感知（受控组件会回灌旧值）。
+function clearControlledInput(input) {
+  const prototype = Object.getPrototypeOf(input);
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+  const setter = descriptor?.set;
+  if (setter) {
+    setter.call(input, "");
+  } else {
+    input.value = "";
+  }
+  input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  input.focus();
+}
+
+// 渠道详情里的「端点地址」「API Key」是长文本输入，拖拽全选容易把鼠标拖出弹窗
+// （已由 mousedown 起点兜住不误关），再补一个行内清空按钮：一键清空整条值，
+// 省去全选删除。按钮按 aria-label 锚定，幂等注入；仅在有内容时显示。
+const CHANNEL_CLEARABLE_INPUT_LABELS = ["端点地址", "API Key"];
+
+function enhanceChannelTextInputClear() {
+  const section = document.querySelector(
+    '.settings-dialog section[aria-label="当前渠道详情"]',
+  );
+  if (!section) {
+    return;
+  }
+
+  for (const labelText of CHANNEL_CLEARABLE_INPUT_LABELS) {
+    const input = section.querySelector(
+      `input[aria-label="${labelText}"]`,
+    );
+    if (!(input instanceof HTMLInputElement)) {
+      continue;
+    }
+
+    const field = input.closest("label");
+    if (!field) {
+      continue;
+    }
+    field.classList.add("sidepanel-channel-clearable");
+
+    let clearButton = field.querySelector(":scope > .sidepanel-channel-clear");
+    if (!clearButton) {
+      clearButton = document.createElement("button");
+      clearButton.type = "button";
+      clearButton.className = "sidepanel-channel-clear";
+      clearButton.tabIndex = -1;
+      clearButton.setAttribute("aria-label", `清空${labelText}`);
+      clearButton.title = `清空${labelText}`;
+      // mousedown 阻止默认：避免清空前输入框先失焦，也保证点击不被外部关闭逻辑误读。
+      clearButton.addEventListener("mousedown", (event) => event.preventDefault());
+      clearButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearControlledInput(input);
+        clearButton.hidden = true;
+      });
+      field.append(clearButton);
+    }
+
+    // 有内容才显示清空按钮，空值时隐藏，避免空框右侧挂个无意义的 x。
+    clearButton.hidden = !input.value;
+    if (input.dataset.sidepanelClearSyncBound !== "true") {
+      input.dataset.sidepanelClearSyncBound = "true";
+      input.addEventListener("input", () => {
+        const button = field.querySelector(":scope > .sidepanel-channel-clear");
+        if (button) {
+          button.hidden = !input.value;
+        }
+      });
+    }
   }
 }
 
@@ -3975,32 +4113,24 @@ function bindTabListeners() {
   }
   tabsBound = true;
 
-  // 缓存 side panel 所在窗口，作为“当前页面”的锚点。
-  try {
-    chrome.windows.getCurrent((win) => {
-      if (chrome.runtime?.lastError) {
-        return;
-      }
-      myWindowId = typeof win?.id === "number" ? win.id : null;
-      refreshTabsAndBanner();
-    });
-  } catch (error) {
-    // 拿不到 windowId 时退化为全局逻辑（myWindowId 保持 null）。
-    refreshTabsAndBanner();
-  }
+  // 缓存打开本 side panel 的标签页/窗口，作为“当前页面”的锚点。
+  captureSidePanelAnchor();
 
-  // 仅当 side panel 所在窗口的活动标签变化时刷新，避免其它窗口切换带偏横幅。
+  // 仅当切回本 side panel 所属标签页时刷新。切到其它标签页不主动关闭，
+  // 也不让隐藏的侧栏实例跟随新标签页改写上下文。
   chrome.tabs.onActivated?.addListener((activeInfo) => {
-    if (myWindowId === null || activeInfo?.windowId === myWindowId) {
-      if (shouldCloseSidePanelForTabSwitch(activeInfo)) {
-        requestCloseSidePanelForTabSwitch(activeInfo);
-        return;
-      }
+    if (
+      (myWindowId === null || activeInfo?.windowId === myWindowId) &&
+      (panelTabId === null || activeInfo?.tabId === panelTabId)
+    ) {
       refreshTabsAndBanner();
     }
   });
   // 同标签页内导航（url/title/favIcon 变化）也要实时更新。
-  chrome.tabs.onUpdated?.addListener((_tabId, info, tab) => {
+  chrome.tabs.onUpdated?.addListener((tabId, info, tab) => {
+    if (panelTabId !== null && tabId !== panelTabId) {
+      return;
+    }
     if (myWindowId !== null && tab?.windowId !== myWindowId) {
       return;
     }
@@ -4008,36 +4138,64 @@ function bindTabListeners() {
       refreshTabsAndBanner();
     }
   });
-  chrome.tabs.onRemoved?.addListener(() => refreshTabsAndBanner());
+  chrome.tabs.onRemoved?.addListener((tabId) => {
+    if (panelTabId === null || tabId === panelTabId) {
+      refreshTabsAndBanner();
+    }
+  });
   chrome.windows?.onFocusChanged?.addListener(() => refreshTabsAndBanner());
 }
 
-function shouldCloseSidePanelForTabSwitch(activeInfo) {
-  if (IS_FLOATING_FRAME || tabSwitchCloseRequested) {
-    return false;
+function captureSidePanelAnchor() {
+  if (typeof panelTabId === "number") {
+    try {
+      chrome.tabs.get(panelTabId, (tab) => {
+        if (!chrome.runtime?.lastError && typeof tab?.windowId === "number") {
+          myWindowId = tab.windowId;
+        }
+        refreshTabsAndBanner();
+      });
+      return;
+    } catch (error) {
+      // tabs.get 不可用时继续尝试 active tab 兜底。
+    }
   }
-  if (typeof activeInfo?.tabId !== "number") {
-    return false;
+
+  try {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab] = []) => {
+      if (chrome.runtime?.lastError) {
+        captureSidePanelWindow();
+        return;
+      }
+      if (panelTabId === null && typeof tab?.id === "number") {
+        panelTabId = tab.id;
+      }
+      myWindowId = typeof tab?.windowId === "number" ? tab.windowId : myWindowId;
+      if (myWindowId === null) {
+        captureSidePanelWindow();
+        return;
+      }
+      refreshTabsAndBanner();
+    });
+  } catch (error) {
+    captureSidePanelWindow();
   }
-  const previousTabId = activePageTab?.id;
-  return typeof previousTabId === "number" && previousTabId !== activeInfo.tabId;
 }
 
-function requestCloseSidePanelForTabSwitch(activeInfo) {
-  tabSwitchCloseRequested = true;
-  closeSidePanelWindow({
-    reason: "tab-switch",
-    tabId: activeInfo.tabId,
-    windowId: activeInfo.windowId,
-  });
-  window.setTimeout(() => {
-    if (!tabSwitchCloseRequested || document.visibilityState === "hidden") {
-      return;
-    }
-    // 老版 Chrome 若无法程序关闭 side panel，至少恢复刷新，避免留在旧标签页状态。
-    tabSwitchCloseRequested = false;
+function captureSidePanelWindow() {
+  try {
+    chrome.windows.getCurrent((win) => {
+      if (chrome.runtime?.lastError) {
+        refreshTabsAndBanner();
+        return;
+      }
+      myWindowId = typeof win?.id === "number" ? win.id : myWindowId;
+      refreshTabsAndBanner();
+    });
+  } catch (error) {
+    // 拿不到 windowId/tabId 时退化为旧的 active-tab 逻辑。
     refreshTabsAndBanner();
-  }, 900);
+  }
 }
 
 // 绑定输入区撤销/重做历史。只绑一次，靠 dataset 标记防止 MutationObserver 反复
@@ -4265,6 +4423,19 @@ function bindGlobalHandlers() {
   document.addEventListener("click", handleStopGenerationClick, true);
   document.addEventListener("click", handleRegenerateDirectClick);
 
+  // 记录 mousedown 起点是否在设置弹窗内。click 只在 mousedown 与 mouseup 同源时
+  // 触发，但拖拽选字会让 mouseup 落在弹窗外；删除模型/渠道时目标元素被同步移除，
+  // click 的 target 也会脱离弹窗。两种情况都靠这个起点标记兜住，避免误关。
+  document.addEventListener(
+    "mousedown",
+    (event) => {
+      const target = event.target;
+      pointerDownInsideSettingsDialog =
+        target instanceof Element && Boolean(target.closest(".settings-dialog"));
+    },
+    true,
+  );
+
   // 点击当前弹窗和触发器以外区域时收起，保持工具/模型菜单关闭方式一致。
   document.addEventListener("click", (event) => {
     const target = event.target;
@@ -4277,8 +4448,12 @@ function bindGlobalHandlers() {
       closeModelMenu();
     }
     const settingsDialog = document.querySelector(".settings-dialog");
+    // 起点在弹窗内（拖拽选字 / 删除按钮触发元素被移除）时，不当作外部点击。
+    const startedInsideDialog = pointerDownInsideSettingsDialog;
+    pointerDownInsideSettingsDialog = false;
     if (
       settingsDialog &&
+      !startedInsideDialog &&
       !target.closest(".settings-dialog") &&
       !target.closest('.app-header-actions button[aria-label="设置"]')
     ) {
