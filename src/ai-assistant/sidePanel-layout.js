@@ -866,6 +866,51 @@ function normalizeSharedTab(tab) {
   };
 }
 
+function makeSharedTabKey(tab) {
+  const normalized = normalizeSharedTab(tab);
+  if (!normalized) {
+    return "";
+  }
+  const url = normalized.url.trim();
+  if (url) {
+    return `url:${url}`;
+  }
+  if (
+    typeof normalized.windowId === "number" &&
+    typeof normalized.tabId === "number"
+  ) {
+    return `tab:${normalized.windowId}:${normalized.tabId}`;
+  }
+  return `title:${normalized.title || ""}`;
+}
+
+function dedupeSharedDisplayTabs(tabs) {
+  const result = [];
+  const indexByKey = new Map();
+  for (const tab of tabs) {
+    const key = makeSharedTabKey(tab);
+    if (!key) {
+      continue;
+    }
+    const normalized = normalizeSharedTab(tab);
+    const next = {
+      ...normalized,
+      isCurrent: Boolean(tab.isCurrent),
+    };
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, result.length);
+      result.push(next);
+      continue;
+    }
+    // 当前页优先展示在重复项的位置，避免同一 tab 既作为 current 又作为 extra 出现。
+    if (next.isCurrent && !result[existingIndex].isCurrent) {
+      result[existingIndex] = next;
+    }
+  }
+  return result;
+}
+
 function applySessionTabContext(sessionId) {
   const contexts = loadSessionTabContexts();
   const context = contexts[sessionId];
@@ -878,7 +923,14 @@ function applySessionTabContext(sessionId) {
     return;
   }
 
-  const tabs = context.tabs.map(normalizeSharedTab).filter(Boolean);
+  const tabs = dedupeSharedTabs(context.tabs);
+  if (tabs.length !== context.tabs.length) {
+    contexts[sessionId] = {
+      tabs,
+      updatedAt: Date.now(),
+    };
+    saveSessionTabContexts(contexts);
+  }
   userExtraSelectedSnapshot = tabs
     .filter((tab) => tab.url && tab.url !== activeUrl)
     .map((tab) => ({
@@ -929,7 +981,7 @@ function dedupeSharedTabs(tabs) {
   const result = [];
   const seen = new Set();
   for (const tab of tabs.map(normalizeSharedTab).filter(Boolean)) {
-    const key = tab.url || `${tab.windowId}:${tab.tabId}`;
+    const key = makeSharedTabKey(tab);
     if (!key || seen.has(key)) {
       continue;
     }
@@ -2920,7 +2972,7 @@ function buildSharedTabs() {
     }
     list.push({ ...extra, isCurrent: false });
   }
-  return list;
+  return dedupeSharedDisplayTabs(list);
 }
 
 function isCurrentTabSuppressed() {
@@ -3244,6 +3296,20 @@ function buildBannerFavicon(src) {
   return img;
 }
 
+function formatSharedTabSubtitle(tab) {
+  if (!tab?.url) {
+    return "";
+  }
+  try {
+    const parsed = new URL(tab.url);
+    const path = `${parsed.pathname || ""}${parsed.search || ""}${parsed.hash || ""}`;
+    const compactPath = path && path !== "/" ? path : "";
+    return `${parsed.host}${compactPath}`.slice(0, 96);
+  } catch {
+    return String(tab.url).slice(0, 96);
+  }
+}
+
 function buildSharedDrawerRow(tab) {
   const row = document.createElement("div");
   row.className = "sidepanel-shared-row";
@@ -3260,11 +3326,23 @@ function buildSharedDrawerRow(tab) {
     favicon.hidden = true;
   }
 
+  const textWrap = document.createElement("span");
+  textWrap.className = "sidepanel-shared-row-text";
+
   const title = document.createElement("span");
   title.className = "sidepanel-shared-row-title";
   title.textContent = tab.title;
+  textWrap.append(title);
 
-  row.append(favicon, title);
+  const subtitleText = formatSharedTabSubtitle(tab);
+  if (subtitleText && subtitleText !== tab.title) {
+    const subtitle = document.createElement("span");
+    subtitle.className = "sidepanel-shared-row-subtitle";
+    subtitle.textContent = subtitleText;
+    textWrap.append(subtitle);
+  }
+
+  row.append(favicon, textWrap);
 
   const remove = document.createElement("button");
   remove.type = "button";

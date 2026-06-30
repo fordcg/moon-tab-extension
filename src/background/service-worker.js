@@ -9,10 +9,44 @@ const FLOATING_ASSISTANT_PATH = "src/ai-assistant/index.html?floating=1";
 const FLOATING_OPEN_TYPE = "sidepanelFloating.openCurrentTab";
 const FLOATING_CONTENT_OPEN_TYPE = "sidepanelFloating.open";
 const SIDE_PANEL_CLOSE_TYPE = "sidePanel.close";
+const OPENED_SIDE_PANEL_TABS_KEY = "sidePanel.openedTabs.v1";
 
-void disableGlobalSidePanelFallback();
-chrome.runtime.onInstalled.addListener(disableGlobalSidePanelFallback);
-chrome.runtime.onStartup.addListener(disableGlobalSidePanelFallback);
+void bootstrapTabScopedSidePanel();
+chrome.runtime.onInstalled.addListener(bootstrapTabScopedSidePanel);
+chrome.runtime.onStartup.addListener(bootstrapTabScopedSidePanel);
+
+chrome.action?.onClicked?.addListener((tab) => {
+  void openTabScopedSidePanel(tab?.id);
+});
+
+chrome.commands?.onCommand?.addListener((command) => {
+  if (command !== "open-side-panel") {
+    return;
+  }
+  void chrome.tabs
+    .query({ active: true, currentWindow: true })
+    .then(([tab]) => openTabScopedSidePanel(tab?.id))
+    .catch(() => undefined);
+});
+
+chrome.contextMenus?.onClicked?.addListener((info, tab) => {
+  if (info?.menuItemId !== "open-side-panel") {
+    return;
+  }
+  void openTabScopedSidePanel(tab?.id);
+});
+
+chrome.tabs?.onActivated?.addListener((activeInfo) => {
+  void syncActiveTabSidePanel(activeInfo?.tabId, activeInfo?.windowId);
+});
+
+chrome.tabs?.onCreated?.addListener((tab) => {
+  void syncTabSidePanelOptions(tab?.id);
+});
+
+chrome.tabs?.onRemoved?.addListener((tabId) => {
+  void forgetOpenedSidePanelTab(tabId);
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== "object" || message.type !== FLOATING_OPEN_TYPE) {
@@ -94,6 +128,134 @@ async function closeSidePanelTargets(targets) {
     }
   }
   return false;
+}
+
+async function bootstrapTabScopedSidePanel() {
+  await disableGlobalSidePanelFallback();
+  try {
+    await chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: false });
+  } catch (_error) {
+    // 不支持 setPanelBehavior 的浏览器忽略即可。
+  }
+  await syncAllTabsSidePanelOptions();
+}
+
+async function openTabScopedSidePanel(tabId) {
+  if (typeof tabId !== "number") {
+    return false;
+  }
+  try {
+    await rememberOpenedSidePanelTab(tabId);
+    await chrome.sidePanel?.setOptions?.({
+      tabId,
+      path: SIDE_PANEL_PATH,
+      enabled: true,
+    });
+    await chrome.sidePanel?.open?.({ tabId });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function syncActiveTabSidePanel(tabId, windowId) {
+  if (typeof tabId !== "number") {
+    return;
+  }
+  const opened = await getOpenedSidePanelTabs();
+  const isOpened = opened.has(tabId);
+  await syncTabSidePanelOptions(tabId, opened);
+
+  // Chrome 通常会在未启用 tab 上自动隐藏 tab-specific side panel。
+  // 这里额外关闭 window 里的全局/旧状态面板，清掉旧版 manifest default_path
+  // 或热更新前留下的“切到其它标签页仍停在原地”的残影。
+  if (!isOpened && typeof windowId === "number") {
+    await closeSidePanelTargets([{ windowId }]);
+  }
+}
+
+async function syncAllTabsSidePanelOptions() {
+  const query = chrome.tabs?.query;
+  if (typeof query !== "function") {
+    return;
+  }
+
+  let tabs = [];
+  try {
+    tabs = await query.call(chrome.tabs, {});
+  } catch (_error) {
+    return;
+  }
+  const opened = await getOpenedSidePanelTabs();
+  await Promise.all(
+    tabs
+      .filter((tab) => typeof tab?.id === "number")
+      .map((tab) => syncTabSidePanelOptions(tab.id, opened)),
+  );
+}
+
+async function syncTabSidePanelOptions(tabId, openedTabs) {
+  if (typeof tabId !== "number") {
+    return;
+  }
+  const setOptions = chrome.sidePanel?.setOptions;
+  if (typeof setOptions !== "function") {
+    return;
+  }
+  const opened = openedTabs || (await getOpenedSidePanelTabs());
+  try {
+    await setOptions.call(chrome.sidePanel, opened.has(tabId)
+      ? { tabId, path: SIDE_PANEL_PATH, enabled: true }
+      : { tabId, enabled: false });
+  } catch (_error) {
+    // 某些内部页面 / 旧版浏览器可能拒绝 tab 级 options，不能影响其它后台逻辑。
+  }
+}
+
+async function getOpenedSidePanelTabs() {
+  const storage = chrome.storage?.session;
+  if (!storage?.get) {
+    return new Set();
+  }
+  try {
+    const data = await storage.get(OPENED_SIDE_PANEL_TABS_KEY);
+    const raw = data?.[OPENED_SIDE_PANEL_TABS_KEY];
+    return new Set(
+      Array.isArray(raw)
+        ? raw.filter((value) => typeof value === "number")
+        : [],
+    );
+  } catch (_error) {
+    return new Set();
+  }
+}
+
+async function writeOpenedSidePanelTabs(opened) {
+  const storage = chrome.storage?.session;
+  if (!storage?.set) {
+    return;
+  }
+  try {
+    await storage.set({
+      [OPENED_SIDE_PANEL_TABS_KEY]: Array.from(opened),
+    });
+  } catch (_error) {
+    // session storage 不可用时只失去跨 service worker 唤醒的记忆。
+  }
+}
+
+async function rememberOpenedSidePanelTab(tabId) {
+  const opened = await getOpenedSidePanelTabs();
+  opened.add(tabId);
+  await writeOpenedSidePanelTabs(opened);
+}
+
+async function forgetOpenedSidePanelTab(tabId) {
+  const opened = await getOpenedSidePanelTabs();
+  if (!opened.delete(tabId)) {
+    return;
+  }
+  await writeOpenedSidePanelTabs(opened);
 }
 
 async function sendFloatingMessageToTab(tabId, payload) {

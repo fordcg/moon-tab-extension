@@ -1883,14 +1883,32 @@ body.sidepanel-regenerate-direct-pending .message-regenerate-popover {
   display: none;
 }
 
-.sidepanel-shared-row-title {
-  color: var(--sidepanel-ink);
+.sidepanel-shared-row-text {
+  display: flex;
   flex: 1;
-  font-size: 0.8125rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sidepanel-shared-row-title,
+.sidepanel-shared-row-subtitle {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidepanel-shared-row-title {
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+}
+
+.sidepanel-shared-row-subtitle {
+  color: var(--sidepanel-muted);
+  font-size: 0.6875rem;
+  line-height: 1.1;
 }
 
 .sidepanel-shared-row-remove {
