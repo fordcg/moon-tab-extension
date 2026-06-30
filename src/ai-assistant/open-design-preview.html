@@ -4671,7 +4671,6 @@ body:has(.model-settings-dialog) .dialog-overlay {
     transition-duration: 0.01ms;
   }
 }
-
 </style>
     <script data-open-design-inline="preview-chrome-mock.js">
 (() => {
@@ -32257,6 +32256,7 @@ let moveConversationCandidateSignature = "";
 let lastConversationContinuitySignature = "";
 let lastPersistedSessionContextSignature = "";
 let moveConversationRequestInFlight = false;
+let tabSwitchCloseRequested = false;
 
 // 输入区撤销/重做历史。React 受控 contenteditable 在 value 变化时直接重写
 // textContent，会打断浏览器原生 undo 栈；fillPrompt 直接赋值同样如此。这里维护
@@ -32519,7 +32519,12 @@ function enhanceMoveConversationPrompt() {
     moveConversationCandidate = null;
     moveConversationCandidateSignature = "";
   }
-  if (!state || !moveConversationCandidate || hasVisibleConversationMessages()) {
+  if (
+    !state ||
+    !moveConversationCandidate ||
+    hasVisibleConversationMessages() ||
+    hasBlockingEmptyNotice()
+  ) {
     existing?.remove();
     return;
   }
@@ -32564,6 +32569,14 @@ function enhanceMoveConversationPrompt() {
 
   const anchor = state.querySelector(".sidepanel-empty-copy") || state.firstChild;
   state.insertBefore(prompt, anchor);
+}
+
+function hasBlockingEmptyNotice() {
+  return Boolean(
+    document.querySelector(
+      ".chat-warning, .chat-failure, .sidepanel-empty-notice",
+    ),
+  );
 }
 
 async function handleMoveConversationClick(button) {
@@ -33382,15 +33395,91 @@ async function handleFloatingWindowClick(button) {
   }
 }
 
-function closeSidePanelWindow() {
+function closeSidePanelWindow(options = {}) {
   if (IS_FLOATING_FRAME) {
     return;
   }
+  void closeSidePanelWindowAsync(options);
+}
+
+async function closeSidePanelWindowAsync(options = {}) {
+  const closedByApi = await tryCloseSidePanelWithApi(options);
+  if (closedByApi) {
+    return;
+  }
+
+  try {
+    const response = await sendRuntimeMessage({
+      type: "sidePanel.close",
+      reason: options.reason || "manual",
+      tabId:
+        typeof options.tabId === "number"
+          ? options.tabId
+          : typeof activePageTab?.id === "number"
+            ? activePageTab.id
+            : undefined,
+      windowId:
+        typeof options.windowId === "number"
+          ? options.windowId
+          : typeof myWindowId === "number"
+            ? myWindowId
+            : undefined,
+    });
+    if (response?.ok) {
+      return;
+    }
+  } catch (error) {
+    // 旧版浏览器 / 预览环境可能没有 sidePanel.close 消息兜底，继续尝试 window.close。
+  }
+
   try {
     window.close();
   } catch (error) {
-    // 旧版浏览器若不允许 window.close，后台的 sidePanel.close 会作为优先路径兜底。
+    // side panel 不一定允许 window.close，失败时静默降级。
   }
+}
+
+async function tryCloseSidePanelWithApi(options = {}) {
+  const close = globalThis.chrome?.sidePanel?.close;
+  if (typeof close !== "function") {
+    return false;
+  }
+
+  const targets = [];
+  const seen = new Set();
+  const addTarget = (target) => {
+    if (!target) {
+      return;
+    }
+    const key = JSON.stringify(target);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    targets.push(target);
+  };
+  if (typeof options.tabId === "number") {
+    addTarget({ tabId: options.tabId });
+  }
+  if (typeof activePageTab?.id === "number") {
+    addTarget({ tabId: activePageTab.id });
+  }
+  if (typeof options.windowId === "number") {
+    addTarget({ windowId: options.windowId });
+  }
+  if (typeof myWindowId === "number") {
+    addTarget({ windowId: myWindowId });
+  }
+
+  for (const target of targets) {
+    try {
+      await close.call(globalThis.chrome.sidePanel, target);
+      return true;
+    } catch (error) {
+      // Chrome 版本对 tabId/windowId 支持不完全一致，逐个尝试。
+    }
+  }
+  return false;
 }
 
 function sendRuntimeMessage(message) {
@@ -36044,6 +36133,10 @@ function bindTabListeners() {
   // 仅当 side panel 所在窗口的活动标签变化时刷新，避免其它窗口切换带偏横幅。
   chrome.tabs.onActivated?.addListener((activeInfo) => {
     if (myWindowId === null || activeInfo?.windowId === myWindowId) {
+      if (shouldCloseSidePanelForTabSwitch(activeInfo)) {
+        requestCloseSidePanelForTabSwitch(activeInfo);
+        return;
+      }
       refreshTabsAndBanner();
     }
   });
@@ -36058,6 +36151,34 @@ function bindTabListeners() {
   });
   chrome.tabs.onRemoved?.addListener(() => refreshTabsAndBanner());
   chrome.windows?.onFocusChanged?.addListener(() => refreshTabsAndBanner());
+}
+
+function shouldCloseSidePanelForTabSwitch(activeInfo) {
+  if (IS_FLOATING_FRAME || tabSwitchCloseRequested) {
+    return false;
+  }
+  if (typeof activeInfo?.tabId !== "number") {
+    return false;
+  }
+  const previousTabId = activePageTab?.id;
+  return typeof previousTabId === "number" && previousTabId !== activeInfo.tabId;
+}
+
+function requestCloseSidePanelForTabSwitch(activeInfo) {
+  tabSwitchCloseRequested = true;
+  closeSidePanelWindow({
+    reason: "tab-switch",
+    tabId: activeInfo.tabId,
+    windowId: activeInfo.windowId,
+  });
+  window.setTimeout(() => {
+    if (!tabSwitchCloseRequested || document.visibilityState === "hidden") {
+      return;
+    }
+    // 老版 Chrome 若无法程序关闭 side panel，至少恢复刷新，避免留在旧标签页状态。
+    tabSwitchCloseRequested = false;
+    refreshTabsAndBanner();
+  }, 900);
 }
 
 // 绑定输入区撤销/重做历史。只绑一次，靠 dataset 标记防止 MutationObserver 反复

@@ -7,6 +7,7 @@ import "../ai-assistant/background/index.js";
 const FLOATING_ASSISTANT_PATH = "src/ai-assistant/index.html?floating=1";
 const FLOATING_OPEN_TYPE = "sidepanelFloating.openCurrentTab";
 const FLOATING_CONTENT_OPEN_TYPE = "sidepanelFloating.open";
+const SIDE_PANEL_CLOSE_TYPE = "sidePanel.close";
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== "object" || message.type !== FLOATING_OPEN_TYPE) {
@@ -14,6 +15,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   openFloatingAssistantInCurrentTab().then(sendResponse);
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (!message || typeof message !== "object" || message.type !== SIDE_PANEL_CLOSE_TYPE) {
+    return false;
+  }
+
+  closeSidePanelFromRequest(message).then(sendResponse);
   return true;
 });
 
@@ -46,24 +56,39 @@ async function openFloatingAssistantInCurrentTab() {
 }
 
 async function closeSidePanelAfterFloatingOpen(tab) {
-  const close = chrome.sidePanel?.close;
-  if (typeof close !== "function") {
-    return;
-  }
-
-  const targets = [
+  await closeSidePanelTargets([
     typeof tab.id === "number" ? { tabId: tab.id } : null,
     typeof tab.windowId === "number" ? { windowId: tab.windowId } : null,
-  ].filter(Boolean);
+  ]);
+}
 
-  for (const target of targets) {
+async function closeSidePanelFromRequest(message) {
+  const targets = [
+    typeof message.tabId === "number" ? { tabId: message.tabId } : null,
+    typeof message.windowId === "number" ? { windowId: message.windowId } : null,
+  ];
+  const closed = await closeSidePanelTargets(targets);
+  return {
+    ok: closed,
+    message: closed ? "已关闭侧边栏" : "当前浏览器不支持自动关闭侧边栏",
+  };
+}
+
+async function closeSidePanelTargets(targets) {
+  const close = chrome.sidePanel?.close;
+  if (typeof close !== "function") {
+    return false;
+  }
+
+  for (const target of targets.filter(Boolean)) {
     try {
       await close.call(chrome.sidePanel, target);
-      return;
+      return true;
     } catch (_error) {
       // 不同浏览器对 tabId/windowId 支持不完全一致，逐个尝试即可。
     }
   }
+  return false;
 }
 
 async function sendFloatingMessageToTab(tabId, payload) {
