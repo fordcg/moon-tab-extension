@@ -24,6 +24,15 @@ assert.deepEqual(normalizeBrowserExtractContentArguments({}), {
   args: { mode: "text", source: "auto_rule", maxLength: 30000 },
 });
 
+assert.deepEqual(normalizeBrowserExtractContentArguments(), {
+  ok: true,
+  args: { mode: "text", source: "auto_rule", maxLength: 30000 },
+});
+assert.match(normalizeBrowserExtractContentArguments(null).message, /参数必须是对象/);
+assert.match(normalizeBrowserExtractContentArguments([]).message, /参数必须是对象/);
+assert.match(normalizeBrowserExtractContentArguments("x").message, /参数必须是对象/);
+assert.match(normalizeBrowserExtractContentArguments(1).message, /参数必须是对象/);
+assert.match(normalizeBrowserExtractContentArguments(true).message, /参数必须是对象/);
 assert.match(normalizeBrowserExtractContentArguments({ mode: "markdown" }).message, /mode 必须是 text 或 html/);
 assert.match(normalizeBrowserExtractContentArguments({ source: "script" }).message, /source 必须是 auto_rule、document 或 selector/);
 assert.match(normalizeBrowserExtractContentArguments({ extra: true }).message, /不接受参数/);
@@ -60,10 +69,16 @@ assert.deepEqual(selectorArgs.args, {
 });
 
 assert.equal(validateExtractionSelector("main.article", "css").ok, true);
+assert.equal(validateExtractionSelector('[data-id="x"]', "css").ok, true);
 assert.equal(validateExtractionSelector("//main", "xpath").ok, true);
+assert.equal(validateExtractionSelector('//*[@id="main"]', "xpath").ok, true);
 assert.equal(validateExtractionSelector("javascript:alert(1)", "css").ok, false);
 assert.equal(validateExtractionSelector("javascript:alert(1)", "xpath").ok, false);
 assert.equal(validateExtractionSelector("main { color: red }", "css").ok, false);
+assert.equal(validateExtractionSelector(">>>", "css").ok, false);
+assert.equal(validateExtractionSelector("[", "css").ok, false);
+assert.equal(validateExtractionSelector(":not(", "css").ok, false);
+assert.equal(validateExtractionSelector("//*[", "xpath").ok, false);
 assert.equal(validateExtractionSelector("main", "xpath").ok, false);
 
 const savedRules = [

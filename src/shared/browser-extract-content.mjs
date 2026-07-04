@@ -45,8 +45,12 @@ export const BROWSER_EXTRACT_CONTENT_INPUT_SCHEMA = Object.freeze({
   }),
 });
 
-export function normalizeBrowserExtractContentArguments(value = {}) {
-  const sourceObject = isPlainObject(value) ? value : {};
+export function normalizeBrowserExtractContentArguments(value) {
+  const sourceObject = value === undefined ? {} : value;
+  if (!isPlainObject(sourceObject)) {
+    return { ok: false, message: "extract_content 的参数必须是对象。" };
+  }
+
   const extraKeys = Object.keys(sourceObject).filter((key) => !ALLOWED_KEYS.has(key));
   if (extraKeys.length > 0) {
     return { ok: false, message: `浏览器内容提取工具不接受参数：${extraKeys.join("、")}。` };
@@ -124,12 +128,21 @@ export function validateExtractionSelector(selector, selectorType) {
     return { ok: false };
   }
 
+  if (!hasBalancedSelectorDelimiters(text)) {
+    return { ok: false };
+  }
+
   if (selectorType === "xpath") {
+    if (/\[\s*\]/.test(text) || /\(\s*\)/.test(text) || /(?:[|/@[]|\band\b|\bor\b)\s*$/i.test(text)) {
+      return { ok: false };
+    }
     return /^(?:\/|\.\/|\/\/|\.\/\/|\()/.test(text) ? { ok: true } : { ok: false };
   }
 
   if (selectorType === "css") {
-    if (/[{};]/.test(text)) return { ok: false };
+    if (/[{};]/.test(text) || />>/.test(text) || /\(\s*\)/.test(text) || /\[\s*\]/.test(text)) {
+      return { ok: false };
+    }
     return { ok: true };
   }
 
@@ -244,6 +257,42 @@ function createPreview(value) {
 
 function normalizeText(value) {
   return typeof value === "string" ? value : "";
+}
+
+function hasBalancedSelectorDelimiters(text) {
+  const stack = [];
+  let quote = "";
+  let escaped = false;
+  for (const char of text) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "[" || char === "(") {
+      stack.push(char);
+      continue;
+    }
+    if (char === "]") {
+      if (stack.pop() !== "[") return false;
+      continue;
+    }
+    if (char === ")") {
+      if (stack.pop() !== "(") return false;
+    }
+  }
+  return !quote && !escaped && stack.length === 0;
 }
 
 function isPlainObject(value) {
