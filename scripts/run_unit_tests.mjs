@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 const testCommands = [
   ["node", ["scripts/test_network_redaction.mjs"]],
   ["node", ["scripts/test_tool_registry.mjs"]],
+  ["node", ["scripts/test_mcp_settings.mjs"]],
   ["node", ["scripts/test_browser_control_queue.mjs"]],
   ["node", ["scripts/test_background_browser_queue_wiring.mjs"]],
   ["node", ["scripts/test_background_agent_tools_wiring.mjs"]],
