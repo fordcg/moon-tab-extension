@@ -1,4 +1,4 @@
-import { callMcpTool, listMcpTools } from "./mcp-http-client.mjs";
+import { callMcpTool, isMcpToolResultError, listMcpTools } from "./mcp-http-client.mjs";
 import { createMcpToolId } from "./mcp-tool-adapter.mjs";
 
 export const TOOL_PERMISSION_SCOPES = Object.freeze({
@@ -151,6 +151,7 @@ export function createHttpMcpToolAdapter(options) {
         () => callRemoteTool(normalizedToolId, input),
         () => bridgeCallTool(normalizedToolId, input),
         `MCP 工具 ${normalizedToolId} 调用失败`,
+        { shouldFallback: (error) => !isMcpToolResultError(error) },
       );
     },
     toToolDefinitions(permission = TOOL_PERMISSION_SCOPES.MCP) {
@@ -187,6 +188,7 @@ function createHttpMcpServerConfig(options = {}, baseUrl, headers) {
     endpoint: endpointUrl,
     endpointUrl,
     token: options.token || options.bearerToken || source.token || source.bearerToken,
+    bearerToken: options.token || options.bearerToken || source.token || source.bearerToken,
     headers: {
       ...(source.headers || {}),
       ...(headers || {}),
@@ -195,11 +197,14 @@ function createHttpMcpServerConfig(options = {}, baseUrl, headers) {
   };
 }
 
-async function withBridgeFallback(mcpOperation, bridgeOperation, message) {
+async function withBridgeFallback(mcpOperation, bridgeOperation, message, options = {}) {
   let mcpError;
   try {
     return await mcpOperation();
   } catch (error) {
+    if (typeof options.shouldFallback === "function" && !options.shouldFallback(error)) {
+      throw error;
+    }
     mcpError = error;
   }
 

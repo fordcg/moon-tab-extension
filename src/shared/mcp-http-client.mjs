@@ -9,6 +9,21 @@ const normalizeText = (value) => (typeof value === "string" ? value.trim() : "")
 
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
+export class McpToolResultError extends Error {
+  constructor(toolName, content, result) {
+    super(`${toolName} 调用失败：${content || "MCP 工具返回错误"}`);
+    this.name = "McpToolResultError";
+    this.toolName = toolName;
+    this.content = content;
+    this.result = result;
+    this.isMcpToolResultError = true;
+  }
+}
+
+export function isMcpToolResultError(error) {
+  return Boolean(error?.isMcpToolResultError);
+}
+
 export function parseSseJsonRpcResponse(text) {
   return collectSseJsonRpcPayloads(text)[0];
 }
@@ -32,7 +47,7 @@ export async function callMcpTool(input = {}) {
   const content = formatMcpToolContent(result);
 
   if (result?.isError) {
-    throw new Error(`${toolName} 调用失败：${content || "MCP 工具返回错误"}`);
+    throw new McpToolResultError(toolName, content, result);
   }
 
   return content;
@@ -121,6 +136,11 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
   if (!response?.ok) {
     const payload = await readJsonRpcResponse(response);
     throw new Error(createHttpErrorMessage(response, payload, method));
+  }
+
+  const payload = await readJsonRpcResponse(response).catch(() => undefined);
+  if (payload?.error) {
+    throw new Error(createJsonRpcErrorMessage(payload.error, method));
   }
 
   return {

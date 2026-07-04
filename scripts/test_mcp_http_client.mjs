@@ -240,4 +240,37 @@ const notificationBeforeResponseTools = await listMcpTools({
 });
 assert.equal(notificationBeforeResponseTools[0].name, "after.progress");
 
+await assert.rejects(
+  () =>
+    listMcpTools({
+      server,
+      fetcher: async (_url, init = {}) => {
+        const body = JSON.parse(init.body);
+        if (body.method === "initialize") {
+          return {
+            ok: true,
+            headers: new Map(),
+            json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+            text: async () => "",
+          };
+        }
+        if (body.method === "notifications/initialized") {
+          return {
+            ok: true,
+            headers: new Map(),
+            json: async () => ({ jsonrpc: "2.0", error: { code: -32000, message: "initialized rejected" } }),
+            text: async () => "",
+          };
+        }
+        return {
+          ok: true,
+          headers: new Map(),
+          json: async () => ({ jsonrpc: "2.0", id: body.id, result: { tools: [] } }),
+          text: async () => "",
+        };
+      },
+    }),
+  /initialized rejected/,
+);
+
 console.log("mcp http client tests passed");

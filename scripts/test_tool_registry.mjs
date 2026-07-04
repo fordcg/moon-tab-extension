@@ -104,14 +104,17 @@ assert.equal(calls.some((call) => call.url.endsWith("/tools/call")), true);
 const mcpCalls = [];
 const mcpAdapter = createHttpMcpToolAdapter({
   baseUrl: "http://127.0.0.1:17333/mcp",
+  token: "top-level-token",
   server: {
     id: "remote.server",
     endpointUrl: "http://127.0.0.1:17333/mcp",
+    bearerToken: "server-token",
   },
   fetchImpl: async (url, init = {}) => {
     const body = JSON.parse(init.body);
     mcpCalls.push({ url, body });
     if (body.method === "initialize") {
+      assert.equal(init.headers.Authorization, "Bearer top-level-token");
       return {
         ok: true,
         headers: new Map([["Mcp-Session-Id", "remote-session"]]),
@@ -169,5 +172,64 @@ assert.match(mcpDefinitions[0].id, /remote\.echo|remote%2Eecho/);
 assert.deepEqual(await mcpDefinitions[0].handler({ text: "ok" }), { ok: true, content: "remote:ok" });
 assert.equal(mcpCalls.some((call) => call.body.method === "tools/list"), true);
 assert.equal(mcpCalls.some((call) => call.body.method === "tools/call"), true);
+
+const errorCalls = [];
+const mcpErrorAdapter = createHttpMcpToolAdapter({
+  baseUrl: "http://127.0.0.1:17334/",
+  server: {
+    id: "remote.error",
+    endpointUrl: "http://127.0.0.1:17333/mcp-error",
+  },
+  fetchImpl: async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : {};
+    errorCalls.push({ url, body });
+    if (body.method === "initialize") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({}),
+      };
+    }
+    if (body.method === "tools/list") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            tools: [{ name: "remote.fail", inputSchema: { type: "object", additionalProperties: true } }],
+          },
+        }),
+      };
+    }
+    if (body.method === "tools/call") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { isError: true, content: [{ type: "text", text: "bad" }] },
+        }),
+      };
+    }
+    if (url.endsWith("/tools/call")) {
+      return { ok: true, json: async () => ({ ok: true, content: "legacy should not run" }) };
+    }
+    return { ok: false, json: async () => ({ message: "legacy missing" }) };
+  },
+});
+
+const [mcpErrorDefinition] = await mcpErrorAdapter.toToolDefinitions();
+await assert.rejects(() => mcpErrorDefinition.handler({}), /remote\.fail 调用失败：bad/);
+assert.equal(errorCalls.some((call) => call.url.endsWith("/tools/call")), false);
 
 console.log("tool registry tests passed");
