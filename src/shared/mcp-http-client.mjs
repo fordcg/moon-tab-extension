@@ -131,19 +131,19 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
   return runWithTimeout(async (signal) => {
     const response = await fetchMcpResponse(fetcher, endpoint, init, signal);
     const payload = await readJsonRpcResponse(response, id);
-    if (!response?.ok) {
-      throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
-        kind: "http",
-        method,
-        fallbackEligible: true,
-      });
-    }
-
     if (payload?.error) {
       throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
         kind: "jsonrpc",
         method,
         fallbackEligible: false,
+      });
+    }
+
+    if (!response?.ok) {
+      throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
+        kind: "http",
+        method,
+        fallbackEligible: true,
       });
     }
 
@@ -185,21 +185,20 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
 
   return runWithTimeout(async (signal) => {
     const response = await fetchMcpResponse(fetcher, endpoint, init, signal);
-    if (!response?.ok) {
-      const payload = await readJsonRpcResponse(response);
-      throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
-        kind: "http",
-        method,
-        fallbackEligible: true,
-      });
-    }
-
     const payload = await readJsonRpcResponse(response).catch(() => undefined);
     if (payload?.error) {
       throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
         kind: "jsonrpc",
         method,
         fallbackEligible: false,
+      });
+    }
+
+    if (!response?.ok) {
+      throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
+        kind: "http",
+        method,
+        fallbackEligible: true,
       });
     }
 

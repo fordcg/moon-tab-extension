@@ -291,4 +291,65 @@ const [mcpJsonRpcErrorDefinition] = await mcpJsonRpcErrorAdapter.toToolDefinitio
 await assert.rejects(() => mcpJsonRpcErrorDefinition.handler({}), /bad args/);
 assert.equal(jsonRpcErrorCalls.some((call) => call.url.endsWith("/tools/call")), false);
 
+const httpJsonRpcErrorCalls = [];
+const mcpHttpJsonRpcErrorAdapter = createHttpMcpToolAdapter({
+  baseUrl: "http://127.0.0.1:17336/",
+  server: {
+    id: "remote.http-jsonrpc-error",
+    endpointUrl: "http://127.0.0.1:17333/mcp-http-jsonrpc-error",
+  },
+  fetchImpl: async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : {};
+    httpJsonRpcErrorCalls.push({ url, body });
+    if (body.method === "initialize") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({}),
+      };
+    }
+    if (body.method === "tools/list") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            tools: [{ name: "remote.httpBadArgs", inputSchema: { type: "object", additionalProperties: true } }],
+          },
+        }),
+      };
+    }
+    if (body.method === "tools/call") {
+      return {
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          error: { code: -32602, message: "bad args over http" },
+        }),
+      };
+    }
+    if (url.endsWith("/tools/call")) {
+      return { ok: true, json: async () => ({ ok: true, content: "legacy should not run" }) };
+    }
+    return { ok: false, json: async () => ({ message: "legacy missing" }) };
+  },
+});
+
+const [mcpHttpJsonRpcErrorDefinition] = await mcpHttpJsonRpcErrorAdapter.toToolDefinitions();
+await assert.rejects(() => mcpHttpJsonRpcErrorDefinition.handler({}), /bad args over http/);
+assert.equal(httpJsonRpcErrorCalls.some((call) => call.url.endsWith("/tools/call")), false);
+
 console.log("tool registry tests passed");

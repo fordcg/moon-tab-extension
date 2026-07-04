@@ -273,6 +273,45 @@ await assert.rejects(
   /initialized rejected/,
 );
 
+const notificationHttpJsonRpcError = await listMcpTools({
+  server,
+  fetcher: async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    if (body.method === "initialize") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+        text: async () => "",
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "initialized rejected over http" },
+        }),
+        text: async () => "",
+      };
+    }
+    return {
+      ok: true,
+      headers: new Map(),
+      json: async () => ({ jsonrpc: "2.0", id: body.id, result: { tools: [] } }),
+      text: async () => "",
+    };
+  },
+}).then(
+  () => undefined,
+  (error) => error,
+);
+assert.match(notificationHttpJsonRpcError?.message, /initialized rejected over http/);
+assert.equal(notificationHttpJsonRpcError?.isMcpBridgeFallbackEligible, false);
+
 const blankTokenRequests = [];
 await listMcpTools({
   server: {
