@@ -1,3 +1,6 @@
+import { callMcpTool, listMcpTools } from "./mcp-http-client.mjs";
+import { createMcpToolId } from "./mcp-tool-adapter.mjs";
+
 export const TOOL_PERMISSION_SCOPES = Object.freeze({
   SAFE: "safe",
   PAGE: "page",
@@ -87,8 +90,9 @@ export class ToolActionQueue {
 
 export function createHttpMcpToolAdapter(options) {
   const baseUrl = new URL(options?.baseUrl || "http://127.0.0.1:17333/");
-  const fetchImpl = options?.fetchImpl || globalThis.fetch;
+  const fetchImpl = options?.fetchImpl || options?.fetcher || globalThis.fetch;
   const headers = options?.headers || {};
+  const server = createHttpMcpServerConfig(options, baseUrl, headers);
 
   if (typeof fetchImpl !== "function") {
     throw new Error("当前环境缺少 fetch，无法连接 MCP Bridge");
@@ -112,32 +116,102 @@ export function createHttpMcpToolAdapter(options) {
     return payload;
   };
 
+  const bridgeListTools = async () => {
+    const payload = await bridgeFetch("/tools/list");
+    return Array.isArray(payload.tools) ? payload.tools : [];
+  };
+
+  const bridgeCallTool = async (toolId, input = {}) =>
+    bridgeFetch("/tools/call", {
+      method: "POST",
+      body: JSON.stringify({ toolId, input }),
+    });
+
+  const callRemoteTool = async (toolName, input = {}) => {
+    const content = await callMcpTool({
+      server,
+      toolName,
+      arguments: input && typeof input === "object" && !Array.isArray(input) ? input : {},
+      fetcher: fetchImpl,
+    });
+    return { ok: true, content };
+  };
+
   return {
     async listTools() {
-      const payload = await bridgeFetch("/tools/list");
-      return Array.isArray(payload.tools) ? payload.tools : [];
+      return withBridgeFallback(
+        () => listMcpTools({ server, fetcher: fetchImpl }),
+        bridgeListTools,
+        "MCP 工具列表读取失败",
+      );
     },
     async callTool(toolId, input = {}) {
-      return bridgeFetch("/tools/call", {
-        method: "POST",
-        body: JSON.stringify({ toolId, input }),
-      });
+      const normalizedToolId = normalizeToolId(toolId);
+      return withBridgeFallback(
+        () => callRemoteTool(normalizedToolId, input),
+        () => bridgeCallTool(normalizedToolId, input),
+        `MCP 工具 ${normalizedToolId} 调用失败`,
+      );
     },
     toToolDefinitions(permission = TOOL_PERMISSION_SCOPES.MCP) {
       return this.listTools().then((tools) =>
         tools.map((tool) =>
           createToolDefinition({
-            id: `mcp.${tool.id || tool.name}`,
+            id: createMcpToolId("legacy", tool.id || tool.name),
             name: tool.name || tool.id,
             description: tool.description || "",
             inputSchema: tool.inputSchema || { type: "object", additionalProperties: true },
             permission,
+            timeoutMs: Number.isFinite(tool.timeoutMs) ? tool.timeoutMs : undefined,
             handler: (input) => this.callTool(tool.id || tool.name, input),
           }),
         ),
       );
     },
   };
+}
+
+function createHttpMcpServerConfig(options = {}, baseUrl, headers) {
+  const source = options.server && typeof options.server === "object" ? options.server : {};
+  const endpointUrl = source.endpoint || source.url || source.endpointUrl || options.endpoint || options.url || options.endpointUrl || baseUrl.toString();
+  const timeoutMs = Number.isFinite(source.timeoutMs)
+    ? source.timeoutMs
+    : Number.isFinite(options.timeoutMs)
+      ? options.timeoutMs
+      : undefined;
+
+  return {
+    ...source,
+    id: normalizeToolId(source.id || options.serverId || "legacy"),
+    name: source.name || options.serverName || "MCP Server",
+    endpoint: endpointUrl,
+    endpointUrl,
+    token: options.token || options.bearerToken || source.token || source.bearerToken,
+    headers: {
+      ...(source.headers || {}),
+      ...(headers || {}),
+    },
+    timeoutMs,
+  };
+}
+
+async function withBridgeFallback(mcpOperation, bridgeOperation, message) {
+  let mcpError;
+  try {
+    return await mcpOperation();
+  } catch (error) {
+    mcpError = error;
+  }
+
+  try {
+    return await bridgeOperation();
+  } catch (bridgeError) {
+    throw new Error(`${message}：${formatErrorMessage(mcpError)}；旧 Bridge fallback 失败：${formatErrorMessage(bridgeError)}`);
+  }
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error && error.message ? error.message : String(error);
 }
 
 async function withTimeout(promise, timeoutMs, message) {

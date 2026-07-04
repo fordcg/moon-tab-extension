@@ -78,6 +78,7 @@ const adapter = createHttpMcpToolAdapter({
               name: "Dev Echo",
               description: "Echo through MCP bridge",
               inputSchema: { type: "object", required: ["text"], properties: { text: { type: "string" } } },
+              timeoutMs: 45000,
             },
           ],
         }),
@@ -92,10 +93,68 @@ const adapter = createHttpMcpToolAdapter({
 
 const definitions = await adapter.toToolDefinitions();
 assert.equal(definitions.length, 1);
-assert.equal(definitions[0].id, "mcp.dev.echo");
+assert.equal(definitions[0].id.startsWith("mcp."), true);
+assert.match(definitions[0].id, /dev\.echo|dev%2Eecho/);
 assert.equal(definitions[0].permission, TOOL_PERMISSION_SCOPES.MCP);
+assert.equal(definitions[0].timeoutMs, 45000);
 assert.deepEqual(await definitions[0].handler({ text: "from mcp" }), { ok: true, content: "from mcp" });
 assert.equal(calls.some((call) => call.url.endsWith("/tools/list")), true);
 assert.equal(calls.some((call) => call.url.endsWith("/tools/call")), true);
+
+const mcpCalls = [];
+const mcpAdapter = createHttpMcpToolAdapter({
+  baseUrl: "http://127.0.0.1:17333/mcp",
+  fetchImpl: async (url, init = {}) => {
+    const body = JSON.parse(init.body);
+    mcpCalls.push({ url, body });
+    if (body.method === "initialize") {
+      return {
+        ok: true,
+        headers: new Map([["Mcp-Session-Id", "remote-session"]]),
+        json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+      };
+    }
+    if (body.method === "tools/list") {
+      assert.equal(init.headers["Mcp-Session-Id"], "remote-session");
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            tools: [
+              {
+                name: "remote.echo",
+                description: "Remote Echo",
+                inputSchema: { type: "object", required: ["text"], properties: { text: { type: "string" } } },
+              },
+            ],
+          },
+        }),
+      };
+    }
+    if (body.method === "tools/call") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text: `remote:${body.params.arguments.text}` }] },
+        }),
+      };
+    }
+    throw new Error(`unexpected ${body.method}`);
+  },
+});
+
+const mcpDefinitions = await mcpAdapter.toToolDefinitions();
+assert.equal(mcpDefinitions.length, 1);
+assert.equal(mcpDefinitions[0].id.startsWith("mcp."), true);
+assert.match(mcpDefinitions[0].id, /remote\.echo|remote%2Eecho/);
+assert.deepEqual(await mcpDefinitions[0].handler({ text: "ok" }), { ok: true, content: "remote:ok" });
+assert.equal(mcpCalls.some((call) => call.body.method === "tools/list"), true);
+assert.equal(mcpCalls.some((call) => call.body.method === "tools/call"), true);
 
 console.log("tool registry tests passed");

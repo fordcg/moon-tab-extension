@@ -1,0 +1,353 @@
+export const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 30000;
+export const JSON_RPC_VERSION = "2.0";
+
+const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
+const MCP_TOOL_TEXT_LIMIT = 12000;
+const MCP_TOOL_TRUNCATION_SUFFIX = "...[已截断]";
+
+const normalizeText = (value) => (typeof value === "string" ? value.trim() : "");
+
+const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+export function parseSseJsonRpcResponse(text) {
+  const value = typeof text === "string" ? text.trim() : "";
+  if (!value) return undefined;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    // 继续按 text/event-stream 解析。
+  }
+
+  for (const eventText of value.split(/\r?\n\r?\n/)) {
+    const data = eventText
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n")
+      .trim();
+    const payload = parseJsonRpcDataLine(data);
+    if (payload) return payload;
+  }
+
+  for (const line of value.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const payload = parseJsonRpcDataLine(line.slice(5).trim());
+    if (payload) return payload;
+  }
+
+  return undefined;
+}
+
+export async function listMcpTools(input = {}) {
+  const result = await requestAfterInitialize(input, "tools/list", {});
+  const tools = Array.isArray(result?.tools) ? result.tools : [];
+  return tools.map(normalizeMcpTool).filter(Boolean);
+}
+
+export async function callMcpTool(input = {}) {
+  const toolName = normalizeText(input.toolName || input.name);
+  if (!toolName) {
+    throw new Error("缺少 MCP tool name");
+  }
+
+  const result = await requestAfterInitialize(input, "tools/call", {
+    name: toolName,
+    arguments: isRecord(input.arguments) ? input.arguments : {},
+  });
+  const content = formatMcpToolContent(result);
+
+  if (result?.isError) {
+    throw new Error(`${toolName} 调用失败：${content || "MCP 工具返回错误"}`);
+  }
+
+  return content;
+}
+
+async function requestAfterInitialize(input, method, params) {
+  const initialize = await sendJsonRpcRequest(input, "initialize", {
+    protocolVersion: DEFAULT_PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: {
+      name: "moon-tab-ai-sidebar",
+      version: "1.0.0",
+    },
+  }, undefined, 1);
+
+  const response = await sendJsonRpcRequest(
+    input,
+    method,
+    params,
+    initialize.sessionId,
+    2,
+  );
+  return response.result;
+}
+
+async function sendJsonRpcRequest(input, method, params, sessionId, id) {
+  const endpoint = normalizeEndpoint(input);
+  const fetcher = input.fetcher || input.fetchImpl || globalThis.fetch;
+  if (typeof fetcher !== "function") {
+    throw new Error("当前环境缺少 fetch，无法连接 MCP HTTP 服务");
+  }
+
+  const response = await fetchWithTimeout(fetcher, endpoint, {
+    method: "POST",
+    headers: buildRequestHeaders(input, sessionId),
+    body: JSON.stringify({
+      jsonrpc: JSON_RPC_VERSION,
+      id,
+      method,
+      params,
+    }),
+  }, normalizeTimeoutMs(input), method);
+
+  const payload = await readJsonRpcResponse(response);
+  if (!response?.ok) {
+    throw new Error(createHttpErrorMessage(response, payload, method));
+  }
+
+  if (payload?.error) {
+    throw new Error(createJsonRpcErrorMessage(payload.error, method));
+  }
+
+  if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "result")) {
+    throw new Error(`MCP ${method} 响应缺少 result`);
+  }
+
+  return {
+    result: payload.result,
+    sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
+  };
+}
+
+async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
+  const controller = typeof AbortController === "function" ? new AbortController() : undefined;
+  const timeoutError = new Error(`MCP 请求超时：${method}`);
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      controller?.abort();
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+
+  try {
+    const response = await Promise.race([
+      fetcher(endpoint, controller ? { ...init, signal: controller.signal } : init),
+      timeout,
+    ]);
+    if (!response || typeof response !== "object") {
+      throw new Error("MCP HTTP 服务返回了无效响应");
+    }
+    return response;
+  } catch (error) {
+    if (error === timeoutError || error?.name === "AbortError") {
+      throw timeoutError;
+    }
+    const message = error instanceof Error && error.message ? error.message : String(error);
+    throw new Error(`MCP HTTP 请求失败：${message}`);
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+  }
+}
+
+async function readJsonRpcResponse(response) {
+  if (typeof response?.json === "function") {
+    try {
+      return await response.json();
+    } catch {
+      // 有些 MCP HTTP server 使用 text/event-stream，继续读取 text。
+    }
+  }
+
+  if (typeof response?.text !== "function") {
+    return undefined;
+  }
+
+  const text = await response.text().catch(() => "");
+  const payload = parseSseJsonRpcResponse(text);
+  if (payload) return payload;
+  return text ? { message: text } : undefined;
+}
+
+function parseJsonRpcDataLine(data) {
+  const value = normalizeText(data);
+  if (!value || value === "[DONE]") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeEndpoint(input) {
+  const server = isRecord(input.server) ? input.server : {};
+  const endpoint = normalizeText(
+    input.endpoint ||
+      input.url ||
+      input.endpointUrl ||
+      server.endpoint ||
+      server.url ||
+      server.endpointUrl,
+  );
+  if (!endpoint) {
+    throw new Error("缺少 MCP HTTP endpoint");
+  }
+
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("protocol");
+    }
+    return url.toString();
+  } catch {
+    throw new Error(`MCP HTTP endpoint 格式无效：${endpoint}`);
+  }
+}
+
+function normalizeTimeoutMs(input) {
+  const server = isRecord(input.server) ? input.server : {};
+  const timeoutMs = Number(input.timeoutMs ?? server.timeoutMs);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : DEFAULT_MCP_REQUEST_TIMEOUT_MS;
+}
+
+function buildRequestHeaders(input, sessionId) {
+  const server = isRecord(input.server) ? input.server : {};
+  const token = normalizeText(input.bearerToken || input.token || server.bearerToken || server.token);
+  const headers = {
+    Accept: "application/json, text/event-stream",
+    "Content-Type": "application/json",
+    ...normalizeHeaders(server.headers),
+    ...normalizeHeaders(input.headers),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (sessionId) {
+    headers["Mcp-Session-Id"] = sessionId;
+  }
+
+  return headers;
+}
+
+function normalizeHeaders(headers) {
+  if (!headers || typeof headers !== "object") return {};
+  const result = {};
+  if (typeof headers.forEach === "function") {
+    headers.forEach((value, key) => {
+      if (value !== undefined && value !== null) result[String(key)] = String(value);
+    });
+    return result;
+  }
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (value !== undefined && value !== null) result[key] = String(value);
+  }
+  return result;
+}
+
+function readHeader(headers, name) {
+  if (!headers) return "";
+  const lowerName = name.toLowerCase();
+  if (typeof headers.get === "function") {
+    return normalizeText(headers.get(name) || headers.get(lowerName));
+  }
+
+  if (typeof headers.forEach === "function") {
+    let found = "";
+    headers.forEach((value, key) => {
+      if (!found && String(key).toLowerCase() === lowerName) {
+        found = normalizeText(String(value));
+      }
+    });
+    return found;
+  }
+
+  if (typeof headers === "object") {
+    for (const [key, value] of Object.entries(headers)) {
+      if (String(key).toLowerCase() === lowerName) {
+        return normalizeText(String(value));
+      }
+    }
+  }
+
+  return "";
+}
+
+function normalizeMcpTool(tool) {
+  if (!isRecord(tool)) return undefined;
+  const name = normalizeText(tool.name || tool.id);
+  if (!name) return undefined;
+  return {
+    ...tool,
+    id: normalizeText(tool.id) || name,
+    name,
+    description: normalizeText(tool.description),
+    inputSchema: isRecord(tool.inputSchema)
+      ? tool.inputSchema
+      : isRecord(tool.input_schema)
+        ? tool.input_schema
+        : { type: "object", additionalProperties: true },
+  };
+}
+
+function formatMcpToolContent(result) {
+  const content = result?.content;
+  let text;
+
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content.map(formatMcpContentBlock).filter(Boolean).join("\n");
+  } else if (typeof result === "string") {
+    text = result;
+  } else {
+    text = safeJsonStringify(result ?? {});
+  }
+
+  return truncateToolContent(text);
+}
+
+function formatMcpContentBlock(block) {
+  if (typeof block === "string") return block;
+  if (!isRecord(block)) return "";
+  if (block.type === "text" && typeof block.text === "string") return block.text;
+  if (block.type === "resource") return safeJsonStringify(block.resource ?? block);
+  if (isRecord(block.resource)) return safeJsonStringify(block.resource);
+  if (typeof block.text === "string") return block.text;
+  return safeJsonStringify(block);
+}
+
+function truncateToolContent(text) {
+  const value = String(text ?? "");
+  return value.length > MCP_TOOL_TEXT_LIMIT
+    ? `${value.slice(0, MCP_TOOL_TEXT_LIMIT)}${MCP_TOOL_TRUNCATION_SUFFIX}`
+    : value;
+}
+
+function safeJsonStringify(value) {
+  try {
+    const text = JSON.stringify(value);
+    return text === undefined ? "" : text;
+  } catch {
+    return String(value);
+  }
+}
+
+function createHttpErrorMessage(response, payload, method) {
+  const status = Number.isFinite(response?.status) ? response.status : 0;
+  const statusText = normalizeText(response?.statusText);
+  const payloadMessage = normalizeText(payload?.message || payload?.error?.message);
+  const suffix = payloadMessage || statusText || "请求失败";
+  return `MCP ${method} HTTP 请求失败：${status || "unknown"} ${suffix}`.trim();
+}
+
+function createJsonRpcErrorMessage(error, method) {
+  if (typeof error === "string") return `MCP ${method} 调用失败：${error}`;
+  const message = normalizeText(error?.message) || safeJsonStringify(error);
+  return `MCP ${method} 调用失败：${message}`;
+}
