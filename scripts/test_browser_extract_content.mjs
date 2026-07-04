@@ -30,6 +30,7 @@ assert.deepEqual(normalizeBrowserExtractContentArguments(), {
 });
 assert.match(normalizeBrowserExtractContentArguments(null).message, /参数必须是对象/);
 assert.match(normalizeBrowserExtractContentArguments([]).message, /参数必须是对象/);
+assert.match(normalizeBrowserExtractContentArguments(new Date()).message, /参数必须是对象/);
 assert.match(normalizeBrowserExtractContentArguments("x").message, /参数必须是对象/);
 assert.match(normalizeBrowserExtractContentArguments(1).message, /参数必须是对象/);
 assert.match(normalizeBrowserExtractContentArguments(true).message, /参数必须是对象/);
@@ -70,16 +71,37 @@ assert.deepEqual(selectorArgs.args, {
 
 assert.equal(validateExtractionSelector("main.article", "css").ok, true);
 assert.equal(validateExtractionSelector('[data-id="x"]', "css").ok, true);
+assert.equal(validateExtractionSelector("#main", "css").ok, true);
+assert.equal(validateExtractionSelector(".card", "css").ok, true);
+assert.equal(validateExtractionSelector("article > h2", "css").ok, true);
+assert.equal(validateExtractionSelector("main, article", "css").ok, true);
+assert.equal(validateExtractionSelector('a[href^="https://"]', "css").ok, true);
+assert.equal(validateExtractionSelector("*:not(.hidden)", "css").ok, true);
 assert.equal(validateExtractionSelector("//main", "xpath").ok, true);
 assert.equal(validateExtractionSelector('//*[@id="main"]', "xpath").ok, true);
 assert.equal(validateExtractionSelector("javascript:alert(1)", "css").ok, false);
 assert.equal(validateExtractionSelector("javascript:alert(1)", "xpath").ok, false);
 assert.equal(validateExtractionSelector("main { color: red }", "css").ok, false);
 assert.equal(validateExtractionSelector(">>>", "css").ok, false);
+assert.equal(validateExtractionSelector("***", "css").ok, false);
+assert.equal(validateExtractionSelector("div >", "css").ok, false);
+assert.equal(validateExtractionSelector("#", "css").ok, false);
+assert.equal(validateExtractionSelector(".", "css").ok, false);
+assert.equal(validateExtractionSelector("a[href=]", "css").ok, false);
 assert.equal(validateExtractionSelector("[", "css").ok, false);
 assert.equal(validateExtractionSelector(":not(", "css").ok, false);
 assert.equal(validateExtractionSelector("//*[", "xpath").ok, false);
 assert.equal(validateExtractionSelector("main", "xpath").ok, false);
+for (const invalidSelector of ["***", "div >", "#", ".", "a[href=]"]) {
+  assert.match(
+    normalizeBrowserExtractContentArguments({
+      source: "selector",
+      selectorType: "css",
+      selector: invalidSelector,
+    }).message,
+    /selector 格式不正确/,
+  );
+}
 
 const savedRules = [
   { id: "saved", alias: "Saved", urlPattern: ".*", selectorsText: "article", sortOrder: 10, createdAt: 1, updatedAt: 1 },
@@ -98,6 +120,7 @@ assert.equal(selectorRules[0].urlPattern, ".*");
 assert.equal(selectorRules[0].selector, "main");
 assert.equal(selectorRules[0].selectorType, "css");
 assert.equal(selectorRules[0].selectorsText, "main");
+assert.equal(selectorRules[0].allowDocumentFallback, false);
 assert.equal(selectorRules[0].sortOrder, 0);
 
 const formatted = formatBrowserExtractContentResult(

@@ -140,7 +140,13 @@ export function validateExtractionSelector(selector, selectorType) {
   }
 
   if (selectorType === "css") {
-    if (/[{};]/.test(text) || />>/.test(text) || /\(\s*\)/.test(text) || /\[\s*\]/.test(text)) {
+    if (
+      /[{};]/.test(text) ||
+      />>/.test(text) ||
+      /\(\s*\)/.test(text) ||
+      /\[\s*\]/.test(text) ||
+      hasInvalidCssSelectorSyntax(text)
+    ) {
       return { ok: false };
     }
     return { ok: true };
@@ -159,6 +165,7 @@ export function createBrowserExtractContentRules(args, savedRules = []) {
     selector: args?.selector ?? "",
     selectorType: args?.selectorType ?? "css",
     selectorsText: args?.selector ?? "",
+    allowDocumentFallback: false,
     sortOrder: 0,
     createdAt: 0,
     updatedAt: 0,
@@ -296,5 +303,155 @@ function hasBalancedSelectorDelimiters(text) {
 }
 
 function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasInvalidCssSelectorSyntax(text) {
+  const visibleSyntax = maskCssSelectorAttributeAndStringContent(text);
+  return (
+    /^\s*,/.test(visibleSyntax) ||
+    /,\s*(?:,|$)/.test(visibleSyntax) ||
+    /(?:^|,)\s*[>+~]/.test(visibleSyntax) ||
+    /[>+~]\s*(?:$|,|[>+~])/.test(visibleSyntax) ||
+    /\*{2,}/.test(visibleSyntax) ||
+    /:{1,2}\s*(?:$|[,>+~)])/.test(visibleSyntax) ||
+    hasInvalidCssIdentifierMarker(text) ||
+    hasInvalidCssAttributeSelector(text)
+  );
+}
+
+function maskCssSelectorAttributeAndStringContent(text) {
+  let output = "";
+  let quote = "";
+  let escaped = false;
+  let attributeDepth = 0;
+  for (const char of text) {
+    if (escaped) {
+      output += " ";
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      output += quote || attributeDepth > 0 ? " " : char;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      output += " ";
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      output += " ";
+      continue;
+    }
+    if (char === "[") {
+      attributeDepth += 1;
+      output += "[";
+      continue;
+    }
+    if (char === "]" && attributeDepth > 0) {
+      attributeDepth -= 1;
+      output += "]";
+      continue;
+    }
+    output += attributeDepth > 0 ? " " : char;
+  }
+  return output;
+}
+
+function hasInvalidCssIdentifierMarker(text) {
+  let quote = "";
+  let escaped = false;
+  let attributeDepth = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "[") {
+      attributeDepth += 1;
+      continue;
+    }
+    if (char === "]" && attributeDepth > 0) {
+      attributeDepth -= 1;
+      continue;
+    }
+    if ((char === "#" || char === ".") && attributeDepth === 0 && !isCssIdentifierStart(text[index + 1])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasInvalidCssAttributeSelector(text) {
+  const bodies = extractCssAttributeBodies(text);
+  return bodies.some((body) => /(?:[*^$|~]?=)\s*$/.test(body.trim()));
+}
+
+function extractCssAttributeBodies(text) {
+  const bodies = [];
+  let quote = "";
+  let escaped = false;
+  let attributeDepth = 0;
+  let body = "";
+  for (const char of text) {
+    if (escaped) {
+      if (attributeDepth > 0) body += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      if (attributeDepth > 0) body += char;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (attributeDepth > 0) body += char;
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      if (attributeDepth > 0) body += char;
+      quote = char;
+      continue;
+    }
+    if (char === "[") {
+      if (attributeDepth > 0) body += char;
+      attributeDepth += 1;
+      continue;
+    }
+    if (char === "]" && attributeDepth > 0) {
+      attributeDepth -= 1;
+      if (attributeDepth === 0) {
+        bodies.push(body);
+        body = "";
+      } else {
+        body += char;
+      }
+      continue;
+    }
+    if (attributeDepth > 0) body += char;
+  }
+  return bodies;
+}
+
+function isCssIdentifierStart(char) {
+  return typeof char === "string" && /^[A-Za-z_\\-\u0080-\uFFFF]$/.test(char);
 }
