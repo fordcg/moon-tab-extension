@@ -1,5 +1,13 @@
+import {
+  BROWSER_EXTRACT_CONTENT_INPUT_SCHEMA,
+  BROWSER_EXTRACT_CONTENT_TOOL_ID,
+  BROWSER_EXTRACT_CONTENT_TOOL_NAME,
+  normalizeBrowserExtractContentArguments,
+} from "./browser-extract-content.mjs";
+
 export const BROWSER_CONTROL_ACTIONS = Object.freeze({
   TAKE_SNAPSHOT: "take_snapshot",
+  EXTRACT_CONTENT: BROWSER_EXTRACT_CONTENT_TOOL_NAME,
   CLICK: "click",
   FILL: "fill",
   PRESS_KEY: "press_key",
@@ -15,6 +23,7 @@ export const BROWSER_CONTROL_ACTIONS = Object.freeze({
 
 export const BROWSER_CONTROL_TOOL_IDS = Object.freeze({
   TAKE_SNAPSHOT: "browser.take_snapshot",
+  EXTRACT_CONTENT: BROWSER_EXTRACT_CONTENT_TOOL_ID,
   CLICK: "browser.click",
   FILL: "browser.fill",
   PRESS_KEY: "browser.press_key",
@@ -34,6 +43,7 @@ export const MAX_BROWSER_CONTROL_ACTION_TIMEOUT_MS = 60000;
 
 const ACTION_TO_TOOL_ID = Object.freeze({
   [BROWSER_CONTROL_ACTIONS.TAKE_SNAPSHOT]: BROWSER_CONTROL_TOOL_IDS.TAKE_SNAPSHOT,
+  [BROWSER_CONTROL_ACTIONS.EXTRACT_CONTENT]: BROWSER_CONTROL_TOOL_IDS.EXTRACT_CONTENT,
   [BROWSER_CONTROL_ACTIONS.CLICK]: BROWSER_CONTROL_TOOL_IDS.CLICK,
   [BROWSER_CONTROL_ACTIONS.FILL]: BROWSER_CONTROL_TOOL_IDS.FILL,
   [BROWSER_CONTROL_ACTIONS.PRESS_KEY]: BROWSER_CONTROL_TOOL_IDS.PRESS_KEY,
@@ -64,6 +74,7 @@ export const BROWSER_CONTROL_ACTION_SCHEMAS = Object.freeze({
     additionalProperties: false,
     properties: {},
   }),
+  [BROWSER_CONTROL_ACTIONS.EXTRACT_CONTENT]: BROWSER_EXTRACT_CONTENT_INPUT_SCHEMA,
   [BROWSER_CONTROL_ACTIONS.CLICK]: Object.freeze({
     type: "object",
     required: ["uid"],
@@ -241,6 +252,15 @@ export function validateBrowserControlRequest(toolCall) {
     return { ok: false, request, message: `浏览器操作工具 ${request.name} 不接受参数：${extras.join("、")}。` };
   }
 
+  if (request.name === BROWSER_CONTROL_ACTIONS.EXTRACT_CONTENT) {
+    const rawArgs = getRawToolArguments(toolCall);
+    const validation = normalizeBrowserExtractContentArguments(rawArgs);
+    if (!validation.ok) {
+      return { ok: false, request, message: validation.message };
+    }
+    return { ok: true, request: { ...request, arguments: validation.args } };
+  }
+
   if ((request.name === BROWSER_CONTROL_ACTIONS.CLICK || request.name === BROWSER_CONTROL_ACTIONS.FILL) && !isNonEmptyString(args.uid)) {
     return { ok: false, request, message: "浏览器操作需要非空 UID。" };
   }
@@ -375,6 +395,16 @@ export function createBrowserControlToolDefinitions({ queue, execute, contextPro
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function getRawToolArguments(toolCall) {
+  if (toolCall && Object.prototype.hasOwnProperty.call(toolCall, "arguments")) {
+    return toolCall.arguments;
+  }
+  if (toolCall && Object.prototype.hasOwnProperty.call(toolCall, "input")) {
+    return toolCall.input;
+  }
+  return undefined;
 }
 
 function normalizeActionTimeout(value) {

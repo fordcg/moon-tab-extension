@@ -16,11 +16,22 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 assert.equal(resolveBrowserControlAction("browser.click"), BROWSER_CONTROL_ACTIONS.CLICK);
 assert.equal(resolveBrowserControlAction("click"), BROWSER_CONTROL_ACTIONS.CLICK);
+assert.equal(resolveBrowserControlAction("browser.extract_content"), BROWSER_CONTROL_ACTIONS.EXTRACT_CONTENT);
+assert.equal(resolveBrowserControlAction("extract_content"), BROWSER_CONTROL_ACTIONS.EXTRACT_CONTENT);
 assert.equal(resolveBrowserControlAction("browser.navigate_page"), BROWSER_CONTROL_ACTIONS.NAVIGATE_PAGE);
 assert.equal(resolveBrowserControlToolId("click"), "browser.click");
+assert.equal(resolveBrowserControlToolId("extract_content"), "browser.extract_content");
 assert.equal(resolveBrowserControlToolId("new_page"), "browser.new_page");
 assert.equal(isBrowserControlAction("not_browser"), false);
+assert.equal(isBrowserControlAction("browser.extract_content"), true);
 assert.equal(BROWSER_CONTROL_TOOL_DEFINITIONS.every((tool) => tool.permission === BROWSER_CONTROL_PERMISSION), true);
+
+const extractContentDefinition = BROWSER_CONTROL_TOOL_DEFINITIONS.find((tool) => tool.id === "browser.extract_content");
+assert.ok(extractContentDefinition);
+assert.equal(extractContentDefinition.name, "extract_content");
+assert.equal(extractContentDefinition.inputSchema.additionalProperties, false);
+assert.deepEqual(extractContentDefinition.inputSchema.properties.mode.enum, ["text", "html"]);
+assert.deepEqual(extractContentDefinition.inputSchema.properties.source.enum, ["auto_rule", "document", "selector"]);
 
 assert.equal(validateBrowserControlRequest({ name: "click", arguments: { uid: "42" } }).ok, true);
 assert.equal(validateBrowserControlRequest({ name: "click", arguments: { uid: "" } }).ok, false);
@@ -42,6 +53,29 @@ assert.equal(validateBrowserControlRequest({ name: "scroll_page", arguments: { d
 assert.match(validateBrowserControlRequest({ name: "scroll_page", arguments: { direction: "diagonal" } }).message, /direction/);
 assert.equal(validateBrowserControlRequest({ name: "wait_for_network_idle", arguments: { idleMs: 500, timeout: 3000 } }).ok, true);
 assert.match(validateBrowserControlRequest({ name: "wait_for_network_idle", arguments: { idleMs: 50 } }).message, /idleMs/);
+
+assert.deepEqual(validateBrowserControlRequest({ name: "extract_content", arguments: {} }).request.arguments, {
+  mode: "text",
+  source: "auto_rule",
+  maxLength: 30000,
+});
+assert.deepEqual(
+  validateBrowserControlRequest({
+    toolId: "browser.extract_content",
+    input: { mode: "html", source: "selector", selectorType: "css", selector: " main ", maxLength: 500 },
+  }).request.arguments,
+  {
+    mode: "html",
+    source: "selector",
+    selectorType: "css",
+    selector: "main",
+    maxLength: 500,
+  },
+);
+assert.match(validateBrowserControlRequest({ name: "extract_content", arguments: null }).message, /参数必须是对象/);
+assert.match(validateBrowserControlRequest({ name: "extract_content", arguments: { mode: "markdown" } }).message, /mode 必须是 text 或 html/);
+assert.match(validateBrowserControlRequest({ name: "extract_content", arguments: { source: "selector", selector: "main" } }).message, /selectorType/);
+assert.match(validateBrowserControlRequest({ name: "extract_content", arguments: { source: "document", selector: "main" } }).message, /只有 source=selector/);
 
 const manualError = createBrowserControlToolError({ id: "manual", name: "click", arguments: { uid: "x" } }, "失败");
 assert.equal(manualError.toolCallId, "manual");
