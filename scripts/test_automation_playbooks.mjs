@@ -38,6 +38,12 @@ assert.deepEqual(getEnabledAutomationPlaybooks({ disabledPlaybookIds: ["page_rea
 assert.equal(shouldRunAutomationPlaybookSelection("帮我总结当前页面并提取重点"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("比较这几个标签页的差异"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("提取当前页面里 .price 的文本"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("总结当前页"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("分析当前页内容"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("提取当前 tab 里的价格"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("比较这几个页面的差异"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("总结这个 tab"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("阅读已打开的网页"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("帮我找几个学习网站"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下企业网站设计趋势"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下 CSS Grid 布局"), false);

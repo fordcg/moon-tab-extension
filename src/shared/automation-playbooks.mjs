@@ -78,7 +78,7 @@ export function shouldRunAutomationPlaybookSelection(userContent) {
   if (!text) return false;
 
   const hasBrowserScene =
-    /当前页面|这个页面|此页面|本页面|当前网页|这个网页|此网页|这几个标签页|这些标签页|当前标签页|这个标签页|此标签页|已打开标签页|打开的标签页|已打开页面|打开的页面|当前浏览器页面/.test(text);
+    /当前页面|这个页面|此页面|本页面|当前页|这个页|此页|当前网页|这个网页|此网页|已打开的网页|打开的网页|这几个页面|这些页面|这几个标签页|这些标签页|当前标签页|这个标签页|此标签页|已打开标签页|打开的标签页|已打开页面|打开的页面|当前浏览器页面|当前\s*tab|这个\s*tab|此\s*tab|已打开\s*tab|打开的\s*tab/.test(text);
   const hasAutomationIntent = /总结|提取|阅读|查看|看看|分析|比较|汇总|打开|切换|整理|归纳|找/.test(text);
   return hasBrowserScene && hasAutomationIntent;
 }
