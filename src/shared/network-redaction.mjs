@@ -16,9 +16,38 @@ const SENSITIVE_HEADER_NAMES = new Set([
   "refresh-token",
 ]);
 
+const SENSITIVE_COMPACT_NAMES = new Set([
+  "apikey",
+  "authtoken",
+  "authorization",
+  "clientsecret",
+  "credential",
+  "credentials",
+  "password",
+  "passwd",
+  "pwd",
+  "sessionid",
+  "secretkey",
+  "token",
+  "accesstoken",
+  "refreshtoken",
+]);
+const SENSITIVE_TOKEN_NAMES = new Set([
+  "authorization",
+  "auth",
+  "credential",
+  "credentials",
+  "jwt",
+  "password",
+  "passwd",
+  "pwd",
+  "secret",
+  "session",
+  "token",
+]);
 const SENSITIVE_KEY_PATTERN = /(^|[-_])(token|secret|password|passwd|pwd|authorization|auth|api[-_]?key|session|jwt|credential|client[-_]?secret|refresh[-_]?token|access[-_]?token)([-_]|$)/i;
 const BEARER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
-const ASSIGNMENT_PATTERN = /((?:token|secret|password|passwd|pwd|apiKey|api_key|authorization|session|jwt)\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s&,;}]+)/gi;
+const ASSIGNMENT_PATTERN = /\b([A-Za-z][A-Za-z0-9_-]*)(\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s&,;}]+)/g;
 
 const normalizeText = (value) => (typeof value === "string" ? value : "");
 
@@ -31,8 +60,12 @@ export function truncateText(value, maxLength = DEFAULT_MAX_TEXT_LENGTH) {
 }
 
 export function isSensitiveName(name) {
-  const normalized = normalizeText(name).trim().toLowerCase();
-  return SENSITIVE_HEADER_NAMES.has(normalized) || SENSITIVE_KEY_PATTERN.test(normalized);
+  const rawName = normalizeText(name).trim();
+  const normalized = rawName.toLowerCase();
+  if (SENSITIVE_HEADER_NAMES.has(normalized) || SENSITIVE_COMPACT_NAMES.has(normalized)) return true;
+  if (SENSITIVE_KEY_PATTERN.test(normalized)) return true;
+  const tokens = splitNameTokens(rawName);
+  return tokens.some((token) => SENSITIVE_TOKEN_NAMES.has(token)) || hasSensitiveTokenPair(tokens);
 }
 
 export function redactUrl(rawUrl, maxLength = DEFAULT_MAX_TEXT_LENGTH) {
@@ -50,7 +83,9 @@ export function redactUrl(rawUrl, maxLength = DEFAULT_MAX_TEXT_LENGTH) {
     }
     nextUrl = parsed.toString();
   } catch {
-    nextUrl = original.replace(ASSIGNMENT_PATTERN, (_match, prefix) => `${prefix}${REDACTED_VALUE}`);
+    nextUrl = original.replace(ASSIGNMENT_PATTERN, (match, key, separator) =>
+      isSensitiveName(key) ? `${key}${separator}${REDACTED_VALUE}` : match
+    );
     redacted = nextUrl !== original;
   }
 
@@ -137,13 +172,30 @@ export function redactBodyText(bodyText, maxLength = DEFAULT_MAX_TEXT_LENGTH) {
     redacted = true;
     return `${scheme} ${REDACTED_VALUE}`;
   });
-  const assignmentRedacted = bearerRedacted.replace(ASSIGNMENT_PATTERN, (_match, prefix) => {
+  const assignmentRedacted = bearerRedacted.replace(ASSIGNMENT_PATTERN, (match, key, separator) => {
+    if (!isSensitiveName(key)) return match;
     redacted = true;
-    return `${prefix}${REDACTED_VALUE}`;
+    return `${key}${separator}${REDACTED_VALUE}`;
   });
 
   const truncated = truncateText(assignmentRedacted, maxLength);
   return { ...truncated, redacted };
+}
+
+function splitNameTokens(name) {
+  return normalizeText(name)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function hasSensitiveTokenPair(tokens) {
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    if (tokens[index] === "api" && tokens[index + 1] === "key") return true;
+  }
+  return false;
 }
 
 export function redactNetworkRecord(record, maxLength = DEFAULT_MAX_TEXT_LENGTH) {

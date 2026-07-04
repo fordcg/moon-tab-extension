@@ -2,6 +2,7 @@
 // Loads the new-tab redirect logic and the embedded Browser AI Assistant background.
 // Each module registers its own chrome.* event listeners on import.
 import "./newtab-redirect.js";
+import "../ai-assistant/assets/imagefree-tool-runtime.js";
 import "../ai-assistant/background/index.js";
 
 installModelCallDiagnostics();
@@ -12,6 +13,11 @@ const FLOATING_OPEN_TYPE = "sidepanelFloating.openCurrentTab";
 const FLOATING_CONTENT_OPEN_TYPE = "sidepanelFloating.open";
 const SIDE_PANEL_CLOSE_TYPE = "sidePanel.close";
 const OPENED_SIDE_PANEL_TABS_KEY = "sidePanel.openedTabs.v1";
+// 浏览器操控新建的标签页会立刻被激活，onActivated 可能早于 onCreated 的存储写入。
+// 这个内存集合在 onCreated 的同步阶段记录“刚创建的标签”，让 onActivated 能在竞态下
+// 仍然识别出新标签并让侧边栏跟随，而不是把整窗口面板关掉。
+const RECENTLY_CREATED_TAB_TTL_MS = 10000;
+const recentlyCreatedTabs = new Set();
 
 void bootstrapTabScopedSidePanel();
 chrome.runtime.onInstalled.addListener(bootstrapTabScopedSidePanel);
@@ -21,13 +27,28 @@ chrome.action?.onClicked?.addListener((tab) => {
   void openTabScopedSidePanel(tab?.id);
 });
 
-chrome.commands?.onCommand?.addListener((command) => {
+chrome.commands?.onCommand?.addListener((command, tab) => {
   if (command !== "open-side-panel") {
+    return;
+  }
+  if (typeof tab?.id === "number") {
+    openTabScopedSidePanel(tab.id);
     return;
   }
   void chrome.tabs
     .query({ active: true, currentWindow: true })
-    .then(([tab]) => openTabScopedSidePanel(tab?.id))
+    .then(([tab]) => {
+      // 旧版浏览器若没有给 commands 事件传 tab，这里只能提前启用该 tab；
+      // sidePanel.open 不能放在这个异步回调里，否则会丢失用户手势。
+      if (typeof tab?.id === "number") {
+        void rememberOpenedSidePanelTab(tab.id);
+        void chrome.sidePanel?.setOptions?.({
+          tabId: tab.id,
+          path: SIDE_PANEL_PATH,
+          enabled: true,
+        })?.catch?.(() => undefined);
+      }
+    })
     .catch(() => undefined);
 });
 
@@ -43,10 +64,13 @@ chrome.tabs?.onActivated?.addListener((activeInfo) => {
 });
 
 chrome.tabs?.onCreated?.addListener((tab) => {
-  void syncTabSidePanelOptions(tab?.id);
+  // 同步标记“刚创建”，让随后的 onActivated 在竞态下也能识别新标签并让侧边栏跟随。
+  markRecentlyCreatedTab(tab?.id);
+  void inheritSidePanelForNewTab(tab);
 });
 
 chrome.tabs?.onRemoved?.addListener((tabId) => {
+  recentlyCreatedTabs.delete(tabId);
   void forgetOpenedSidePanelTab(tabId);
 });
 
@@ -142,18 +166,21 @@ async function bootstrapTabScopedSidePanel() {
   await syncAllTabsSidePanelOptions();
 }
 
-async function openTabScopedSidePanel(tabId) {
+function openTabScopedSidePanel(tabId) {
   if (typeof tabId !== "number") {
     return false;
   }
   try {
-    await rememberOpenedSidePanelTab(tabId);
-    await chrome.sidePanel?.setOptions?.({
+    // sidePanel.open() 必须紧贴 action/context-menu/command 的用户手势调用。
+    // 这里不能先 await storage/setOptions，否则 Chrome 会判定手势已丢失。
+    void rememberOpenedSidePanelTab(tabId);
+    const setOptionsPromise = chrome.sidePanel?.setOptions?.({
       tabId,
       path: SIDE_PANEL_PATH,
       enabled: true,
     });
-    await chrome.sidePanel?.open?.({ tabId });
+    void setOptionsPromise?.catch?.(() => undefined);
+    void chrome.sidePanel?.open?.({ tabId })?.catch?.(() => undefined);
     return true;
   } catch (_error) {
     return false;
@@ -164,7 +191,18 @@ async function syncActiveTabSidePanel(tabId, windowId) {
   if (typeof tabId !== "number") {
     return;
   }
-  const opened = await getOpenedSidePanelTabs();
+  let opened = await getOpenedSidePanelTabs();
+
+  // 浏览器操控会以 active:true 新建标签页，激活后会落到这里。若直接按“未开启”
+  // 处理就会关掉整窗口面板，让 AI 把自己所在的侧边栏关闭。这里改为：刚创建且
+  // 同窗口已有标签开着侧边栏时，让新标签继承侧边栏而不是关闭。
+  if (!opened.has(tabId) && recentlyCreatedTabs.has(tabId)) {
+    if (await windowHasOpenedSidePanel(windowId, opened)) {
+      await rememberOpenedSidePanelTab(tabId);
+      opened = await getOpenedSidePanelTabs();
+    }
+  }
+
   const isOpened = opened.has(tabId);
   await syncTabSidePanelOptions(tabId, opened);
 
@@ -174,6 +212,56 @@ async function syncActiveTabSidePanel(tabId, windowId) {
   if (!isOpened && typeof windowId === "number") {
     await closeSidePanelTargets([{ windowId }]);
   }
+}
+
+// 判断指定窗口里是否还有“已开启侧边栏”的标签页，用于决定新标签是否继承侧边栏。
+async function windowHasOpenedSidePanel(windowId, openedTabs) {
+  if (typeof windowId !== "number") {
+    return false;
+  }
+  const opened = openedTabs || (await getOpenedSidePanelTabs());
+  if (opened.size === 0) {
+    return false;
+  }
+  const query = chrome.tabs?.query;
+  if (typeof query !== "function") {
+    return false;
+  }
+  let tabs = [];
+  try {
+    tabs = await query.call(chrome.tabs, { windowId });
+  } catch (_error) {
+    return false;
+  }
+  return tabs.some((tab) => typeof tab?.id === "number" && opened.has(tab.id));
+}
+
+function markRecentlyCreatedTab(tabId) {
+  if (typeof tabId !== "number") {
+    return;
+  }
+  recentlyCreatedTabs.add(tabId);
+  // 仅用于桥接 onCreated 与 onActivated 的短暂竞态，超时后清掉避免误判后续复用的 tabId。
+  setTimeout(() => recentlyCreatedTabs.delete(tabId), RECENTLY_CREATED_TAB_TTL_MS);
+}
+
+// 新建标签页时，如果同窗口已有标签开着侧边栏（通常是发起操控的 AI 侧边栏），
+// 让新标签继承侧边栏配置，这样激活切换过去也不会被同步逻辑关闭。
+async function inheritSidePanelForNewTab(tab) {
+  const tabId = tab?.id;
+  if (typeof tabId !== "number") {
+    return;
+  }
+  const opened = await getOpenedSidePanelTabs();
+  if (opened.has(tabId)) {
+    return;
+  }
+  if (!(await windowHasOpenedSidePanel(tab.windowId, opened))) {
+    await syncTabSidePanelOptions(tabId, opened);
+    return;
+  }
+  await rememberOpenedSidePanelTab(tabId);
+  await syncTabSidePanelOptions(tabId);
 }
 
 async function syncAllTabsSidePanelOptions() {

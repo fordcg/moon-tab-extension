@@ -7,7 +7,6 @@
     "tabs",
     "storage",
     "sidePanel",
-    "permissions",
     "contextMenus",
     "activeTab",
     "scripting",
@@ -16,10 +15,6 @@
   ],
   "host_permissions": [
     "<all_urls>"
-  ],
-  "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
   ],
   "action": {
     "default_title": "打开 AI 助手"

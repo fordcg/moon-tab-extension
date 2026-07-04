@@ -54,6 +54,13 @@ const FLOATING_WINDOW_SVG =
   '<rect x="4" y="5" width="16" height="14" rx="3"></rect>' +
   '<path d="M7.5 9.75h9M7.5 13.5h6"></path></svg>';
 
+// “移到此处”按钮图标：细线右入箭头，表示把当前标签页并入该会话。
+const MOVE_HERE_SVG =
+  '<svg class="sidepanel-move-conversation-button-icon" viewBox="0 0 24 24" fill="none" ' +
+  'stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M4 12h12"></path>' +
+  '<path d="M11 6l5 6-5 6"></path></svg>';
+
 const SIDE_PANEL_URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_FLOATING_FRAME = SIDE_PANEL_URL_PARAMS.get("floating") === "1";
 const INITIAL_PANEL_TAB_ID = parseIntegerParam(
@@ -68,6 +75,7 @@ const INITIAL_PANEL_WINDOW_ID = parseIntegerParam(
 const MODEL_PLACEHOLDER_TEXT = "未选择模型";
 const RECENT_HISTORY_COMPACT_LIMIT = 5;
 const MOVE_CONVERSATION_TTL_MS = 60 * 60 * 1000;
+const MOVE_CONVERSATION_PROMPT_SUPPRESS_MS = 1600;
 const CHAT_DB_NAME = "browser-ai-assistant";
 const CHAT_SESSION_STORE = "chatSessions";
 const TAB_CONVERSATION_STATE_KEY = "sidepanel.tabConversationState.v1";
@@ -113,12 +121,14 @@ let floatingToastTimer = null;
 let messageListPinnedToBottom = true;
 let messageListScrollTarget = null;
 let messageListScrollRaf = null;
+let messageListLastScrollTop = 0;
 let regenerateDirectTimer = null;
 let conversationContinuityInFlight = false;
 const conversationContinuityBootstrappedTabs = new Set();
 let currentConversationSessionId = null;
 let moveConversationCandidate = null;
 let moveConversationCandidateSignature = "";
+let moveConversationPromptSuppressedUntil = 0;
 let lastConversationContinuitySignature = "";
 let lastPersistedSessionContextSignature = "";
 let moveConversationRequestInFlight = false;
@@ -170,6 +180,7 @@ function scheduleEnhancement() {
       enhanceComposerTools,
       enhanceComposerAddTab,
       enhanceComposerFooter,
+      renderTokenUsageMeter,
       enhancePromptUndo,
       syncTabConversationContinuity,
       enhanceMoveConversationPrompt,
@@ -187,7 +198,7 @@ function scheduleEnhancement() {
       enhanceSettingsDialog,
       syncSettingsTabsScroll,
       enhanceChannelManager,
-      enhanceChannelSelects,
+      enhanceSettingsSelects,
       enhanceChannelTextInputClear,
       cleanupSettingsBackgroundSnapshot,
       updateContextBanner,
@@ -322,7 +333,11 @@ function syncTabConversationContinuity() {
     document.querySelectorAll(".session-title-button").length,
   ].join("|");
 
-  if (conversationContinuityInFlight || signature === lastConversationContinuitySignature) {
+  if (
+    conversationContinuityInFlight ||
+    newConversationRequestInFlight ||
+    signature === lastConversationContinuitySignature
+  ) {
     return;
   }
 
@@ -338,6 +353,20 @@ async function syncTabConversationContinuityAsync(tabKey) {
     let binding = getValidTabBinding(state, tabKey, sessions);
 
     if (binding) {
+      const domActiveId = getActiveSessionIdFromDom();
+      // 用户已在历史里手动切到别的会话：尊重选择，把绑定跟过去，而不是把视图拽回旧绑定。
+      // 仅当目标会话真实存在时跟随；空会话（domActiveId 为空）仍按旧绑定恢复，避免初次渲染抖动。
+      if (
+        domActiveId &&
+        domActiveId !== binding.sessionId &&
+        sessions.some((session) => session.id === domActiveId)
+      ) {
+        const followed = sessions.find((session) => session.id === domActiveId);
+        binding = {
+          sessionId: domActiveId,
+          provisional: hasChatSessionMessages(followed) ? false : Boolean(binding.provisional),
+        };
+      }
       currentConversationSessionId = binding.sessionId;
       updateTabBinding(state, tabKey, binding.sessionId, {
         provisional: Boolean(binding.provisional),
@@ -402,6 +431,9 @@ function enhanceMoveConversationPrompt() {
   if (
     !state ||
     !moveConversationCandidate ||
+    isMoveConversationPromptSuppressed() ||
+    newConversationRequestInFlight ||
+    isAssistantBusy() ||
     hasVisibleConversationMessages() ||
     hasBlockingEmptyNotice()
   ) {
@@ -421,10 +453,6 @@ function enhanceMoveConversationPrompt() {
   prompt.dataset.candidateSignature = moveConversationCandidateSignature;
   prompt.setAttribute("aria-label", "继续最近对话");
 
-  const icon = document.createElement("span");
-  icon.className = "sidepanel-move-conversation-icon";
-  icon.setAttribute("aria-hidden", "true");
-
   const title = document.createElement("span");
   title.className = "sidepanel-move-conversation-title";
   title.textContent = moveConversationCandidate.title || "最近对话";
@@ -433,14 +461,18 @@ function enhanceMoveConversationPrompt() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sidepanel-move-conversation-button";
-  button.textContent = "移到此处";
+  button.innerHTML = MOVE_HERE_SVG;
+  const buttonLabel = document.createElement("span");
+  buttonLabel.className = "sidepanel-move-conversation-button-label";
+  buttonLabel.textContent = "移到此处";
+  button.append(buttonLabel);
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
     void handleMoveConversationClick(button);
   });
 
-  prompt.append(icon, title, button);
+  prompt.append(title, button);
 
   if (existing) {
     existing.replaceWith(prompt);
@@ -449,6 +481,18 @@ function enhanceMoveConversationPrompt() {
 
   const anchor = state.querySelector(".sidepanel-empty-copy") || state.firstChild;
   state.insertBefore(prompt, anchor);
+}
+
+function suppressMoveConversationPrompt(durationMs = MOVE_CONVERSATION_PROMPT_SUPPRESS_MS) {
+  moveConversationPromptSuppressedUntil = Math.max(
+    moveConversationPromptSuppressedUntil,
+    Date.now() + durationMs,
+  );
+  document.querySelector(".sidepanel-move-conversation")?.remove();
+}
+
+function isMoveConversationPromptSuppressed() {
+  return Date.now() < moveConversationPromptSuppressedUntil;
 }
 
 function hasBlockingEmptyNotice() {
@@ -792,6 +836,7 @@ async function ensureChatSessionSelected(sessionId, sessions = []) {
     return true;
   }
 
+  suppressMoveConversationPrompt();
   const session = sessions.find((item) => item.id === sessionId) || null;
   let button = findSessionButton(sessionId, session);
   if (!button) {
@@ -834,6 +879,51 @@ async function createFreshConversationForTab() {
     }
   }
   return null;
+}
+
+// 用户手动点“新建对话”后，原生已切到新空会话。但标签页继续绑着旧会话，
+// 下一轮 syncTabConversationContinuity 会用旧绑定把视图拽回去，导致“切不走”。
+// 这里把当前标签页重绑到新会话，让连续性逻辑跟随新会话而不是与之对抗。
+async function rebindTabToNewConversation() {
+  const tabKey = getActiveTabKey();
+  if (!tabKey) {
+    return;
+  }
+
+  suppressMoveConversationPrompt(2200);
+  let newSessionId = "";
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await waitForDomSettle();
+    const sessions = await readChatSessions();
+    // 新会话即当前活动会话：优先读 DOM 活动项，回退到最新（空）会话。
+    const domActive = getActiveSessionIdFromDom();
+    const candidate =
+      (domActive && sessions.find((session) => session.id === domActive)) ||
+      sessions
+        .filter((session) => !session.archived)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+    if (candidate?.id) {
+      newSessionId = candidate.id;
+      break;
+    }
+  }
+
+  if (!newSessionId) {
+    return;
+  }
+
+  const sessions = await readChatSessions();
+  const state = pruneConversationState(loadTabConversationState(), sessions);
+  updateTabBinding(state, tabKey, newSessionId, { provisional: true });
+  saveTabConversationState(state);
+  currentConversationSessionId = newSessionId;
+  conversationContinuityBootstrappedTabs.add(tabKey);
+  // 强制下轮连续性重新计算，并丢弃可能残留的旧“移到此处”候选。
+  lastConversationContinuitySignature = "";
+  moveConversationCandidate = null;
+  moveConversationCandidateSignature = "";
+  applySessionTabContext(newSessionId);
+  scheduleEnhancement();
 }
 
 function loadSessionTabContexts() {
@@ -1166,16 +1256,25 @@ async function handleNewConversationClick(button) {
     return;
   }
 
+  suppressMoveConversationPrompt(2200);
   newConversationRequestInFlight = true;
   button.disabled = true;
   button.classList.add("is-creating");
   closeModelMenu();
   toggleTools(false);
 
+  // 先清掉旧的“移到此处”候选并移除已渲染的弹窗，避免新空会话的空状态出现时，
+  // 增强逻辑用陈旧候选把弹窗闪出来一下。
+  moveConversationCandidate = null;
+  moveConversationCandidateSignature = "";
+  document.querySelector(".sidepanel-move-conversation")?.remove();
+
   try {
     const created = await triggerNativeNewConversation();
     if (!created) {
       showFloatingToast("暂时无法新建对话，请先返回聊天页", true);
+    } else {
+      await rebindTabToNewConversation();
     }
   } finally {
     setTimeout(() => {
@@ -1196,8 +1295,7 @@ async function triggerNativeNewConversation() {
   const settingsButton = document.querySelector('.app-header-icon-button[aria-label="设置"]');
   if (document.querySelector(".settings-main-layout") && settingsButton) {
     settingsButton.click();
-    await waitForDomSettle();
-    const buttonAfterSettings = findNativeNewConversationButton();
+    const buttonAfterSettings = await waitForNativeNewConversationButton();
     if (buttonAfterSettings) {
       buttonAfterSettings.click();
       return true;
@@ -1210,9 +1308,10 @@ async function triggerNativeNewConversation() {
       historyPanelToggle.getAttribute("data-history-panel-open") === "true" ||
       historyPanelToggle.getAttribute("aria-expanded") === "true";
     historyPanelToggle.click();
-    await waitForDomSettle();
 
-    const buttonAfterToggle = findNativeNewConversationButton();
+    // 历史面板由 React 在切换后异步挂载，单帧等待常常拿不到原生“新建”按钮，
+    // 因此轮询直到它出现再点击。
+    const buttonAfterToggle = await waitForNativeNewConversationButton();
     if (buttonAfterToggle) {
       buttonAfterToggle.click();
       if (!wasOpen) {
@@ -1237,13 +1336,10 @@ async function triggerNativeNewConversation() {
   const historyTrigger = document.querySelector(".chat-history-trigger");
   if (historyTrigger) {
     historyTrigger.click();
-    await waitForDomSettle();
-    const drawerButton = findNativeNewConversationButton();
+      const drawerButton = await waitForNativeNewConversationButton();
     if (drawerButton) {
       drawerButton.click();
-      document
-        .querySelector('.history-drawer .drawer-icon-button[aria-label="关闭历史记录"]')
-        ?.click();
+      closeHistoryDrawerNow();
       return true;
     }
   }
@@ -1255,6 +1351,27 @@ function findNativeNewConversationButton() {
   return Array.from(document.querySelectorAll('button[aria-label="新对话"]')).find(
     (button) => !button.classList.contains("sidepanel-new-chat-trigger")
   );
+}
+
+// 轮询等待原生“新建”按钮出现（最多约 600ms），覆盖 React 异步挂载历史面板的延迟。
+function waitForNativeNewConversationButton(maxFrames = 30) {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const tick = () => {
+      const button = findNativeNewConversationButton();
+      if (button) {
+        resolve(button);
+        return;
+      }
+      frames += 1;
+      if (frames >= maxFrames) {
+        resolve(null);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
 function waitForDomSettle() {
@@ -1291,6 +1408,7 @@ function enhanceFloatingWindowButton() {
 
 async function handleFloatingWindowClick(button) {
   if (IS_FLOATING_FRAME) {
+    suppressMoveConversationPrompt(2200);
     window.parent?.postMessage({ type: "sidepanelFloating.close" }, "*");
     showFloatingToast("正在关闭悬浮窗");
     return;
@@ -1328,6 +1446,7 @@ async function handleFloatingWindowClick(button) {
 }
 
 function closeSidePanelWindow(options = {}) {
+  suppressMoveConversationPrompt(2200);
   if (IS_FLOATING_FRAME) {
     return;
   }
@@ -1494,6 +1613,70 @@ function enhanceComposerFooter() {
   ensureControlLabel(modelSelector?.querySelector(".model-select-input"), "选择模型");
 }
 
+function formatTokenCount(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return "0";
+  if (numberValue >= 1_000_000) {
+    return `${(numberValue / 1_000_000)
+      .toFixed(numberValue >= 10_000_000 ? 0 : 1)
+      .replace(/\.0$/, "")}M`;
+  }
+  if (numberValue >= 1_000) {
+    return `${(numberValue / 1_000).toFixed(numberValue >= 10_000 ? 0 : 1).replace(/\.0$/, "")}k`;
+  }
+  return String(Math.floor(numberValue));
+}
+
+function readTokenUsageFromDom() {
+  const raw = document.querySelector("[data-token-usage]")?.getAttribute("data-token-usage");
+  if (!raw) return { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      inputTokens: Number(parsed.inputTokens) || 0,
+      outputTokens: Number(parsed.outputTokens) || 0,
+      cacheWriteTokens: Number(parsed.cacheWriteTokens) || 0,
+      cacheReadTokens: Number(parsed.cacheReadTokens) || 0,
+    };
+  } catch (error) {
+    return { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  }
+}
+
+function renderTokenUsageMeter() {
+  const composer = document.querySelector(".chat-composer");
+  const contextStrip = document.querySelector(".context-strip");
+  if (!composer || !contextStrip) return;
+  let meter = contextStrip.querySelector(".token-usage-meter");
+  if (!meter) {
+    meter = document.createElement("div");
+    meter.className = "token-usage-meter token-usage-meter-empty";
+    meter.setAttribute("aria-label", "当前会话 Token 用量");
+    meter.title = "当前会话 Token 用量";
+    contextStrip.prepend(meter);
+  }
+  const usage = readTokenUsageFromDom();
+  const hasUsage = usage.inputTokens || usage.outputTokens || usage.cacheWriteTokens || usage.cacheReadTokens;
+  meter.classList.toggle("token-usage-meter-empty", !hasUsage);
+  meter.replaceChildren();
+  if (!hasUsage) {
+    const span = document.createElement("span");
+    span.textContent = composer.classList.contains("is-sending") ? "Token 统计中" : "Token 暂无";
+    meter.append(span);
+    return;
+  }
+  for (const [label, value] of [
+    ["输入", usage.inputTokens],
+    ["输出", usage.outputTokens],
+    ["写入", usage.cacheWriteTokens],
+    ["读取", usage.cacheReadTokens],
+  ]) {
+    const span = document.createElement("span");
+    span.textContent = `${label} ${formatTokenCount(value)}`;
+    meter.append(span);
+  }
+}
+
 function enhanceModelSelectDisplay() {
   const select = document.querySelector(".model-selector .model-select-input");
   const label = select?.closest(".model-select-label");
@@ -1586,8 +1769,33 @@ function modelOptionsSignature(usableOptions) {
   // 拼接每个选项的 value+文案，作为“选项结构是否变化”的指纹。
   // 用换行分隔，单条内部以制表符分隔 value 与文案，降低与正常文本冲突的概率。
   return usableOptions
-    .map((option) => `${option.value}\t${option.textContent?.trim() || ""}`)
+    .map((option) => `${getModelOptionChannel(option)}\t${option.value}\t${option.textContent?.trim() || ""}`)
     .join("\n");
+}
+
+function getModelOptionChannel(option) {
+  const parent = option.parentElement;
+  return (
+    option.getAttribute("data-channel-name") ||
+    option.dataset?.channel ||
+    (parent?.tagName === "OPTGROUP" ? parent.getAttribute("label") : "") ||
+    "其他"
+  );
+}
+
+function groupModelOptionsByChannel(options) {
+  const groups = [];
+  const groupMap = new Map();
+  for (const option of options) {
+    const channel = getModelOptionChannel(option);
+    if (!groupMap.has(channel)) {
+      const group = { channel, options: [] };
+      groupMap.set(channel, group);
+      groups.push(group);
+    }
+    groupMap.get(channel).options.push(option);
+  }
+  return groups;
 }
 
 // 仅更新选中态（class / aria / roving tabindex），不重建 DOM。
@@ -1607,6 +1815,47 @@ function syncModelOptionSelection(menu, selectedValue) {
   if (!focusable && items[0]) {
     items[0].tabIndex = 0;
   }
+}
+
+function createModelOptionNode(option, selectedValue, select) {
+  const text = option.textContent?.trim() || option.value;
+  const isSelected = option.value === selectedValue;
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "model-select-option";
+  item.dataset.value = option.value;
+  item.setAttribute("role", "option");
+  item.setAttribute("aria-selected", String(isSelected));
+  // Roving tabindex：listbox 整体只占一个 Tab 停靠点，内部用方向键移动。
+  item.tabIndex = isSelected ? 0 : -1;
+  if (isSelected) {
+    item.classList.add("is-selected");
+  }
+
+  const copy = document.createElement("span");
+  copy.className = "model-select-option-copy";
+
+  const name = document.createElement("span");
+  name.className = "model-select-option-name";
+  name.textContent = text;
+
+  const check = document.createElement("span");
+  check.className = "model-select-option-check";
+  check.setAttribute("aria-hidden", "true");
+
+  copy.append(name);
+  item.append(copy, check);
+  item.addEventListener("click", () => {
+    if (select.value !== option.value) {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const label = select.closest(".model-select-label");
+    closeModelMenu();
+    // 选完归还焦点到触发器，避免被点的按钮随后重建后焦点落到 body。
+    label?.querySelector(".model-select-trigger")?.focus();
+  });
+  return item;
 }
 
 function renderModelSelectMenu(select, menu, { force = false } = {}) {
@@ -1632,50 +1881,28 @@ function renderModelSelectMenu(select, menu, { force = false } = {}) {
   list.className = "model-select-option-list";
 
   let focusable = null;
-  for (const option of usableOptions) {
-    const text = option.textContent?.trim() || option.value;
-    const isSelected = option.value === selectedValue;
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "model-select-option";
-    item.dataset.value = option.value;
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", String(isSelected));
-    // Roving tabindex：listbox 整体只占一个 Tab 停靠点，内部用方向键移动。
-    item.tabIndex = isSelected ? 0 : -1;
-    if (isSelected) {
-      item.classList.add("is-selected");
-      focusable = item;
-    }
+  let firstOption = null;
+  for (const group of groupModelOptionsByChannel(usableOptions)) {
+    const groupNode = document.createElement("div");
+    groupNode.className = "model-select-group";
+    const groupTitle = document.createElement("div");
+    groupTitle.className = "model-select-group-title";
+    groupTitle.textContent = group.channel;
+    groupNode.append(groupTitle);
 
-    const copy = document.createElement("span");
-    copy.className = "model-select-option-copy";
-
-    const name = document.createElement("span");
-    name.className = "model-select-option-name";
-    name.textContent = text;
-
-    const check = document.createElement("span");
-    check.className = "model-select-option-check";
-    check.setAttribute("aria-hidden", "true");
-
-    copy.append(name);
-    item.append(copy, check);
-    item.addEventListener("click", () => {
-      if (select.value !== option.value) {
-        select.value = option.value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+    for (const option of group.options) {
+      const item = createModelOptionNode(option, selectedValue, select);
+      firstOption ||= item;
+      if (item.classList.contains("is-selected")) {
+        focusable = item;
       }
-      const label = select.closest(".model-select-label");
-      closeModelMenu();
-      // 选完归还焦点到触发器，避免被点的按钮随后重建后焦点落到 body。
-      label?.querySelector(".model-select-trigger")?.focus();
-    });
-    list.append(item);
+      groupNode.append(item);
+    }
+    list.append(groupNode);
   }
 
-  if (!focusable && list.firstElementChild) {
-    list.firstElementChild.tabIndex = 0;
+  if (!focusable && firstOption) {
+    firstOption.tabIndex = 0;
   }
 
   if (!usableOptions.length) {
@@ -1797,10 +2024,9 @@ function focusModelOption(option) {
     return;
   }
   // 维持 roving tabindex：被聚焦项可 Tab，其余移出 Tab 序列。
-  for (const sibling of option.parentElement?.children || []) {
-    if (sibling.classList?.contains("model-select-option")) {
-      sibling.tabIndex = sibling === option ? 0 : -1;
-    }
+  const menu = option.closest(".model-select-menu");
+  for (const item of menu?.querySelectorAll(".model-select-option") || []) {
+    item.tabIndex = item === option ? 0 : -1;
   }
   option.focus();
 }
@@ -2119,10 +2345,20 @@ function syncMessageScrollState() {
   if (messageListScrollTarget !== list) {
     messageListScrollTarget = list;
     messageListPinnedToBottom = isMessageListNearBottom(list);
+    messageListLastScrollTop = list.scrollTop;
     list.addEventListener(
       "scroll",
       () => {
-        messageListPinnedToBottom = isMessageListNearBottom(list);
+        const previousTop = messageListLastScrollTop;
+        const currentTop = list.scrollTop;
+        messageListLastScrollTop = currentTop;
+        // 用户主动上滚立即解除钉底，避免 MutationObserver 触发的增强把视图拽回底部。
+        // 只有当用户自己滚回真正的底部时才恢复自动钉底。
+        if (currentTop < previousTop - 1) {
+          messageListPinnedToBottom = false;
+        } else if (isMessageListNearBottom(list)) {
+          messageListPinnedToBottom = true;
+        }
         updateJumpToLatestButton(list);
       },
       { passive: true },
@@ -2150,6 +2386,7 @@ function scheduleMessageListScrollToBottom(list) {
     }
     if (messageListPinnedToBottom) {
       list.scrollTop = list.scrollHeight;
+      messageListLastScrollTop = list.scrollTop;
       messageListPinnedToBottom = true;
       updateJumpToLatestButton(list);
     }
@@ -2172,6 +2409,7 @@ function updateJumpToLatestButton(list) {
       const currentList = document.querySelector(".message-list");
       if (currentList instanceof HTMLElement) {
         currentList.scrollTop = currentList.scrollHeight;
+        messageListLastScrollTop = currentList.scrollTop;
         messageListPinnedToBottom = true;
         updateJumpToLatestButton(currentList);
       }
@@ -2693,8 +2931,7 @@ function makeAgentToolsDrawerAction() {
   return makeDrawerAction("工具和 MCP", AGENT_TOOLS_SVG, "工具和 MCP", {
     closeOnClick: false,
     onClick: () => {
-      closeHistoryDrawer();
-      openAgentToolsDialog();
+      closeHistoryDrawer(() => openAgentToolsDialog());
     },
   });
 }
@@ -2760,11 +2997,80 @@ function getHeaderButton(label) {
   );
 }
 
-function closeHistoryDrawer() {
-  const close = document.querySelector(
+function closeHistoryDrawer(done) {
+  const drawer = document.querySelector(".drawer-panel.history-drawer");
+  if (!drawer) {
+    closeHistoryDrawerNow();
+    return;
+  }
+  if (slideInProgress || historyMoreTransitionInFlight) {
+    return;
+  }
+
+  slideInProgress = true;
+  pendingSlideIntent = null;
+  runSlideOut(drawer, "is-slide-out-right", () => {
+    closeHistoryDrawerNow();
+    slideInProgress = false;
+    if (typeof done === "function") {
+      done();
+    }
+  });
+}
+
+function getHistoryDrawerCloseButton() {
+  return document.querySelector(
     '.history-drawer [aria-label="关闭历史记录"], .history-drawer .drawer-icon-button',
   );
-  close?.click();
+}
+
+function closeHistoryDrawerNow() {
+  const close = getHistoryDrawerCloseButton();
+  if (!(close instanceof HTMLElement)) {
+    return;
+  }
+  close.dataset.sidepanelImmediateClose = "true";
+  try {
+    close.click();
+  } finally {
+    delete close.dataset.sidepanelImmediateClose;
+  }
+}
+
+function stopHistoryDrawerNativeDismiss(event) {
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+}
+
+function handleHistoryDrawerOverlayDismiss(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const drawer = document.querySelector(".drawer-panel.history-drawer");
+  if (!drawer || !target.closest(".dialog-overlay")) {
+    return;
+  }
+  stopHistoryDrawerNativeDismiss(event);
+  closeHistoryDrawer();
+}
+
+function handleHistoryDrawerCloseButtonClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const close = target.closest(
+    '.history-drawer [aria-label="关闭历史记录"], .history-drawer .drawer-icon-button',
+  );
+  if (!(close instanceof HTMLElement) || close.dataset.sidepanelImmediateClose === "true") {
+    return;
+  }
+  stopHistoryDrawerNativeDismiss(event);
+  closeHistoryDrawer();
 }
 
 // ── 抽屉 ↔ 设置弹窗 slide 切换编排 ───────────────────────────────
@@ -2880,7 +3186,7 @@ function startSlideToSettings(triggerButton, headerLabel) {
   runSlideOut(drawer, "is-slide-out-left", () => {
     // 真正开设置 + 关抽屉。设置弹窗挂载后 enhanceSettingsDialog 会加进入动画。
     getHeaderButton(headerLabel)?.click();
-    closeHistoryDrawer();
+    closeHistoryDrawerNow();
     triggerButton?.removeAttribute("aria-disabled");
     slideInProgress = false;
   });
@@ -3744,15 +4050,13 @@ function enhanceChannelManager() {
   }
 }
 
-// 渠道管理里的原生 <select>（端点类型 / 默认对话模型 / 标题生成模型）：原生下拉
-// 弹层无法用 CSS 改造，和侧栏 composer 那套“蓝软底卡片 + 蓝勾选项”对不上。这里把
-// 每个 select 包成 .model-select-label，复用 toggleModelMenu / renderModelSelectMenu /
+// 设置弹窗里的原生 <select>：原生下拉弹层无法用 CSS 改造，和渠道管理那套
+// “蓝软底卡片 + 蓝勾选项”对不上。这里把每个 select 包成 .model-select-label，
+// 复用 toggleModelMenu / renderModelSelectMenu /
 // positionModelMenu / 键盘导航——菜单与选项样式直接继承，触发器在 CSS 里重写成
 // 输入框外观。原生 select 降级为不可见状态载体，仍由 React 受控、change 照常派发。
-function enhanceChannelSelects() {
-  const selects = document.querySelectorAll(
-    '.settings-dialog section[aria-label="渠道管理"] select.ui-input',
-  );
+function enhanceSettingsSelects() {
+  const selects = document.querySelectorAll(".settings-dialog select.ui-input");
   for (const select of selects) {
     if (!(select instanceof HTMLSelectElement)) {
       continue;
@@ -3762,17 +4066,22 @@ function enhanceChannelSelects() {
       continue;
     }
 
-    let wrapper = label.querySelector(":scope > .sidepanel-channel-select");
+    let wrapper = label.querySelector(
+      ":scope > .sidepanel-settings-select, :scope > .sidepanel-channel-select",
+    );
     if (wrapper) {
       // 已注入：React 重渲染可能重建 select，重绑 change + 同步显示 + 刷新菜单。
-      bindChannelSelectChange(select);
-      syncChannelSelectValue(select, wrapper);
-      renderModelSelectMenu(select, wrapper.querySelector(".model-select-menu"));
+      bindSettingsSelectChange(select);
+      syncSettingsSelectValue(select, wrapper);
+      const menu = wrapper.querySelector(".model-select-menu");
+      if (menu) {
+        renderModelSelectMenu(select, menu);
+      }
       continue;
     }
 
     wrapper = document.createElement("span");
-    wrapper.className = "model-select-label sidepanel-channel-select";
+    wrapper.className = "model-select-label sidepanel-settings-select sidepanel-channel-select";
 
     const trigger = document.createElement("button");
     trigger.type = "button";
@@ -3802,9 +4111,9 @@ function enhanceChannelSelects() {
     // 原生 select 退居为状态载体：移出 Tab 序列、对 AT 隐藏，视觉由 CSS 兜底隐藏。
     select.tabIndex = -1;
     select.setAttribute("aria-hidden", "true");
-    syncChannelSelectValue(select, wrapper);
+    syncSettingsSelectValue(select, wrapper);
     renderModelSelectMenu(select, menu);
-    bindChannelSelectChange(select);
+    bindSettingsSelectChange(select);
 
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3825,17 +4134,18 @@ function enhanceChannelSelects() {
   }
 }
 
-function bindChannelSelectChange(select) {
-  if (select.dataset.channelChangeBound === "true") {
+function bindSettingsSelectChange(select) {
+  if (select.dataset.settingsSelectChangeBound === "true") {
     return;
   }
-  select.dataset.channelChangeBound = "true";
+  select.dataset.settingsSelectChangeBound = "true";
   select.addEventListener("change", () => scheduleEnhancement());
 }
 
-function syncChannelSelectValue(select, wrapper) {
+function syncSettingsSelectValue(select, wrapper) {
   const value = wrapper.querySelector(".model-select-value");
-  if (!value) {
+  const trigger = wrapper.querySelector(".model-select-trigger");
+  if (!value || !(trigger instanceof HTMLButtonElement)) {
     return;
   }
   const text =
@@ -3845,14 +4155,22 @@ function syncChannelSelectValue(select, wrapper) {
     value.title = text;
   }
   value.classList.toggle("is-placeholder", !text);
+  trigger.title = text;
+  trigger.disabled = select.disabled;
+  trigger.setAttribute("aria-disabled", String(select.disabled));
+  const controlLabel = select.getAttribute("aria-label") || "选项";
+  trigger.setAttribute("aria-label", text ? `${controlLabel}，当前为${text}` : controlLabel);
+  if (select.disabled) {
+    closeModelMenu(wrapper);
+  }
 }
 
-// 只关渠道管理的自定义下拉，不动 composer 的 model-select（composer 那套打开时
-// 是 window scroll 跟随重定位，这里不改它的行为）。渠道下拉开在设置弹窗内部滚动
-// 容器里，滚动=用户离开，应直接收起。
-function closeChannelMenus() {
+// 只关设置弹窗里的自定义下拉，不动 composer 的 model-select（composer 那套打开时
+// 是 window scroll 跟随重定位，这里不改它的行为）。表单下拉开在设置弹窗内部滚动
+// 容器里，外部滚动=用户离开，应直接收起；菜单自身滚动则保留，用于鼠标浏览长列表。
+function closeSettingsSelectMenus() {
   for (const wrapper of document.querySelectorAll(
-    ".sidepanel-channel-select.is-model-menu-open",
+    ".sidepanel-settings-select.is-model-menu-open, .sidepanel-channel-select.is-model-menu-open",
   )) {
     wrapper.classList.remove("is-model-menu-open");
     wrapper.querySelector(".model-select-trigger")?.setAttribute("aria-expanded", "false");
@@ -3864,6 +4182,30 @@ function closeChannelMenus() {
     window.removeEventListener("resize", modelMenuReposition);
     modelMenuReposition = null;
   }
+}
+
+function isScrollInsideOpenSettingsSelectMenu(event) {
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  for (const node of path) {
+    if (
+      node instanceof Element &&
+      node.closest(
+        ".sidepanel-settings-select.is-model-menu-open .model-select-menu, .sidepanel-channel-select.is-model-menu-open .model-select-menu",
+      )
+    ) {
+      return true;
+    }
+  }
+
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        ".sidepanel-settings-select.is-model-menu-open .model-select-menu, .sidepanel-channel-select.is-model-menu-open .model-select-menu",
+      ),
+    )
+  );
 }
 
 // React 受控 input 清空：原生 value setter 绕过 React 的 value 缓存，再派发 input
@@ -4479,6 +4821,40 @@ function fillPrompt(text) {
   editor.dispatchEvent(event);
 }
 
+function handleSendIntentClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest(".composer-actions .ui-button-primary");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  if (
+    button.disabled ||
+    button.dataset.sending === "true" ||
+    button.textContent.trim() === "发送中"
+  ) {
+    return;
+  }
+  suppressMoveConversationPrompt();
+}
+
+function handlePromptSendKeydown(event) {
+  if (event.key !== "Enter" || event.isComposing) {
+    return;
+  }
+  const target = event.target;
+  if (!(target instanceof Element) || !target.closest(PROMPT_EDITOR_SELECTOR)) {
+    return;
+  }
+  const editor = document.querySelector(PROMPT_EDITOR_SELECTOR);
+  if (!editor || !editor.textContent?.trim()) {
+    return;
+  }
+  suppressMoveConversationPrompt();
+}
+
 function moveCaretToEnd(element) {
   const selection = window.getSelection();
   if (!selection) {
@@ -4498,8 +4874,13 @@ function bindGlobalHandlers() {
   }
   globalHandlersBound = true;
 
+  document.addEventListener("click", handleSendIntentClick, true);
+  document.addEventListener("keydown", handlePromptSendKeydown, true);
   document.addEventListener("click", handleStopGenerationClick, true);
   document.addEventListener("click", handleRegenerateDirectClick);
+  document.addEventListener("pointerdown", handleHistoryDrawerOverlayDismiss, true);
+  document.addEventListener("click", handleHistoryDrawerOverlayDismiss, true);
+  document.addEventListener("click", handleHistoryDrawerCloseButtonClick, true);
 
   // 记录 mousedown 起点是否在设置弹窗内。click 只在 mousedown 与 mouseup 同源时
   // 触发，但拖拽选字会让 mouseup 落在弹窗外；删除模型/渠道时目标元素被同步移除，
@@ -4578,14 +4959,21 @@ function bindGlobalHandlers() {
   window.addEventListener("scroll", repositionMessageLayers, true);
   window.addEventListener("resize", repositionMessageLayers);
 
-  // 渠道管理自定义下拉：任意滚动（含设置弹窗内部滚动容器）即收起。
+  // 设置表单自定义下拉：设置弹窗等外部滚动即收起；菜单内部滚动用于浏览选项，不收起。
   // 捕获阶段 + 启动期注册，先于 toggleModelMenu 运行时绑的 reposition 触发，
   // 收起后顺手解绑 reposition，避免已收起的菜单被挪位。
   window.addEventListener(
     "scroll",
-    () => {
-      if (document.querySelector(".sidepanel-channel-select.is-model-menu-open")) {
-        closeChannelMenus();
+    (event) => {
+      if (
+        document.querySelector(
+          ".sidepanel-settings-select.is-model-menu-open, .sidepanel-channel-select.is-model-menu-open",
+        )
+      ) {
+        if (isScrollInsideOpenSettingsSelectMenu(event)) {
+          return;
+        }
+        closeSettingsSelectMenus();
       }
     },
     { capture: true, passive: true },

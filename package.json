@@ -5,6 +5,11 @@
   "description": "Moon Tab Chrome MV3 extension with new tab search, game page, and Browser AI Assistant side panel.",
   "scripts": {
     "test": "node scripts/run_unit_tests.mjs",
+    "mcp:grok-search": "node scripts/run_grok_search_mcp_bridge.mjs --model grok-4.20-multi-agent-xhigh",
+    "mcp:grok-search:check": "node scripts/run_grok_search_mcp_bridge.mjs --model grok-4.20-multi-agent-xhigh --list-tools-once",
+    "mcp:grok-search:start-bg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start_grok_search_mcp_bridge.ps1",
+    "mcp:grok-search:install-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install_grok_search_mcp_bridge_task.ps1",
+    "mcp:grok-search:uninstall-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall_grok_search_mcp_bridge_task.ps1",
     "model-diagnostics": "node scripts/model_diagnostics_sink.mjs"
   },
   "engines": {

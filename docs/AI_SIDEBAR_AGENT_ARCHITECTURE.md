@@ -5,7 +5,7 @@
 本侧边栏后续按“开发者级浏览器 Agent”演进，而不是只做普通聊天框。必须同时保证：
 
 1. **丝滑操控浏览器**：保留并增强基于 `chrome.debugger` / CDP 的快照、点击、填写、按键、等待、弹窗处理能力。
-2. **分析接口辅助开发**：保留 DevTools Network 桥接能力，支持请求列表、详情、差异分析、curl / fetch / 类型生成等开发辅助。
+2. **分析接口辅助开发**：保留 DevTools Network 桥接能力，当前支持请求列表和详情；差异分析、curl / fetch / 类型生成作为后续评估方向。
 3. **工具与 MCP 可扩展**：所有内置工具、后续本地工具、MCP Bridge 工具都通过统一 Tool Registry 暴露给模型。
 4. **高可用**：主聊天永远可用；页面上下文、Network、浏览器控制、MCP 都是增强能力，失败时只降级对应能力。
 
@@ -65,6 +65,20 @@ Capability Services
 - `browser.scroll_page` / `scroll_page`：按 `up / down / left / right / top / bottom` 滚动页面，可选返回最新快照。
 - `browser.wait_for_network_idle` / `wait_for_network_idle`：等待页面资源数量稳定，适合导航、提交表单或触发接口后再读取页面状态。
 
+## Phase 2：Playbook 与 browser.extract_content
+
+`src/shared/automation-playbooks.mjs` 保存 Phase 2 的内置任务策略、设置归一化、选择触发启发式和选中策略 prompt。当前只启用 `page_reading` 和 `multi_page_synthesis`，不包含表单提交、Network/API、Runtime、Replay 或 Full Access 策略。
+
+聊天发送前，后台会根据用户最新消息和当前页面上下文判断是否需要 Playbook 预选。预选请求禁用工具调用并设置 `skipAutomationPlaybookSelection`，避免递归选择；成功选择后，选中 Playbook 的约束会追加到浏览器工具系统提示里，不覆盖基础安全规则。
+
+`src/shared/browser-extract-content.mjs` 定义 `browser.extract_content` 的工具 ID、模型函数名、参数 schema、选择器约束和结果格式化。该工具只读，复用现有 `pageContext.extract` 内容脚本路径，不执行模型自定义脚本，不读取 Cookie、Storage 或跨域 iframe。
+
+`src/ai-assistant/background/browser-extract-content-service.js` 是后台执行适配层，负责读取保存的提取规则、调用当前页面提取路径，并返回工具结果对象。`src/ai-assistant/background/index.js` 会把 `browser.extract_content` 暴露给聊天工具列表，并在通用 `browser.*` 分支之前分发到该适配层。
+
+`browser.extract_content` 进入统一工具审计链路。审计记录只保存脱敏参数和结果摘要，优先使用工具返回的 `summary`，不保存页面正文、HTML 原文、Cookie、Storage 或跨域 iframe 内容。
+
+Phase 2 不迁入 Console、Performance、Debugger Network recorder、`network.*`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*`、上游 React/TypeScript/Vite 设置页或高风险表单交互 Playbook。这些能力需要单独设计、权限确认和验证。
+
 ## Network / 接口分析原则
 
 Network 是开发辅助核心能力，但必须默认脱敏：
@@ -75,6 +89,21 @@ Network 是开发辅助核心能力，但必须默认脱敏：
 - 如后续需要“包含敏感头/完整 body”，必须由用户对单次请求显式确认。
 
 当前已新增 `src/shared/network-redaction.mjs`，并让 `src/ai-assistant/devtools.js` 在进入后台前执行脱敏。
+
+### Phase 3：network.* 只读工具
+
+Phase 3 只迁入两个只读 Network 工具，使用已有 DevTools Network 桥接，不新增 debugger-backed Network recorder：
+
+- `network.list_requests`：读取 DevTools 已采集的请求摘要，支持 `tabId`、`resourceTypes` 和 `limit`。
+- `network.get_request_details`：用 `network.list_requests` 返回的 `requestIds` 读取请求/响应详情。
+
+`src/shared/network-tools.mjs` 负责工具 ID、模型函数名、参数 schema、参数归一化、输出格式化和结果摘要。所有输出会再次经过 Network 脱敏与长度截断，保留 `redacted` / `truncated` 标记。
+
+`src/ai-assistant/background/network-tools-service.js` 是后台执行适配层，负责校验参数、调用读取回调、格式化 tool message，并把 DevTools 未连接、参数非法和通道异常转为隔离的工具错误。
+
+后台 wiring 仍复用既有 runtime 消息：`network.list_requests` 调用 `networkContext.getSnapshot`，`network.get_request_details` 调用 `networkContext.getDetails`。实际数据来源仍是 `src/ai-assistant/devtools.js` 中 `chrome.devtools.network` 采集到的 snapshot / details；目标标签页的 DevTools Network 面板必须保持打开并连接。
+
+当前不迁入上游 Network 的差异分析、curl/fetch 生成、类型生成、HAR 导出、请求重放或独立录制器。后续可单独评估基于已脱敏数据的差异分析、curl/fetch 生成和类型生成；Replay、Runtime、Full Access、原始 Cookie / Authorization / Token / Secret 不作为默认模型工具暴露。
 
 ## Tool Registry 约定
 
@@ -100,29 +129,27 @@ Network 是开发辅助核心能力，但必须默认脱敏：
 - `external`：访问外部网络或远端服务。
 - `mcp`：通过 MCP Bridge 调用外部工具。
 
-当前后台已接入 `ToolRegistry` / MCP Bridge 的真实路由：
+当前“工具和 MCP”入口是通用工具中心。Grok 搜索只是内置预设，不再是唯一 MCP 形态。
 
-- `agentTools.getStatus`：读取内置工具、MCP 设置、MCP 连接状态和已发现工具。
-- `agentTools.configureMcp`：保存本地 MCP Bridge 设置，并按需刷新工具列表。
-- `agentTools.refreshMcp`：主动重新读取 `GET /tools/list`。
-- `agentTools.list`：返回内置工具 + MCP 工具摘要。
-- `agentTools.call`：直接调用已注册 MCP 工具，便于调试。
-- 聊天请求进入后台时会通过 `agentToolsDefinitionsForChat()` 合并内置工具和 MCP 工具。
-- MCP 工具会被注册为 `mcp.<rawToolId>`，并转换成模型可调用的安全函数名，例如 `mcp.dev.echo` → `mcp_dev_echo`。
-- 模型触发 `mcp_*` 工具后，后台通过 `ToolRegistry.call()` 转发到本地 MCP Bridge，再把结果作为 tool message 回填聊天循环。
+当前后台已接入 source-owned `agent-tools-service.js` 路由：
 
-为避免误暴露能力，MCP 工具只有在以下条件满足时才进入聊天工具列表：
+- `agentTools.getStatus`：读取内置工具、MCP Server 设置、已发现工具和最近审计日志。
+- `agentTools.configureMcp`：保存 MCP Server 列表，并按需把 Grok 预设配置同步写入本地 Bridge `/config`。
+- `agentTools.refreshMcp`：主动刷新全部或指定 Server 的 `tools/list`。
+- `agentTools.getAuditLog` / `agentTools.clearAuditLog`：读取或清空最近工具调用审计日志。
+- `agentTools.call`：直接调用已注册且启用的 MCP 工具，便于调试。
 
-1. 用户在“工具和 MCP”入口开启 MCP Bridge。
-2. 用户开启“工具调用开启时暴露 MCP 工具给模型”，或调用方显式传入 `mcp.*` / `mcp.<id>`。
-3. 当前聊天请求本身启用了工具调用。
+MCP 配置以 Server 列表保存，Bearer Token 使用 `mcpBearerToken:<serverId>` 独立保存。聊天发送前会根据工具开关、会话启用工具、Server 启用状态和工具禁用状态生成模型可见工具列表。工具执行前后台再次校验 Server 和工具缓存。
+
+MCP 工具会被注册为稳定的 `mcp.<serverId>.<toolName>` 工具 ID，并转换成模型可调用的安全函数名，例如 `mcp.grok-search-127-0-0-1-17333.search` → `mcp_grok_search_127_0_0_1_17333_search`。模型触发 `mcp_*` 工具后，后台通过统一工具分发转发到对应 Server，再把结果作为 tool message 回填聊天循环。
 
 当前 UI 已在历史抽屉 footer 增加“工具和 MCP”入口，可配置：
 
-- 本地 MCP Bridge 地址。
-- 是否启用 MCP Bridge。
-- 是否在工具调用开启时暴露 MCP 工具给模型。
-- 刷新并查看当前发现的 MCP 工具。
+- 新增 HTTP / Streamable HTTP MCP Server。
+- 使用“添加 Grok 搜索预设”快速接入本地 Grok Search MCP Bridge。
+- 启用或禁用 MCP Server。
+- 刷新并查看 MCP Server 已发现工具。
+- 查看最近工具调用审计日志和清空审计日志。
 
 为降低 `sidePanel-layout.js` 的长期维护成本，“工具和 MCP”浮层已拆到独立模块：
 
@@ -146,6 +173,8 @@ Network 是开发辅助核心能力，但必须默认脱敏：
 - 每条记录包含工具 ID、函数名、展示名、权限域、开始/结束时间、耗时、状态、脱敏后的参数、结果摘要或错误信息。
 - 参数默认通过统一脱敏逻辑处理，`apiKey`、`token`、`secret`、`password`、`authorization`、`cookie` 等字段不会以原文写入聊天工具记录或审计日志。
 - 用户可在“工具和 MCP”浮层查看最近工具调用，也可以一键清空审计日志。
+
+审计日志保留最近 80 条工具调用，参数和结果摘要默认脱敏。审计日志用于复盘工具调用，不保存 Bearer Token、API Key、Cookie 或响应体原文。
 
 该能力用于排查工具失败、确认模型实际调用了哪些强能力，并避免 MCP / 浏览器控制等外部副作用变成不可见黑盒。审计日志只记录摘要和脱敏参数，不替代后续远程 MCP Gateway 所需的认证、授权和服务端审计。
 
@@ -200,6 +229,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_qu
 - `python scripts\verify_browser_control_attach.py`：启动本地普通 HTTP 页面，验证 `browserControl.setEnabled` 可以 attach / detach，不依赖真实模型调用。
 - `python scripts\verify_browser_control_tool_loop.py`：启动本地普通 HTTP 页面和本地假 OpenAI 接口，验证 `chat.send → wait_for_network_idle → scroll_page → take_snapshot → click → 最终回复` 的真实工具闭环。
 - `python scripts\verify_mcp_bridge_tool_loop.py`：启动本地假 MCP Bridge 和假 OpenAI 接口，验证 `chat.send → mcp_dev_echo → POST /tools/call → 最终回复` 的真实 MCP 工具闭环。
+
+Phase 3 的 `network.list_requests` / `network.get_request_details` 纯 Node 回归由 `npm test` 中的 `node scripts\test_network_tools.mjs` 覆盖；修改 Network 工具契约或后台适配时，也应单独运行 `node scripts\test_network_tools.mjs` 和 `node scripts\test_background_agent_tools_wiring.mjs`。
 
 CI 已预置：
 

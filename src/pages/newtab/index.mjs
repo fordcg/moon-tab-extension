@@ -58,6 +58,7 @@ const extensionApi = typeof chrome !== "undefined" ? chrome : null;
 const availableSearchTargets = SEARCH_TARGETS;
 let currentSearchTarget = getSearchTargetById(DEFAULT_SEARCH_TARGET_ID);
 let searchHistoryItems = [];
+let cachedSidebarWindowId = null;
 
 let aiPreviewController;
 let suggestionsController;
@@ -122,21 +123,40 @@ const runSearchForTarget = async (query, targetId = currentSearchTarget?.id ?? D
   window.location.href = searchTarget.buildSearchUrl(query);
 };
 
-const openAiSidebar = async () => {
-  if (!extensionApi?.sidePanel?.open || !extensionApi?.tabs?.query || typeof window === "undefined") {
+const refreshSidebarWindowId = async () => {
+  if (!extensionApi?.tabs?.query) {
+    return;
+  }
+  try {
+    const [activeTab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
+    if (typeof activeTab?.windowId === "number") {
+      cachedSidebarWindowId = activeTab.windowId;
+    }
+  } catch (_error) {
+    // 查询失败时保留旧的 windowId，open 时再兜底处理。
+  }
+};
+
+const openAiSidebar = () => {
+  if (!extensionApi?.sidePanel?.open || typeof window === "undefined") {
     setSearchStatus("当前环境不支持侧边栏，请在兼容浏览器中重试。", "error");
     return;
   }
 
-  try {
-    const [activeTab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
-    if (!activeTab?.windowId) {
-      setSearchStatus("未找到当前窗口，无法打开 AI 侧边栏。", "error");
-      return;
-    }
+  // sidePanel.open() 必须同步运行在用户手势任务内，任何 await 都会丢失手势，
+  // 因此用启动时预取并缓存的 windowId，避免在点击处理里再 await tabs.query。
+  if (typeof cachedSidebarWindowId !== "number") {
+    setSearchStatus("正在准备 AI 侧边栏，请再点一次。", "error");
+    void refreshSidebarWindowId();
+    return;
+  }
 
-    await extensionApi.sidePanel.open({ windowId: activeTab.windowId });
+  try {
+    const openResult = extensionApi.sidePanel.open({ windowId: cachedSidebarWindowId });
     setSearchStatus("已打开 AI 助手侧边栏。", "success");
+    void openResult?.catch?.((error) => {
+      setSearchStatus(error instanceof Error ? error.message : "打开 AI 侧边栏失败。", "error");
+    });
   } catch (error) {
     setSearchStatus(error instanceof Error ? error.message : "打开 AI 侧边栏失败。", "error");
   }
@@ -328,8 +348,20 @@ interactionsController = createInteractionsController({
 });
 interactionsController.bind();
 
+// 启动即预取 windowId，并在标签/窗口焦点变化时刷新，保证点击时缓存可用。
+void refreshSidebarWindowId();
+extensionApi?.tabs?.onActivated?.addListener?.(() => {
+  void refreshSidebarWindowId();
+});
+extensionApi?.windows?.onFocusChanged?.addListener?.(() => {
+  void refreshSidebarWindowId();
+});
+window.addEventListener("focus", () => {
+  void refreshSidebarWindowId();
+});
+
 ai.openSidebarButton?.addEventListener("click", () => {
-  void openAiSidebar();
+  openAiSidebar();
 });
 
 const openGameDeckButton = document.getElementById("open-game-deck");

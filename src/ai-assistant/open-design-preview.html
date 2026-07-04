@@ -605,8 +605,17 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   display: grid;
   gap: 1.75rem;
   margin-top: auto;
-  max-width: 25rem;
   padding-bottom: 1.25rem;
+}
+
+/* 招呼语、标题、快捷提问保持窄列居中；弹窗单独占满消息列表宽度。
+   .sidepanel-empty-state 是单列 grid，块轴 = 纵向，因此水平居中用 justify-self，
+   align-self 在这里只会影响垂直位置（被 margin-top:auto 顶到底部后无意义）。 */
+.sidepanel-empty-copy,
+.sidepanel-empty-suggestions {
+  justify-self: center;
+  max-width: 25rem;
+  width: 100%;
 }
 
 .sidepanel-empty-copy {
@@ -618,30 +627,28 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   align-items: center;
   background: var(--sidepanel-control);
   border: 1px solid var(--sidepanel-line-soft);
-  border-radius: 0.875rem;
+  border-radius: 0.5rem;
   display: grid;
-  gap: 0.625rem;
-  grid-template-columns: 1rem minmax(0, 1fr) auto;
-  min-height: 2.75rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
-}
-
-.sidepanel-move-conversation-icon {
-  background:
-    linear-gradient(currentColor 0 0) left top 0.125rem / 0.875rem 0.125rem no-repeat,
-    linear-gradient(currentColor 0 0) left top 0.4375rem / 0.5625rem 0.125rem no-repeat,
-    linear-gradient(currentColor 0 0) left top 0.75rem / 0.875rem 0.125rem no-repeat;
-  color: var(--sidepanel-ink);
-  height: 1rem;
-  opacity: 0.82;
-  width: 1rem;
+  /* 弹窗保持满宽（与输入框等宽，仅左右各留 0.25rem 比输入框小一点），
+     用负水平外边距抵消消息列表两侧 1rem 内边距，天然居中。
+     上移用 transform——grid 子项的负 margin-top 会被 track 吸收、无法跨过
+     gap，只有 transform 能真正把盒子往上挪；下方让出的空隙由 suggestions
+     的负 margin-top 收回。 */
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 0.75rem;
+  margin-inline: -0.75rem;
+  min-height: 2.25rem;
+  padding: 0.3125rem 0.375rem 0.3125rem 0.75rem;
+  transform: translateY(-1.5rem);
+  width: calc(100% + 1.5rem);
 }
 
 .sidepanel-move-conversation-title {
   color: var(--sidepanel-ink-strong);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  line-height: 1.25rem;
+  line-height: 1.125rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -649,18 +656,30 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 }
 
 .sidepanel-move-conversation-button {
+  align-items: center;
   background: var(--sidepanel-blue);
   border: 0;
-  border-radius: 0.625rem;
+  border-radius: 0.5rem;
   color: var(--sidepanel-canvas);
   cursor: pointer;
+  display: inline-flex;
   font-size: 0.8125rem;
   font-weight: 650;
+  gap: 0.25rem;
   line-height: 1;
-  min-height: 2rem;
-  padding: 0 0.75rem;
+  min-height: 1.75rem;
+  padding: 0 0.625rem;
   transition: background-color 140ms ease-out, transform 140ms ease-out, opacity 140ms ease-out;
   white-space: nowrap;
+}
+
+.sidepanel-move-conversation-button-icon {
+  height: 0.8125rem;
+  width: 0.8125rem;
+}
+
+.sidepanel-move-conversation-button-label {
+  line-height: 1;
 }
 
 .sidepanel-move-conversation-button:hover,
@@ -703,6 +722,9 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   display: grid;
   gap: 0.75rem;
   justify-items: start;
+  /* 收回上方 .sidepanel-move-conversation 用 transform 上移后让出的空隙，
+     使快捷提问紧接弹窗、整体不往下窜。 */
+  margin-top: -1.5rem;
 }
 
 .sidepanel-empty-notice {
@@ -3324,6 +3346,14 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   color: var(--sidepanel-muted) !important;
 }
 
+/* 「添加模型」死按钮隐藏：addModel 只塞一条 modelId 写死为“新模型”的占位记录，
+   而模型设置弹窗没有改 modelId / 名称的入口，加出来的条目无法变成有效模型，只能
+   再删。真正有用的是「获取模型列表」。bundle 不可手改，这里按结构锚点用 CSS 隐藏
+   （JS 的 hidden 属性会被弹窗里更高优先级的 display 规则压制，必须 !important）。 */
+.settings-dialog section[aria-label="渠道模型"] > div:first-child > button {
+  display: none !important;
+}
+
 /* 模型区：候选列表恢复为浅面板，与详情字段分层。 */
 .settings-dialog section[aria-label="渠道模型"] > div:first-child > h4 {
   color: var(--sidepanel-ink-strong) !important;
@@ -3363,19 +3393,19 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   cursor: not-allowed;
 }
 
-/* 渠道管理的原生 select 改造为自定义 listbox（复用 composer model-select 的菜单：
+/* 设置表单的原生 select 改造为自定义 listbox（复用 composer model-select 的菜单：
    蓝软底卡片 + 蓝勾选项 + 键盘导航）。触发器在表单上下文里重写成输入框外观，
-   原生 select 降级为不可见状态载体。由 enhanceChannelSelects 注入 wrapper。 */
+   原生 select 降级为不可见状态载体。由 enhanceSettingsSelects 注入 wrapper。 */
 
 /* wrapper：表单字段容器，全宽、自然高，覆盖 .model-select-label 的 inline-block 药丸态。 */
-.settings-dialog .sidepanel-channel-select {
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) {
   display: block !important;
   height: auto !important;
   width: 100% !important;
 }
 
 /* 触发器：白底 hairline 圆角，左文案右 chevron，对齐 .ui-input 输入框。 */
-.settings-dialog .sidepanel-channel-select .model-select-trigger {
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger {
   background: var(--sidepanel-canvas) !important;
   border: 1px solid var(--sidepanel-line) !important;
   border-radius: 0.5rem !important;
@@ -3386,28 +3416,40 @@ body:has(.drawer-panel.history-drawer) .dialog-overlay {
   width: 100% !important;
 }
 
-.settings-dialog .sidepanel-channel-select .model-select-trigger:hover {
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:hover {
   border-color: color-mix(in srgb, var(--sidepanel-blue) 36%, var(--sidepanel-line)) !important;
 }
 
-.settings-dialog .sidepanel-channel-select .model-select-trigger:focus-visible {
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:focus-visible {
   border-color: color-mix(in srgb, var(--sidepanel-blue) 36%, var(--sidepanel-line)) !important;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--sidepanel-blue) 18%, transparent) !important;
   outline: 0 !important;
 }
 
-.settings-dialog .sidepanel-channel-select .model-select-value {
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-value {
   font-size: 0.8125rem !important;
   line-height: 2.25rem !important;
 }
 
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:disabled {
+  background: var(--sidepanel-control) !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  color: var(--sidepanel-muted) !important;
+  cursor: not-allowed;
+}
+
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:disabled .model-select-value,
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:disabled .model-select-chevron {
+  color: var(--sidepanel-muted) !important;
+}
+
 /* 菜单宽度收窄，跟随表单字段，不占满视口。 */
-.settings-dialog .sidepanel-channel-select .model-select-menu {
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-menu {
   width: min(18rem, calc(100vw - 1.5rem)) !important;
 }
 
 /* 原生 select 隐藏：状态由自定义菜单接管，视觉上彻底让位给触发器。 */
-.settings-dialog label:has(> .sidepanel-channel-select) > select.ui-input {
+.settings-dialog label:has(> :is(.sidepanel-settings-select, .sidepanel-channel-select)) > select.ui-input {
   border: 0 !important;
   clip: rect(0, 0, 0, 0) !important;
   height: 1px !important;
@@ -4844,6 +4886,10 @@ body:has(.model-settings-dialog) .dialog-overlay {
   animation: sidepanel-slide-out-left 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+.drawer-panel.history-drawer.is-slide-out-right > * {
+  animation: sidepanel-slide-out-right 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
 .drawer-panel.history-drawer.is-slide-in-from-left > * {
   animation: sidepanel-slide-in-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
@@ -4874,6 +4920,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
 
 @media (prefers-reduced-motion: reduce) {
   .drawer-panel.history-drawer.is-slide-out-left > *,
+  .drawer-panel.history-drawer.is-slide-out-right > *,
   .drawer-panel.history-drawer.is-slide-in-from-left > *,
   .drawer-panel.history-drawer.is-history-page-out-left > :not(.sidepanel-history-scrollbar),
   .drawer-panel.history-drawer.is-history-page-in-right > :not(.sidepanel-history-scrollbar),
@@ -4911,7 +4958,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
     transition-duration: 0.01ms;
   }
 }
-</style>
+    </style>
     <script data-open-design-inline="preview-chrome-mock.js">
 (() => {
   const existingChrome = globalThis.chrome;
@@ -26245,7 +26292,7 @@ async function La2(e4) {
 }
 async function Ra2(e4) {
   if (!globalThis.chrome?.runtime?.connect) return { completed: false };
-  let t3 = !!e4.request.enabledToolIds?.length, n3 = t3 ? void 0 : await La2(e4), r3;
+  let t3 = !!e4.request.enabledToolIds?.length, n3 = t3 ? void 0 : await La2(e4), r3, m3 = [];
   return !t3 && !n3 ? { completed: true } : new Promise((t4) => {
     let i3 = globalThis.chrome.runtime.connect({ name: `chat.stream` }), a3 = false, o3 = false, p3, s3 = Promise.resolve(), c3 = (e5, n4 = { disconnect: true }) => {
       a3 || (a3 = true, globalThis.__sidepanelStopGeneration === p3 && (globalThis.__sidepanelStopGeneration = void 0), n4.disconnect && i3.disconnect(), t4(e5));
@@ -26255,6 +26302,9 @@ async function Ra2(e4) {
     p3 = () => {
       a3 || (o3 = true, l3(async () => {
         let t5 = await u3();
+        if (r3 && m3.some((e5) => e5.status === `running`)) {
+          await Va2(e4.sessionId, r3, `已停止生成`, e4.set, e4.privateMode);
+        }
         t5 && await Va2(e4.sessionId, t5.id, `已停止生成`, e4.set, e4.privateMode);
       }).then(() => c3({ completed: true }, { disconnect: true })));
     };
@@ -26282,32 +26332,44 @@ async function Ra2(e4) {
       }
       if (t5.type === `tool:start`) {
         l3(async () => {
+          m3 = Ga2(m3, t5.record);
+          let n5 = await u3();
           r3 && await Wa2(e4.sessionId, r3, t5.record, [], e4.set, e4.privateMode);
+          n5 && await Wa2(e4.sessionId, n5.id, t5.record, [], e4.set, e4.privateMode);
         });
         return;
       }
       if (t5.type === `tool:complete`) {
         l3(async () => {
+          m3 = Ga2(m3, t5.record);
+          let n5 = await u3();
           r3 && await Wa2(e4.sessionId, r3, t5.record, t5.attachments ?? [], e4.set, e4.privateMode);
+          n5 && await Wa2(e4.sessionId, n5.id, t5.record, t5.attachments ?? [], e4.set, e4.privateMode);
         });
         return;
       }
       if (t5.type === `complete`) {
         o3 = true, l3(async () => {
           let n5 = await u3();
-          n5 && await qa2(e4.sessionId, n5.id, t5.content, t5.thinking, e4.set, e4.privateMode, { reasoningContent: t5.reasoningContent, toolAttachments: Ka2(e4.toolAttachments, t5.toolAttachments) });
+          n5 && await qa2(e4.sessionId, n5.id, t5.content, t5.thinking, e4.set, e4.privateMode, { reasoningContent: t5.reasoningContent, toolCallRecords: t5.toolCallRecords, toolAttachments: Ka2(e4.toolAttachments, t5.toolAttachments) });
         }).then(() => c3({ completed: true, assistantContent: t5.content }));
         return;
       }
-      let n4 = za2(t5);
+      let n4 = za2(t5); o3 = true;
       e4.set({ failure: { message: n4 } }), l3(async () => {
         let t6 = await u3();
+        if (r3 && m3.some((e5) => e5.status === `running`)) {
+          await Va2(e4.sessionId, r3, n4, e4.set, e4.privateMode);
+        }
         t6 && await Va2(e4.sessionId, t6.id, n4, e4.set, e4.privateMode);
       }).then(() => c3({ completed: true }));
     }), i3.onDisconnect.addListener(() => {
       if (!o3) {
         e4.set({ failure: { message: Fa2 } }), l3(async () => {
           let t5 = await u3();
+          if (r3 && m3.some((e5) => e5.status === `running`)) {
+            await Va2(e4.sessionId, r3, Fa2, e4.set, e4.privateMode);
+          }
           t5 && await Va2(e4.sessionId, t5.id, Fa2, e4.set, e4.privateMode);
         }).then(() => c3({ completed: true }, { disconnect: false }));
         return;
@@ -26329,7 +26391,7 @@ async function Va2(e4, t3, n3, r3, i3 = false) {
     let t4 = e5.content.trim() ? `${e5.content}
 
 ${n3}` : n3;
-    return { ...e5, content: t4, streaming: false };
+    return { ...e5, content: t4, toolCallRecords: markRunningToolCallsInterrupted2(e5.toolCallRecords, n3), streaming: false };
   };
   if (i3) {
     r3((n4) => Ya2(n4, e4, t3, a3));
@@ -26370,6 +26432,9 @@ function Ka2(e4, t3) {
     e5 >= 0 ? n3[e5] = r3 : n3.push(r3);
   }
   return n3.length ? n3 : void 0;
+}
+function markRunningToolCallsInterrupted2(e4, t3) {
+  return e4?.length ? e4.map((e5) => e5.status === `running` ? { ...e5, status: `error`, completedAt: Date.now(), resultSummary: t3, errorMessage: t3 } : e5) : e4;
 }
 async function qa2(e4, t3, n3, r3, i3, a3 = false, o3 = {}) {
   if (a3) {
@@ -26755,7 +26820,7 @@ async function To2(e4) {
       e4.set({ failure: { message: m3.message } });
       return;
     }
-    let g3 = Date.now(), _3 = { id: `message-${g3}-assistant`, role: `assistant`, content: m3.content, thinking: m3.thinking, reasoningContent: m3.reasoningContent, createdAt: g3, modelId: e4.model.id, endpointType: e4.provider.endpointType, streamMode: u3, systemPrompt: n3.systemPrompt, contextPrompt: e4.pageContextPrompt, contextMode: e4.state.contextMode, matchedRuleId: e4.state.pageContext.matchedRuleId, networkContextAttachment: a4.attachment, toolAttachments: Ka2(p3, m3.toolAttachments) }, v3 = [...m3.toolTurnMessages ?? [], _3];
+    let g3 = Date.now(), _3 = { id: `message-${g3}-assistant`, role: `assistant`, content: m3.content, thinking: m3.thinking, reasoningContent: m3.reasoningContent, createdAt: g3, modelId: e4.model.id, endpointType: e4.provider.endpointType, streamMode: u3, systemPrompt: n3.systemPrompt, contextPrompt: e4.pageContextPrompt, contextMode: e4.state.contextMode, matchedRuleId: e4.state.pageContext.matchedRuleId, networkContextAttachment: a4.attachment, toolCallRecords: m3.toolCallRecords, toolAttachments: Ka2(p3, m3.toolAttachments) }, v3 = [...m3.toolTurnMessages ?? [], _3];
     if (e4.privateMode) {
       e4.set((e5) => {
         let t3 = e5.privateChatSession;
@@ -31928,7 +31993,7 @@ function C_({ messages: e4, toolCallDisplayMode: t3, showToolCallProcessInAssist
     }
   };
   return e4.length === 0 ? (0, P3.jsx)(`section`, { "aria-label": `\u6D88\u606F\u5217\u8868`, className: `message-list`, children: (0, P3.jsx)(`p`, { className: `ui-muted text-sm`, children: `\u6682\u65E0\u6D88\u606F` }) }) : (0, P3.jsxs)(`section`, { "aria-label": `\u6D88\u606F\u5217\u8868`, className: `message-list`, children: [e4.map((e5) => {
-    let o4 = e5.role === `assistant` && e5.assistantMessageKind === `tool_call_turn`, _4 = B_(e5, t3, n3), T3 = z_(e5, t3), E3 = e5.role === `assistant` && !o4 && !!e5.thinking && !T3, ee3 = !!e5.content.trim() && !T3, D3 = e5.role !== `assistant` || !o4 || E3 || ee3 || !!e5.attachments?.length || !!bt(e5).length;
+    let o4 = e5.role === `assistant` && e5.assistantMessageKind === `tool_call_turn`, _4 = B_(e5, t3, n3), T3 = z_(e5, t3), E3 = e5.role === `assistant` && !o4 && !!e5.thinking && !T3, ee3 = !!e5.content.trim() && !T3, D3 = e5.role !== `assistant` ? true : o4 ? E3 || ee3 || !!e5.attachments?.length || !!bt(e5).length : E3 || ee3 || !!e5.attachments?.length || !!bt(e5).length || !e5.toolCallRecords?.length;
     return (0, P3.jsxs)(`div`, { className: `message-entry`, children: [e5.role === `assistant` && e5.toolCallRecords?.length && e5.assistantMessageKind !== `tool_call_turn` ? (0, P3.jsx)(w_, { records: e5.toolCallRecords, attachments: xt(e5), activeToolCallId: v3, popoverRef: S3, panelCentered: true, onToggle: (e6) => y3((t4) => t4 === e6 ? void 0 : e6) }) : null, D3 ? (0, P3.jsxs)(`article`, { className: e5.role === `user` ? `message-row message-row-user` : `message-row`, children: [(0, P3.jsx)(`div`, { className: `message-avatar`, "aria-hidden": `true`, children: e5.role === `user` ? `\u6211` : `AI` }), (0, P3.jsxs)(`div`, { className: `message-bubble-wrap`, children: [E3 ? (0, P3.jsxs)(`details`, { className: `message-thinking`, open: R_(e5) || void 0, children: [(0, P3.jsx)(`summary`, { children: e5.streaming ? `\u601D\u8003\u4E2D` : `\u601D\u8003\u8FC7\u7A0B` }), (0, P3.jsx)(`p`, { children: e5.thinking })] }) : null, e5.attachments?.length ? (0, P3.jsx)(`div`, { className: `message-image-preview-strip`, "aria-label": `\u5DF2\u53D1\u9001\u56FE\u7247`, children: e5.attachments.map((e6) => (0, P3.jsx)(`button`, { className: `image-preview-thumb`, type: `button`, "aria-label": `\u67E5\u770B\u5DF2\u53D1\u9001\u56FE\u7247 ${e6.name}`, onClick: () => s3(e6), children: (0, P3.jsx)(`img`, { src: e6.dataUrl, alt: `` }) }, e6.id)) }) : null, u3 === e5.id ? (0, P3.jsxs)(`div`, { className: `message-edit-panel`, children: [(0, P3.jsx)(Lo2, { className: `ui-input message-edit-input`, ariaLabel: `\u7F16\u8F91\u7528\u6237\u6D88\u606F`, value: f3, promptInvocations: m3, promptAriaLabelPrefix: `\u7F16\u8F91\u6D88\u606F\u63D0\u793A\u8BCD`, onChange: p3, onRemovePrompt: (e6) => h3((t4) => t4.filter((t5, n4) => n4 !== e6)) }), (0, P3.jsxs)(`div`, { className: `message-edit-actions`, children: [(0, P3.jsx)(`button`, { className: `message-icon-button message-edit-cancel-button`, type: `button`, "aria-label": `\u53D6\u6D88\u7F16\u8F91`, title: `\u53D6\u6D88\u7F16\u8F91`, onClick: () => {
       d3(void 0), p3(``), h3([]);
     }, children: (0, P3.jsx)(F_, {}) }), (0, P3.jsx)(`button`, { className: `message-icon-button message-edit-send-button`, type: `button`, "aria-label": `\u53D1\u9001\u7F16\u8F91\u540E\u7684\u6D88\u606F`, title: `\u53D1\u9001\u7F16\u8F91\u540E\u7684\u6D88\u606F`, disabled: a3 || !f3.trim() && m3.length === 0, onClick: () => {
@@ -32435,6 +32500,13 @@ const FLOATING_WINDOW_SVG =
   '<rect x="4" y="5" width="16" height="14" rx="3"></rect>' +
   '<path d="M7.5 9.75h9M7.5 13.5h6"></path></svg>';
 
+// “移到此处”按钮图标：细线右入箭头，表示把当前标签页并入该会话。
+const MOVE_HERE_SVG =
+  '<svg class="sidepanel-move-conversation-button-icon" viewBox="0 0 24 24" fill="none" ' +
+  'stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M4 12h12"></path>' +
+  '<path d="M11 6l5 6-5 6"></path></svg>';
+
 const SIDE_PANEL_URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_FLOATING_FRAME = SIDE_PANEL_URL_PARAMS.get("floating") === "1";
 const INITIAL_PANEL_TAB_ID = parseIntegerParam(
@@ -32449,6 +32521,7 @@ const INITIAL_PANEL_WINDOW_ID = parseIntegerParam(
 const MODEL_PLACEHOLDER_TEXT = "未选择模型";
 const RECENT_HISTORY_COMPACT_LIMIT = 5;
 const MOVE_CONVERSATION_TTL_MS = 60 * 60 * 1000;
+const MOVE_CONVERSATION_PROMPT_SUPPRESS_MS = 1600;
 const CHAT_DB_NAME = "browser-ai-assistant";
 const CHAT_SESSION_STORE = "chatSessions";
 const TAB_CONVERSATION_STATE_KEY = "sidepanel.tabConversationState.v1";
@@ -32494,12 +32567,14 @@ let floatingToastTimer = null;
 let messageListPinnedToBottom = true;
 let messageListScrollTarget = null;
 let messageListScrollRaf = null;
+let messageListLastScrollTop = 0;
 let regenerateDirectTimer = null;
 let conversationContinuityInFlight = false;
 const conversationContinuityBootstrappedTabs = new Set();
 let currentConversationSessionId = null;
 let moveConversationCandidate = null;
 let moveConversationCandidateSignature = "";
+let moveConversationPromptSuppressedUntil = 0;
 let lastConversationContinuitySignature = "";
 let lastPersistedSessionContextSignature = "";
 let moveConversationRequestInFlight = false;
@@ -32568,7 +32643,7 @@ function scheduleEnhancement() {
       enhanceSettingsDialog,
       syncSettingsTabsScroll,
       enhanceChannelManager,
-      enhanceChannelSelects,
+      enhanceSettingsSelects,
       enhanceChannelTextInputClear,
       cleanupSettingsBackgroundSnapshot,
       updateContextBanner,
@@ -32703,7 +32778,11 @@ function syncTabConversationContinuity() {
     document.querySelectorAll(".session-title-button").length,
   ].join("|");
 
-  if (conversationContinuityInFlight || signature === lastConversationContinuitySignature) {
+  if (
+    conversationContinuityInFlight ||
+    newConversationRequestInFlight ||
+    signature === lastConversationContinuitySignature
+  ) {
     return;
   }
 
@@ -32719,6 +32798,20 @@ async function syncTabConversationContinuityAsync(tabKey) {
     let binding = getValidTabBinding(state, tabKey, sessions);
 
     if (binding) {
+      const domActiveId = getActiveSessionIdFromDom();
+      // 用户已在历史里手动切到别的会话：尊重选择，把绑定跟过去，而不是把视图拽回旧绑定。
+      // 仅当目标会话真实存在时跟随；空会话（domActiveId 为空）仍按旧绑定恢复，避免初次渲染抖动。
+      if (
+        domActiveId &&
+        domActiveId !== binding.sessionId &&
+        sessions.some((session) => session.id === domActiveId)
+      ) {
+        const followed = sessions.find((session) => session.id === domActiveId);
+        binding = {
+          sessionId: domActiveId,
+          provisional: hasChatSessionMessages(followed) ? false : Boolean(binding.provisional),
+        };
+      }
       currentConversationSessionId = binding.sessionId;
       updateTabBinding(state, tabKey, binding.sessionId, {
         provisional: Boolean(binding.provisional),
@@ -32783,6 +32876,9 @@ function enhanceMoveConversationPrompt() {
   if (
     !state ||
     !moveConversationCandidate ||
+    isMoveConversationPromptSuppressed() ||
+    newConversationRequestInFlight ||
+    isAssistantBusy() ||
     hasVisibleConversationMessages() ||
     hasBlockingEmptyNotice()
   ) {
@@ -32802,10 +32898,6 @@ function enhanceMoveConversationPrompt() {
   prompt.dataset.candidateSignature = moveConversationCandidateSignature;
   prompt.setAttribute("aria-label", "继续最近对话");
 
-  const icon = document.createElement("span");
-  icon.className = "sidepanel-move-conversation-icon";
-  icon.setAttribute("aria-hidden", "true");
-
   const title = document.createElement("span");
   title.className = "sidepanel-move-conversation-title";
   title.textContent = moveConversationCandidate.title || "最近对话";
@@ -32814,14 +32906,18 @@ function enhanceMoveConversationPrompt() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sidepanel-move-conversation-button";
-  button.textContent = "移到此处";
+  button.innerHTML = MOVE_HERE_SVG;
+  const buttonLabel = document.createElement("span");
+  buttonLabel.className = "sidepanel-move-conversation-button-label";
+  buttonLabel.textContent = "移到此处";
+  button.append(buttonLabel);
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
     void handleMoveConversationClick(button);
   });
 
-  prompt.append(icon, title, button);
+  prompt.append(title, button);
 
   if (existing) {
     existing.replaceWith(prompt);
@@ -32830,6 +32926,18 @@ function enhanceMoveConversationPrompt() {
 
   const anchor = state.querySelector(".sidepanel-empty-copy") || state.firstChild;
   state.insertBefore(prompt, anchor);
+}
+
+function suppressMoveConversationPrompt(durationMs = MOVE_CONVERSATION_PROMPT_SUPPRESS_MS) {
+  moveConversationPromptSuppressedUntil = Math.max(
+    moveConversationPromptSuppressedUntil,
+    Date.now() + durationMs,
+  );
+  document.querySelector(".sidepanel-move-conversation")?.remove();
+}
+
+function isMoveConversationPromptSuppressed() {
+  return Date.now() < moveConversationPromptSuppressedUntil;
 }
 
 function hasBlockingEmptyNotice() {
@@ -33173,6 +33281,7 @@ async function ensureChatSessionSelected(sessionId, sessions = []) {
     return true;
   }
 
+  suppressMoveConversationPrompt();
   const session = sessions.find((item) => item.id === sessionId) || null;
   let button = findSessionButton(sessionId, session);
   if (!button) {
@@ -33215,6 +33324,51 @@ async function createFreshConversationForTab() {
     }
   }
   return null;
+}
+
+// 用户手动点“新建对话”后，原生已切到新空会话。但标签页继续绑着旧会话，
+// 下一轮 syncTabConversationContinuity 会用旧绑定把视图拽回去，导致“切不走”。
+// 这里把当前标签页重绑到新会话，让连续性逻辑跟随新会话而不是与之对抗。
+async function rebindTabToNewConversation() {
+  const tabKey = getActiveTabKey();
+  if (!tabKey) {
+    return;
+  }
+
+  suppressMoveConversationPrompt(2200);
+  let newSessionId = "";
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await waitForDomSettle();
+    const sessions = await readChatSessions();
+    // 新会话即当前活动会话：优先读 DOM 活动项，回退到最新（空）会话。
+    const domActive = getActiveSessionIdFromDom();
+    const candidate =
+      (domActive && sessions.find((session) => session.id === domActive)) ||
+      sessions
+        .filter((session) => !session.archived)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+    if (candidate?.id) {
+      newSessionId = candidate.id;
+      break;
+    }
+  }
+
+  if (!newSessionId) {
+    return;
+  }
+
+  const sessions = await readChatSessions();
+  const state = pruneConversationState(loadTabConversationState(), sessions);
+  updateTabBinding(state, tabKey, newSessionId, { provisional: true });
+  saveTabConversationState(state);
+  currentConversationSessionId = newSessionId;
+  conversationContinuityBootstrappedTabs.add(tabKey);
+  // 强制下轮连续性重新计算，并丢弃可能残留的旧“移到此处”候选。
+  lastConversationContinuitySignature = "";
+  moveConversationCandidate = null;
+  moveConversationCandidateSignature = "";
+  applySessionTabContext(newSessionId);
+  scheduleEnhancement();
 }
 
 function loadSessionTabContexts() {
@@ -33547,16 +33701,25 @@ async function handleNewConversationClick(button) {
     return;
   }
 
+  suppressMoveConversationPrompt(2200);
   newConversationRequestInFlight = true;
   button.disabled = true;
   button.classList.add("is-creating");
   closeModelMenu();
   toggleTools(false);
 
+  // 先清掉旧的“移到此处”候选并移除已渲染的弹窗，避免新空会话的空状态出现时，
+  // 增强逻辑用陈旧候选把弹窗闪出来一下。
+  moveConversationCandidate = null;
+  moveConversationCandidateSignature = "";
+  document.querySelector(".sidepanel-move-conversation")?.remove();
+
   try {
     const created = await triggerNativeNewConversation();
     if (!created) {
       showFloatingToast("暂时无法新建对话，请先返回聊天页", true);
+    } else {
+      await rebindTabToNewConversation();
     }
   } finally {
     setTimeout(() => {
@@ -33577,8 +33740,7 @@ async function triggerNativeNewConversation() {
   const settingsButton = document.querySelector('.app-header-icon-button[aria-label="设置"]');
   if (document.querySelector(".settings-main-layout") && settingsButton) {
     settingsButton.click();
-    await waitForDomSettle();
-    const buttonAfterSettings = findNativeNewConversationButton();
+    const buttonAfterSettings = await waitForNativeNewConversationButton();
     if (buttonAfterSettings) {
       buttonAfterSettings.click();
       return true;
@@ -33591,9 +33753,10 @@ async function triggerNativeNewConversation() {
       historyPanelToggle.getAttribute("data-history-panel-open") === "true" ||
       historyPanelToggle.getAttribute("aria-expanded") === "true";
     historyPanelToggle.click();
-    await waitForDomSettle();
 
-    const buttonAfterToggle = findNativeNewConversationButton();
+    // 历史面板由 React 在切换后异步挂载，单帧等待常常拿不到原生“新建”按钮，
+    // 因此轮询直到它出现再点击。
+    const buttonAfterToggle = await waitForNativeNewConversationButton();
     if (buttonAfterToggle) {
       buttonAfterToggle.click();
       if (!wasOpen) {
@@ -33618,13 +33781,10 @@ async function triggerNativeNewConversation() {
   const historyTrigger = document.querySelector(".chat-history-trigger");
   if (historyTrigger) {
     historyTrigger.click();
-    await waitForDomSettle();
-    const drawerButton = findNativeNewConversationButton();
+    const drawerButton = await waitForNativeNewConversationButton();
     if (drawerButton) {
       drawerButton.click();
-      document
-        .querySelector('.history-drawer .drawer-icon-button[aria-label="关闭历史记录"]')
-        ?.click();
+      closeHistoryDrawerNow();
       return true;
     }
   }
@@ -33636,6 +33796,27 @@ function findNativeNewConversationButton() {
   return Array.from(document.querySelectorAll('button[aria-label="新对话"]')).find(
     (button) => !button.classList.contains("sidepanel-new-chat-trigger")
   );
+}
+
+// 轮询等待原生“新建”按钮出现（最多约 600ms），覆盖 React 异步挂载历史面板的延迟。
+function waitForNativeNewConversationButton(maxFrames = 30) {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const tick = () => {
+      const button = findNativeNewConversationButton();
+      if (button) {
+        resolve(button);
+        return;
+      }
+      frames += 1;
+      if (frames >= maxFrames) {
+        resolve(null);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
 function waitForDomSettle() {
@@ -33672,6 +33853,7 @@ function enhanceFloatingWindowButton() {
 
 async function handleFloatingWindowClick(button) {
   if (IS_FLOATING_FRAME) {
+    suppressMoveConversationPrompt(2200);
     window.parent?.postMessage({ type: "sidepanelFloating.close" }, "*");
     showFloatingToast("正在关闭悬浮窗");
     return;
@@ -33709,6 +33891,7 @@ async function handleFloatingWindowClick(button) {
 }
 
 function closeSidePanelWindow(options = {}) {
+  suppressMoveConversationPrompt(2200);
   if (IS_FLOATING_FRAME) {
     return;
   }
@@ -34500,10 +34683,20 @@ function syncMessageScrollState() {
   if (messageListScrollTarget !== list) {
     messageListScrollTarget = list;
     messageListPinnedToBottom = isMessageListNearBottom(list);
+    messageListLastScrollTop = list.scrollTop;
     list.addEventListener(
       "scroll",
       () => {
-        messageListPinnedToBottom = isMessageListNearBottom(list);
+        const previousTop = messageListLastScrollTop;
+        const currentTop = list.scrollTop;
+        messageListLastScrollTop = currentTop;
+        // 用户主动上滚立即解除钉底，避免 MutationObserver 触发的增强把视图拽回底部。
+        // 只有当用户自己滚回真正的底部时才恢复自动钉底。
+        if (currentTop < previousTop - 1) {
+          messageListPinnedToBottom = false;
+        } else if (isMessageListNearBottom(list)) {
+          messageListPinnedToBottom = true;
+        }
         updateJumpToLatestButton(list);
       },
       { passive: true },
@@ -34531,6 +34724,7 @@ function scheduleMessageListScrollToBottom(list) {
     }
     if (messageListPinnedToBottom) {
       list.scrollTop = list.scrollHeight;
+      messageListLastScrollTop = list.scrollTop;
       messageListPinnedToBottom = true;
       updateJumpToLatestButton(list);
     }
@@ -34553,6 +34747,7 @@ function updateJumpToLatestButton(list) {
       const currentList = document.querySelector(".message-list");
       if (currentList instanceof HTMLElement) {
         currentList.scrollTop = currentList.scrollHeight;
+        messageListLastScrollTop = currentList.scrollTop;
         messageListPinnedToBottom = true;
         updateJumpToLatestButton(currentList);
       }
@@ -35074,8 +35269,7 @@ function makeAgentToolsDrawerAction() {
   return makeDrawerAction("工具和 MCP", AGENT_TOOLS_SVG, "工具和 MCP", {
     closeOnClick: false,
     onClick: () => {
-      closeHistoryDrawer();
-      openAgentToolsDialog();
+      closeHistoryDrawer(() => openAgentToolsDialog());
     },
   });
 }
@@ -35141,11 +35335,80 @@ function getHeaderButton(label) {
   );
 }
 
-function closeHistoryDrawer() {
-  const close = document.querySelector(
+function closeHistoryDrawer(done) {
+  const drawer = document.querySelector(".drawer-panel.history-drawer");
+  if (!drawer) {
+    closeHistoryDrawerNow();
+    return;
+  }
+  if (slideInProgress || historyMoreTransitionInFlight) {
+    return;
+  }
+
+  slideInProgress = true;
+  pendingSlideIntent = null;
+  runSlideOut(drawer, "is-slide-out-right", () => {
+    closeHistoryDrawerNow();
+    slideInProgress = false;
+    if (typeof done === "function") {
+      done();
+    }
+  });
+}
+
+function getHistoryDrawerCloseButton() {
+  return document.querySelector(
     '.history-drawer [aria-label="关闭历史记录"], .history-drawer .drawer-icon-button',
   );
-  close?.click();
+}
+
+function closeHistoryDrawerNow() {
+  const close = getHistoryDrawerCloseButton();
+  if (!(close instanceof HTMLElement)) {
+    return;
+  }
+  close.dataset.sidepanelImmediateClose = "true";
+  try {
+    close.click();
+  } finally {
+    delete close.dataset.sidepanelImmediateClose;
+  }
+}
+
+function stopHistoryDrawerNativeDismiss(event) {
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+}
+
+function handleHistoryDrawerOverlayDismiss(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const drawer = document.querySelector(".drawer-panel.history-drawer");
+  if (!drawer || !target.closest(".dialog-overlay")) {
+    return;
+  }
+  stopHistoryDrawerNativeDismiss(event);
+  closeHistoryDrawer();
+}
+
+function handleHistoryDrawerCloseButtonClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const close = target.closest(
+    '.history-drawer [aria-label="关闭历史记录"], .history-drawer .drawer-icon-button',
+  );
+  if (!(close instanceof HTMLElement) || close.dataset.sidepanelImmediateClose === "true") {
+    return;
+  }
+  stopHistoryDrawerNativeDismiss(event);
+  closeHistoryDrawer();
 }
 
 // ── 抽屉 ↔ 设置弹窗 slide 切换编排 ───────────────────────────────
@@ -35261,7 +35524,7 @@ function startSlideToSettings(triggerButton, headerLabel) {
   runSlideOut(drawer, "is-slide-out-left", () => {
     // 真正开设置 + 关抽屉。设置弹窗挂载后 enhanceSettingsDialog 会加进入动画。
     getHeaderButton(headerLabel)?.click();
-    closeHistoryDrawer();
+    closeHistoryDrawerNow();
     triggerButton?.removeAttribute("aria-disabled");
     slideInProgress = false;
   });
@@ -36125,15 +36388,13 @@ function enhanceChannelManager() {
   }
 }
 
-// 渠道管理里的原生 <select>（端点类型 / 默认对话模型 / 标题生成模型）：原生下拉
-// 弹层无法用 CSS 改造，和侧栏 composer 那套“蓝软底卡片 + 蓝勾选项”对不上。这里把
-// 每个 select 包成 .model-select-label，复用 toggleModelMenu / renderModelSelectMenu /
+// 设置弹窗里的原生 <select>：原生下拉弹层无法用 CSS 改造，和渠道管理那套
+// “蓝软底卡片 + 蓝勾选项”对不上。这里把每个 select 包成 .model-select-label，
+// 复用 toggleModelMenu / renderModelSelectMenu /
 // positionModelMenu / 键盘导航——菜单与选项样式直接继承，触发器在 CSS 里重写成
 // 输入框外观。原生 select 降级为不可见状态载体，仍由 React 受控、change 照常派发。
-function enhanceChannelSelects() {
-  const selects = document.querySelectorAll(
-    '.settings-dialog section[aria-label="渠道管理"] select.ui-input',
-  );
+function enhanceSettingsSelects() {
+  const selects = document.querySelectorAll(".settings-dialog select.ui-input");
   for (const select of selects) {
     if (!(select instanceof HTMLSelectElement)) {
       continue;
@@ -36143,17 +36404,22 @@ function enhanceChannelSelects() {
       continue;
     }
 
-    let wrapper = label.querySelector(":scope > .sidepanel-channel-select");
+    let wrapper = label.querySelector(
+      ":scope > .sidepanel-settings-select, :scope > .sidepanel-channel-select",
+    );
     if (wrapper) {
       // 已注入：React 重渲染可能重建 select，重绑 change + 同步显示 + 刷新菜单。
-      bindChannelSelectChange(select);
-      syncChannelSelectValue(select, wrapper);
-      renderModelSelectMenu(select, wrapper.querySelector(".model-select-menu"));
+      bindSettingsSelectChange(select);
+      syncSettingsSelectValue(select, wrapper);
+      const menu = wrapper.querySelector(".model-select-menu");
+      if (menu) {
+        renderModelSelectMenu(select, menu);
+      }
       continue;
     }
 
     wrapper = document.createElement("span");
-    wrapper.className = "model-select-label sidepanel-channel-select";
+    wrapper.className = "model-select-label sidepanel-settings-select sidepanel-channel-select";
 
     const trigger = document.createElement("button");
     trigger.type = "button";
@@ -36183,9 +36449,9 @@ function enhanceChannelSelects() {
     // 原生 select 退居为状态载体：移出 Tab 序列、对 AT 隐藏，视觉由 CSS 兜底隐藏。
     select.tabIndex = -1;
     select.setAttribute("aria-hidden", "true");
-    syncChannelSelectValue(select, wrapper);
+    syncSettingsSelectValue(select, wrapper);
     renderModelSelectMenu(select, menu);
-    bindChannelSelectChange(select);
+    bindSettingsSelectChange(select);
 
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
@@ -36206,17 +36472,18 @@ function enhanceChannelSelects() {
   }
 }
 
-function bindChannelSelectChange(select) {
-  if (select.dataset.channelChangeBound === "true") {
+function bindSettingsSelectChange(select) {
+  if (select.dataset.settingsSelectChangeBound === "true") {
     return;
   }
-  select.dataset.channelChangeBound = "true";
+  select.dataset.settingsSelectChangeBound = "true";
   select.addEventListener("change", () => scheduleEnhancement());
 }
 
-function syncChannelSelectValue(select, wrapper) {
+function syncSettingsSelectValue(select, wrapper) {
   const value = wrapper.querySelector(".model-select-value");
-  if (!value) {
+  const trigger = wrapper.querySelector(".model-select-trigger");
+  if (!value || !(trigger instanceof HTMLButtonElement)) {
     return;
   }
   const text =
@@ -36226,14 +36493,22 @@ function syncChannelSelectValue(select, wrapper) {
     value.title = text;
   }
   value.classList.toggle("is-placeholder", !text);
+  trigger.title = text;
+  trigger.disabled = select.disabled;
+  trigger.setAttribute("aria-disabled", String(select.disabled));
+  const controlLabel = select.getAttribute("aria-label") || "选项";
+  trigger.setAttribute("aria-label", text ? `${controlLabel}，当前为${text}` : controlLabel);
+  if (select.disabled) {
+    closeModelMenu(wrapper);
+  }
 }
 
-// 只关渠道管理的自定义下拉，不动 composer 的 model-select（composer 那套打开时
-// 是 window scroll 跟随重定位，这里不改它的行为）。渠道下拉开在设置弹窗内部滚动
-// 容器里，滚动=用户离开，应直接收起。
-function closeChannelMenus() {
+// 只关设置弹窗里的自定义下拉，不动 composer 的 model-select（composer 那套打开时
+// 是 window scroll 跟随重定位，这里不改它的行为）。表单下拉开在设置弹窗内部滚动
+// 容器里，外部滚动=用户离开，应直接收起；菜单自身滚动则保留，用于鼠标浏览长列表。
+function closeSettingsSelectMenus() {
   for (const wrapper of document.querySelectorAll(
-    ".sidepanel-channel-select.is-model-menu-open",
+    ".sidepanel-settings-select.is-model-menu-open, .sidepanel-channel-select.is-model-menu-open",
   )) {
     wrapper.classList.remove("is-model-menu-open");
     wrapper.querySelector(".model-select-trigger")?.setAttribute("aria-expanded", "false");
@@ -36245,6 +36520,30 @@ function closeChannelMenus() {
     window.removeEventListener("resize", modelMenuReposition);
     modelMenuReposition = null;
   }
+}
+
+function isScrollInsideOpenSettingsSelectMenu(event) {
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  for (const node of path) {
+    if (
+      node instanceof Element &&
+      node.closest(
+        ".sidepanel-settings-select.is-model-menu-open .model-select-menu, .sidepanel-channel-select.is-model-menu-open .model-select-menu",
+      )
+    ) {
+      return true;
+    }
+  }
+
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        ".sidepanel-settings-select.is-model-menu-open .model-select-menu, .sidepanel-channel-select.is-model-menu-open .model-select-menu",
+      ),
+    )
+  );
 }
 
 // React 受控 input 清空：原生 value setter 绕过 React 的 value 缓存，再派发 input
@@ -36860,6 +37159,40 @@ function fillPrompt(text) {
   editor.dispatchEvent(event);
 }
 
+function handleSendIntentClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest(".composer-actions .ui-button-primary");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  if (
+    button.disabled ||
+    button.dataset.sending === "true" ||
+    button.textContent.trim() === "发送中"
+  ) {
+    return;
+  }
+  suppressMoveConversationPrompt();
+}
+
+function handlePromptSendKeydown(event) {
+  if (event.key !== "Enter" || event.isComposing) {
+    return;
+  }
+  const target = event.target;
+  if (!(target instanceof Element) || !target.closest(PROMPT_EDITOR_SELECTOR)) {
+    return;
+  }
+  const editor = document.querySelector(PROMPT_EDITOR_SELECTOR);
+  if (!editor || !editor.textContent?.trim()) {
+    return;
+  }
+  suppressMoveConversationPrompt();
+}
+
 function moveCaretToEnd(element) {
   const selection = window.getSelection();
   if (!selection) {
@@ -36879,8 +37212,13 @@ function bindGlobalHandlers() {
   }
   globalHandlersBound = true;
 
+  document.addEventListener("click", handleSendIntentClick, true);
+  document.addEventListener("keydown", handlePromptSendKeydown, true);
   document.addEventListener("click", handleStopGenerationClick, true);
   document.addEventListener("click", handleRegenerateDirectClick);
+  document.addEventListener("pointerdown", handleHistoryDrawerOverlayDismiss, true);
+  document.addEventListener("click", handleHistoryDrawerOverlayDismiss, true);
+  document.addEventListener("click", handleHistoryDrawerCloseButtonClick, true);
 
   // 记录 mousedown 起点是否在设置弹窗内。click 只在 mousedown 与 mouseup 同源时
   // 触发，但拖拽选字会让 mouseup 落在弹窗外；删除模型/渠道时目标元素被同步移除，
@@ -36959,14 +37297,21 @@ function bindGlobalHandlers() {
   window.addEventListener("scroll", repositionMessageLayers, true);
   window.addEventListener("resize", repositionMessageLayers);
 
-  // 渠道管理自定义下拉：任意滚动（含设置弹窗内部滚动容器）即收起。
+  // 设置表单自定义下拉：设置弹窗等外部滚动即收起；菜单内部滚动用于浏览选项，不收起。
   // 捕获阶段 + 启动期注册，先于 toggleModelMenu 运行时绑的 reposition 触发，
   // 收起后顺手解绑 reposition，避免已收起的菜单被挪位。
   window.addEventListener(
     "scroll",
-    () => {
-      if (document.querySelector(".sidepanel-channel-select.is-model-menu-open")) {
-        closeChannelMenus();
+    (event) => {
+      if (
+        document.querySelector(
+          ".sidepanel-settings-select.is-model-menu-open, .sidepanel-channel-select.is-model-menu-open",
+        )
+      ) {
+        if (isScrollInsideOpenSettingsSelectMenu(event)) {
+          return;
+        }
+        closeSettingsSelectMenus();
       }
     },
     { capture: true, passive: true },
@@ -37070,5 +37415,5 @@ enhancementObserver.observe(document.documentElement || document.body, {
 });
 
 scheduleEnhancement();
-</script>
+    </script>
 </body></html>

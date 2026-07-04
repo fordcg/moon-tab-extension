@@ -66,7 +66,7 @@ Modify:
 - Create: `scripts/test_automation_playbooks.mjs`
 - Modify: `scripts/run_unit_tests.mjs`
 
-- [ ] **Step 1: Write the failing Playbook test**
+- [x] **Step 1: Write the failing Playbook test**
 
 Create `scripts/test_automation_playbooks.mjs`:
 
@@ -161,7 +161,7 @@ assert.equal(getAutomationPlaybookById("missing"), undefined);
 console.log("automation playbooks tests passed");
 ```
 
-- [ ] **Step 2: Add the test to the unit runner**
+- [x] **Step 2: Add the test to the unit runner**
 
 Modify `scripts/run_unit_tests.mjs` by inserting this command immediately before `scripts/test_browser_control_queue.mjs`:
 
@@ -169,7 +169,7 @@ Modify `scripts/run_unit_tests.mjs` by inserting this command immediately before
   ["node", ["scripts/test_automation_playbooks.mjs"]],
 ```
 
-- [ ] **Step 3: Run the new test and verify it fails**
+- [x] **Step 3: Run the new test and verify it fails**
 
 Run:
 
@@ -179,7 +179,7 @@ node scripts/test_automation_playbooks.mjs
 
 Expected: FAIL with `Cannot find module` for `src/shared/automation-playbooks.mjs`.
 
-- [ ] **Step 4: Implement `automation-playbooks.mjs`**
+- [x] **Step 4: Implement `automation-playbooks.mjs`**
 
 Create `src/shared/automation-playbooks.mjs`:
 
@@ -368,7 +368,7 @@ function extractJsonObjectText(text) {
 }
 ```
 
-- [ ] **Step 5: Run the Playbook test**
+- [x] **Step 5: Run the Playbook test**
 
 Run:
 
@@ -382,7 +382,7 @@ Expected:
 automation playbooks tests passed
 ```
 
-- [ ] **Step 6: Commit Task 1**
+- [x] **Step 6: Commit Task 1**
 
 Run:
 
@@ -409,7 +409,7 @@ M	scripts/run_unit_tests.mjs
 - Create: `scripts/test_browser_extract_content.mjs`
 - Modify: `scripts/run_unit_tests.mjs`
 
-- [ ] **Step 1: Write the failing extract-content test**
+- [x] **Step 1: Write the failing extract-content test**
 
 Create `scripts/test_browser_extract_content.mjs`:
 
@@ -524,7 +524,7 @@ assert.deepEqual(summary, {
 console.log("browser extract content tests passed");
 ```
 
-- [ ] **Step 2: Add the test to the unit runner**
+- [x] **Step 2: Add the test to the unit runner**
 
 Modify `scripts/run_unit_tests.mjs` by inserting this command immediately after `scripts/test_automation_playbooks.mjs`:
 
@@ -532,7 +532,7 @@ Modify `scripts/run_unit_tests.mjs` by inserting this command immediately after 
   ["node", ["scripts/test_browser_extract_content.mjs"]],
 ```
 
-- [ ] **Step 3: Run the new test and verify it fails**
+- [x] **Step 3: Run the new test and verify it fails**
 
 Run:
 
@@ -542,7 +542,7 @@ node scripts/test_browser_extract_content.mjs
 
 Expected: FAIL with `Cannot find module` for `src/shared/browser-extract-content.mjs`.
 
-- [ ] **Step 4: Implement `browser-extract-content.mjs`**
+- [x] **Step 4: Implement `browser-extract-content.mjs`**
 
 Create `src/shared/browser-extract-content.mjs`:
 
@@ -729,7 +729,7 @@ function normalizeText(value) {
 }
 ```
 
-- [ ] **Step 5: Run the extract-content test**
+- [x] **Step 5: Run the extract-content test**
 
 Run:
 
@@ -743,7 +743,7 @@ Expected:
 browser extract content tests passed
 ```
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 Run:
 
@@ -769,7 +769,7 @@ M	scripts/run_unit_tests.mjs
 - Modify: `src/shared/browser-control-contract.mjs`
 - Modify: `scripts/test_browser_control_queue.mjs`
 
-- [ ] **Step 1: Add contract tests for `browser.extract_content`**
+- [x] **Step 1: Add contract tests for `browser.extract_content`**
 
 In `scripts/test_browser_control_queue.mjs`, add these assertions after the existing `new_page` assertions and before `list_pages`:
 
@@ -794,7 +794,7 @@ assert.match(validateBrowserControlRequest({ name: "extract_content", arguments:
 assert.match(validateBrowserControlRequest({ name: "extract_content", arguments: { source: "document", selector: "main" } }).message, /只有 source=selector/);
 ```
 
-- [ ] **Step 2: Run the browser-control test and verify it fails**
+- [x] **Step 2: Run the browser-control test and verify it fails**
 
 Run:
 
@@ -804,7 +804,7 @@ node scripts/test_browser_control_queue.mjs
 
 Expected: FAIL because `BROWSER_CONTROL_ACTIONS.EXTRACT_CONTENT` is undefined.
 
-- [ ] **Step 3: Import extract-content schema and validator**
+- [x] **Step 3: Import extract-content schema and validator**
 
 At the top of `src/shared/browser-control-contract.mjs`, add:
 
@@ -817,7 +817,7 @@ import {
 } from "./browser-extract-content.mjs";
 ```
 
-- [ ] **Step 4: Add action, tool id, schema, and validation branch**
+- [x] **Step 4: Add action, tool id, schema, and validation branch**
 
 In `src/shared/browser-control-contract.mjs`, make these changes:
 
@@ -857,7 +857,7 @@ In `validateBrowserControlRequest()`, add this branch immediately after the extr
   }
 ```
 
-- [ ] **Step 5: Run the browser-control test**
+- [x] **Step 5: Run the browser-control test**
 
 Run:
 
@@ -871,7 +871,7 @@ Expected:
 browser control queue tests passed
 ```
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 Run:
 
@@ -897,7 +897,7 @@ M	scripts/test_browser_control_queue.mjs
 - Modify: `src/ai-assistant/background/index.js`
 - Modify: `scripts/test_background_agent_tools_wiring.mjs`
 
-- [ ] **Step 1: Add source assertions for Phase 2 background wiring**
+- [x] **Step 1: Add source assertions for Phase 2 background wiring**
 
 In `scripts/test_background_agent_tools_wiring.mjs`, add a read near the other source reads:
 
@@ -984,7 +984,7 @@ assert.match(
 );
 ```
 
-- [ ] **Step 2: Run the wiring test and verify it fails**
+- [x] **Step 2: Run the wiring test and verify it fails**
 
 Run:
 
@@ -994,7 +994,7 @@ node scripts/test_background_agent_tools_wiring.mjs
 
 Expected: FAIL because `browser-extract-content-service.js` does not exist.
 
-- [ ] **Step 3: Create `browser-extract-content-service.js`**
+- [x] **Step 3: Create `browser-extract-content-service.js`**
 
 Create `src/ai-assistant/background/browser-extract-content-service.js`:
 
@@ -1059,7 +1059,7 @@ function createToolError(toolCall, message, code) {
 }
 ```
 
-- [ ] **Step 4: Import Phase 2 modules in the assistant background**
+- [x] **Step 4: Import Phase 2 modules in the assistant background**
 
 Modify the first import line in `src/ai-assistant/background/index.js` so the asset import also includes the extraction-rule reader:
 
@@ -1083,7 +1083,7 @@ import {
 } from "../../shared/automation-playbooks.mjs";
 ```
 
-- [ ] **Step 5: Add the extract-content executor helper**
+- [x] **Step 5: Add the extract-content executor helper**
 
 In `src/ai-assistant/background/index.js`, insert this helper after `var D=new qe,BCQ=new BCQueue;`:
 
@@ -1097,7 +1097,7 @@ async function executeBrowserExtractContentFromBackground(toolCall) {
 }
 ```
 
-- [ ] **Step 6: Dispatch `browser.extract_content` before the generic browser branch**
+- [x] **Step 6: Dispatch `browser.extract_content` before the generic browser branch**
 
 In the `_t(e,t)` tool dispatch function in `src/ai-assistant/background/index.js`, update the branch order so `browser.extract_content` is handled before `r.id.startsWith(\`browser.\`)`.
 
@@ -1115,7 +1115,7 @@ r.id===`browser.extract_content`&&r.name===`extract_content`?BCQ.enqueue(n,()=>e
 r.id.startsWith(`browser.`)?BCQ.enqueue(n,()=>D.executeBrowserTool(n)):
 ```
 
-- [ ] **Step 7: Add `extract_content` prompt rules**
+- [x] **Step 7: Add `extract_content` prompt rules**
 
 In the `vt(e,t)` browser prompt injection function in `src/ai-assistant/background/index.js`, add these two lines after the existing `take_snapshot` rule:
 
@@ -1124,7 +1124,7 @@ In the `vt(e,t)` browser prompt injection function in `src/ai-assistant/backgrou
 `- extract_content 只读，不执行自定义脚本，不读取 Cookie、Storage 或跨域 iframe。`,
 ```
 
-- [ ] **Step 8: Add Playbook preselection helpers**
+- [x] **Step 8: Add Playbook preselection helpers**
 
 In `src/ai-assistant/background/index.js`, insert these helpers near the existing chat helper functions `mt`, `ht`, and `gt`:
 
@@ -1185,7 +1185,7 @@ async function maybeSelectAutomationPlaybookForChat(message, fetcher, options = 
 }
 ```
 
-- [ ] **Step 9: Inject selected Playbook prompt into the main chat**
+- [x] **Step 9: Inject selected Playbook prompt into the main chat**
 
 In the main chat function `Zt(e,t=fetch,n={})`, locate where `agentToolsDefinitionsForChat(e,n)` is called and where `vt(messages, exposedTools)` injects browser-control prompt rules.
 
@@ -1224,7 +1224,7 @@ function appendAutomationPlaybookPrompt(messages, prompt) {
 
 Preserve existing tool-call behavior. The selection request must run with `skipAutomationPlaybookSelection: true` to prevent recursive selection.
 
-- [ ] **Step 10: Run focused syntax and wiring tests**
+- [x] **Step 10: Run focused syntax and wiring tests**
 
 Run:
 
@@ -1241,6 +1241,8 @@ background agent tools wiring tests passed
 ```
 
 - [ ] **Step 11: Commit Task 4**
+
+2026-07-05 note: implementation and verification are complete, but this commit is intentionally deferred. `src/ai-assistant/background/index.js` is a single-line bundled file and currently mixes Phase 2 wiring with pre-existing unrelated background changes, so staging it as a clean Phase 2-only commit is not safe.
 
 Run:
 
@@ -1266,7 +1268,7 @@ M	scripts/test_background_agent_tools_wiring.mjs
 - Modify: `README.md`
 - Modify: `docs/AI_SIDEBAR_AGENT_ARCHITECTURE.md`
 
-- [ ] **Step 1: Update README with Phase 2 behavior**
+- [x] **Step 1: Update README with Phase 2 behavior**
 
 In `README.md`, update the AI sidebar tools section to include:
 
@@ -1281,7 +1283,7 @@ AI 侧边栏在浏览器控制和工具调用开启后，会对“总结当前�
 `browser.extract_content` 是只读工具，不执行模型提供的脚本，不读取 Cookie、Storage 或跨域 iframe。工具结果会按长度限制截断，审计日志只记录摘要。
 ```
 
-- [ ] **Step 2: Update the architecture document**
+- [x] **Step 2: Update the architecture document**
 
 In `docs/AI_SIDEBAR_AGENT_ARCHITECTURE.md`, add or update a section with:
 
@@ -1295,7 +1297,7 @@ In `docs/AI_SIDEBAR_AGENT_ARCHITECTURE.md`, add or update a section with:
 后台通过 `src/ai-assistant/background/browser-extract-content-service.js` 把模型工具调用转换成 `pageContext.extract` 请求。审计日志记录工具参数和结果摘要，不保存完整页面正文或 HTML 原文。
 ```
 
-- [ ] **Step 3: Run focused tests**
+- [x] **Step 3: Run focused tests**
 
 Run:
 
@@ -1315,7 +1317,7 @@ browser control queue tests passed
 background agent tools wiring tests passed
 ```
 
-- [ ] **Step 4: Run full unit suite**
+- [x] **Step 4: Run full unit suite**
 
 Run:
 
@@ -1329,7 +1331,7 @@ Expected final line:
 unit tests passed
 ```
 
-- [ ] **Step 5: Run AI sidebar smoke verification**
+- [x] **Step 5: Run AI sidebar smoke verification**
 
 Run:
 
@@ -1340,6 +1342,8 @@ python scripts\verify_ai_sidebar_core.py
 Expected: the JSON result reports `"ok": true`. If the browser environment fails before extension verification, capture the exact error and include it in the final implementation report.
 
 - [ ] **Step 6: Commit documentation**
+
+2026-07-05 note: documentation updates are complete and verified. The commit is deferred for the same dirty-worktree boundary reason; README and architecture docs already contain pre-existing Phase 1 / MCP edits mixed with the new Phase 2 paragraphs.
 
 Run:
 
@@ -1356,7 +1360,7 @@ M	README.md
 M	docs/AI_SIDEBAR_AGENT_ARCHITECTURE.md
 ```
 
-- [ ] **Step 7: Final status check**
+- [x] **Step 7: Final status check**
 
 Run:
 
