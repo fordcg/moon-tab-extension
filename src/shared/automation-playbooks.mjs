@@ -1,6 +1,8 @@
 export const AUTOMATION_PLAYBOOK_SETTINGS_KEY = "automationPlaybookSettings";
 
 const PLAYBOOK_SELECTION_REASON_LIMIT = 200;
+const PLAYBOOK_SELECTION_USER_CONTENT_LIMIT = 2000;
+const PLAYBOOK_SELECTION_PAGE_CONTEXT_LIMIT = 4000;
 
 const BUILTIN_AUTOMATION_PLAYBOOKS = Object.freeze([
   Object.freeze({
@@ -79,11 +81,20 @@ export function shouldRunAutomationPlaybookSelection(userContent) {
 
   const hasBrowserScene =
     /当前页面|这个页面|此页面|本页面|当前页|这个页|此页|当前网页|这个网页|此网页|已打开的网页|打开的网页|这几个页面|这些页面|这几个标签页|这些标签页|当前标签页|这个标签页|此标签页|已打开标签页|打开的标签页|已打开页面|打开的页面|当前浏览器页面|当前\s*tab|这个\s*tab|此\s*tab|已打开\s*tab|打开的\s*tab/.test(text);
-  const hasAutomationIntent = /总结|提取|阅读|查看|看看|分析|比较|汇总|打开|切换|整理|归纳|找/.test(text);
-  return hasBrowserScene && hasAutomationIntent;
+  const textForIntent = text.replace(
+    /已打开的网页|打开的网页|已打开标签页|打开的标签页|已打开页面|打开的页面|已打开\s*tab|打开的\s*tab/g,
+    "",
+  );
+  const hasAutomationIntent = /总结|提取|阅读|查看|看看|看一下|看下|分析|比较|汇总|打开|切换|整理|归纳|找/.test(textForIntent);
+  const hasCurrentPageAlias =
+    /当前页面|这个页面|此页面|本页面|当前页|这个页|此页|当前网页|这个网页|此网页|当前标签页|这个标签页|此标签页|当前浏览器页面|当前\s*tab|这个\s*tab|此\s*tab/.test(text);
+  const hasPageQuestionForm = hasCurrentPageAlias && /是什么|什么内容|主要内容|讲什么|说什么/.test(text);
+  return hasBrowserScene && (hasAutomationIntent || hasPageQuestionForm);
 }
 
 export function createAutomationPlaybookSelectionPrompt(input) {
+  const userContent = truncatePromptText(input.userContent, PLAYBOOK_SELECTION_USER_CONTENT_LIMIT);
+  const pageContextSummary = truncatePromptText(String(input.pageContextSummary ?? "").trim(), PLAYBOOK_SELECTION_PAGE_CONTEXT_LIMIT);
   const candidates = input.playbooks.map((playbook) => ({
     id: playbook.id,
     title: playbook.title,
@@ -106,8 +117,8 @@ export function createAutomationPlaybookSelectionPrompt(input) {
     {
       role: "user",
       content: [
-        `用户需求：${String(input.userContent ?? "")}`,
-        input.pageContextSummary?.trim() ? `页面摘要：\n${input.pageContextSummary.trim()}` : "页面摘要：无",
+        `用户需求：${userContent}`,
+        pageContextSummary ? `页面摘要：\n${pageContextSummary}` : "页面摘要：无",
         `候选 Playbook：\n${JSON.stringify(candidates, null, 2)}`,
       ].join("\n\n"),
     },
@@ -176,8 +187,44 @@ export function createSelectedAutomationPlaybookPrompt(selection) {
 function extractJsonObjectText(text) {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
   const source = fenced || text;
-  const start = source.indexOf("{");
-  const end = source.lastIndexOf("}");
-  if (start < 0 || end <= start) return "";
-  return source.slice(start, end + 1);
+  for (let start = source.indexOf("{"); start >= 0; start = source.indexOf("{", start + 1)) {
+    const end = findJsonObjectEnd(source, start);
+    if (end > start) return source.slice(start, end + 1);
+  }
+  return "";
+}
+
+function truncatePromptText(value, limit) {
+  return String(value ?? "").slice(0, limit);
+}
+
+function findJsonObjectEnd(source, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  return -1;
 }

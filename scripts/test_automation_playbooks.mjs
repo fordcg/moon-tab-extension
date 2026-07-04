@@ -44,12 +44,19 @@ assert.equal(shouldRunAutomationPlaybookSelection("提取当前 tab 里的价格
 assert.equal(shouldRunAutomationPlaybookSelection("比较这几个页面的差异"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("总结这个 tab"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("阅读已打开的网页"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("当前页面是什么"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("当前页面主要内容是什么"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("帮我看一下当前页面"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("看下当前页"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("帮我找几个学习网站"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下企业网站设计趋势"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下 CSS Grid 布局"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下浏览器标签页的设计趋势"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下网页内容运营方法"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("比较网页内容和传统媒体内容"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("什么是已打开的网页"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("浏览器已打开标签页会占用多少内存"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("打开的网页设计趋势"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("今天星期几"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("解释一下 JavaScript 闭包"), false);
 
@@ -64,6 +71,15 @@ assert.match(prompt[0].content, /只返回 JSON/);
 assert.match(prompt[1].content, /总结当前页面/);
 assert.match(prompt[1].content, /page_reading/);
 
+const limitedPrompt = createAutomationPlaybookSelectionPrompt({
+  userContent: "u".repeat(2100),
+  pageContextSummary: "p".repeat(4100),
+  playbooks,
+});
+const limitedPromptSections = limitedPrompt[1].content.split("\n\n");
+assert.equal(limitedPromptSections[0], `用户需求：${"u".repeat(2000)}`);
+assert.equal(limitedPromptSections[1], `页面摘要：\n${"p".repeat(4000)}`);
+
 assert.deepEqual(parseAutomationPlaybookSelectionJson('{"playbookId":"page_reading","confidence":"high","reason":"页面阅读"}'), {
   playbookId: "page_reading",
   confidence: "high",
@@ -74,6 +90,14 @@ assert.deepEqual(parseAutomationPlaybookSelectionJson("```json\n{\"playbookId\":
   confidence: "low",
   reason: "无需策略",
 });
+assert.deepEqual(
+  parseAutomationPlaybookSelectionJson('前缀 {"playbookId":"page_reading","confidence":"medium","reason":"页面阅读"} 后缀 {"ignored":true}'),
+  {
+    playbookId: "page_reading",
+    confidence: "medium",
+    reason: "页面阅读",
+  },
+);
 assert.equal(parseAutomationPlaybookSelectionJson("not json"), undefined);
 
 const normalized = normalizeAutomationPlaybookSelection(
