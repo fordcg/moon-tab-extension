@@ -30,6 +30,7 @@ const fetcher = async (url, init = {}) => {
     };
   }
   if (body.method === "notifications/initialized") {
+    assert.equal(init.headers["Mcp-Session-Id"], "session-1");
     return {
       ok: true,
       headers: new Map(),
@@ -38,6 +39,7 @@ const fetcher = async (url, init = {}) => {
     };
   }
   if (body.method === "tools/list") {
+    assert.equal(init.headers["Mcp-Session-Id"], "session-1");
     return {
       ok: true,
       headers: new Map(),
@@ -54,6 +56,7 @@ const fetcher = async (url, init = {}) => {
     };
   }
   if (body.method === "tools/call") {
+    assert.equal(init.headers["Mcp-Session-Id"], "session-1");
     return {
       ok: true,
       headers: new Map(),
@@ -311,6 +314,21 @@ const notificationHttpJsonRpcError = await listMcpTools({
 );
 assert.match(notificationHttpJsonRpcError?.message, /initialized rejected over http/);
 assert.equal(notificationHttpJsonRpcError?.isMcpBridgeFallbackEligible, false);
+
+await assert.rejects(
+  () =>
+    listMcpTools({
+      server: { endpoint: "ftp://user:pass@example.test/mcp?token=secret&debug=1" },
+      fetcher: async () => {
+        throw new Error("fetcher should not run for invalid endpoint");
+      },
+    }),
+  (error) => {
+    assert.match(error.message, /ftp:\/\/example\.test\/mcp\?debug=1/);
+    assert.doesNotMatch(error.message, /user|pass|secret|token/);
+    return true;
+  },
+);
 
 const blankTokenRequests = [];
 await listMcpTools({

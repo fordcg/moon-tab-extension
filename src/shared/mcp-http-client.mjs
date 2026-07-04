@@ -275,9 +275,8 @@ async function readJsonRpcResponse(response, requestId) {
 
 function selectJsonRpcPayloadById(payload, requestId) {
   if (requestId === undefined || !isRecord(payload)) return payload;
-  return Object.prototype.hasOwnProperty.call(payload, "id") && payload.id === requestId
-    ? payload
-    : undefined;
+  if (isJsonRpcPayloadForRequestId(payload, requestId)) return payload;
+  return isUnattributedJsonRpcError(payload) ? payload : undefined;
 }
 
 async function readTextJsonRpcResponse(response, requestId) {
@@ -294,9 +293,21 @@ async function readTextJsonRpcResponse(response, requestId) {
 }
 
 function parseSseJsonRpcResponseById(text, requestId) {
-  return collectSseJsonRpcPayloads(text).find(
-    (payload) => payload && Object.prototype.hasOwnProperty.call(payload, "id") && payload.id === requestId,
-  );
+  const payloads = collectSseJsonRpcPayloads(text);
+  return payloads.find((payload) => isJsonRpcPayloadForRequestId(payload, requestId)) ||
+    payloads.find(isUnattributedJsonRpcError);
+}
+
+function isJsonRpcPayloadForRequestId(payload, requestId) {
+  return isRecord(payload) &&
+    Object.prototype.hasOwnProperty.call(payload, "id") &&
+    payload.id === requestId;
+}
+
+function isUnattributedJsonRpcError(payload) {
+  if (!isRecord(payload) || payload.jsonrpc !== JSON_RPC_VERSION) return false;
+  if (!Object.prototype.hasOwnProperty.call(payload, "error")) return false;
+  return !Object.prototype.hasOwnProperty.call(payload, "id") || payload.id === null;
 }
 
 function collectSseJsonRpcPayloads(text) {
@@ -368,11 +379,41 @@ function normalizeEndpoint(input) {
     }
     return url.toString();
   } catch {
-    throw new McpHttpClientError(`MCP HTTP endpoint 格式无效：${endpoint}`, {
+    throw new McpHttpClientError(`MCP HTTP endpoint 格式无效：${sanitizeEndpointForError(endpoint)}`, {
       kind: "configuration",
       fallbackEligible: true,
     });
   }
+}
+
+function sanitizeEndpointForError(endpoint) {
+  const value = normalizeText(endpoint);
+  if (!value) return "";
+
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (isSensitiveEndpointQueryKey(key)) {
+        url.searchParams.delete(key);
+      }
+    }
+    return url.toString();
+  } catch {
+    return "[无效 endpoint]";
+  }
+}
+
+function isSensitiveEndpointQueryKey(key) {
+  const normalized = normalizeText(key).toLowerCase().replace(/[-_]/g, "");
+  return normalized === "key" ||
+    normalized === "auth" ||
+    normalized.includes("token") ||
+    normalized.includes("apikey") ||
+    normalized.includes("authorization") ||
+    normalized.includes("password") ||
+    normalized.includes("secret");
 }
 
 function normalizeTimeoutMs(input) {

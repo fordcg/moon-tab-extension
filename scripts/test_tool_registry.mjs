@@ -93,8 +93,7 @@ const adapter = createHttpMcpToolAdapter({
 
 const definitions = await adapter.toToolDefinitions();
 assert.equal(definitions.length, 1);
-assert.equal(definitions[0].id.startsWith("mcp."), true);
-assert.match(definitions[0].id, /dev\.echo|dev%2Eecho/);
+assert.equal(definitions[0].id, "mcp.legacy.dev.echo");
 assert.equal(definitions[0].permission, TOOL_PERMISSION_SCOPES.MCP);
 assert.equal(definitions[0].timeoutMs, 45000);
 assert.deepEqual(await definitions[0].handler({ text: "from mcp" }), { ok: true, content: "from mcp" });
@@ -352,4 +351,118 @@ const [mcpHttpJsonRpcErrorDefinition] = await mcpHttpJsonRpcErrorAdapter.toToolD
 await assert.rejects(() => mcpHttpJsonRpcErrorDefinition.handler({}), /bad args over http/);
 assert.equal(httpJsonRpcErrorCalls.some((call) => call.url.endsWith("/tools/call")), false);
 
+await assertJsonRpcErrorWithoutRequestIdDoesNotFallback({
+  baseUrl: "http://127.0.0.1:17337/",
+  serverId: "remote.null-jsonrpc-error",
+  endpointUrl: "http://127.0.0.1:17333/mcp-null-jsonrpc-error",
+  toolName: "remote.nullBadArgs",
+  expectedMessage: /bad null id json/,
+  createCallResponse: () => ({
+    ok: true,
+    headers: new Map(),
+    json: async () => ({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32602, message: "bad null id json" },
+    }),
+  }),
+});
+
+await assertJsonRpcErrorWithoutRequestIdDoesNotFallback({
+  baseUrl: "http://127.0.0.1:17338/",
+  serverId: "remote.missing-jsonrpc-error",
+  endpointUrl: "http://127.0.0.1:17333/mcp-missing-jsonrpc-error",
+  toolName: "remote.missingBadArgs",
+  expectedMessage: /bad missing id json/,
+  createCallResponse: () => ({
+    ok: false,
+    status: 400,
+    statusText: "Bad Request",
+    headers: new Map(),
+    json: async () => ({
+      jsonrpc: "2.0",
+      error: { code: -32602, message: "bad missing id json" },
+    }),
+  }),
+});
+
+await assertJsonRpcErrorWithoutRequestIdDoesNotFallback({
+  baseUrl: "http://127.0.0.1:17339/",
+  serverId: "remote.sse-jsonrpc-error",
+  endpointUrl: "http://127.0.0.1:17333/mcp-sse-jsonrpc-error",
+  toolName: "remote.sseBadArgs",
+  expectedMessage: /bad null id sse/,
+  createCallResponse: () => ({
+    ok: true,
+    headers: new Map([["content-type", "text/event-stream"]]),
+    json: async () => {
+      throw new Error("SSE response should use text");
+    },
+    text: async () =>
+      [
+        `data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/progress", params: { progress: 1 } })}`,
+        "",
+        `data: ${JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32602, message: "bad null id sse" } })}`,
+        "",
+      ].join("\n"),
+  }),
+});
+
 console.log("tool registry tests passed");
+
+async function assertJsonRpcErrorWithoutRequestIdDoesNotFallback({
+  baseUrl,
+  serverId,
+  endpointUrl,
+  toolName,
+  expectedMessage,
+  createCallResponse,
+}) {
+  const calls = [];
+  const adapter = createHttpMcpToolAdapter({
+    baseUrl,
+    server: { id: serverId, endpointUrl },
+    fetchImpl: async (url, init = {}) => {
+      const body = init.body ? JSON.parse(init.body) : {};
+      calls.push({ url, body });
+      if (body.method === "initialize") {
+        return {
+          ok: true,
+          headers: new Map(),
+          json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+        };
+      }
+      if (body.method === "notifications/initialized") {
+        return {
+          ok: true,
+          headers: new Map(),
+          json: async () => ({}),
+        };
+      }
+      if (body.method === "tools/list") {
+        return {
+          ok: true,
+          headers: new Map(),
+          json: async () => ({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              tools: [{ name: toolName, inputSchema: { type: "object", additionalProperties: true } }],
+            },
+          }),
+        };
+      }
+      if (body.method === "tools/call") {
+        return createCallResponse(body);
+      }
+      if (url.endsWith("/tools/call")) {
+        return { ok: true, json: async () => ({ ok: true, content: "legacy should not run" }) };
+      }
+      return { ok: false, json: async () => ({ message: "legacy missing" }) };
+    },
+  });
+
+  const [definition] = await adapter.toToolDefinitions();
+  await assert.rejects(() => definition.handler({}), expectedMessage);
+  assert.equal(calls.some((call) => call.url.endsWith("/tools/call")), false);
+}
