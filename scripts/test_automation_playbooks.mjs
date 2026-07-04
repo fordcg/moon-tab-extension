@@ -37,6 +37,8 @@ assert.deepEqual(getEnabledAutomationPlaybooks({ disabledPlaybookIds: ["page_rea
 
 assert.equal(shouldRunAutomationPlaybookSelection("帮我总结当前页面并提取重点"), true);
 assert.equal(shouldRunAutomationPlaybookSelection("比较这几个标签页的差异"), true);
+assert.equal(shouldRunAutomationPlaybookSelection("帮我找几个学习网站"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("分析一下企业网站设计趋势"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("今天星期几"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("解释一下 JavaScript 闭包"), false);
 
