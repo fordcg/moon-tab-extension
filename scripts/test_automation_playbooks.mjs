@@ -41,6 +41,9 @@ assert.equal(shouldRunAutomationPlaybookSelection("提取当前页面里 .price 
 assert.equal(shouldRunAutomationPlaybookSelection("帮我找几个学习网站"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下企业网站设计趋势"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("分析一下 CSS Grid 布局"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("分析一下浏览器标签页的设计趋势"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("分析一下网页内容运营方法"), false);
+assert.equal(shouldRunAutomationPlaybookSelection("比较网页内容和传统媒体内容"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("今天星期几"), false);
 assert.equal(shouldRunAutomationPlaybookSelection("解释一下 JavaScript 闭包"), false);
 
