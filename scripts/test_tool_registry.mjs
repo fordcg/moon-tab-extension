@@ -104,6 +104,10 @@ assert.equal(calls.some((call) => call.url.endsWith("/tools/call")), true);
 const mcpCalls = [];
 const mcpAdapter = createHttpMcpToolAdapter({
   baseUrl: "http://127.0.0.1:17333/mcp",
+  server: {
+    id: "remote.server",
+    endpointUrl: "http://127.0.0.1:17333/mcp",
+  },
   fetchImpl: async (url, init = {}) => {
     const body = JSON.parse(init.body);
     mcpCalls.push({ url, body });
@@ -112,6 +116,14 @@ const mcpAdapter = createHttpMcpToolAdapter({
         ok: true,
         headers: new Map([["Mcp-Session-Id", "remote-session"]]),
         json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      assert.equal(init.headers["Mcp-Session-Id"], "remote-session");
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({}),
       };
     }
     if (body.method === "tools/list") {
@@ -152,6 +164,7 @@ const mcpAdapter = createHttpMcpToolAdapter({
 const mcpDefinitions = await mcpAdapter.toToolDefinitions();
 assert.equal(mcpDefinitions.length, 1);
 assert.equal(mcpDefinitions[0].id.startsWith("mcp."), true);
+assert.equal(mcpDefinitions[0].id.startsWith("mcp.remote%2Eserver."), true);
 assert.match(mcpDefinitions[0].id, /remote\.echo|remote%2Eecho/);
 assert.deepEqual(await mcpDefinitions[0].handler({ text: "ok" }), { ok: true, content: "remote:ok" });
 assert.equal(mcpCalls.some((call) => call.body.method === "tools/list"), true);

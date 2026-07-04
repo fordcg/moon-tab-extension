@@ -29,6 +29,14 @@ const fetcher = async (url, init = {}) => {
       text: async () => "",
     };
   }
+  if (body.method === "notifications/initialized") {
+    return {
+      ok: true,
+      headers: new Map(),
+      json: async () => ({}),
+      text: async () => "",
+    };
+  }
   if (body.method === "tools/list") {
     return {
       ok: true,
@@ -76,7 +84,13 @@ assert.equal(tools.length, 1);
 assert.equal(tools[0].name, "search.web");
 assert.equal(requests[0].init.headers.Authorization, "Bearer secret");
 assert.equal(requests[0].init.headers["X-MCP-Tenant"], "tenant-a");
+assert.deepEqual(requests.slice(0, 3).map((request) => request.body.method), [
+  "initialize",
+  "notifications/initialized",
+  "tools/list",
+]);
 assert.equal(requests[1].init.headers["Mcp-Session-Id"], "session-1");
+assert.equal(requests[2].init.headers["Mcp-Session-Id"], "session-1");
 
 const content = await callMcpTool({
   server,
@@ -86,6 +100,11 @@ const content = await callMcpTool({
   fetcher,
 });
 assert.equal(content, "result:moon");
+assert.deepEqual(requests.slice(-3).map((request) => request.body.method), [
+  "initialize",
+  "notifications/initialized",
+  "tools/call",
+]);
 
 const formatted = await callMcpTool({
   server,
@@ -99,6 +118,14 @@ const formatted = await callMcpTool({
         ok: true,
         headers: new Map(),
         json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+        text: async () => "",
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({}),
         text: async () => "",
       };
     }
@@ -134,6 +161,14 @@ const sseFetcher = async (_url, init = {}) => {
       text: async () => "",
     };
   }
+  if (body.method === "notifications/initialized") {
+    return {
+      ok: true,
+      headers: new Map(),
+      json: async () => ({}),
+      text: async () => "",
+    };
+  }
   return {
     ok: true,
     headers: new Map(),
@@ -145,5 +180,64 @@ const sseFetcher = async (_url, init = {}) => {
 };
 
 assert.deepEqual(await listMcpTools({ server, fetcher: sseFetcher }), []);
+
+const responseSseTools = await listMcpTools({
+  server,
+  fetcher: async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    if (body.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+        headers: { "content-type": "application/json", "Mcp-Session-Id": "response-session" },
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      assert.equal(init.headers["Mcp-Session-Id"], "response-session");
+      return new Response("", { status: 202 });
+    }
+    assert.equal(init.headers["Mcp-Session-Id"], "response-session");
+    return new Response(
+      `event: message\ndata: ${JSON.stringify({
+        jsonrpc: "2.0",
+        id: body.id,
+        result: { tools: [{ name: "response.sse", inputSchema: { type: "object" } }] },
+      })}\n\n`,
+      { headers: { "content-type": "text/event-stream" } },
+    );
+  },
+});
+assert.equal(responseSseTools[0].name, "response.sse");
+
+const notificationBeforeResponseTools = await listMcpTools({
+  server,
+  fetcher: async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    if (body.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      return new Response("", { status: 202 });
+    }
+    return new Response(
+      [
+        `data: ${JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/progress",
+          params: { progress: 1 },
+        })}`,
+        "",
+        `data: ${JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { tools: [{ name: "after.progress", inputSchema: { type: "object" } }] },
+        })}`,
+        "",
+      ].join("\n"),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+  },
+});
+assert.equal(notificationBeforeResponseTools[0].name, "after.progress");
 
 console.log("mcp http client tests passed");

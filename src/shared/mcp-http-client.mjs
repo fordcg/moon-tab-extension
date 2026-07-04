@@ -10,33 +10,7 @@ const normalizeText = (value) => (typeof value === "string" ? value.trim() : "")
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
 export function parseSseJsonRpcResponse(text) {
-  const value = typeof text === "string" ? text.trim() : "";
-  if (!value) return undefined;
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    // 继续按 text/event-stream 解析。
-  }
-
-  for (const eventText of value.split(/\r?\n\r?\n/)) {
-    const data = eventText
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n")
-      .trim();
-    const payload = parseJsonRpcDataLine(data);
-    if (payload) return payload;
-  }
-
-  for (const line of value.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) continue;
-    const payload = parseJsonRpcDataLine(line.slice(5).trim());
-    if (payload) return payload;
-  }
-
-  return undefined;
+  return collectSseJsonRpcPayloads(text)[0];
 }
 
 export async function listMcpTools(input = {}) {
@@ -73,12 +47,18 @@ async function requestAfterInitialize(input, method, params) {
       version: "1.0.0",
     },
   }, undefined, 1);
+  const initialized = await sendJsonRpcNotification(
+    input,
+    "notifications/initialized",
+    {},
+    initialize.sessionId,
+  );
 
   const response = await sendJsonRpcRequest(
     input,
     method,
     params,
-    initialize.sessionId,
+    initialized.sessionId,
     2,
   );
   return response.result;
@@ -102,7 +82,7 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
     }),
   }, normalizeTimeoutMs(input), method);
 
-  const payload = await readJsonRpcResponse(response);
+  const payload = await readJsonRpcResponse(response, id);
   if (!response?.ok) {
     throw new Error(createHttpErrorMessage(response, payload, method));
   }
@@ -117,6 +97,33 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
 
   return {
     result: payload.result,
+    sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
+  };
+}
+
+async function sendJsonRpcNotification(input, method, params, sessionId) {
+  const endpoint = normalizeEndpoint(input);
+  const fetcher = input.fetcher || input.fetchImpl || globalThis.fetch;
+  if (typeof fetcher !== "function") {
+    throw new Error("当前环境缺少 fetch，无法连接 MCP HTTP 服务");
+  }
+
+  const response = await fetchWithTimeout(fetcher, endpoint, {
+    method: "POST",
+    headers: buildRequestHeaders(input, sessionId),
+    body: JSON.stringify({
+      jsonrpc: JSON_RPC_VERSION,
+      method,
+      params,
+    }),
+  }, normalizeTimeoutMs(input), method);
+
+  if (!response?.ok) {
+    const payload = await readJsonRpcResponse(response);
+    throw new Error(createHttpErrorMessage(response, payload, method));
+  }
+
+  return {
     sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
   };
 }
@@ -152,26 +159,78 @@ async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
   }
 }
 
-async function readJsonRpcResponse(response) {
+async function readJsonRpcResponse(response, requestId) {
+  const contentType = readHeader(response?.headers, "content-type").toLowerCase();
+  if (contentType.includes("text/event-stream")) {
+    return readTextJsonRpcResponse(response, requestId);
+  }
+
   if (typeof response?.json === "function") {
     try {
-      return await response.json();
+      return await (typeof response.clone === "function" ? response.clone().json() : response.json());
     } catch {
       // 有些 MCP HTTP server 使用 text/event-stream，继续读取 text。
     }
   }
 
+  return readTextJsonRpcResponse(response, requestId);
+}
+
+async function readTextJsonRpcResponse(response, requestId) {
   if (typeof response?.text !== "function") {
     return undefined;
   }
 
   const text = await response.text().catch(() => "");
-  const payload = parseSseJsonRpcResponse(text);
+  const payload = requestId === undefined
+    ? parseSseJsonRpcResponse(text)
+    : parseSseJsonRpcResponseById(text, requestId);
   if (payload) return payload;
   return text ? { message: text } : undefined;
 }
 
-function parseJsonRpcDataLine(data) {
+function parseSseJsonRpcResponseById(text, requestId) {
+  return collectSseJsonRpcPayloads(text).find(
+    (payload) => payload && Object.prototype.hasOwnProperty.call(payload, "id") && payload.id === requestId,
+  );
+}
+
+function collectSseJsonRpcPayloads(text) {
+  const value = typeof text === "string" ? text.trim() : "";
+  if (!value) return [];
+
+  try {
+    return [JSON.parse(value)];
+  } catch {
+    // 继续按 text/event-stream 解析。
+  }
+
+  const payloads = [];
+  for (const eventText of value.split(/\r?\n\r?\n/)) {
+    const dataLines = eventText
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart());
+    if (!dataLines.length) continue;
+
+    const joinedPayload = parseJsonRpcDataText(
+      dataLines.filter((line) => normalizeText(line) !== "[DONE]").join("\n"),
+    );
+    if (joinedPayload) {
+      payloads.push(joinedPayload);
+      continue;
+    }
+
+    for (const dataLine of dataLines) {
+      const payload = parseJsonRpcDataText(dataLine);
+      if (payload) payloads.push(payload);
+    }
+  }
+
+  return payloads;
+}
+
+function parseJsonRpcDataText(data) {
   const value = normalizeText(data);
   if (!value || value === "[DONE]") return undefined;
   try {

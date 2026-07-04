@@ -157,7 +157,7 @@ export function createHttpMcpToolAdapter(options) {
       return this.listTools().then((tools) =>
         tools.map((tool) =>
           createToolDefinition({
-            id: createMcpToolId("legacy", tool.id || tool.name),
+            id: createMcpToolId(server.id || "legacy", tool.id || tool.name),
             name: tool.name || tool.id,
             description: tool.description || "",
             inputSchema: tool.inputSchema || { type: "object", additionalProperties: true },
