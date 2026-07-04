@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 EXTENSION_PATH = str(ROOT)
 OUT_DIR = ROOT / ".tmp"
 OUT_DIR.mkdir(exist_ok=True)
+BRIDGE_TOOL_ID = "dev.echo"
+MCP_TOOL_ID = "mcp.legacy.dev.echo"
+MCP_TOOL_NAME = "mcp_legacy_dev_echo"
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -33,7 +36,7 @@ class FakeMcpBridgeHandler(BaseHTTPRequestHandler):
             {
                 "tools": [
                     {
-                        "id": "dev.echo",
+                        "id": BRIDGE_TOOL_ID,
                         "name": "Dev Echo",
                         "description": "Echo through local MCP bridge",
                         "inputSchema": {
@@ -86,7 +89,7 @@ class FakeOpenAiHandler(BaseHTTPRequestHandler):
         has_mcp_result = any(
             isinstance(item, dict)
             and item.get("role") == "tool"
-            and item.get("name") == "mcp_dev_echo"
+            and item.get("name") == MCP_TOOL_NAME
             for item in messages
         )
 
@@ -113,7 +116,7 @@ class FakeOpenAiHandler(BaseHTTPRequestHandler):
                                     "id": "call_mcp_echo",
                                     "type": "function",
                                     "function": {
-                                        "name": "mcp_dev_echo",
+                                        "name": MCP_TOOL_NAME,
                                         "arguments": json.dumps(
                                             {
                                                 "text": "hello from chat",
@@ -262,16 +265,16 @@ def main():
                 listed_tools = response.get("listed", {}).get("mcp", {}).get("tools", [])
                 chat = response.get("chat") or {}
                 records = flatten_tool_records(chat)
-                mcp_record = next((item for item in records if item.get("name") == "mcp_dev_echo"), {})
+                mcp_record = next((item for item in records if item.get("name") == MCP_TOOL_NAME), {})
                 audit_log = response.get("audit", {}).get("auditLog", [])
-                mcp_audit = next((item for item in audit_log if item.get("name") == "mcp_dev_echo"), {})
+                mcp_audit = next((item for item in audit_log if item.get("name") == MCP_TOOL_NAME), {})
 
                 add_check(
                     result,
                     "mcp bridge status exposes sanitized chat tool",
-                    any(item.get("id") == "mcp.dev.echo" and item.get("name") == "mcp_dev_echo" for item in listed_tools),
+                    any(item.get("id") == MCP_TOOL_ID and item.get("name") == MCP_TOOL_NAME for item in listed_tools),
                     actual=listed_tools,
-                    expected="mcp.dev.echo is listed as mcp_dev_echo",
+                    expected=f"{MCP_TOOL_ID} is listed as {MCP_TOOL_NAME}",
                 )
                 add_check(
                     result,
@@ -296,7 +299,7 @@ def main():
                     "mcp bridge receives exactly one tool call",
                     len(FakeMcpBridgeHandler.calls) == 1,
                     actual=FakeMcpBridgeHandler.calls,
-                    expected="one POST /tools/call with toolId dev.echo",
+                    expected=f"one POST /tools/call with toolId {BRIDGE_TOOL_ID}",
                 )
                 add_check(
                     result,
@@ -308,7 +311,7 @@ def main():
                         and mcp_audit.get("arguments", {}).get("password") == "[已脱敏]"
                     ),
                     actual=mcp_audit,
-                    expected="audit log contains successful mcp_dev_echo with redacted apiKey/password",
+                    expected=f"audit log contains successful {MCP_TOOL_NAME} with redacted apiKey/password",
                 )
             finally:
                 context.close()
