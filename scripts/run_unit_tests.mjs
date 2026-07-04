@@ -6,6 +6,8 @@ const testCommands = [
   ["node", ["scripts/test_mcp_settings.mjs"]],
   ["node", ["scripts/test_mcp_http_client.mjs"]],
   ["node", ["scripts/test_mcp_tool_adapter.mjs"]],
+  ["node", ["scripts/test_token_usage.mjs"]],
+  ["node", ["scripts/test_agent_tool_audit.mjs"]],
   ["node", ["scripts/test_browser_control_queue.mjs"]],
   ["node", ["scripts/test_background_browser_queue_wiring.mjs"]],
   ["node", ["scripts/test_background_agent_tools_wiring.mjs"]],
