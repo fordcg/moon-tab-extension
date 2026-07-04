@@ -9,6 +9,20 @@ const normalizeText = (value) => (typeof value === "string" ? value.trim() : "")
 
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
+export class McpHttpClientError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "McpHttpClientError";
+    this.kind = options.kind || "client";
+    this.method = options.method;
+    this.isMcpHttpClientError = true;
+    this.isMcpBridgeFallbackEligible = options.fallbackEligible === true;
+    if (options.cause !== undefined) {
+      this.cause = options.cause;
+    }
+  }
+}
+
 export class McpToolResultError extends Error {
   constructor(toolName, content, result) {
     super(`${toolName} 调用失败：${content || "MCP 工具返回错误"}`);
@@ -17,7 +31,12 @@ export class McpToolResultError extends Error {
     this.content = content;
     this.result = result;
     this.isMcpToolResultError = true;
+    this.isMcpBridgeFallbackEligible = false;
   }
+}
+
+export function isMcpBridgeFallbackEligibleError(error) {
+  return Boolean(error?.isMcpBridgeFallbackEligible);
 }
 
 export function isMcpToolResultError(error) {
@@ -37,7 +56,7 @@ export async function listMcpTools(input = {}) {
 export async function callMcpTool(input = {}) {
   const toolName = normalizeText(input.toolName || input.name);
   if (!toolName) {
-    throw new Error("缺少 MCP tool name");
+    throw new McpHttpClientError("缺少 MCP tool name", { kind: "validation", fallbackEligible: false });
   }
 
   const result = await requestAfterInitialize(input, "tools/call", {
@@ -83,7 +102,11 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
   const endpoint = normalizeEndpoint(input);
   const fetcher = input.fetcher || input.fetchImpl || globalThis.fetch;
   if (typeof fetcher !== "function") {
-    throw new Error("当前环境缺少 fetch，无法连接 MCP HTTP 服务");
+    throw new McpHttpClientError("当前环境缺少 fetch，无法连接 MCP HTTP 服务", {
+      kind: "transport",
+      method,
+      fallbackEligible: true,
+    });
   }
 
   const response = await fetchWithTimeout(fetcher, endpoint, {
@@ -99,15 +122,27 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
 
   const payload = await readJsonRpcResponse(response, id);
   if (!response?.ok) {
-    throw new Error(createHttpErrorMessage(response, payload, method));
+    throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
+      kind: "http",
+      method,
+      fallbackEligible: true,
+    });
   }
 
   if (payload?.error) {
-    throw new Error(createJsonRpcErrorMessage(payload.error, method));
+    throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
+      kind: "jsonrpc",
+      method,
+      fallbackEligible: false,
+    });
   }
 
   if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "result")) {
-    throw new Error(`MCP ${method} 响应缺少 result`);
+    throw new McpHttpClientError(`MCP ${method} 响应缺少 result`, {
+      kind: "protocol",
+      method,
+      fallbackEligible: true,
+    });
   }
 
   return {
@@ -120,7 +155,11 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
   const endpoint = normalizeEndpoint(input);
   const fetcher = input.fetcher || input.fetchImpl || globalThis.fetch;
   if (typeof fetcher !== "function") {
-    throw new Error("当前环境缺少 fetch，无法连接 MCP HTTP 服务");
+    throw new McpHttpClientError("当前环境缺少 fetch，无法连接 MCP HTTP 服务", {
+      kind: "transport",
+      method,
+      fallbackEligible: true,
+    });
   }
 
   const response = await fetchWithTimeout(fetcher, endpoint, {
@@ -135,12 +174,20 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
 
   if (!response?.ok) {
     const payload = await readJsonRpcResponse(response);
-    throw new Error(createHttpErrorMessage(response, payload, method));
+    throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
+      kind: "http",
+      method,
+      fallbackEligible: true,
+    });
   }
 
   const payload = await readJsonRpcResponse(response).catch(() => undefined);
   if (payload?.error) {
-    throw new Error(createJsonRpcErrorMessage(payload.error, method));
+    throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
+      kind: "jsonrpc",
+      method,
+      fallbackEligible: false,
+    });
   }
 
   return {
@@ -150,7 +197,11 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
 
 async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
   const controller = typeof AbortController === "function" ? new AbortController() : undefined;
-  const timeoutError = new Error(`MCP 请求超时：${method}`);
+  const timeoutError = new McpHttpClientError(`MCP 请求超时：${method}`, {
+    kind: "timeout",
+    method,
+    fallbackEligible: true,
+  });
   let timeoutId;
   const timeout = new Promise((_, reject) => {
     timeoutId = globalThis.setTimeout(() => {
@@ -172,8 +223,16 @@ async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
     if (error === timeoutError || error?.name === "AbortError") {
       throw timeoutError;
     }
+    if (error?.isMcpHttpClientError) {
+      throw error;
+    }
     const message = error instanceof Error && error.message ? error.message : String(error);
-    throw new Error(`MCP HTTP 请求失败：${message}`);
+    throw new McpHttpClientError(`MCP HTTP 请求失败：${message}`, {
+      kind: "transport",
+      method,
+      fallbackEligible: true,
+      cause: error,
+    });
   } finally {
     globalThis.clearTimeout(timeoutId);
   }
@@ -271,7 +330,10 @@ function normalizeEndpoint(input) {
       server.endpointUrl,
   );
   if (!endpoint) {
-    throw new Error("缺少 MCP HTTP endpoint");
+    throw new McpHttpClientError("缺少 MCP HTTP endpoint", {
+      kind: "configuration",
+      fallbackEligible: true,
+    });
   }
 
   try {
@@ -281,7 +343,10 @@ function normalizeEndpoint(input) {
     }
     return url.toString();
   } catch {
-    throw new Error(`MCP HTTP endpoint 格式无效：${endpoint}`);
+    throw new McpHttpClientError(`MCP HTTP endpoint 格式无效：${endpoint}`, {
+      kind: "configuration",
+      fallbackEligible: true,
+    });
   }
 }
 

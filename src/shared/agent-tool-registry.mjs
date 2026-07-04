@@ -1,4 +1,4 @@
-import { callMcpTool, isMcpToolResultError, listMcpTools } from "./mcp-http-client.mjs";
+import { callMcpTool, isMcpBridgeFallbackEligibleError, listMcpTools } from "./mcp-http-client.mjs";
 import { createMcpToolId } from "./mcp-tool-adapter.mjs";
 
 export const TOOL_PERMISSION_SCOPES = Object.freeze({
@@ -143,6 +143,7 @@ export function createHttpMcpToolAdapter(options) {
         () => listMcpTools({ server, fetcher: fetchImpl }),
         bridgeListTools,
         "MCP 工具列表读取失败",
+        { shouldFallback: isMcpBridgeFallbackEligibleError },
       );
     },
     async callTool(toolId, input = {}) {
@@ -151,7 +152,7 @@ export function createHttpMcpToolAdapter(options) {
         () => callRemoteTool(normalizedToolId, input),
         () => bridgeCallTool(normalizedToolId, input),
         `MCP 工具 ${normalizedToolId} 调用失败`,
-        { shouldFallback: (error) => !isMcpToolResultError(error) },
+        { shouldFallback: isMcpBridgeFallbackEligibleError },
       );
     },
     toToolDefinitions(permission = TOOL_PERMISSION_SCOPES.MCP) {

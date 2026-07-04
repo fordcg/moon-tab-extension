@@ -232,4 +232,63 @@ const [mcpErrorDefinition] = await mcpErrorAdapter.toToolDefinitions();
 await assert.rejects(() => mcpErrorDefinition.handler({}), /remote\.fail 调用失败：bad/);
 assert.equal(errorCalls.some((call) => call.url.endsWith("/tools/call")), false);
 
+const jsonRpcErrorCalls = [];
+const mcpJsonRpcErrorAdapter = createHttpMcpToolAdapter({
+  baseUrl: "http://127.0.0.1:17335/",
+  server: {
+    id: "remote.jsonrpc-error",
+    endpointUrl: "http://127.0.0.1:17333/mcp-jsonrpc-error",
+  },
+  fetchImpl: async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : {};
+    jsonRpcErrorCalls.push({ url, body });
+    if (body.method === "initialize") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({}),
+      };
+    }
+    if (body.method === "tools/list") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            tools: [{ name: "remote.badArgs", inputSchema: { type: "object", additionalProperties: true } }],
+          },
+        }),
+      };
+    }
+    if (body.method === "tools/call") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: body.id,
+          error: { code: -32602, message: "bad args" },
+        }),
+      };
+    }
+    if (url.endsWith("/tools/call")) {
+      return { ok: true, json: async () => ({ ok: true, content: "legacy should not run" }) };
+    }
+    return { ok: false, json: async () => ({ message: "legacy missing" }) };
+  },
+});
+
+const [mcpJsonRpcErrorDefinition] = await mcpJsonRpcErrorAdapter.toToolDefinitions();
+await assert.rejects(() => mcpJsonRpcErrorDefinition.handler({}), /bad args/);
+assert.equal(jsonRpcErrorCalls.some((call) => call.url.endsWith("/tools/call")), false);
+
 console.log("tool registry tests passed");
