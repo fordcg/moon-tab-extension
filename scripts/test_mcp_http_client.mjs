@@ -273,4 +273,147 @@ await assert.rejects(
   /initialized rejected/,
 );
 
+const blankTokenRequests = [];
+await listMcpTools({
+  server: {
+    ...server,
+    bearerToken: "server-secret",
+  },
+  token: "   ",
+  fetcher: async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    blankTokenRequests.push({ init, body });
+    if (body.method === "initialize") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+        text: async () => "",
+      };
+    }
+    if (body.method === "notifications/initialized") {
+      return {
+        ok: true,
+        headers: new Map(),
+        json: async () => ({}),
+        text: async () => "",
+      };
+    }
+    return {
+      ok: true,
+      headers: new Map(),
+      json: async () => ({ jsonrpc: "2.0", id: body.id, result: { tools: [] } }),
+      text: async () => "",
+    };
+  },
+});
+assert.equal(blankTokenRequests[0].init.headers.Authorization, "Bearer server-secret");
+
+await assert.rejects(
+  () =>
+    listMcpTools({
+      server,
+      fetcher: async (_url, init = {}) => {
+        const body = JSON.parse(init.body);
+        if (body.method === "initialize") {
+          return {
+            ok: true,
+            headers: new Map(),
+            json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+            text: async () => "",
+          };
+        }
+        if (body.method === "notifications/initialized") {
+          return {
+            ok: true,
+            headers: new Map(),
+            json: async () => ({}),
+            text: async () => "",
+          };
+        }
+        return {
+          ok: true,
+          headers: new Map(),
+          json: async () => ({ jsonrpc: "2.0", id: body.id + 10, result: { tools: [] } }),
+          text: async () => "",
+        };
+      },
+    }),
+  /响应缺少 result/,
+);
+
+await assert.rejects(
+  () =>
+    listMcpTools({
+      server,
+      fetcher: async (_url, init = {}) => {
+        const body = JSON.parse(init.body);
+        if (body.method === "initialize") {
+          return {
+            ok: true,
+            headers: new Map(),
+            json: async () => ({ jsonrpc: "2.0", id: body.id, result: {} }),
+            text: async () => "",
+          };
+        }
+        if (body.method === "notifications/initialized") {
+          return {
+            ok: true,
+            headers: new Map(),
+            json: async () => ({}),
+            text: async () => "",
+          };
+        }
+        return {
+          ok: true,
+          headers: new Map(),
+          json: async () => ({
+            jsonrpc: "2.0",
+            method: "notifications/progress",
+            params: { progress: 1 },
+          }),
+          text: async () => "",
+        };
+      },
+    }),
+  /响应缺少 result/,
+);
+
+const slowBodyResult = await Promise.race([
+  listMcpTools({
+    server,
+    timeoutMs: 20,
+    fetcher: async (_url, init = {}) => {
+      const body = JSON.parse(init.body);
+      if (body.method === "initialize") {
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (body.method === "notifications/initialized") {
+        return new Response("", { status: 202 });
+      }
+      const encoder = new TextEncoder();
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              jsonrpc: "2.0",
+              id: body.id,
+              result: { tools: [] },
+            })}\n\n`));
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    },
+  }).then(
+    () => new Error("expected body timeout"),
+    (error) => error,
+  ),
+  new Promise((resolve) => setTimeout(() => resolve("hung"), 120)),
+]);
+assert.notEqual(slowBodyResult, "hung");
+assert.match(slowBodyResult.message, /MCP 请求超时：tools\/list/);
+
 console.log("mcp http client tests passed");

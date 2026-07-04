@@ -7,6 +7,14 @@ const MCP_TOOL_TRUNCATION_SUFFIX = "...[已截断]";
 
 const normalizeText = (value) => (typeof value === "string" ? value.trim() : "");
 
+const firstNonEmptyText = (...values) => {
+  for (const value of values) {
+    const text = normalizeText(value);
+    if (text) return text;
+  }
+  return "";
+};
+
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
 export class McpHttpClientError extends Error {
@@ -109,7 +117,7 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
     });
   }
 
-  const response = await fetchWithTimeout(fetcher, endpoint, {
+  const init = {
     method: "POST",
     headers: buildRequestHeaders(input, sessionId),
     body: JSON.stringify({
@@ -118,37 +126,40 @@ async function sendJsonRpcRequest(input, method, params, sessionId, id) {
       method,
       params,
     }),
-  }, normalizeTimeoutMs(input), method);
-
-  const payload = await readJsonRpcResponse(response, id);
-  if (!response?.ok) {
-    throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
-      kind: "http",
-      method,
-      fallbackEligible: true,
-    });
-  }
-
-  if (payload?.error) {
-    throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
-      kind: "jsonrpc",
-      method,
-      fallbackEligible: false,
-    });
-  }
-
-  if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "result")) {
-    throw new McpHttpClientError(`MCP ${method} 响应缺少 result`, {
-      kind: "protocol",
-      method,
-      fallbackEligible: true,
-    });
-  }
-
-  return {
-    result: payload.result,
-    sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
   };
+
+  return runWithTimeout(async (signal) => {
+    const response = await fetchMcpResponse(fetcher, endpoint, init, signal);
+    const payload = await readJsonRpcResponse(response, id);
+    if (!response?.ok) {
+      throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
+        kind: "http",
+        method,
+        fallbackEligible: true,
+      });
+    }
+
+    if (payload?.error) {
+      throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
+        kind: "jsonrpc",
+        method,
+        fallbackEligible: false,
+      });
+    }
+
+    if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "result")) {
+      throw new McpHttpClientError(`MCP ${method} 响应缺少 result`, {
+        kind: "protocol",
+        method,
+        fallbackEligible: true,
+      });
+    }
+
+    return {
+      result: payload.result,
+      sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
+    };
+  }, normalizeTimeoutMs(input), method);
 }
 
 async function sendJsonRpcNotification(input, method, params, sessionId) {
@@ -162,7 +173,7 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
     });
   }
 
-  const response = await fetchWithTimeout(fetcher, endpoint, {
+  const init = {
     method: "POST",
     headers: buildRequestHeaders(input, sessionId),
     body: JSON.stringify({
@@ -170,32 +181,35 @@ async function sendJsonRpcNotification(input, method, params, sessionId) {
       method,
       params,
     }),
-  }, normalizeTimeoutMs(input), method);
-
-  if (!response?.ok) {
-    const payload = await readJsonRpcResponse(response);
-    throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
-      kind: "http",
-      method,
-      fallbackEligible: true,
-    });
-  }
-
-  const payload = await readJsonRpcResponse(response).catch(() => undefined);
-  if (payload?.error) {
-    throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
-      kind: "jsonrpc",
-      method,
-      fallbackEligible: false,
-    });
-  }
-
-  return {
-    sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
   };
+
+  return runWithTimeout(async (signal) => {
+    const response = await fetchMcpResponse(fetcher, endpoint, init, signal);
+    if (!response?.ok) {
+      const payload = await readJsonRpcResponse(response);
+      throw new McpHttpClientError(createHttpErrorMessage(response, payload, method), {
+        kind: "http",
+        method,
+        fallbackEligible: true,
+      });
+    }
+
+    const payload = await readJsonRpcResponse(response).catch(() => undefined);
+    if (payload?.error) {
+      throw new McpHttpClientError(createJsonRpcErrorMessage(payload.error, method), {
+        kind: "jsonrpc",
+        method,
+        fallbackEligible: false,
+      });
+    }
+
+    return {
+      sessionId: readHeader(response.headers, "Mcp-Session-Id") || sessionId,
+    };
+  }, normalizeTimeoutMs(input), method);
 }
 
-async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
+async function runWithTimeout(operation, timeoutMs, method) {
   const controller = typeof AbortController === "function" ? new AbortController() : undefined;
   const timeoutError = new McpHttpClientError(`MCP 请求超时：${method}`, {
     kind: "timeout",
@@ -211,14 +225,10 @@ async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
   });
 
   try {
-    const response = await Promise.race([
-      fetcher(endpoint, controller ? { ...init, signal: controller.signal } : init),
+    return await Promise.race([
+      operation(controller?.signal),
       timeout,
     ]);
-    if (!response || typeof response !== "object") {
-      throw new Error("MCP HTTP 服务返回了无效响应");
-    }
-    return response;
   } catch (error) {
     if (error === timeoutError || error?.name === "AbortError") {
       throw timeoutError;
@@ -238,6 +248,14 @@ async function fetchWithTimeout(fetcher, endpoint, init, timeoutMs, method) {
   }
 }
 
+async function fetchMcpResponse(fetcher, endpoint, init, signal) {
+  const response = await fetcher(endpoint, signal ? { ...init, signal } : init);
+  if (!response || typeof response !== "object") {
+    throw new Error("MCP HTTP 服务返回了无效响应");
+  }
+  return response;
+}
+
 async function readJsonRpcResponse(response, requestId) {
   const contentType = readHeader(response?.headers, "content-type").toLowerCase();
   if (contentType.includes("text/event-stream")) {
@@ -246,13 +264,21 @@ async function readJsonRpcResponse(response, requestId) {
 
   if (typeof response?.json === "function") {
     try {
-      return await (typeof response.clone === "function" ? response.clone().json() : response.json());
+      const payload = await (typeof response.clone === "function" ? response.clone().json() : response.json());
+      return selectJsonRpcPayloadById(payload, requestId);
     } catch {
       // 有些 MCP HTTP server 使用 text/event-stream，继续读取 text。
     }
   }
 
   return readTextJsonRpcResponse(response, requestId);
+}
+
+function selectJsonRpcPayloadById(payload, requestId) {
+  if (requestId === undefined || !isRecord(payload)) return payload;
+  return Object.prototype.hasOwnProperty.call(payload, "id") && payload.id === requestId
+    ? payload
+    : undefined;
 }
 
 async function readTextJsonRpcResponse(response, requestId) {
@@ -360,7 +386,7 @@ function normalizeTimeoutMs(input) {
 
 function buildRequestHeaders(input, sessionId) {
   const server = isRecord(input.server) ? input.server : {};
-  const token = normalizeText(input.bearerToken || input.token || server.bearerToken || server.token);
+  const token = firstNonEmptyText(input.bearerToken, input.token, server.bearerToken, server.token);
   const headers = {
     Accept: "application/json, text/event-stream",
     "Content-Type": "application/json",

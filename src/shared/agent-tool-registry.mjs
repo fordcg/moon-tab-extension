@@ -14,6 +14,14 @@ const DEFAULT_TIMEOUT_MS = 30000;
 
 const normalizeToolId = (value) => (typeof value === "string" ? value.trim() : "");
 
+const firstNonEmptyText = (...values) => {
+  for (const value of values) {
+    const text = normalizeToolId(value);
+    if (text) return text;
+  }
+  return "";
+};
+
 export function createToolDefinition(definition) {
   const id = normalizeToolId(definition?.id);
   if (!id) {
@@ -176,6 +184,7 @@ export function createHttpMcpToolAdapter(options) {
 function createHttpMcpServerConfig(options = {}, baseUrl, headers) {
   const source = options.server && typeof options.server === "object" ? options.server : {};
   const endpointUrl = source.endpoint || source.url || source.endpointUrl || options.endpoint || options.url || options.endpointUrl || baseUrl.toString();
+  const token = firstNonEmptyText(options.token, options.bearerToken, source.token, source.bearerToken);
   const timeoutMs = Number.isFinite(source.timeoutMs)
     ? source.timeoutMs
     : Number.isFinite(options.timeoutMs)
@@ -188,8 +197,8 @@ function createHttpMcpServerConfig(options = {}, baseUrl, headers) {
     name: source.name || options.serverName || "MCP Server",
     endpoint: endpointUrl,
     endpointUrl,
-    token: options.token || options.bearerToken || source.token || source.bearerToken,
-    bearerToken: options.token || options.bearerToken || source.token || source.bearerToken,
+    token,
+    bearerToken: token,
     headers: {
       ...(source.headers || {}),
       ...(headers || {}),
