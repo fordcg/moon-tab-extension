@@ -1,4 +1,7 @@
 .edge-profile*/
+node_modules/
+dist/
+artifacts/
 *-temp.json
 *.log
 *.artifact.json

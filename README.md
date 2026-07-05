@@ -4,19 +4,32 @@ Moon Tab 是一个原生 Chrome Manifest V3 扩展，包含新标签页、小游
 
 ## 运行方式
 
-1. 在 Chrome/Edge 打开扩展管理页。
-2. 启用开发者模式。
-3. 选择“加载已解压的扩展”，目录指向项目根目录。
+本项目正在迁移为 Vite / React / TypeScript 工程化扩展。源码不再直接以项目根目录作为最终加载目录；开发和验收时先生成构建产物。
 
-扩展入口由 `manifest.json` 定义，不需要构建步骤。
+安装依赖：
+
+```powershell
+npm install
+```
+
+构建扩展：
+
+```powershell
+npm run build:extension
+```
+
+在 Chrome/Edge 打开扩展管理页，启用开发者模式，选择“加载已解压的扩展”，目录指向 `dist/`。后续本地可分发目录由 `npm run package:extension` 生成。
 
 ## 常用命令
 
 ```powershell
+npm run typecheck
+npm run build:extension
 npm test
+npm run test:legacy
 ```
 
-`npm test` 会顺序运行 `scripts/` 下的 Node 单测，以及 `src/pages/game` 的 `node:test` 用例。
+`npm test` 运行工程化后的 Vitest 测试；`npm run test:legacy` 暂时保留迁移前的 Node 脚本回归，后续会按阶段并入 Vitest 或 smoke 流程。
 
 启动本地 Grok Search MCP Bridge：
 
