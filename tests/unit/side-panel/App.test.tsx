@@ -3870,7 +3870,9 @@ describe("App", () => {
     vi.spyOn(window, "confirm").mockReturnValueOnce(true);
     await user.click(screen.getByRole("button", { name: "删除提示词" }));
 
-    expect(screen.queryByRole("button", { name: /第三条已编辑/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /第三条已编辑/ })).not.toBeInTheDocument();
+    });
   });
 
   it("同步设置输入框使用中文输入法组合输入时只保存最终文本", async () => {

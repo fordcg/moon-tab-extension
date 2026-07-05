@@ -30,7 +30,7 @@ Phase 0-1：删除 PocketAide，并建立远程 Vite / React / TypeScript 工程
 
 ## 未解决问题
 
-- Phase 0-1 的 `dist/` 构建默认不声明 `debugger` 权限；debugger-backed browser control、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 和 `full_access.*` 只导入源码，不作为当前构建默认启用能力。
+- Phase 0-1 的 `dist/` 构建默认不声明 `debugger` 权限；debugger-backed browser control、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 和 `full_access.*` 只导入源码，可能出现在工具偏好设置中，但当前构建不会在运行时暴露为可用能力。
 - 尚未迁移 Moon Tab 新标签页和小游戏到 Vite 多入口构建。
 - 尚未把 `sidePanel-layout.js` 行为迁入 React 源码。
 - 尚未合并 tab scoped side panel、悬浮助手、Imagefree、Grok/MCP 和 DevTools Network bridge 到 TypeScript background。

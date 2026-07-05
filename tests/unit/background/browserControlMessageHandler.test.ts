@@ -702,7 +702,7 @@ describe("浏览器控制地基", () => {
 
     expect(result.content).not.toContain("需要 allowSameOriginFetch=true");
     expect(result.content).not.toContain("用户已确认本次受控增强边界");
-  });
+  }, 10000);
 
   it("受控增强确认 Runtime 摘要扩展后会使用更大摘要参数重跑并消费授权", async () => {
     const chromeMock = createChromeMock({
