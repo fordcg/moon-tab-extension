@@ -18,7 +18,7 @@ Phase 2：迁移 Moon Tab 新标签页和小游戏到 Vite 多入口构建。
 | Phase 0-1 | `e9f25aa` | 删除 PocketAide 并建立远程工程化迁移基础 |
 | Phase 0-1 Review Fix | `29934bb` | 降权构建 manifest 并补齐 Vitest 发现规则回归测试 |
 | Phase 0-1 Verification Stabilization | `470476e` | 稳定全量 Vitest 验证和迁移边界文档 |
-| Phase 2 | `待提交` | 迁移 Moon Tab 新标签页和小游戏到 Vite 多入口构建 |
+| Phase 2 | `d7bfdd5` | 迁移 Moon Tab 新标签页和小游戏到 Vite 多入口构建 |
 
 ## 当前验证状态
 
