@@ -2134,11 +2134,13 @@ body:has(.context-dialog) .dialog-overlay {
    表现为“标签项挤在一起”。强制单列纵向流 + 清掉 max-height，让 flex:1 + overflow-y 真正生效。 */
 .context-tab-list {
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 0.75rem, black calc(100% - 1.25rem), transparent);
+  align-content: start !important;
   display: grid !important;
   flex: 1 1 auto;
   gap: 0.125rem !important;
   grid-auto-columns: auto !important;
   grid-auto-flow: row !important;
+  grid-auto-rows: min-content !important;
   grid-template-columns: minmax(0, 1fr) !important;
   mask-image: linear-gradient(to bottom, transparent, black 0.75rem, black calc(100% - 1.25rem), transparent);
   max-height: none !important;
@@ -2639,19 +2641,19 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
    loading 由 sidePanel-layout.js 打 data-sending 标记驱动 spinner。 */
 .composer-actions .ui-button-primary {
   align-items: center;
-  background: var(--sidepanel-blue);
+  background: #a8c6f0 !important;
   border: 0;
-  border-radius: 0.625rem;
-  color: var(--sidepanel-canvas);
+  border-radius: 0.5rem;
+  color: #ffffff !important;
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 0;
   font-weight: 650;
-  height: 2.25rem;
+  height: 1.875rem;
   justify-content: center;
   letter-spacing: 0;
   margin-left: 0.25rem;
-  min-width: 2.25rem;
+  min-width: 1.875rem;
   order: 40;
   overflow: hidden;
   padding: 0;
@@ -2660,20 +2662,36 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
     background 180ms cubic-bezier(0.22, 1, 0.36, 1),
     color 180ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  width: 2.25rem;
+  width: 1.875rem;
 }
 
+/* 三根不等高竖线（中间最高，两侧一中一低，非阶梯）+ 右上角四角星。
+   星星单独放在 ::after，便于发送态对其做独立浮动动画。 */
 .composer-actions .ui-button-primary::before {
   background: currentColor;
   content: "";
-  height: 1.25rem;
-  width: 1.25rem;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m5 12 7-7 7 7'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m5 12 7-7 7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+  height: 1.125rem;
+  width: 1.125rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='4' y='11' width='3' height='10' rx='1.5' fill='%23000'/%3E%3Crect x='10.5' y='6' width='3' height='15' rx='1.5' fill='%23000'/%3E%3Crect x='17' y='15' width='3' height='6' rx='1.5' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='4' y='11' width='3' height='10' rx='1.5' fill='%23000'/%3E%3Crect x='10.5' y='6' width='3' height='15' rx='1.5' fill='%23000'/%3E%3Crect x='17' y='15' width='3' height='6' rx='1.5' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.composer-actions .ui-button-primary::after {
+  background: currentColor;
+  content: "";
+  height: 0.5rem;
+  pointer-events: none;
+  position: absolute;
+  right: 0.1875rem;
+  top: 0.1875rem;
+  transform-origin: 50% 50%;
+  width: 0.5rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5 L14.2 9.8 L22.5 12 L14.2 14.2 L12 22.5 L9.8 14.2 L1.5 12 L9.8 9.8 Z' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5 L14.2 9.8 L22.5 12 L14.2 14.2 L12 22.5 L9.8 14.2 L1.5 12 L9.8 9.8 Z' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .composer-actions .ui-button-primary:hover:not(:disabled) {
-  background: var(--sidepanel-blue-deep);
+  background: #8bb2e8 !important;
   transform: translateY(-1px);
 }
 
@@ -2687,7 +2705,7 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   color: var(--sidepanel-muted);
 }
 
-/* loading：箭头换成旋转的环（data-sending 由 layout.js 维护）。 */
+/* 发送中：竖线换成旋转的环，星星做自然浮动（限制在右上角小盒子里）。 */
 .composer-actions .ui-button-primary[data-sending="true"]::before {
   -webkit-mask: none;
   mask: none;
@@ -2698,6 +2716,26 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   border-top-color: currentColor;
   height: 1rem;
   width: 1rem;
+}
+
+.composer-actions .ui-button-primary[data-sending="true"]::after {
+  animation: sidepanel-send-star-float 2.2s ease-in-out infinite;
+}
+
+/* 星星在右上角小范围上下浮动 + 极轻微缩放/旋转，
+   总位移 <0.25rem，绝不越过图标主体所在的中下区。 */
+@keyframes sidepanel-send-star-float {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: translateY(-0.1875rem) rotate(8deg) scale(1.08);
+  }
+
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
 }
 
 .composer-actions .ui-button-primary[data-stop-generation="true"] {
@@ -4969,7 +5007,8 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .composer-actions .ui-button-primary[data-sending="true"]::before {
+  .composer-actions .ui-button-primary[data-sending="true"]::before,
+  .composer-actions .ui-button-primary[data-sending="true"]::after {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }

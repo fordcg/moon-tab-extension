@@ -481,6 +481,7 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
   gap: 0.125rem;
   max-height: none;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding: 0.5rem;
   scrollbar-width: none;
@@ -488,6 +489,19 @@ body.sidepanel-floating-frame .sidepanel-floating-trigger {
 
 .model-select-option-list::-webkit-scrollbar {
   display: none;
+}
+
+.model-select-group {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.25rem;
+}
+
+.model-select-group-title {
+  color: var(--color-muted, #64748b);
+  font-size: 0.75rem;
+  font-weight: 650;
+  padding: 0.25rem 0.5rem;
 }
 
 .model-select-option {
@@ -1604,6 +1618,28 @@ body.sidepanel-regenerate-direct-pending .message-regenerate-popover {
   flex-shrink: 0;
 }
 
+.context-strip > .token-usage-meter {
+  flex: 1 1 auto;
+}
+
+.token-usage-meter {
+  color: var(--color-muted, #64748b);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 0.25rem 0.5rem;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.token-usage-meter span {
+  white-space: nowrap;
+}
+
+.token-usage-meter-empty {
+  opacity: 0.72;
+}
+
 .context-strip .ui-button-secondary {
   background: transparent;
   border-color: transparent;
@@ -2108,11 +2144,13 @@ body:has(.context-dialog) .dialog-overlay {
    表现为“标签项挤在一起”。强制单列纵向流 + 清掉 max-height，让 flex:1 + overflow-y 真正生效。 */
 .context-tab-list {
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 0.75rem, black calc(100% - 1.25rem), transparent);
+  align-content: start !important;
   display: grid !important;
   flex: 1 1 auto;
   gap: 0.125rem !important;
   grid-auto-columns: auto !important;
   grid-auto-flow: row !important;
+  grid-auto-rows: min-content !important;
   grid-template-columns: minmax(0, 1fr) !important;
   mask-image: linear-gradient(to bottom, transparent, black 0.75rem, black calc(100% - 1.25rem), transparent);
   max-height: none !important;
@@ -2613,19 +2651,19 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
    loading 由 sidePanel-layout.js 打 data-sending 标记驱动 spinner。 */
 .composer-actions .ui-button-primary {
   align-items: center;
-  background: var(--sidepanel-blue);
+  background: #a8c6f0 !important;
   border: 0;
-  border-radius: 0.625rem;
-  color: var(--sidepanel-canvas);
+  border-radius: 0.5rem;
+  color: #ffffff !important;
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 0;
   font-weight: 650;
-  height: 2.25rem;
+  height: 1.875rem;
   justify-content: center;
   letter-spacing: 0;
   margin-left: 0.25rem;
-  min-width: 2.25rem;
+  min-width: 1.875rem;
   order: 40;
   overflow: hidden;
   padding: 0;
@@ -2634,20 +2672,36 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
     background 180ms cubic-bezier(0.22, 1, 0.36, 1),
     color 180ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  width: 2.25rem;
+  width: 1.875rem;
 }
 
+/* 三根不等高竖线（中间最高，两侧一中一低，非阶梯）+ 右上角四角星。
+   星星单独放在 ::after，便于发送态对其做独立浮动动画。 */
 .composer-actions .ui-button-primary::before {
   background: currentColor;
   content: "";
-  height: 1.25rem;
-  width: 1.25rem;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m5 12 7-7 7 7'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m5 12 7-7 7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+  height: 1.125rem;
+  width: 1.125rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='4' y='11' width='3' height='10' rx='1.5' fill='%23000'/%3E%3Crect x='10.5' y='6' width='3' height='15' rx='1.5' fill='%23000'/%3E%3Crect x='17' y='15' width='3' height='6' rx='1.5' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='4' y='11' width='3' height='10' rx='1.5' fill='%23000'/%3E%3Crect x='10.5' y='6' width='3' height='15' rx='1.5' fill='%23000'/%3E%3Crect x='17' y='15' width='3' height='6' rx='1.5' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.composer-actions .ui-button-primary::after {
+  background: currentColor;
+  content: "";
+  height: 0.5rem;
+  pointer-events: none;
+  position: absolute;
+  right: 0.1875rem;
+  top: 0.1875rem;
+  transform-origin: 50% 50%;
+  width: 0.5rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5 L14.2 9.8 L22.5 12 L14.2 14.2 L12 22.5 L9.8 14.2 L1.5 12 L9.8 9.8 Z' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5 L14.2 9.8 L22.5 12 L14.2 14.2 L12 22.5 L9.8 14.2 L1.5 12 L9.8 9.8 Z' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .composer-actions .ui-button-primary:hover:not(:disabled) {
-  background: var(--sidepanel-blue-deep);
+  background: #8bb2e8 !important;
   transform: translateY(-1px);
 }
 
@@ -2661,7 +2715,7 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   color: var(--sidepanel-muted);
 }
 
-/* loading：箭头换成旋转的环（data-sending 由 layout.js 维护）。 */
+/* 发送中：竖线换成旋转的环，星星做自然浮动（限制在右上角小盒子里）。 */
 .composer-actions .ui-button-primary[data-sending="true"]::before {
   -webkit-mask: none;
   mask: none;
@@ -2672,6 +2726,26 @@ body:has(.context-dialog) .sidepanel-add-tab-button {
   border-top-color: currentColor;
   height: 1rem;
   width: 1rem;
+}
+
+.composer-actions .ui-button-primary[data-sending="true"]::after {
+  animation: sidepanel-send-star-float 2.2s ease-in-out infinite;
+}
+
+/* 星星在右上角小范围上下浮动 + 极轻微缩放/旋转，
+   总位移 <0.25rem，绝不越过图标主体所在的中下区。 */
+@keyframes sidepanel-send-star-float {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: translateY(-0.1875rem) rotate(8deg) scale(1.08);
+  }
+
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
 }
 
 .composer-actions .ui-button-primary[data-stop-generation="true"] {
@@ -4402,6 +4476,67 @@ body:has(.model-settings-dialog) .dialog-overlay {
   width: 0.5rem;
 }
 
+.sidepanel-notification-host {
+  display: grid;
+  gap: 0.5rem;
+  pointer-events: none;
+  position: fixed;
+  right: 0.75rem;
+  top: 0.75rem;
+  width: min(22rem, calc(100vw - 1.5rem));
+  z-index: 2147483647;
+}
+
+.sidepanel-notification {
+  background: #fff;
+  border: 1px solid var(--color-hairline, #d8dde8);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgb(31 41 55 / 12%);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr auto;
+  padding: 0.75rem;
+  pointer-events: auto;
+}
+
+.sidepanel-notification-content {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sidepanel-notification-content strong {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.sidepanel-notification-content p {
+  color: var(--color-muted, #64748b);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.sidepanel-notification-close {
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: currentColor;
+  cursor: pointer;
+  font-size: 1rem;
+  min-height: 2rem;
+  min-width: 2rem;
+}
+
+.sidepanel-notification-close:hover,
+.sidepanel-notification-close:focus-visible {
+  background: var(--sidepanel-control-hover);
+  outline: 3px solid color-mix(in srgb, var(--sidepanel-blue) 18%, transparent);
+  outline-offset: 2px;
+}
+
 .sidepanel-agent-tools-overlay {
   background: transparent;
   inset: 0;
@@ -4410,16 +4545,15 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 .sidepanel-agent-tools-dialog {
-  background: #f7f9fc;
+  background: var(--sidepanel-canvas);
   border: 1px solid #dfe5ef;
   border-radius: 0.875rem;
-  box-shadow: 0 4px 8px rgb(31 41 55 / 14%);
+  box-shadow: var(--sidepanel-shadow);
   color: var(--sidepanel-ink);
   display: flex;
   flex-direction: column;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
-  height: min(27rem, calc(100dvh - 5rem));
-  max-height: min(27rem, calc(100dvh - 5rem));
+  max-height: min(26rem, calc(100dvh - 5rem));
   overflow: hidden;
   position: fixed;
   right: 0.75rem;
@@ -4451,8 +4585,7 @@ body:has(.model-settings-dialog) .dialog-overlay {
 
 .sidepanel-agent-tools-title-wrap p,
 .sidepanel-agent-tools-muted,
-.sidepanel-agent-tools-status-row p,
-.sidepanel-agent-tool-item p {
+.sidepanel-agent-tools-status-row p {
   color: var(--sidepanel-muted);
   font-size: 0.8125rem;
   line-height: 1.45;
@@ -4517,6 +4650,65 @@ body:has(.model-settings-dialog) .dialog-overlay {
   color: #8b3a2f;
 }
 
+.sidepanel-agent-tools-section {
+  background: var(--color-surface-soft, #f8fafc);
+  border: 1px solid var(--color-hairline, #d8dde8);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.875rem;
+}
+
+.sidepanel-agent-tools-section-title {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.sidepanel-agent-tools-server-list,
+.sidepanel-agent-tools-tool-list,
+.sidepanel-agent-tools-audit-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sidepanel-agent-tools-server,
+.sidepanel-agent-tools-tool,
+.sidepanel-agent-tools-audit {
+  background: #fff;
+  border: 1px solid var(--color-hairline, #d8dde8);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.625rem;
+}
+
+.sidepanel-agent-tools-server strong,
+.sidepanel-agent-tools-tool strong,
+.sidepanel-agent-tools-audit strong {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidepanel-agent-tools-audit-args {
+  color: var(--sidepanel-muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.sidepanel-agent-tools-audit.is-error {
+  border-color: color-mix(in srgb, var(--color-error, #dc2626) 45%, #d8dde8);
+}
+
 .sidepanel-agent-tools-field,
 .sidepanel-agent-tools-switch {
   display: grid;
@@ -4527,6 +4719,13 @@ body:has(.model-settings-dialog) .dialog-overlay {
   color: var(--sidepanel-ink-strong);
   font-size: 0.8125rem;
   font-weight: 600;
+}
+
+.sidepanel-agent-tools-field-hint {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin: -0.125rem 0 0;
 }
 
 .sidepanel-agent-tools-field input {
@@ -4612,52 +4811,6 @@ body:has(.model-settings-dialog) .dialog-overlay {
   gap: 0.5rem;
 }
 
-.sidepanel-agent-tools-section-title {
-  color: var(--sidepanel-ink-strong);
-  font-size: 0.8125rem;
-  font-weight: 650;
-  margin: 0.125rem 0 -0.25rem;
-}
-
-.sidepanel-agent-tools-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.sidepanel-agent-tools-empty,
-.sidepanel-agent-tool-item {
-  background: #fff;
-  border: 1px solid var(--sidepanel-line-soft);
-  border-radius: 0.75rem;
-  margin: 0;
-  padding: 0.625rem;
-}
-
-.sidepanel-agent-tool-item {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.sidepanel-agent-tool-item strong {
-  color: var(--sidepanel-ink-strong);
-  font-size: 0.875rem;
-}
-
-.sidepanel-agent-tool-item code {
-  color: var(--sidepanel-blue-deep);
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 0.75rem;
-  overflow-wrap: anywhere;
-}
-
-.sidepanel-agent-tools-audit-header {
-  align-items: center;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  margin-top: 0.125rem;
-}
-
 .sidepanel-agent-tools-link-button {
   background: transparent;
   border: 0;
@@ -4666,7 +4819,8 @@ body:has(.model-settings-dialog) .dialog-overlay {
   cursor: pointer;
   font-size: 0.8125rem;
   font-weight: 600;
-  padding: 0.25rem 0.375rem;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.5rem;
 }
 
 .sidepanel-agent-tools-link-button:hover,
@@ -4679,77 +4833,6 @@ body:has(.model-settings-dialog) .dialog-overlay {
   color: var(--sidepanel-muted);
   cursor: default;
   opacity: 0.65;
-}
-
-.sidepanel-agent-tools-audit-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.sidepanel-agent-tools-audit-item {
-  background: #fff;
-  border: 1px solid var(--sidepanel-line-soft);
-  border-radius: 0.75rem;
-  display: grid;
-  gap: 0.375rem;
-  padding: 0.625rem;
-}
-
-.sidepanel-agent-tools-audit-item.is-error {
-  border-color: #efcfc8;
-}
-
-.sidepanel-agent-tools-audit-item-head {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-}
-
-.sidepanel-agent-tools-audit-item-head strong {
-  color: var(--sidepanel-ink-strong);
-  font-size: 0.875rem;
-  min-width: 0;
-}
-
-.sidepanel-agent-tools-audit-item-head span {
-  background: color-mix(in srgb, var(--sidepanel-blue) 10%, white);
-  border-radius: 999px;
-  color: var(--sidepanel-blue-deep);
-  flex: 0 0 auto;
-  font-size: 0.75rem;
-  font-weight: 650;
-  line-height: 1.25rem;
-  padding: 0 0.5rem;
-}
-
-.sidepanel-agent-tools-audit-item.is-error .sidepanel-agent-tools-audit-item-head span {
-  background: #f7e9e5;
-  color: #8b3a2f;
-}
-
-.sidepanel-agent-tools-audit-meta,
-.sidepanel-agent-tools-audit-result {
-  color: var(--sidepanel-muted);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.sidepanel-agent-tools-audit-item pre {
-  background: #f2f5fa;
-  border: 1px solid var(--sidepanel-line-soft);
-  border-radius: 0.5rem;
-  color: #3b4350;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 0.71875rem;
-  line-height: 1.45;
-  margin: 0;
-  max-height: 7.5rem;
-  overflow: auto;
-  padding: 0.5rem;
-  white-space: pre-wrap;
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -4934,7 +5017,8 @@ body:has(.model-settings-dialog) .dialog-overlay {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .composer-actions .ui-button-primary[data-sending="true"]::before {
+  .composer-actions .ui-button-primary[data-sending="true"]::before,
+  .composer-actions .ui-button-primary[data-sending="true"]::after {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
@@ -32626,6 +32710,7 @@ function scheduleEnhancement() {
       enhanceComposerTools,
       enhanceComposerAddTab,
       enhanceComposerFooter,
+      renderTokenUsageMeter,
       enhancePromptUndo,
       syncTabConversationContinuity,
       enhanceMoveConversationPrompt,
@@ -33781,7 +33866,7 @@ async function triggerNativeNewConversation() {
   const historyTrigger = document.querySelector(".chat-history-trigger");
   if (historyTrigger) {
     historyTrigger.click();
-    const drawerButton = await waitForNativeNewConversationButton();
+      const drawerButton = await waitForNativeNewConversationButton();
     if (drawerButton) {
       drawerButton.click();
       closeHistoryDrawerNow();
@@ -34058,6 +34143,70 @@ function enhanceComposerFooter() {
   ensureControlLabel(modelSelector?.querySelector(".model-select-input"), "选择模型");
 }
 
+function formatTokenCount(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return "0";
+  if (numberValue >= 1_000_000) {
+    return `${(numberValue / 1_000_000)
+      .toFixed(numberValue >= 10_000_000 ? 0 : 1)
+      .replace(/\.0$/, "")}M`;
+  }
+  if (numberValue >= 1_000) {
+    return `${(numberValue / 1_000).toFixed(numberValue >= 10_000 ? 0 : 1).replace(/\.0$/, "")}k`;
+  }
+  return String(Math.floor(numberValue));
+}
+
+function readTokenUsageFromDom() {
+  const raw = document.querySelector("[data-token-usage]")?.getAttribute("data-token-usage");
+  if (!raw) return { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      inputTokens: Number(parsed.inputTokens) || 0,
+      outputTokens: Number(parsed.outputTokens) || 0,
+      cacheWriteTokens: Number(parsed.cacheWriteTokens) || 0,
+      cacheReadTokens: Number(parsed.cacheReadTokens) || 0,
+    };
+  } catch (error) {
+    return { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+  }
+}
+
+function renderTokenUsageMeter() {
+  const composer = document.querySelector(".chat-composer");
+  const contextStrip = document.querySelector(".context-strip");
+  if (!composer || !contextStrip) return;
+  let meter = contextStrip.querySelector(".token-usage-meter");
+  if (!meter) {
+    meter = document.createElement("div");
+    meter.className = "token-usage-meter token-usage-meter-empty";
+    meter.setAttribute("aria-label", "当前会话 Token 用量");
+    meter.title = "当前会话 Token 用量";
+    contextStrip.prepend(meter);
+  }
+  const usage = readTokenUsageFromDom();
+  const hasUsage = usage.inputTokens || usage.outputTokens || usage.cacheWriteTokens || usage.cacheReadTokens;
+  meter.classList.toggle("token-usage-meter-empty", !hasUsage);
+  meter.replaceChildren();
+  if (!hasUsage) {
+    const span = document.createElement("span");
+    span.textContent = composer.classList.contains("is-sending") ? "Token 统计中" : "Token 暂无";
+    meter.append(span);
+    return;
+  }
+  for (const [label, value] of [
+    ["输入", usage.inputTokens],
+    ["输出", usage.outputTokens],
+    ["写入", usage.cacheWriteTokens],
+    ["读取", usage.cacheReadTokens],
+  ]) {
+    const span = document.createElement("span");
+    span.textContent = `${label} ${formatTokenCount(value)}`;
+    meter.append(span);
+  }
+}
+
 function enhanceModelSelectDisplay() {
   const select = document.querySelector(".model-selector .model-select-input");
   const label = select?.closest(".model-select-label");
@@ -34150,8 +34299,33 @@ function modelOptionsSignature(usableOptions) {
   // 拼接每个选项的 value+文案，作为“选项结构是否变化”的指纹。
   // 用换行分隔，单条内部以制表符分隔 value 与文案，降低与正常文本冲突的概率。
   return usableOptions
-    .map((option) => `${option.value}\t${option.textContent?.trim() || ""}`)
+    .map((option) => `${getModelOptionChannel(option)}\t${option.value}\t${option.textContent?.trim() || ""}`)
     .join("\n");
+}
+
+function getModelOptionChannel(option) {
+  const parent = option.parentElement;
+  return (
+    option.getAttribute("data-channel-name") ||
+    option.dataset?.channel ||
+    (parent?.tagName === "OPTGROUP" ? parent.getAttribute("label") : "") ||
+    "其他"
+  );
+}
+
+function groupModelOptionsByChannel(options) {
+  const groups = [];
+  const groupMap = new Map();
+  for (const option of options) {
+    const channel = getModelOptionChannel(option);
+    if (!groupMap.has(channel)) {
+      const group = { channel, options: [] };
+      groupMap.set(channel, group);
+      groups.push(group);
+    }
+    groupMap.get(channel).options.push(option);
+  }
+  return groups;
 }
 
 // 仅更新选中态（class / aria / roving tabindex），不重建 DOM。
@@ -34171,6 +34345,47 @@ function syncModelOptionSelection(menu, selectedValue) {
   if (!focusable && items[0]) {
     items[0].tabIndex = 0;
   }
+}
+
+function createModelOptionNode(option, selectedValue, select) {
+  const text = option.textContent?.trim() || option.value;
+  const isSelected = option.value === selectedValue;
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "model-select-option";
+  item.dataset.value = option.value;
+  item.setAttribute("role", "option");
+  item.setAttribute("aria-selected", String(isSelected));
+  // Roving tabindex：listbox 整体只占一个 Tab 停靠点，内部用方向键移动。
+  item.tabIndex = isSelected ? 0 : -1;
+  if (isSelected) {
+    item.classList.add("is-selected");
+  }
+
+  const copy = document.createElement("span");
+  copy.className = "model-select-option-copy";
+
+  const name = document.createElement("span");
+  name.className = "model-select-option-name";
+  name.textContent = text;
+
+  const check = document.createElement("span");
+  check.className = "model-select-option-check";
+  check.setAttribute("aria-hidden", "true");
+
+  copy.append(name);
+  item.append(copy, check);
+  item.addEventListener("click", () => {
+    if (select.value !== option.value) {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const label = select.closest(".model-select-label");
+    closeModelMenu();
+    // 选完归还焦点到触发器，避免被点的按钮随后重建后焦点落到 body。
+    label?.querySelector(".model-select-trigger")?.focus();
+  });
+  return item;
 }
 
 function renderModelSelectMenu(select, menu, { force = false } = {}) {
@@ -34196,50 +34411,28 @@ function renderModelSelectMenu(select, menu, { force = false } = {}) {
   list.className = "model-select-option-list";
 
   let focusable = null;
-  for (const option of usableOptions) {
-    const text = option.textContent?.trim() || option.value;
-    const isSelected = option.value === selectedValue;
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "model-select-option";
-    item.dataset.value = option.value;
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", String(isSelected));
-    // Roving tabindex：listbox 整体只占一个 Tab 停靠点，内部用方向键移动。
-    item.tabIndex = isSelected ? 0 : -1;
-    if (isSelected) {
-      item.classList.add("is-selected");
-      focusable = item;
-    }
+  let firstOption = null;
+  for (const group of groupModelOptionsByChannel(usableOptions)) {
+    const groupNode = document.createElement("div");
+    groupNode.className = "model-select-group";
+    const groupTitle = document.createElement("div");
+    groupTitle.className = "model-select-group-title";
+    groupTitle.textContent = group.channel;
+    groupNode.append(groupTitle);
 
-    const copy = document.createElement("span");
-    copy.className = "model-select-option-copy";
-
-    const name = document.createElement("span");
-    name.className = "model-select-option-name";
-    name.textContent = text;
-
-    const check = document.createElement("span");
-    check.className = "model-select-option-check";
-    check.setAttribute("aria-hidden", "true");
-
-    copy.append(name);
-    item.append(copy, check);
-    item.addEventListener("click", () => {
-      if (select.value !== option.value) {
-        select.value = option.value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+    for (const option of group.options) {
+      const item = createModelOptionNode(option, selectedValue, select);
+      firstOption ||= item;
+      if (item.classList.contains("is-selected")) {
+        focusable = item;
       }
-      const label = select.closest(".model-select-label");
-      closeModelMenu();
-      // 选完归还焦点到触发器，避免被点的按钮随后重建后焦点落到 body。
-      label?.querySelector(".model-select-trigger")?.focus();
-    });
-    list.append(item);
+      groupNode.append(item);
+    }
+    list.append(groupNode);
   }
 
-  if (!focusable && list.firstElementChild) {
-    list.firstElementChild.tabIndex = 0;
+  if (!focusable && firstOption) {
+    firstOption.tabIndex = 0;
   }
 
   if (!usableOptions.length) {
@@ -34361,10 +34554,9 @@ function focusModelOption(option) {
     return;
   }
   // 维持 roving tabindex：被聚焦项可 Tab，其余移出 Tab 序列。
-  for (const sibling of option.parentElement?.children || []) {
-    if (sibling.classList?.contains("model-select-option")) {
-      sibling.tabIndex = sibling === option ? 0 : -1;
-    }
+  const menu = option.closest(".model-select-menu");
+  for (const item of menu?.querySelectorAll(".model-select-option") || []) {
+    item.tabIndex = item === option ? 0 : -1;
   }
   option.focus();
 }
