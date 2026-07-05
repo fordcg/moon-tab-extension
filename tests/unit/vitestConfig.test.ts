@@ -5,6 +5,7 @@ describe("Vitest discovery configuration", () => {
   it("keeps legacy Node runner tests and scratch copies out of Vitest", () => {
     const exclude = Array.isArray(config.test?.exclude) ? config.test.exclude : [];
 
+    expect(exclude).toContain("artifacts/**");
     expect(exclude).toContain(".tmp/**");
     expect(exclude).toContain("src/pages/**/*.test.mjs");
   });

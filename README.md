@@ -20,6 +20,8 @@ npm run build:extension
 
 在 Chrome/Edge 打开扩展管理页，启用开发者模式，选择“加载已解压的扩展”，目录指向 `dist/`。后续本地可分发目录由 `npm run package:extension` 生成。
 
+Phase 0-1 的 `dist/` 是降权工程化基线：默认不声明 `debugger` 权限，debugger-backed browser control、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 和 `full_access.*` 后续按独立 Phase 启用。
+
 ## 常用命令
 
 ```powershell
