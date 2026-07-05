@@ -16,7 +16,7 @@ Phase 0-1：删除 PocketAide，并建立远程 Vite / React / TypeScript 工程
 | Design | `1ba71bd` | 设计全面迁移远程工程化结构 |
 | Plan 0-1 | `5ed6ab0` | 制定远程工程化迁移基础计划 |
 | Phase 0-1 | `e9f25aa` | 删除 PocketAide 并建立远程工程化迁移基础 |
-| Phase 0-1 Review Fix | `待提交` | 降权构建 manifest 并补齐 Vitest 发现规则回归测试 |
+| Phase 0-1 Review Fix | `29934bb` | 降权构建 manifest 并补齐 Vitest 发现规则回归测试 |
 
 ## 当前验证状态
 
