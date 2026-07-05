@@ -38,6 +38,7 @@ Files and directories to delete:
 
 Files and directories to create or import from upstream clone `D:\proj\browser-ai-assistant-compare-1c98e78925f14709aacfd5772d2d431d`:
 
+- Create: `docs/superpowers/MIGRATION_STATUS.md`
 - Create: `index.html`
 - Create: `public/manifest.json`
 - Create: `vite.config.ts`
@@ -250,7 +251,80 @@ True
 
 ---
 
-### Task 4: Import Upstream TypeScript Source And Tests
+### Task 4: Create Migration Status Ledger
+
+**Files:**
+
+- Create: `docs/superpowers/MIGRATION_STATUS.md`
+
+- [ ] **Step 1: Create the migration status ledger**
+
+Use `apply_patch` to create `docs/superpowers/MIGRATION_STATUS.md` with:
+
+```markdown
+# 远程工程化迁移状态
+
+## 当前阶段
+
+Phase 0-1：删除 PocketAide，并建立远程 Vite / React / TypeScript 工程化基础骨架。
+
+## 持久入口
+
+- 总设计：`docs/superpowers/specs/2026-07-05-full-upstream-engineering-migration-design.md`
+- 当前计划：`docs/superpowers/plans/2026-07-05-full-upstream-engineering-migration-phase-0-1.md`
+
+## 已完成提交
+
+| Phase | Commit | 内容 |
+|---|---|---|
+| Design | `1ba71bd` | 设计全面迁移远程工程化结构 |
+| Plan 0-1 | `5ed6ab0` | 制定远程工程化迁移基础计划 |
+
+## 当前验证状态
+
+| 命令 | 状态 | 备注 |
+|---|---|---|
+| `npm test` | 待执行 | Phase 0-1 执行前基线 |
+| `npm run typecheck` | 待执行 | 工程化骨架导入后执行 |
+| `npm run build:extension` | 待执行 | 工程化骨架导入后执行 |
+| `npm test` | 待执行 | Vitest 基线 |
+| `npm run check:package` | 待执行 | 打包产物校验 |
+
+## 未解决问题
+
+- 尚未迁移 Moon Tab 新标签页和小游戏到 Vite 多入口构建。
+- 尚未把 `sidePanel-layout.js` 行为迁入 React 源码。
+- 尚未合并 tab scoped side panel、悬浮助手、Imagefree、Grok/MCP 和 DevTools Network bridge 到 TypeScript background。
+- 尚未删除旧 AI 侧栏 bundle 作为长期源码依赖。
+
+## 下一阶段入口
+
+Phase 0-1 完成后，编写 Phase 2 计划：迁移 Moon Tab newtab 和 game 到 Vite 多入口构建。
+```
+
+Expected: a future context can recover the migration state from the status ledger, the total design, and the current plan.
+
+- [ ] **Step 2: Verify the ledger references existing files**
+
+Run:
+
+```powershell
+Test-Path -LiteralPath docs/superpowers/MIGRATION_STATUS.md
+Test-Path -LiteralPath docs/superpowers/specs/2026-07-05-full-upstream-engineering-migration-design.md
+Test-Path -LiteralPath docs/superpowers/plans/2026-07-05-full-upstream-engineering-migration-phase-0-1.md
+```
+
+Expected:
+
+```text
+True
+True
+True
+```
+
+---
+
+### Task 5: Import Upstream TypeScript Source And Tests
 
 **Files:**
 
@@ -311,7 +385,7 @@ True
 
 ---
 
-### Task 5: Merge package.json Scripts And Dependencies
+### Task 6: Merge package.json Scripts And Dependencies
 
 **Files:**
 
@@ -406,7 +480,7 @@ Expected: `node_modules/` is created and `package-lock.json` top-level metadata 
 
 ---
 
-### Task 6: Add Basic Ignore Rules For Build Artifacts
+### Task 7: Add Basic Ignore Rules For Build Artifacts
 
 **Files:**
 
@@ -446,7 +520,7 @@ artifacts
 
 ---
 
-### Task 7: Update README For Engineering Baseline
+### Task 8: Update README For Engineering Baseline
 
 **Files:**
 
@@ -501,7 +575,7 @@ Expected: no matches.
 
 ---
 
-### Task 8: Verify Foundation Commands
+### Task 9: Verify Foundation Commands
 
 **Files:**
 
@@ -556,7 +630,43 @@ Expected: packaging tests pass and `artifacts/chrome-extension/` is generated.
 
 ---
 
-### Task 9: Commit Phase 0-1 Foundation
+### Task 10: Update Migration Status And Commit Phase 0-1 Foundation
+
+**Files:**
+
+- Modify: `docs/superpowers/MIGRATION_STATUS.md`
+
+- [ ] **Step 1: Update verification status**
+
+Use `apply_patch` to update the “当前验证状态” table in `docs/superpowers/MIGRATION_STATUS.md` so every command run in Task 9 records its actual result.
+
+If all Task 9 commands passed, the table must become:
+
+```markdown
+| 命令 | 状态 | 备注 |
+|---|---|---|
+| `npm test` | 通过 | Phase 0-1 执行前基线 |
+| `npm run typecheck` | 通过 | 工程化骨架导入后执行 |
+| `npm run build:extension` | 通过 | 工程化骨架导入后执行 |
+| `npm test` | 通过 | Vitest 基线 |
+| `npm run check:package` | 通过 | 打包产物校验 |
+```
+
+If a command failed and the user approved continuing, record `未通过` and a concise reason in the 备注 column.
+
+- [ ] **Step 2: Add the final Phase 0-1 commit placeholder before committing**
+
+Use `apply_patch` to add this row under “已完成提交”; keep the commit as `待提交` before the commit exists:
+
+```markdown
+| Phase 0-1 | `待提交` | 删除 PocketAide 并建立远程工程化迁移基础 |
+```
+
+Expected: the status ledger reflects the actual verification state before the final commit.
+
+---
+
+### Task 11: Commit Phase 0-1 Foundation
 
 **Files:**
 
@@ -583,7 +693,7 @@ plus tracked and untracked files related to the migration before staging. `Pocke
 Run:
 
 ```powershell
-git add -- package.json package-lock.json README.md .gitignore LICENSE index.html public vite.config.ts tsconfig.json vitest.config.ts playwright.config.ts postcss.config.js tailwind.config.ts src tests scripts/package-extension.mjs scripts/package-extension.test.ts
+git add -- package.json package-lock.json README.md .gitignore LICENSE index.html public vite.config.ts tsconfig.json vitest.config.ts playwright.config.ts postcss.config.js tailwind.config.ts docs/superpowers/MIGRATION_STATUS.md src tests scripts/package-extension.mjs scripts/package-extension.test.ts
 git add -A -- PocketAide
 git status --short
 ```
@@ -599,6 +709,36 @@ git commit -m "feat: 建立远程工程化迁移基础"
 ```
 
 Expected: commit succeeds.
+
+- [ ] **Step 4: Replace `待提交` with the actual Phase 0-1 commit SHA**
+
+Run:
+
+```powershell
+$Sha = git rev-parse --short HEAD
+Write-Output $Sha
+```
+
+Use `apply_patch` to replace this row in `docs/superpowers/MIGRATION_STATUS.md`:
+
+```markdown
+| Phase 0-1 | `待提交` | 删除 PocketAide 并建立远程工程化迁移基础 |
+```
+
+with:
+
+```markdown
+| Phase 0-1 | `<actual short SHA from $Sha>` | 删除 PocketAide 并建立远程工程化迁移基础 |
+```
+
+Then run:
+
+```powershell
+git add -- docs/superpowers/MIGRATION_STATUS.md
+git commit -m "docs: 更新远程工程化迁移状态"
+```
+
+Expected: migration status records the final commit SHA in a follow-up documentation commit.
 
 ---
 
@@ -617,9 +757,10 @@ After this plan is complete, write separate implementation plans for:
 Spec coverage:
 
 - PocketAide deletion is covered by Task 2.
-- Remote engineering skeleton is covered by Tasks 3-6.
-- README and command transition are covered by Task 7.
-- Verification is covered by Task 8.
-- Commit hygiene and `.claude/` exclusion are covered by Task 9.
+- Remote engineering skeleton is covered by Tasks 3 and 5-7.
+- Migration status recovery is covered by Tasks 4 and 10-11.
+- README and command transition are covered by Task 8.
+- Verification is covered by Task 9.
+- Commit hygiene and `.claude/` exclusion are covered by Task 11.
 
 No unresolved markers remain. This plan intentionally does not implement newtab/game/side-panel/background behavior migration because those are independent subsystems called out for follow-up plans.
