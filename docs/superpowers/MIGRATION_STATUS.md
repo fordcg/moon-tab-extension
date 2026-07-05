@@ -2,12 +2,12 @@
 
 ## 当前阶段
 
-Phase 0-1：删除 PocketAide，并建立远程 Vite / React / TypeScript 工程化基础骨架。
+Phase 2：迁移 Moon Tab 新标签页和小游戏到 Vite 多入口构建（计划已编写，待执行）。
 
 ## 持久入口
 
 - 总设计：`docs/superpowers/specs/2026-07-05-full-upstream-engineering-migration-design.md`
-- 当前计划：`docs/superpowers/plans/2026-07-05-full-upstream-engineering-migration-phase-0-1.md`
+- 当前计划：`docs/superpowers/plans/2026-07-05-full-upstream-engineering-migration-phase-2.md`
 
 ## 已完成提交
 
@@ -39,4 +39,4 @@ Phase 0-1：删除 PocketAide，并建立远程 Vite / React / TypeScript 工程
 
 ## 下一阶段入口
 
-Phase 0-1 完成后，编写 Phase 2 计划：迁移 Moon Tab newtab 和 game 到 Vite 多入口构建。
+执行 Phase 2 计划：迁移 Moon Tab newtab 和 game 到 Vite 多入口构建。
