@@ -47,7 +47,7 @@ const SENSITIVE_TOKEN_NAMES = new Set([
 ]);
 const SENSITIVE_KEY_PATTERN = /(^|[-_])(token|secret|password|passwd|pwd|authorization|auth|api[-_]?key|session|jwt|credential|client[-_]?secret|refresh[-_]?token|access[-_]?token)([-_]|$)/i;
 const BEARER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
-const ASSIGNMENT_PATTERN = /\b([A-Za-z][A-Za-z0-9_-]*)(\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s&,;}]+)/g;
+const ASSIGNMENT_PATTERN = /\b([A-Za-z][A-Za-z0-9_.%\[\]-]*)(\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s&,;}]+)/g;
 
 const normalizeText = (value) => (typeof value === "string" ? value : "");
 
@@ -61,6 +61,18 @@ export function truncateText(value, maxLength = DEFAULT_MAX_TEXT_LENGTH) {
 
 export function isSensitiveName(name) {
   const rawName = normalizeText(name).trim();
+  const names = [rawName];
+  try {
+    const decodedName = decodeURIComponent(rawName);
+    if (decodedName !== rawName) names.push(decodedName);
+  } catch {
+    // Keep the raw key when percent decoding fails.
+  }
+
+  return names.some(isSensitiveNameCandidate);
+}
+
+function isSensitiveNameCandidate(rawName) {
   const normalized = rawName.toLowerCase();
   if (SENSITIVE_HEADER_NAMES.has(normalized) || SENSITIVE_COMPACT_NAMES.has(normalized)) return true;
   if (SENSITIVE_KEY_PATTERN.test(normalized)) return true;

@@ -1,10 +1,26 @@
 import {
+  NETWORK_CLEAR_REQUESTS_TOOL_ID,
+  NETWORK_CLEAR_REQUESTS_TOOL_NAME,
+  NETWORK_COMPARE_REQUESTS_TOOL_ID,
+  NETWORK_COMPARE_REQUESTS_TOOL_NAME,
+  NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID,
+  NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME,
+  NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID,
+  NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_NAME,
   NETWORK_GET_REQUEST_DETAILS_TOOL_ID,
   NETWORK_GET_REQUEST_DETAILS_TOOL_NAME,
   NETWORK_LIST_REQUESTS_TOOL_ID,
   NETWORK_LIST_REQUESTS_TOOL_NAME,
+  formatNetworkClearRequestsResult,
+  formatNetworkCompareRequestsResult,
+  formatNetworkJsCandidatesResult,
+  formatNetworkParameterCandidatesResult,
   formatNetworkRequestDetailsResult,
   formatNetworkRequestsListResult,
+  normalizeNetworkClearRequestsArguments,
+  normalizeNetworkCompareRequestsArguments,
+  normalizeNetworkExtractJsCandidatesArguments,
+  normalizeNetworkFindParameterCandidatesArguments,
   normalizeNetworkGetRequestDetailsArguments,
   normalizeNetworkListRequestsArguments,
   summarizeNetworkToolResult,
@@ -28,9 +44,12 @@ export async function executeNetworkTool(toolCall, options = {}) {
     );
   }
 
-  return toolKind === "list"
-    ? executeNetworkListRequestsTool(toolCall, options)
-    : executeNetworkGetRequestDetailsTool(toolCall, options);
+  if (toolKind === "list") return executeNetworkListRequestsTool(toolCall, options);
+  if (toolKind === "details") return executeNetworkGetRequestDetailsTool(toolCall, options);
+  if (toolKind === "clear") return executeNetworkClearRequestsTool(toolCall, options);
+  if (toolKind === "compare") return executeNetworkCompareRequestsTool(toolCall, options);
+  if (toolKind === "extract-js-candidates") return executeNetworkExtractJsCandidatesTool(toolCall, options);
+  return executeNetworkFindParameterCandidatesTool(toolCall, options);
 }
 
 async function executeNetworkListRequestsTool(toolCall, options) {
@@ -99,9 +118,106 @@ async function executeNetworkGetRequestDetailsTool(toolCall, options) {
   }
 }
 
+async function executeNetworkClearRequestsTool(toolCall, options) {
+  const validation = normalizeNetworkClearRequestsArguments(getRawToolArguments(toolCall));
+  if (!validation.ok) {
+    return createToolError(toolCall, validation.message, ERROR_CODES.INVALID_ARGUMENTS);
+  }
+
+  const args = validation.args;
+  if (typeof options.clearNetworkRequests !== "function") {
+    return createToolError(toolCall, NETWORK_UNAVAILABLE_MESSAGE, ERROR_CODES.DEVTOOLS_UNAVAILABLE);
+  }
+
+  try {
+    const response = await options.clearNetworkRequests({ tabId: args.tabId });
+    if (!response?.ok) {
+      return createToolError(
+        toolCall,
+        response?.message || NETWORK_UNAVAILABLE_MESSAGE,
+        normalizeReaderErrorCode(response?.code, ERROR_CODES.DEVTOOLS_UNAVAILABLE),
+      );
+    }
+
+    return {
+      toolCallId: toolCall.id,
+      name: toolCall.name,
+      content: formatNetworkClearRequestsResult(response),
+      summary: "Network 请求缓存已清空。",
+    };
+  } catch (error) {
+    return createToolError(toolCall, getErrorMessage(error), ERROR_CODES.NETWORK_TOOL_ERROR);
+  }
+}
+
+async function executeNetworkCompareRequestsTool(toolCall, options) {
+  const validation = normalizeNetworkCompareRequestsArguments(getRawToolArguments(toolCall));
+  if (!validation.ok) {
+    return createToolError(toolCall, validation.message, ERROR_CODES.INVALID_ARGUMENTS);
+  }
+
+  return executeNetworkDetailsAnalysisTool(toolCall, options, validation.args, formatNetworkCompareRequestsResult);
+}
+
+async function executeNetworkFindParameterCandidatesTool(toolCall, options) {
+  const validation = normalizeNetworkFindParameterCandidatesArguments(getRawToolArguments(toolCall));
+  if (!validation.ok) {
+    return createToolError(toolCall, validation.message, ERROR_CODES.INVALID_ARGUMENTS);
+  }
+
+  return executeNetworkDetailsAnalysisTool(toolCall, options, validation.args, formatNetworkParameterCandidatesResult);
+}
+
+async function executeNetworkExtractJsCandidatesTool(toolCall, options) {
+  const validation = normalizeNetworkExtractJsCandidatesArguments(getRawToolArguments(toolCall));
+  if (!validation.ok) {
+    return createToolError(toolCall, validation.message, ERROR_CODES.INVALID_ARGUMENTS);
+  }
+
+  const args = validation.args;
+  return executeNetworkDetailsAnalysisTool(toolCall, options, args, (details) =>
+    formatNetworkJsCandidatesResult(details, args),
+  );
+}
+
+async function executeNetworkDetailsAnalysisTool(toolCall, options, args, formatter) {
+  if (typeof options.getNetworkDetails !== "function") {
+    return createToolError(toolCall, NETWORK_UNAVAILABLE_MESSAGE, ERROR_CODES.DEVTOOLS_UNAVAILABLE);
+  }
+
+  try {
+    const response = await options.getNetworkDetails({ tabId: args.tabId, requestIds: args.requestIds });
+    if (!response?.ok) {
+      return createToolError(
+        toolCall,
+        response?.message || NETWORK_UNAVAILABLE_MESSAGE,
+        normalizeReaderErrorCode(response?.code, ERROR_CODES.DEVTOOLS_UNAVAILABLE),
+      );
+    }
+
+    const details = filterDetailsByRequestIds(response.details, args.requestIds);
+    return {
+      toolCallId: toolCall.id,
+      name: toolCall.name,
+      content: formatter(details),
+      summary: summarizeNetworkToolResult(details),
+    };
+  } catch (error) {
+    return createToolError(toolCall, getErrorMessage(error), ERROR_CODES.NETWORK_TOOL_ERROR);
+  }
+}
+
 function resolveNetworkToolKind(name) {
   if (name === NETWORK_LIST_REQUESTS_TOOL_ID || name === NETWORK_LIST_REQUESTS_TOOL_NAME) return "list";
   if (name === NETWORK_GET_REQUEST_DETAILS_TOOL_ID || name === NETWORK_GET_REQUEST_DETAILS_TOOL_NAME) return "details";
+  if (name === NETWORK_CLEAR_REQUESTS_TOOL_ID || name === NETWORK_CLEAR_REQUESTS_TOOL_NAME) return "clear";
+  if (name === NETWORK_COMPARE_REQUESTS_TOOL_ID || name === NETWORK_COMPARE_REQUESTS_TOOL_NAME) return "compare";
+  if (name === NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID || name === NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_NAME) {
+    return "find-parameter-candidates";
+  }
+  if (name === NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID || name === NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME) {
+    return "extract-js-candidates";
+  }
   return undefined;
 }
 
@@ -111,6 +227,19 @@ function applyListFilters(requests, args) {
 
   const resourceTypes = new Set(args.resourceTypes.map((type) => type.toLowerCase()));
   return records.filter((request) => resourceTypes.has(String(request?.resourceType || "").trim().toLowerCase()));
+}
+
+function filterDetailsByRequestIds(details, requestIds) {
+  const records = Array.isArray(details) ? details : [];
+  const detailsById = new Map();
+  for (const detail of records) {
+    const id = String(detail?.id ?? "").trim();
+    if (id && !detailsById.has(id)) {
+      detailsById.set(id, detail);
+    }
+  }
+
+  return requestIds.map((id) => detailsById.get(String(id).trim())).filter(Boolean);
 }
 
 function createToolError(toolCall, message, code) {

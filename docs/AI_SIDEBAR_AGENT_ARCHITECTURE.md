@@ -5,7 +5,7 @@
 本侧边栏后续按“开发者级浏览器 Agent”演进，而不是只做普通聊天框。必须同时保证：
 
 1. **丝滑操控浏览器**：保留并增强基于 `chrome.debugger` / CDP 的快照、点击、填写、按键、等待、弹窗处理能力。
-2. **分析接口辅助开发**：保留 DevTools Network 桥接能力，当前支持请求列表和详情；差异分析、curl / fetch / 类型生成作为后续评估方向。
+2. **分析接口辅助开发**：保留 DevTools Network 桥接能力，当前支持请求列表、详情、清空缓存、只读差异分析、关键参数候选和 JS 候选片段；curl / fetch / 类型生成作为后续评估方向。
 3. **工具与 MCP 可扩展**：所有内置工具、后续本地工具、MCP Bridge 工具都通过统一 Tool Registry 暴露给模型。
 4. **高可用**：主聊天永远可用；页面上下文、Network、浏览器控制、MCP 都是增强能力，失败时只降级对应能力。
 
@@ -103,7 +103,30 @@ Phase 3 只迁入两个只读 Network 工具，使用已有 DevTools Network 桥
 
 后台 wiring 仍复用既有 runtime 消息：`network.list_requests` 调用 `networkContext.getSnapshot`，`network.get_request_details` 调用 `networkContext.getDetails`。实际数据来源仍是 `src/ai-assistant/devtools.js` 中 `chrome.devtools.network` 采集到的 snapshot / details；目标标签页的 DevTools Network 面板必须保持打开并连接。
 
-当前不迁入上游 Network 的差异分析、curl/fetch 生成、类型生成、HAR 导出、请求重放或独立录制器。后续可单独评估基于已脱敏数据的差异分析、curl/fetch 生成和类型生成；Replay、Runtime、Full Access、原始 Cookie / Authorization / Token / Secret 不作为默认模型工具暴露。
+Phase 3 当时不迁入上游 Network 的差异分析、curl/fetch 生成、类型生成、HAR 导出、请求重放或独立录制器。Phase 4 已迁入基于已脱敏详情的只读差异分析和关键参数候选，Phase 5 已迁入 requestIds 约束版 JS 候选片段，Phase 6 已迁入只清空缓存的 `network.clear_requests`；`network.wait_for_requests`、curl/fetch 生成、类型生成、HAR 导出、请求重放、Replay、Runtime、Full Access、原始 Cookie / Authorization / Token / Secret 仍不作为默认模型工具暴露。
+
+### Phase 4：network.* 只读分析工具
+
+Phase 4 在 Phase 3 的已脱敏详情基础上继续迁入两个低风险 Network 分析工具：
+
+- `network.compare_requests`：读取 2 到 50 个请求详情，输出稳定字段、变化字段和疑似关键参数。
+- `network.find_parameter_candidates`：读取 1 到 50 个请求详情，从 query、请求头、JSON/form/text 请求体中提取签名、时间戳、随机数、请求 ID、凭据类字段和编码载荷候选。
+
+这两个工具仍由 `src/shared/network-tools.mjs` 定义参数和纯分析逻辑，由 `src/ai-assistant/background/network-tools-service.js` 调用 `networkContext.getDetails` 读取 DevTools 缓存。分析前会再次经过 `redactNetworkRecord()`，输出只包含脱敏、截断后的字段摘要。
+
+Phase 4 当时不新增 JS 候选片段、`network.clear_requests`、`network.wait_for_requests`、debugger-backed recorder、同源 JS fetch、SourceMap 读取、Runtime evaluate、请求重放或 Full Access。Phase 5 已覆盖 requestIds 约束版 `network.extract_js_candidates`，Phase 6 已覆盖只清空缓存的 `network.clear_requests`；`network.wait_for_requests`、无 requestIds 的全局 JS 搜索、JS/SourceMap、Runtime、Boundary、Replay 和 Full Access 需要后续独立设计授权边界、审计和 UI 确认。
+
+### Phase 5：network.extract_js_candidates
+
+Phase 5 迁入 requestIds 约束版 `network.extract_js_candidates`。该工具只读取 `network.list_requests` 返回并由模型显式传入的 JS 请求详情，从已脱敏、已截断的 `responseBody` 中按默认关键词、显式关键词或 `urlIncludes` 提取有限候选片段。
+
+该阶段不建立 JS 资源索引，不支持无 requestIds 的全局 JS 搜索，不做同源 fetch / 补位，不解析 Source Map，不执行 Runtime，不发送请求，也不读取原始 Cookie、Authorization、Token、Secret 或 Storage。需要更大源码上下文、Source Map 或运行时模块摘要时，应进入后续 `js.*` / `sourcemap.*` / `runtime.*` 独立阶段。
+
+### Phase 6：network.clear_requests
+
+Phase 6 迁入只清空缓存的 `network.clear_requests`。该工具只通过既有 DevTools port 通知 `src/ai-assistant/devtools.js` 清空内存中的 `requestStore`，并同步清空后台 snapshot；随后 DevTools bridge 会推送空 snapshot，下一次 `network.list_requests` 只显示清空后新采集的请求。
+
+该阶段不迁入 `network.wait_for_requests`，因为等待新增请求需要后台和 DevTools 建立一次性等待 RPC、超时语义和断线恢复策略。`network.clear_requests` 不发送请求、不读取响应体、不补 fetch、不执行 Runtime、不接触 Cookie、Authorization、Token、Secret 或 Storage。
 
 ## Tool Registry 约定
 
@@ -230,7 +253,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_qu
 - `python scripts\verify_browser_control_tool_loop.py`：启动本地普通 HTTP 页面和本地假 OpenAI 接口，验证 `chat.send → wait_for_network_idle → scroll_page → take_snapshot → click → 最终回复` 的真实工具闭环。
 - `python scripts\verify_mcp_bridge_tool_loop.py`：启动本地假 MCP Bridge 和假 OpenAI 接口，验证 `chat.send → mcp_dev_echo → POST /tools/call → 最终回复` 的真实 MCP 工具闭环。
 
-Phase 3 的 `network.list_requests` / `network.get_request_details` 纯 Node 回归由 `npm test` 中的 `node scripts\test_network_tools.mjs` 覆盖；修改 Network 工具契约或后台适配时，也应单独运行 `node scripts\test_network_tools.mjs` 和 `node scripts\test_background_agent_tools_wiring.mjs`。
+Phase 3/4/5/6 的 `network.list_requests`、`network.get_request_details`、`network.clear_requests`、`network.compare_requests`、`network.find_parameter_candidates`、`network.extract_js_candidates` 纯 Node 回归由 `npm test` 中的 `node scripts\test_network_tools.mjs` 覆盖；修改 Network 工具契约或后台适配时，也应单独运行 `node scripts\test_network_tools.mjs` 和 `node scripts\test_background_agent_tools_wiring.mjs`。
 
 CI 已预置：
 

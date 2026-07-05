@@ -80,6 +80,33 @@ AI 侧边栏已迁入两个只读 Network 工具，复用现有 DevTools Network
 
 Phase 3 的边界：URL query、headers、body 和响应体中的 Cookie、Authorization、Token、Secret、密码、API Key 等敏感信息默认脱敏，长文本在工具边界截断。当前仍不迁入 Replay、Runtime、Full Access、Debugger Network recorder，也不向模型暴露原始凭据。
 
+### Phase 4：DevTools Network 只读分析
+
+AI 侧边栏继续基于 Phase 3 的已脱敏 Network 详情增加两个只读分析工具：
+
+- `network.compare_requests`：对多个请求做稳定字段、变化字段和疑似关键参数对比。
+- `network.find_parameter_candidates`：从 query、请求头和请求体中提取签名、时间戳、随机数、请求 ID、凭据类字段候选。
+
+这两个工具只读取 `network.list_requests` 返回的 `requestIds` 对应详情，不新增 debugger-backed recorder，不发送请求，不执行页面脚本。输出会再次脱敏和截断；Phase 4 当时不迁入 JS 候选片段、`network.clear_requests`、`network.wait_for_requests`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*` 或原始凭据读取。
+
+### Phase 5：DevTools Network JS 候选片段
+
+AI 侧边栏在 Phase 4 的只读 Network 分析基础上继续增加 `network.extract_js_candidates`：
+
+- 只分析 `network.list_requests` 返回、再由模型显式传入的 JS 请求 `requestIds`。
+- 从已脱敏、已截断的 JS `responseBody` 中按关键词、接口路径或参数名提取有限候选片段。
+- 不执行页面脚本，不补 fetch，不解析 Source Map，不读取 Cookie、Storage 或原始凭据。
+
+### Phase 6：DevTools Network 清空请求缓存
+
+AI 侧边栏继续迁入低风险的 `network.clear_requests`：
+
+- 只清空当前 DevTools bridge 和后台 snapshot 中的已采集请求缓存。
+- 清空后 DevTools bridge 会推送空 snapshot，后续 `network.list_requests` 从新请求重新开始。
+- 不发送网络请求，不读取额外详情，不执行页面脚本，不关闭 DevTools。
+
+当前仍不迁入 `network.wait_for_requests`、无 requestIds 的全局 JS 搜索、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 或 `full_access.*`。
+
 ## 目录结构
 
 - `manifest.json`: MV3 权限、入口和资源暴露清单。

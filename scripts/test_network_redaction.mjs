@@ -25,6 +25,8 @@ assert.equal(isSensitiveName("secretKey"), true);
 assert.equal(isSensitiveName("clientSecret"), true);
 assert.equal(isSensitiveName("xApiKey"), true);
 assert.equal(isSensitiveName("AuthToken"), true);
+assert.equal(isSensitiveName("password[]"), true);
+assert.equal(isSensitiveName("token%5B%5D"), true);
 assert.equal(isSensitiveName("content-type"), false);
 
 const url = redactUrl("https://api.example.test/user?token=abc123&q=visible&client_secret=def456");
@@ -38,6 +40,11 @@ const camelCaseUrl = redactUrl(
 assert.equal(camelCaseUrl.redacted, true);
 assert.equal(decodeURIComponent(camelCaseUrl.text).includes("q=visible"), true);
 assertNoSecret(camelCaseUrl, ["url-auth-secret", "url-session-secret", "url-secret-key", "url-api-key"]);
+
+const relativeUrl = redactUrl("/api/orders?password[]=relative-query-secret&token%5B%5D=encoded-query-secret&safe=visible");
+assert.equal(relativeUrl.redacted, true);
+assert.equal(relativeUrl.text.includes("safe=visible"), true);
+assertNoSecret(relativeUrl, ["relative-query-secret", "encoded-query-secret"]);
 
 const headers = redactHeaders([
   { name: "Authorization", value: "Bearer secret-token" },
@@ -84,6 +91,11 @@ const textBody = redactBodyText(
 assert.equal(textBody.redacted, true);
 assert.equal(textBody.text.includes("visible"), true);
 assertNoSecret(textBody, ["plain-secret", "plain-auth-secret", "plain-session-secret", "plain-secret-key", "header-secret"]);
+
+const bracketBody = redactBodyText("password[]=body-password-secret&token%5B%5D=body-token-secret&safe=visible");
+assert.equal(bracketBody.redacted, true);
+assert.equal(bracketBody.text.includes("safe=visible"), true);
+assertNoSecret(bracketBody, ["body-password-secret", "body-token-secret"]);
 
 const record = redactNetworkRecord({
   id: "req-1",

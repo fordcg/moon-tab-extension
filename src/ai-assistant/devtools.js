@@ -23,6 +23,12 @@ function connectRuntimePort() {
   port = nextPort;
 
   nextPort.onMessage.addListener((message) => {
+    if (message?.type === "networkContext.clearRequests") {
+      requestStore.clear();
+      postSnapshotUpdated();
+      return;
+    }
+
     if (message?.type !== "networkContext.getDetails") {
       return;
     }

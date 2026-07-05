@@ -11,6 +11,8 @@ const networkToolsServiceSource = await readFile(
   new URL("../src/ai-assistant/background/network-tools-service.js", import.meta.url),
   "utf8",
 );
+const networkToolsSource = await readFile(new URL("../src/shared/network-tools.mjs", import.meta.url), "utf8");
+const devtoolsSource = await readFile(new URL("../src/ai-assistant/devtools.js", import.meta.url), "utf8");
 const serviceWorkerSource = await readFile(new URL("../src/background/service-worker.js", import.meta.url), "utf8");
 const sidePanelHtml = await readFile(new URL("../src/ai-assistant/index.html", import.meta.url), "utf8");
 const sidePanelSource = await readFile(new URL("../src/ai-assistant/sidePanel.js", import.meta.url), "utf8");
@@ -109,6 +111,108 @@ assert.match(
   "background must append shared Network tool definitions",
 );
 
+assert.doesNotMatch(
+  backgroundSource,
+  /NETWORK_LIST_REQUESTS_TOOL_ID\)\|\|!n\.has\(NETWORK_GET_REQUEST_DETAILS_TOOL_ID\)\)\{let \w=NETWORK_TOOL_DEFINITIONS\.filter/,
+  "background must append any missing shared Network tool definitions, not only when Phase 3 tools are absent",
+);
+
+assert.match(
+  networkToolsSource,
+  /NETWORK_CLEAR_REQUESTS_TOOL_ID/,
+  "shared Network tools must define network.clear_requests",
+);
+
+assert.match(
+  networkToolsSource,
+  /NETWORK_COMPARE_REQUESTS_TOOL_ID/,
+  "shared Network tools must define network.compare_requests",
+);
+
+assert.match(
+  networkToolsSource,
+  /NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID/,
+  "shared Network tools must define network.find_parameter_candidates",
+);
+
+assert.match(
+  networkToolsSource,
+  /NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID/,
+  "shared Network tools must define network.extract_js_candidates",
+);
+
+assert.match(
+  networkToolsServiceSource,
+  /NETWORK_CLEAR_REQUESTS_TOOL_ID|NETWORK_CLEAR_REQUESTS_TOOL_NAME/,
+  "Network tools service must dispatch network.clear_requests",
+);
+
+assert.match(
+  networkToolsServiceSource,
+  /NETWORK_COMPARE_REQUESTS_TOOL_ID|NETWORK_COMPARE_REQUESTS_TOOL_NAME/,
+  "Network tools service must dispatch network.compare_requests",
+);
+
+assert.match(
+  networkToolsServiceSource,
+  /NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID|NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_NAME/,
+  "Network tools service must dispatch network.find_parameter_candidates",
+);
+
+assert.match(
+  networkToolsServiceSource,
+  /clearNetworkRequests/,
+  "Network tools service must call a clearNetworkRequests adapter for network.clear_requests",
+);
+
+assert.match(
+  backgroundSource,
+  /clearNetworkRequests:\(\{tabId:\w\}=\{\}\)=>dn\(\{type:`networkContext\.clearRequests`,tabId:\w\}\)/,
+  "background must wire network.clear_requests to networkContext.clearRequests",
+);
+
+assert.match(
+  backgroundSource,
+  /networkContext\.getSnapshot`\|\|e\.type===`networkContext\.getDetails`\|\|e\.type===`networkContext\.clearRequests`/,
+  "runtime message handler must accept networkContext.clearRequests",
+);
+
+assert.match(
+  backgroundSource,
+  /networkContext\.clearRequests`\}\)\}catch\{return\{ok:!1,message:rn\}\}t\.requests=\[\];return\{ok:!0,tabId:t\.tabId,clearedCount:n\}/,
+  "background must clear its cached Network snapshot only after DevTools clear postMessage succeeds",
+);
+
+assert.match(
+  devtoolsSource,
+  /networkContext\.clearRequests/,
+  "DevTools bridge must listen for networkContext.clearRequests",
+);
+
+assert.match(
+  devtoolsSource,
+  /requestStore\.clear\(\);[\s\S]*postSnapshotUpdated\(\)/,
+  "DevTools bridge must clear the request store and publish an empty snapshot",
+);
+
+assert.match(
+  networkToolsServiceSource,
+  /function resolveNetworkToolKind\(name\) \{[\s\S]*?if \(name === NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID \|\| name === NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME\) \{\s*return "extract-js-candidates";\s*\}/,
+  "Network tools service must resolve network.extract_js_candidates to the extract-js-candidates dispatch kind",
+);
+
+assert.match(
+  networkToolsServiceSource,
+  /export async function executeNetworkTool\(toolCall, options = \{\}\) \{[\s\S]*?const toolKind = resolveNetworkToolKind\(toolCall\?\.name\);[\s\S]*?if \(toolKind === "extract-js-candidates"\) return executeNetworkExtractJsCandidatesTool\(toolCall, options\);/,
+  "Network tools service must dispatch the extract-js-candidates kind to executeNetworkExtractJsCandidatesTool",
+);
+
+assert.match(
+  backgroundSource,
+  /JS 候选片段|network_extract_js_candidates/,
+  "background prompt must mention Phase 5 Network JS candidate extraction",
+);
+
 assert.match(
   backgroundSource,
   /automation-playbooks\.mjs/,
@@ -167,6 +271,24 @@ assert.match(
   backgroundSource,
   /需要读取请求\/响应详情时[\s\S]*已脱敏、截断[\s\S]*不要要求或猜测 Cookie、Authorization、Token、Secret 原文/,
   "background prompt must include Network redaction, truncation, and sensitive-field boundaries",
+);
+
+assert.match(
+  backgroundSource,
+  /接口差异分析|差异分析/,
+  "background prompt must mention Phase 4 Network request comparison",
+);
+
+assert.match(
+  backgroundSource,
+  /关键参数候选|关键参数/,
+  "background prompt must mention Phase 4 Network parameter candidate discovery",
+);
+
+assert.match(
+  backgroundSource,
+  /network_compare_requests[\s\S]*network_find_parameter_candidates/,
+  "background prompt must route Phase 4 Network analysis through the read-only redacted tools",
 );
 
 assert.match(
