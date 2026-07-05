@@ -39,8 +39,8 @@ describe("本地扩展打包脚本", () => {
     await writeFile(join(packageRoot, "sidePanel.js"), "", "utf8");
     await writeFile(join(packageRoot, "assets", "index-abc.js"), "", "utf8");
 
-    expect(collectHtmlAssetReferences(await readFile(join(packageRoot, "index.html"), "utf8"))).toEqual(["assets/index-abc.js", "assets/index-def.css", "sidePanel.js"]);
-    await expect(ensureHtmlAssetReferences(packageRoot, ["index.html"])).rejects.toThrow("index.html -> assets/index-def.css");
+    expect(collectHtmlAssetReferences(await readFile(join(packageRoot, "index.html"), "utf8"))).toEqual(["/assets/index-def.css", "assets/index-abc.js", "sidePanel.js"]);
+    await expect(ensureHtmlAssetReferences(packageRoot, ["index.html"])).rejects.toThrow("index.html -> /assets/index-def.css");
   });
 
   it("拒绝跳出打包目录的 HTML 资源引用", async () => {
@@ -55,6 +55,62 @@ describe("本地扩展打包脚本", () => {
     await writeFile(join(packageRoot, "index.html"), '<script src="assets/../../outside.js"></script>', "utf8");
 
     await expect(ensureHtmlAssetReferences(packageRoot, ["index.html"])).rejects.toThrow("index.html -> assets/../../outside.js");
+  });
+
+  it("支持嵌套 HTML 页面引用 dist 根目录内的相对资源", async () => {
+    const packageRoot = await mkdir(join(tmpdir(), `browser-ai-package-nested-${Date.now()}`), { recursive: true });
+    if (!packageRoot) {
+      throw new Error("无法创建临时打包目录。");
+    }
+
+    await mkdir(join(packageRoot, "src", "pages", "newtab"), { recursive: true });
+    await mkdir(join(packageRoot, "assets"), { recursive: true });
+    await writeFile(
+      join(packageRoot, "src", "pages", "newtab", "index.html"),
+      '<script type="module" src="../../../assets/newtab.js"></script><link href="../../../assets/newtab.css" rel="stylesheet">',
+      "utf8",
+    );
+    await writeFile(join(packageRoot, "assets", "newtab.js"), "", "utf8");
+    await writeFile(join(packageRoot, "assets", "newtab.css"), "", "utf8");
+
+    await expect(ensureHtmlAssetReferences(packageRoot, ["src/pages/newtab/index.html"])).resolves.toBeUndefined();
+  });
+
+  it("支持嵌套 HTML 页面使用根相对路径引用 dist 根目录资源", async () => {
+    const packageRoot = await mkdir(join(tmpdir(), `browser-ai-package-root-relative-${Date.now()}`), { recursive: true });
+    if (!packageRoot) {
+      throw new Error("无法创建临时打包目录。");
+    }
+
+    await mkdir(join(packageRoot, "src", "pages", "newtab"), { recursive: true });
+    await mkdir(join(packageRoot, "assets"), { recursive: true });
+    await writeFile(join(packageRoot, "src", "pages", "newtab", "index.html"), '<script type="module" src="/assets/root.js"></script>', "utf8");
+    await writeFile(join(packageRoot, "assets", "root.js"), "", "utf8");
+
+    await expect(ensureHtmlAssetReferences(packageRoot, ["src/pages/newtab/index.html"])).resolves.toBeUndefined();
+  });
+
+  it("拒绝嵌套 HTML 页面引用 dist 根目录外的资源", async () => {
+    const tempRoot = await mkdir(join(tmpdir(), `browser-ai-package-nested-traversal-${Date.now()}`), { recursive: true });
+    if (!tempRoot) {
+      throw new Error("无法创建临时打包目录。");
+    }
+
+    const packageRoot = join(tempRoot, "package");
+    await mkdir(join(packageRoot, "src", "pages", "newtab"), { recursive: true });
+    await writeFile(join(tempRoot, "outside.js"), "", "utf8");
+    await writeFile(join(packageRoot, "src", "pages", "newtab", "index.html"), '<script src="../../../../outside.js"></script>', "utf8");
+
+    await expect(ensureHtmlAssetReferences(packageRoot, ["src/pages/newtab/index.html"])).rejects.toThrow("src/pages/newtab/index.html -> ../../../../outside.js");
+  });
+
+  it("打包脚本要求 Phase 2 的 newtab 和 game 构建产物", async () => {
+    const scriptSource = await readFile(join(projectRoot, "scripts", "package-extension.mjs"), "utf8");
+
+    expect(scriptSource).toContain('"src/pages/newtab/index.html"');
+    expect(scriptSource).toContain('"src/pages/game/index.html"');
+    expect(scriptSource).toContain('"src/pages/game/vendor/matter.min.js"');
+    expect(scriptSource).toContain('ensureHtmlAssetReferences(packageDir, ["index.html", "src/pages/newtab/index.html", "src/pages/game/index.html"])');
   });
 
   it("清理复制后残留的测试文件和空测试目录", async () => {

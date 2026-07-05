@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, test as base } from "@playwright/test";
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Worker } from "@playwright/test";
 import { resolveBrowserExecutablePath } from "./browserExecutable";
 
 interface ExtensionFixtures {
@@ -38,12 +38,30 @@ export const test = base.extend<ExtensionFixtures>({
     }
   },
   extensionId: async ({ extensionContext }, use) => {
-    let [serviceWorker] = extensionContext.serviceWorkers();
+    let serviceWorker: Worker | null = extensionContext.serviceWorkers()[0] ?? null;
     if (!serviceWorker) {
-      serviceWorker = await extensionContext.waitForEvent("serviceworker");
+      serviceWorker = await extensionContext.waitForEvent("serviceworker", { timeout: 3_000 }).catch(() => null);
     }
 
-    const extensionId = new URL(serviceWorker.url()).host;
+    if (serviceWorker) {
+      await use(new URL(serviceWorker.url()).host);
+      return;
+    }
+
+    let extensionId: string;
+    const page = await extensionContext.newPage();
+    try {
+      await page.goto("chrome://newtab/");
+      await page.waitForURL(
+        (url) => url.protocol === "chrome-extension:" && url.pathname.endsWith("/src/pages/newtab/index.html"),
+        { timeout: 5_000 },
+      );
+
+      extensionId = new URL(page.url()).host;
+    } finally {
+      await page.close();
+    }
+
     await use(extensionId);
   },
 });

@@ -1,9 +1,22 @@
-import { resolve } from "node:path";
+import { copyFile, mkdir } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { build, defineConfig, type PluginOption } from "vite";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
+
+function copyLegacyPageStaticAssetsPlugin(): PluginOption {
+  return {
+    name: "copy-legacy-page-static-assets",
+    apply: "build",
+    closeBundle: async () => {
+      const matterOutput = resolve(rootDir, "dist/src/pages/game/vendor/matter.min.js");
+      await mkdir(dirname(matterOutput), { recursive: true });
+      await copyFile(resolve(rootDir, "src/pages/game/vendor/matter.min.js"), matterOutput);
+    },
+  };
+}
 
 function buildContentScriptPlugin(): PluginOption {
   return {
@@ -35,7 +48,7 @@ function buildContentScriptPlugin(): PluginOption {
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), buildContentScriptPlugin()],
+  plugins: [react(), copyLegacyPageStaticAssetsPlugin(), buildContentScriptPlugin()],
   resolve: {
     alias: {
       "@": resolve(rootDir, "src"),
@@ -47,6 +60,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         sidePanel: resolve(rootDir, "index.html"),
+        newtab: resolve(rootDir, "src/pages/newtab/index.html"),
+        game: resolve(rootDir, "src/pages/game/index.html"),
         "background/index": resolve(rootDir, "src/background/index.ts"),
       },
       output: {

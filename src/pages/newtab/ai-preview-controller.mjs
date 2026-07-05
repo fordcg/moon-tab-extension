@@ -320,7 +320,7 @@ export const createAiPreviewController = ({ elements, callbacks, deps, config = 
 
     if (aiToggleButton instanceof HTMLButtonElement) {
       aiToggleButton.setAttribute("aria-pressed", isAiSearchEnabled ? "true" : "false");
-      aiToggleButton.setAttribute("aria-label", isAiSearchActivating ? "AI增强搜索启用中" : isAiSearchEnabled ? "关闭AI增强搜索" : "开启AI增强搜索");
+      aiToggleButton.setAttribute("aria-label", "切换AI增强搜索");
     }
 
     if (state === "searching") {

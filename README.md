@@ -20,6 +20,8 @@ npm run build:extension
 
 在 Chrome/Edge 打开扩展管理页，启用开发者模式，选择“加载已解压的扩展”，目录指向 `dist/`。后续本地可分发目录由 `npm run package:extension` 生成。
 
+Phase 2 起，`dist/` 同时包含 Moon Tab 新标签页和小游戏页面。新标签页由构建后的 `src/pages/newtab/index.html` 提供，游戏页面由 `src/pages/game/index.html` 提供；页面间导航继续使用这两个扩展内路径。
+
 Phase 0-1 的 `dist/` 是降权工程化基线：默认不声明 `debugger` 权限。上游 debugger-backed browser control、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 和 `full_access.*` 源码已导入，可能出现在工具偏好设置中，但当前构建不会在运行时暴露为可用能力；后续按独立 Phase 启用。
 
 ## 常用命令
@@ -29,9 +31,10 @@ npm run typecheck
 npm run build:extension
 npm test
 npm run test:legacy
+npm run test:e2e
 ```
 
-`npm test` 运行工程化后的 Vitest 测试；`npm run test:legacy` 暂时保留迁移前的 Node 脚本回归，后续会按阶段并入 Vitest 或 smoke 流程。
+`npm test` 运行工程化后的 Vitest 测试；`npm run test:legacy` 暂时保留迁移前的 Node 脚本回归，并在 Phase 2 的 `npm run check` 中覆盖小游戏 worker/sprite 逻辑；`npm run test:e2e` 验证构建后的侧栏、新标签页和游戏页面。
 
 启动本地 Grok Search MCP Bridge：
 

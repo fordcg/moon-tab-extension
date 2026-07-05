@@ -15,6 +15,9 @@ describe("扩展构建产物合约", () => {
 
     expect(manifest.background.service_worker).toBe("background/index.js");
     expect(manifest.side_panel.default_path).toBe("index.html");
+    expect(manifest.chrome_url_overrides).toEqual({
+      newtab: "src/pages/newtab/index.html",
+    });
     expect("devtools_page" in manifest).toBe(false);
     expect(manifest.content_scripts).toHaveLength(1);
     expect(manifest.content_scripts[0].js).toEqual(["content/index.js"]);
@@ -22,6 +25,10 @@ describe("扩展构建产物合约", () => {
     expect(viteConfig).toContain('"background/index": resolve(rootDir, "src/background/index.ts")');
     expect(viteConfig).not.toContain("devtools.html");
     expect(viteConfig).toContain('sidePanel: resolve(rootDir, "index.html")');
+    expect(viteConfig).toContain('newtab: resolve(rootDir, "src/pages/newtab/index.html")');
+    expect(viteConfig).toContain('game: resolve(rootDir, "src/pages/game/index.html")');
+    expect(viteConfig).toContain("copy-legacy-page-static-assets");
+    expect(viteConfig).toContain('copyFile(resolve(rootDir, "src/pages/game/vendor/matter.min.js")');
     expect(viteConfig).toContain('outDir: resolve(rootDir, "dist/content")');
     expect(viteConfig).toContain('entry: resolve(rootDir, "src/content/index.ts")');
     expect(viteConfig).toContain('formats: ["iife"]');
@@ -32,5 +39,13 @@ describe("扩展构建产物合约", () => {
     const contentEntry = await readProjectFile("src/content/index.ts");
 
     expect(contentEntry).not.toMatch(/\bimport\s*\(/);
+  });
+
+  it("Moon Tab 页面间导航应继续指向构建后的稳定扩展路径", async () => {
+    const newtabEntry = await readProjectFile("src/pages/newtab/index.mjs");
+    const gameEntry = await readProjectFile("src/pages/game/index.mjs");
+
+    expect(newtabEntry).toContain('runtime.getURL("src/pages/game/index.html")');
+    expect(gameEntry).toContain('runtime.getURL("src/pages/newtab/index.html")');
   });
 });

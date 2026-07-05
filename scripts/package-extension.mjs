@@ -11,6 +11,9 @@ const packageDir = path.join(rootDir, "artifacts", "chrome-extension");
 const requiredDistPaths = [
   "manifest.json",
   "index.html",
+  "src/pages/newtab/index.html",
+  "src/pages/game/index.html",
+  "src/pages/game/vendor/matter.min.js",
   "background/index.js",
   "content/index.js",
 ];
@@ -43,7 +46,7 @@ export function collectHtmlAssetReferences(html) {
   const attributePattern = /\b(?:href|src)=["']([^"']+)["']/g;
 
   for (const match of html.matchAll(attributePattern)) {
-    const reference = match[1].split(/[?#]/)[0].replace(/^\/+/, "").replace(/^\.\//, "");
+    const reference = match[1].split(/[?#]/)[0].replace(/^\.\//, "");
     if (isLocalPackagedReference(match[1], reference)) {
       references.add(reference);
     }
@@ -55,11 +58,18 @@ export function collectHtmlAssetReferences(html) {
 /**
  * @param {string} packageRoot
  * @param {string} assetReference
+ * @param {string} [htmlRelativePath]
  * @returns {string | undefined}
  */
-function resolvePackagedReference(packageRoot, assetReference) {
+function resolvePackagedReference(packageRoot, assetReference, htmlRelativePath = "") {
   const resolvedPackageRoot = path.resolve(packageRoot);
-  const resolvedReference = path.resolve(resolvedPackageRoot, assetReference);
+  const htmlDirectory = path.dirname(path.join(resolvedPackageRoot, htmlRelativePath));
+  const resolvedReference = path.resolve(
+    assetReference.startsWith("/")
+      ? resolvedPackageRoot
+      : htmlDirectory,
+    assetReference.replace(/^\/+/, ""),
+  );
   const relativeReference = path.relative(resolvedPackageRoot, resolvedReference);
   if (relativeReference.startsWith("..") || path.isAbsolute(relativeReference)) {
     return undefined;
@@ -77,7 +87,7 @@ function isLocalPackagedReference(rawReference, normalizedReference) {
   if (rawReference.startsWith("#")) return false;
   if (/^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(rawReference)) return false;
   if (/^(?:data|blob|mailto|tel|chrome|chrome-extension):/i.test(rawReference)) return false;
-  return !normalizedReference.startsWith("../");
+  return true;
 }
 
 /**
@@ -90,7 +100,7 @@ export async function ensureHtmlAssetReferences(packageRoot, htmlRelativePaths) 
   for (const htmlRelativePath of htmlRelativePaths) {
     const html = await readFile(path.join(packageRoot, htmlRelativePath), "utf8");
     for (const assetReference of collectHtmlAssetReferences(html)) {
-      const resolvedReference = resolvePackagedReference(packageRoot, assetReference);
+      const resolvedReference = resolvePackagedReference(packageRoot, assetReference, htmlRelativePath);
       if (!resolvedReference) {
         missingReferences.push(`${htmlRelativePath} -> ${assetReference}`);
         continue;
@@ -174,7 +184,7 @@ async function main() {
 
   await writePackagedManifest();
   await removeJunkFiles(packageDir);
-  await ensureHtmlAssetReferences(packageDir, ["index.html"]);
+  await ensureHtmlAssetReferences(packageDir, ["index.html", "src/pages/newtab/index.html", "src/pages/game/index.html"]);
 
   const packageJson = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
   await writeFile(path.join(packageDir, "build-info.json"), `${JSON.stringify(createBuildInfo(packageJson), null, 2)}\n`, "utf8");

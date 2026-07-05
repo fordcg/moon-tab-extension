@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Browser AI Assistant",
-  "version": "3.5.0",
-  "description": "基于当前网页内容进行 AI 对话的浏览器侧边栏助手。",
+  "name": "月标签",
+  "version": "0.3.0",
+  "description": "Moon Tab 新标签页、小游戏和 Browser AI Assistant 侧边栏。",
   "permissions": ["sidePanel", "storage", "contextMenus", "activeTab", "scripting", "alarms", "tabs"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -14,6 +14,9 @@
   },
   "side_panel": {
     "default_path": "index.html"
+  },
+  "chrome_url_overrides": {
+    "newtab": "src/pages/newtab/index.html"
   },
   "commands": {
     "open-side-panel": {
@@ -29,6 +32,12 @@
       "matches": ["<all_urls>"],
       "js": ["content/index.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/pages/game/index.html", "src/pages/game/vendor/matter.min.js", "assets/*"],
+      "matches": ["<all_urls>"]
     }
   ]
 }

@@ -2,6 +2,7 @@
 node_modules/
 dist/
 artifacts/
+test-results/
 *-temp.json
 *.log
 *.artifact.json
