@@ -27,6 +27,7 @@ import { runModelToolLoop } from "./toolCalling/toolLoop";
 
 export interface ChatSendMessage {
   type: "chat.send";
+  tabId?: number;
   model: ModelConfig;
   messages: ModelRequestMessage[];
   stream: boolean;
@@ -90,14 +91,20 @@ interface ChatStreamCallbacks {
   onGuidanceConsumed?: (followUpId: string) => void;
 }
 
+interface ChatSendOptions {
+  shouldExposeTool?: (tool: ReturnType<typeof getRegisteredModelTools>[number]) => boolean;
+}
+
 export async function handleChatSendMessage(
   message: ChatSendHandlerMessage,
   fetcher: Fetcher = fetch,
   callbacks: ChatStreamCallbacks = {},
   executeTool?: ModelToolExecutor,
+  options: ChatSendOptions = {},
 ): Promise<ChatSendResponse> {
   const enabledTools = resolveEnabledModelTools(getRegisteredModelTools(message.mcp), message.enabledToolIds ?? []);
-  const exposedTools = message.structuredOutput ? [] : enabledTools.filter(shouldExposeTool);
+  const exposeTool = options.shouldExposeTool ?? shouldExposeTool;
+  const exposedTools = message.structuredOutput ? [] : enabledTools.filter(exposeTool);
   const toolExecutor = executeTool ?? createBackgroundToolExecutor(message, fetcher);
   const automationPlaybookSelection = await maybeSelectAutomationPlaybook(message, exposedTools, fetcher);
   const initialMessages = appendBrowserControlPromptIfNeeded(message.messages, exposedTools, automationPlaybookSelection);

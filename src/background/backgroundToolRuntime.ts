@@ -3,6 +3,7 @@ import {
   BROWSER_TAKE_SNAPSHOT_TOOL_NAME,
   BROWSER_EXTRACT_CONTENT_TOOL_ID,
   CURRENT_TIME_TOOL_NAME,
+  IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
   RUNTIME_DESCRIBE_FUNCTION_TOOL_ID,
   RUNTIME_INSPECT_GLOBALS_TOOL_ID,
   RUNTIME_SEARCH_MODULES_TOOL_ID,
@@ -18,7 +19,7 @@ import {
   REPLAY_SEND_REQUEST_TOOL_ID,
   TAVILY_SEARCH_TOOL_NAME,
 } from "../shared/models/toolRegistry";
-import type { ModelRequestMessage, ModelSystemMessage, ModelToolCall, ModelToolDefinition, ModelToolExecutor, ModelToolRegistryEntry } from "../shared/models/types";
+import type { ModelRequestMessage, ModelSystemMessage, ModelToolCall, ModelToolDefinition, ModelToolExecutor, ModelToolRegistryEntry, ModelToolResult } from "../shared/models/types";
 import { getAutomationPlaybookById } from "../shared/automationPlaybooks";
 import type { AutomationPlaybookSelection, ExtractionRule, McpServerSecretMap, McpSettings, ModelConfig } from "../shared/types";
 import { createWebSearchToolAttachment } from "../shared/toolArtifacts";
@@ -30,6 +31,7 @@ import { callMcpTool } from "../shared/mcp/httpClient";
 import { parseMcpToolId } from "../shared/mcp/toolAdapter";
 
 type Fetcher = typeof fetch;
+type NetworkCompatibilityExecutor = (toolCall: ModelToolCall, tool: ModelToolRegistryEntry) => ModelToolResult | undefined | Promise<ModelToolResult | undefined>;
 
 const DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS = 32;
 
@@ -38,6 +40,10 @@ export interface BackgroundToolExecutorMessage {
   extractionRules?: ExtractionRule[];
   tavily?: TavilySearchOptions;
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
+}
+
+export interface BackgroundToolExecutorOptions {
+  networkCompatibilityExecutor?: NetworkCompatibilityExecutor;
 }
 
 export function normalizeBrowserAutomationMaxToolIterations(value: unknown): number {
@@ -93,7 +99,7 @@ export function createModelToolDefinition(tool: ModelToolRegistryEntry): ModelTo
   };
 }
 
-export function createBackgroundToolExecutor(message: BackgroundToolExecutorMessage, fetcher: Fetcher): ModelToolExecutor {
+export function createBackgroundToolExecutor(message: BackgroundToolExecutorMessage, fetcher: Fetcher, options: BackgroundToolExecutorOptions = {}): ModelToolExecutor {
   return async (toolCall, tool) => {
     if (tool.id === BROWSER_TAKE_SNAPSHOT_TOOL_ID && tool.name === BROWSER_TAKE_SNAPSHOT_TOOL_NAME) {
       return browserControlManager.takeSnapshot(toolCall);
@@ -103,11 +109,19 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
       return browserControlManager.extractContent(toolCall, message.extractionRules ?? []);
     }
 
+    if (tool.id === IMAGEFREE_GENERATE_IMAGE_TOOL_ID) {
+      return executeImagefreeGenerateTool(toolCall, fetcher);
+    }
+
     if (tool.id.startsWith("browser.")) {
       return browserControlManager.executeBrowserTool(toolCall);
     }
 
     if (tool.id.startsWith("network.")) {
+      const compatibilityResult = await options.networkCompatibilityExecutor?.(toolCall, tool);
+      if (compatibilityResult !== undefined) {
+        return compatibilityResult;
+      }
       return browserControlManager.executeNetworkTool(toolCall);
     }
 
@@ -349,6 +363,23 @@ function createUnavailableToolResult(toolCall: ModelToolCall): Awaited<ReturnTyp
     content: `工具 ${toolCall.name} 暂未实现，已拒绝执行。`,
     isError: true,
   };
+}
+
+async function executeImagefreeGenerateTool(toolCall: ModelToolCall, fetcher: Fetcher): Promise<Awaited<ReturnType<ModelToolExecutor>>> {
+  const imagefreeGenerateTool = (globalThis as typeof globalThis & {
+    __imagefreeGenerateTool?: (toolCall: ModelToolCall, fetcher: Fetcher) => Awaited<ReturnType<ModelToolExecutor>> | Promise<Awaited<ReturnType<ModelToolExecutor>>>;
+  }).__imagefreeGenerateTool;
+
+  if (typeof imagefreeGenerateTool !== "function") {
+    return {
+      toolCallId: toolCall.id,
+      name: toolCall.name,
+      content: "Imagefree 图片生成运行时暂不可用，已拒绝执行。",
+      isError: true,
+    };
+  }
+
+  return imagefreeGenerateTool(toolCall, fetcher);
 }
 
 async function executeMcpRemoteTool(

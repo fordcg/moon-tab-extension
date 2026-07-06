@@ -6,7 +6,12 @@ import {
   normalizeBrowserAutomationMaxToolIterations,
   shouldExposeTool,
 } from "../../../src/background/backgroundToolRuntime";
-import type { ModelRequestMessage, ModelToolCall, ModelToolRegistryEntry } from "../../../src/shared/models/types";
+import {
+  getRegisteredModelTools,
+  IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
+  IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+} from "../../../src/shared/models/toolRegistry";
+import type { ModelRequestMessage, ModelToolCall, ModelToolRegistryEntry, ModelToolResult } from "../../../src/shared/models/types";
 import type { ModelConfig } from "../../../src/shared/types";
 
 const browserControlManagerMock = vi.hoisted(() => ({
@@ -153,6 +158,29 @@ describe("background 工具运行时封装", () => {
 
     expect(shouldExposeTool({ id: "full_access.execute_script", name: "full_access_execute_script", parameters: {} })).toBe(false);
     expect(shouldExposeTool({ id: "full_access.execute_script", name: "full_access_execute_script", parameters: {} })).toBe(true);
+  });
+
+  it("Imagefree 图片生成注册为低风险本地工具并默认可暴露", () => {
+    const imagefreeTool = getRegisteredModelTools().find((tool) => tool.id === IMAGEFREE_GENERATE_IMAGE_TOOL_ID);
+
+    expect(imagefreeTool).toMatchObject({
+      id: IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
+      name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+      groupId: "system",
+      displayName: "Imagefree 图片生成",
+      toolClassification: { runtime: "local", capabilities: ["deliver_result"], risk: "low" },
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          aspect_ratio: { type: "string", enum: ["1:1", "16:9", "9:16", "4:3", "3:4"] },
+          turnstile_token: { type: "string" },
+        },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+    });
+    expect(shouldExposeTool(imagefreeTool!)).toBe(true);
   });
 
   it("完全访问提示要求模型直接放行边界而不走受控增强确认", () => {
@@ -383,6 +411,45 @@ describe("background 工具运行时封装", () => {
     });
   });
 
+  it("network 工具优先使用注入的 DevTools 兼容执行器", async () => {
+    browserControlManagerMock.executeNetworkTool.mockResolvedValue({ toolCallId: "call-network_list_requests", name: "network_list_requests", content: "Browser Control Network" });
+    const compatibilityResult: ModelToolResult = {
+      toolCallId: "call-network_list_requests",
+      name: "network_list_requests",
+      content: "DevTools Network",
+    };
+    const networkCompatibilityExecutor = vi.fn().mockResolvedValue(compatibilityResult);
+    const executor = createBackgroundToolExecutor(
+      { model: createModel(), tavily: undefined },
+      vi.fn() as unknown as typeof fetch,
+      { networkCompatibilityExecutor },
+    );
+    const toolCall = createToolCall("network_list_requests");
+    const tool = { id: "network.list_requests", name: "network_list_requests", parameters: {} };
+
+    await expect(executor(toolCall, tool)).resolves.toBe(compatibilityResult);
+    expect(networkCompatibilityExecutor).toHaveBeenCalledWith(toolCall, tool);
+    expect(browserControlManagerMock.executeNetworkTool).not.toHaveBeenCalled();
+  });
+
+  it("network 兼容执行器不可用时回退到浏览器控制 Network 执行器", async () => {
+    browserControlManagerMock.executeNetworkTool.mockResolvedValue({ toolCallId: "call-network_list_requests", name: "network_list_requests", content: "Browser Control Network" });
+    const networkCompatibilityExecutor = vi.fn().mockResolvedValue(undefined);
+    const executor = createBackgroundToolExecutor(
+      { model: createModel(), tavily: undefined },
+      vi.fn() as unknown as typeof fetch,
+      { networkCompatibilityExecutor },
+    );
+    const toolCall = createToolCall("network_list_requests");
+    const tool = { id: "network.list_requests", name: "network_list_requests", parameters: {} };
+
+    await expect(executor(toolCall, tool)).resolves.toMatchObject({
+      content: "Browser Control Network",
+    });
+    expect(networkCompatibilityExecutor).toHaveBeenCalledWith(toolCall, tool);
+    expect(browserControlManagerMock.executeNetworkTool).toHaveBeenCalledWith(toolCall);
+  });
+
   it("Tavily 工具拒绝空 query 和额外参数", async () => {
     const executor = createBackgroundToolExecutor({ model: createModel(), tavily: undefined }, vi.fn() as unknown as typeof fetch);
     const tool = { id: "web.tavily_search", name: "tavily_search", parameters: {} };
@@ -396,5 +463,39 @@ describe("background 工具运行时封装", () => {
       isError: true,
     });
     expect(executeTavilySearchFromSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("Imagefree 工具分发到全局运行时 hook，缺失 hook 时返回不可用错误", async () => {
+    const globalWithHook = globalThis as typeof globalThis & {
+      __imagefreeGenerateTool?: (toolCall: ModelToolCall, fetcher: typeof fetch) => Promise<unknown>;
+    };
+    const previousHook = globalWithHook.__imagefreeGenerateTool;
+    const fetcher = vi.fn() as unknown as typeof fetch;
+    const tool = { id: IMAGEFREE_GENERATE_IMAGE_TOOL_ID, name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, parameters: {} };
+    const executor = createBackgroundToolExecutor({ model: createModel(), tavily: undefined }, fetcher);
+
+    try {
+      globalWithHook.__imagefreeGenerateTool = vi.fn().mockResolvedValue({
+        toolCallId: "call-imagefree_generate_image",
+        name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+        content: "{\"imageUrl\":\"https://image.example.com/out.png\"}",
+      });
+
+      await expect(executor(createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, { prompt: "moon" }), tool)).resolves.toMatchObject({
+        content: expect.stringContaining("out.png"),
+      });
+      expect(globalWithHook.__imagefreeGenerateTool).toHaveBeenCalledWith(
+        createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, { prompt: "moon" }),
+        fetcher,
+      );
+
+      delete globalWithHook.__imagefreeGenerateTool;
+      await expect(executor(createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, { prompt: "moon" }), tool)).resolves.toMatchObject({
+        isError: true,
+        content: "Imagefree 图片生成运行时暂不可用，已拒绝执行。",
+      });
+    } finally {
+      globalWithHook.__imagefreeGenerateTool = previousHook;
+    }
   });
 });

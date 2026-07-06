@@ -15,6 +15,7 @@
   "side_panel": {
     "default_path": "index.html"
   },
+  "devtools_page": "src/ai-assistant/devtools.html",
   "chrome_url_overrides": {
     "newtab": "src/pages/newtab/index.html"
   },
@@ -36,7 +37,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/pages/game/index.html", "src/pages/game/vendor/matter.min.js", "assets/*"],
+      "resources": ["index.html", "src/pages/game/index.html", "src/pages/game/vendor/matter.min.js", "assets/*"],
       "matches": ["<all_urls>"]
     }
   ]

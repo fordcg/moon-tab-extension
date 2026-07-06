@@ -13,6 +13,8 @@ export const TAVILY_SEARCH_TOOL_ID = "web_search.tavily";
 export const TAVILY_SEARCH_TOOL_NAME = "tavily_search";
 export const CURRENT_TIME_TOOL_ID = "system.current_time";
 export const CURRENT_TIME_TOOL_NAME = "get_current_time";
+export const IMAGEFREE_GENERATE_IMAGE_TOOL_ID = "imagefree.generate_image";
+export const IMAGEFREE_GENERATE_IMAGE_TOOL_NAME = "imagefree_generate_image";
 export const BROWSER_TAKE_SNAPSHOT_TOOL_ID = "browser.take_snapshot";
 export const BROWSER_TAKE_SNAPSHOT_TOOL_NAME = "take_snapshot";
 export const BROWSER_GET_PAGE_STATE_TOOL_ID = "browser.get_page_state";
@@ -135,6 +137,7 @@ export const MODEL_TOOL_RISK_VALUES = ["low", "medium", "high", "critical"] as c
 const TOOL_CLASSIFICATION_BY_ID: Record<string, ModelToolClassification> = {
   [CURRENT_TIME_TOOL_ID]: { runtime: "local", capabilities: ["system_context"], risk: "low" },
   [TAVILY_SEARCH_TOOL_ID]: { runtime: "external_web", capabilities: ["search_public_web"], risk: "low" },
+  [IMAGEFREE_GENERATE_IMAGE_TOOL_ID]: { runtime: "local", capabilities: ["deliver_result"], risk: "low" },
   [BROWSER_TAKE_SNAPSHOT_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page"], risk: "low" },
   [BROWSER_GET_PAGE_STATE_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page"], risk: "low" },
   [BROWSER_EXTRACT_CONTENT_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page"], risk: "medium" },
@@ -229,6 +232,35 @@ const RAW_AVAILABLE_MODEL_TOOLS: Omit<ModelToolRegistryEntry, "toolClassificatio
         },
       },
       required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
+    name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+    groupId: MODEL_TOOL_GROUP_SYSTEM_ID,
+    displayName: "Imagefree 图片生成",
+    description:
+      "调用 imagefree.net 按 prompt 和 aspect_ratio 生成图片，返回生成后的图片 URL。非官方接口，可能较慢或要求真人验证。",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description: "图片描述，建议具体清晰，最多 2000 字。",
+        },
+        aspect_ratio: {
+          type: "string",
+          enum: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+          description: "图片比例，默认 1:1。",
+        },
+        turnstile_token: {
+          type: "string",
+          description:
+            "Cloudflare Turnstile 真人验证 token。模型不要编造；通常由扩展自动打开 Imagefree 页面获取。",
+        },
+      },
+      required: ["prompt"],
       additionalProperties: false,
     },
   },

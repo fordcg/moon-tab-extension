@@ -18,12 +18,16 @@ describe("扩展构建产物合约", () => {
     expect(manifest.chrome_url_overrides).toEqual({
       newtab: "src/pages/newtab/index.html",
     });
-    expect("devtools_page" in manifest).toBe(false);
+    expect(manifest.devtools_page).toBe("src/ai-assistant/devtools.html");
     expect(manifest.content_scripts).toHaveLength(1);
     expect(manifest.content_scripts[0].js).toEqual(["content/index.js"]);
+    expect(manifest.web_accessible_resources.flatMap((entry) => entry.resources)).toEqual(expect.arrayContaining([
+      "index.html",
+      "assets/*",
+    ]));
 
     expect(viteConfig).toContain('"background/index": resolve(rootDir, "src/background/index.ts")');
-    expect(viteConfig).not.toContain("devtools.html");
+    expect(viteConfig).toContain('devtools: resolve(rootDir, "src/ai-assistant/devtools.html")');
     expect(viteConfig).toContain('sidePanel: resolve(rootDir, "index.html")');
     expect(viteConfig).toContain('newtab: resolve(rootDir, "src/pages/newtab/index.html")');
     expect(viteConfig).toContain('game: resolve(rootDir, "src/pages/game/index.html")');
@@ -39,6 +43,12 @@ describe("扩展构建产物合约", () => {
     const contentEntry = await readProjectFile("src/content/index.ts");
 
     expect(contentEntry).not.toMatch(/\bimport\s*\(/);
+  });
+
+  it("TypeScript 后台入口应加载 Imagefree 后台运行时 hook", async () => {
+    const backgroundEntry = await readProjectFile("src/background/index.ts");
+
+    expect(backgroundEntry).toContain('import "../ai-assistant/assets/imagefree-tool-runtime.js";');
   });
 
   it("Moon Tab 页面间导航应继续指向构建后的稳定扩展路径", async () => {

@@ -108,4 +108,120 @@ describe("content 脚本消息", () => {
       }),
     );
   });
+
+  it("floating 悬浮助手 attach 消息会创建可复用 iframe", async () => {
+    let registeredListener:
+      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn((listener) => {
+            registeredListener = listener;
+          }),
+        },
+      },
+    });
+
+    await import("../../../src/content/index");
+
+    const sendResponse = vi.fn();
+    const message = {
+      type: "sidePanel.floating.attach",
+      url: "chrome-extension://moon-tab/index.html?floating=1&tabId=7&windowId=3",
+    };
+
+    const firstReturn = registeredListener?.(message, {} as chrome.runtime.MessageSender, sendResponse);
+    const secondReturn = registeredListener?.(message, {} as chrome.runtime.MessageSender, sendResponse);
+
+    const frames = document.querySelectorAll("iframe[data-moon-tab-ai-floating-frame]");
+    expect(firstReturn).toBe(false);
+    expect(secondReturn).toBe(false);
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ src: message.url });
+    expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
+  });
+
+  it("floating 悬浮助手兼容旧 attach 类型并支持关闭", async () => {
+    let registeredListener:
+      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn((listener) => {
+            registeredListener = listener;
+          }),
+        },
+      },
+    });
+
+    await import("../../../src/content/index");
+
+    const sendResponse = vi.fn();
+    registeredListener?.(
+      {
+        type: "sidepanelFloating.open",
+        url: "chrome-extension://moon-tab/index.html?floating=1",
+      },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+    expect(document.querySelectorAll("iframe[data-moon-tab-ai-floating-frame]")).toHaveLength(1);
+
+    const closeReturn = registeredListener?.(
+      { type: "sidePanel.floating.close" },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(closeReturn).toBe(false);
+    expect(document.querySelectorAll("iframe[data-moon-tab-ai-floating-frame]")).toHaveLength(0);
+    expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
+  });
+
+  it("floating 悬浮助手拒绝非当前扩展 index floating 地址", async () => {
+    let registeredListener:
+      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn((listener) => {
+            registeredListener = listener;
+          }),
+        },
+      },
+    });
+
+    await import("../../../src/content/index");
+
+    const invalidUrls = [
+      "chrome-extension://other-extension/index.html?floating=1",
+      "chrome-extension://moon-tab/options.html?floating=1",
+      "chrome-extension://moon-tab/index.html",
+    ];
+
+    for (const url of invalidUrls) {
+      const sendResponse = vi.fn();
+      const keepChannelOpen = registeredListener?.(
+        {
+          type: "sidePanel.floating.attach",
+          url,
+        },
+        {} as chrome.runtime.MessageSender,
+        sendResponse,
+      );
+
+      expect(keepChannelOpen).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false, message: "悬浮窗地址无效" });
+      expect(document.querySelectorAll("iframe[data-moon-tab-ai-floating-frame]")).toHaveLength(0);
+    }
+  });
 });

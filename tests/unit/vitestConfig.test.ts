@@ -8,6 +8,7 @@ describe("Vitest discovery configuration", () => {
     expect(exclude).toContain("dist/**");
     expect(exclude).toContain("artifacts/**");
     expect(exclude).toContain(".tmp/**");
+    expect(exclude).toContain(".worktrees/**");
     expect(exclude).toContain("tests/e2e/**");
     expect(exclude).toContain("src/pages/**/*.test.mjs");
   });

@@ -9,6 +9,7 @@ import { App } from "../../../src/side-panel/App";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
 import { registerChatTaskFollowUpHandle } from "../../../src/side-panel/state/appStoreChatTasks";
 import { MCP_SETTINGS_KEY } from "../../../src/shared/mcp/settings";
+import { SIDE_PANEL_FLOATING_CLOSE_TYPE, SIDE_PANEL_OPEN_FLOATING_TYPE } from "../../../src/shared/sidePanelRuntime";
 import type { ModelToolRegistryEntry } from "../../../src/shared/models/types";
 import {
   clearDatabase,
@@ -297,6 +298,7 @@ describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/");
     registeredModelToolsMock.tools = [];
     useAppStore.getState().reset();
   });
@@ -5075,6 +5077,180 @@ describe("App", () => {
     expect(screen.queryByRole("dialog", { name: "选择注入标签页" })).not.toBeInTheDocument();
   });
 
+  it("非流式聊天请求携带当前选中标签页 ID", async () => {
+    const user = userEvent.setup();
+    const provider: ModelProvider = {
+      id: "provider-context-tab-non-stream",
+      name: "标签页渠道",
+      endpointType: "openai_chat",
+      endpointUrl: "https://api.example.com/v1/chat/completions",
+      apiKey: "sk-context-tab",
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const model: ProviderModel = {
+      id: "model-context-tab-non-stream",
+      providerId: "provider-context-tab-non-stream",
+      displayName: "标签页模型",
+      modelId: "gpt-context-tab",
+      temperature: 0.7,
+      maxTokens: 1024,
+      systemPrompt: "你是网页助手",
+      isTitleModel: false,
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const sendMessage = vi.fn((message: { type: string; tabId?: number }, callback: (response: unknown) => void) => {
+      if (message.type === "pageContext.listTabs") {
+        callback({
+          ok: true,
+          tabs: [
+            { tabId: 7, title: "文章页", url: "https://example.com/article", active: true },
+            { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false },
+          ],
+        });
+        return undefined;
+      }
+
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          text: "页面内容",
+          truncated: false,
+          usedFallback: true,
+        });
+        return undefined;
+      }
+
+      callback({ ok: true, content: "AI 回复" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+
+    render(<App />);
+
+    await screen.findByDisplayValue("标签页渠道 / 标签页模型");
+    act(() => {
+      useAppStore.setState({
+        contextTabs: [
+          { tabId: 7, title: "文章页", url: "https://example.com/article", active: true, selected: true },
+          { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false, selected: false },
+        ],
+      });
+    });
+    await user.click(screen.getByRole("switch", { name: "流式响应" }));
+    await user.type(screen.getByLabelText("对话输入"), "总结当前页");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => expect(hasChatSendCall(sendMessage)).toBe(true));
+    const chatRequest = sendMessage.mock.calls
+      .map(([message]) => message as { type: string; tabId?: number })
+      .find((message) => message.type === "chat.send");
+    expect(chatRequest?.tabId).toBe(7);
+  });
+
+  it("流式聊天请求携带当前选中标签页 ID", async () => {
+    const user = userEvent.setup();
+    const provider: ModelProvider = {
+      id: "provider-context-tab-stream",
+      name: "流式标签页渠道",
+      endpointType: "openai_chat",
+      endpointUrl: "https://api.example.com/v1/chat/completions",
+      apiKey: "sk-context-tab-stream",
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const model: ProviderModel = {
+      id: "model-context-tab-stream",
+      providerId: "provider-context-tab-stream",
+      displayName: "流式标签页模型",
+      modelId: "gpt-context-tab-stream",
+      temperature: 0.7,
+      maxTokens: 1024,
+      systemPrompt: "你是网页助手",
+      isTitleModel: false,
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    let portMessageListener: ((message: unknown) => void) | undefined;
+    const port = {
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onMessage: {
+        addListener: vi.fn((listener: (message: unknown) => void) => {
+          portMessageListener = listener;
+        }),
+      },
+      onDisconnect: {
+        addListener: vi.fn(),
+      },
+    };
+    const sendMessage = vi.fn((message: { type: string; tabId?: number }, callback: (response: unknown) => void) => {
+      if (message.type === "pageContext.listTabs") {
+        callback({
+          ok: true,
+          tabs: [
+            { tabId: 7, title: "文章页", url: "https://example.com/article", active: true },
+            { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false },
+          ],
+        });
+        return undefined;
+      }
+
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          text: "页面内容",
+          truncated: false,
+          usedFallback: true,
+        });
+        return undefined;
+      }
+
+      callback({ ok: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        connect: vi.fn(() => port),
+        sendMessage,
+      },
+    });
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+
+    render(<App />);
+
+    await screen.findByDisplayValue("流式标签页渠道 / 流式标签页模型");
+    act(() => {
+      useAppStore.setState({
+        contextTabs: [
+          { tabId: 7, title: "文章页", url: "https://example.com/article", active: true, selected: true },
+          { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false, selected: false },
+        ],
+      });
+    });
+    await user.type(screen.getByLabelText("对话输入"), "总结当前页");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => expect(port.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "chat.stream.start" })));
+    const streamStartMessage = port.postMessage.mock.calls
+      .map(([message]) => message as { type: string; payload?: { tabId?: number } })
+      .find((message) => message.type === "chat.stream.start");
+    expect(streamStartMessage?.payload?.tabId).toBe(7);
+
+    await act(async () => {
+      portMessageListener?.({ type: "complete", content: "AI 回复" });
+      await Promise.resolve();
+    });
+  });
+
   it("聊天输入区的上下文、流式响应和提取模式使用紧凑图标 switch 控件切换", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -5152,6 +5328,79 @@ describe("App", () => {
     expect(styles.indexOf(".ui-button-secondary.browser-control-global-button-active")).toBeGreaterThan(styles.indexOf(".ui-button-secondary"));
     expect(styles).toContain(".composer-mode-trigger");
     expect(styles).toContain(".composer-mode-menu-header");
+  });
+
+  it("普通侧边栏顶部操作区提供打开悬浮助手按钮并发送 runtime 消息", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((_message: unknown, callback: (response: unknown) => void) => {
+      callback({ ok: true, message: "悬浮助手已打开" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    const floatingButton = screen.getByRole("button", { name: "打开悬浮助手" });
+    const browserControlButton = screen.getByRole("button", { name: "浏览器控制" });
+    expect(floatingButton.nextElementSibling).toBe(browserControlButton);
+    expect(floatingButton).toHaveClass("ui-button-secondary", "app-header-icon-button");
+    expect(floatingButton).toHaveAttribute("title", "打开悬浮助手");
+    expect(floatingButton).toHaveTextContent("");
+
+    await user.click(floatingButton);
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: SIDE_PANEL_OPEN_FLOATING_TYPE }, expect.any(Function)));
+    expect(screen.getByRole("status")).toHaveTextContent("悬浮助手已打开");
+  });
+
+  it("悬浮 iframe 顶部操作区提供关闭悬浮助手按钮并向 tab 发送消息", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((_tabId: number, _message: unknown, callback: (response: unknown) => void) => {
+      callback({ ok: true });
+      return undefined;
+    });
+    window.history.replaceState({}, "", "/?floating=1&tabId=42");
+    vi.stubGlobal("chrome", {
+      tabs: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    const floatingButton = screen.getByRole("button", { name: "关闭悬浮助手" });
+    const browserControlButton = screen.getByRole("button", { name: "浏览器控制" });
+    expect(floatingButton.nextElementSibling).toBe(browserControlButton);
+    expect(floatingButton).toHaveClass("ui-button-secondary", "app-header-icon-button");
+    expect(floatingButton).toHaveAttribute("title", "关闭悬浮助手");
+    expect(floatingButton).toHaveTextContent("");
+
+    await user.click(floatingButton);
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(42, { type: SIDE_PANEL_FLOATING_CLOSE_TYPE }, expect.any(Function)));
+    expect(screen.getByRole("status")).toHaveTextContent("悬浮助手已关闭");
+  });
+
+  it("悬浮 iframe 缺少有效 tabId 时点击关闭悬浮助手显示错误通知", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn();
+    window.history.replaceState({}, "", "/?floating=1&tabId=abc");
+    vi.stubGlobal("chrome", {
+      tabs: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "关闭悬浮助手" }));
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("缺少有效的标签页 ID，无法关闭悬浮助手");
   });
 
   it("用户点击 Chrome 调试提示栏取消后回滚全局浏览器控制按钮状态", async () => {

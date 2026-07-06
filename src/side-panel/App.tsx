@@ -4,6 +4,7 @@ import { NotificationHost } from "./components/NotificationHost";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SessionList } from "./components/SessionList";
 import { useAppStore } from "./state/appStore";
+import { sendRuntimeMessage } from "./state/runtimeMessage";
 import {
   BROWSER_CONTROL_AUTOMATION_MODE_CHANGED_MESSAGE_TYPE,
   BROWSER_CONTROL_BOUNDARY_CHOICE_REQUEST_MESSAGE_TYPE,
@@ -12,9 +13,18 @@ import {
   type BrowserControlBoundaryChoiceRequestMessage,
   type BrowserControlRuntimeEvent,
 } from "../shared/browserControl";
+import { SIDE_PANEL_FLOATING_CLOSE_TYPE, SIDE_PANEL_OPEN_FLOATING_TYPE } from "../shared/sidePanelRuntime";
+
+interface SidePanelActionResponse {
+  ok: boolean;
+  message?: string;
+}
 
 export function App() {
   const [showSettings, setShowSettings] = useState(false);
+  const searchParams = new URLSearchParams(window.location.search);
+  const floatingMode = searchParams.get("floating") === "1";
+  const floatingTabId = resolveFloatingTabId(searchParams.get("tabId"));
   const historyPanelDefaultOpen = useAppStore((state) => state.chatPreferences.historyDrawerDefaultOpen);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(historyPanelDefaultOpen);
   const loadChannelConfig = useAppStore((state) => state.loadChannelConfig);
@@ -30,6 +40,33 @@ export function App() {
   const markBrowserControlDetached = useAppStore((state) => state.markBrowserControlDetached);
   const markBrowserAutomationModeChanged = useAppStore((state) => state.markBrowserAutomationModeChanged);
   const showBoundaryChoiceRequest = useAppStore((state) => state.showBoundaryChoiceRequest);
+  const addNotification = useAppStore((state) => state.addNotification);
+
+  const handleFloatingAssistantAction = async () => {
+    if (floatingMode) {
+      if (typeof floatingTabId !== "number") {
+        addNotification({ type: "error", title: "关闭悬浮助手失败", message: "缺少有效的标签页 ID，无法关闭悬浮助手" });
+        return;
+      }
+
+      const response = await sendTabMessage<SidePanelActionResponse | undefined>(floatingTabId, { type: SIDE_PANEL_FLOATING_CLOSE_TYPE });
+      if (response?.ok === false) {
+        addNotification({ type: "error", title: "关闭悬浮助手失败", message: response.message ?? "关闭悬浮助手失败" });
+        return;
+      }
+
+      addNotification({ type: "success", title: "悬浮助手已关闭", message: response?.message ?? "悬浮助手已关闭" });
+      return;
+    }
+
+    const response = await sendRuntimeMessage<SidePanelActionResponse | undefined>({ type: SIDE_PANEL_OPEN_FLOATING_TYPE });
+    if (response?.ok === false) {
+      addNotification({ type: "error", title: "打开悬浮助手失败", message: response.message ?? "打开悬浮助手失败" });
+      return;
+    }
+
+    addNotification({ type: "success", title: "悬浮助手已打开", message: response?.message ?? "悬浮助手已打开" });
+  };
 
   useEffect(() => {
     void Promise.all([loadChannelConfig(), loadExtractionRules(), loadPromptTemplates(), loadChatData(), loadSyncSettings()]).then(() => refreshPageContext());
@@ -85,6 +122,29 @@ export function App() {
             </svg>
           </button>
           <button
+            className="ui-button-secondary app-header-icon-button"
+            type="button"
+            aria-label={floatingMode ? "关闭悬浮助手" : "打开悬浮助手"}
+            title={floatingMode ? "关闭悬浮助手" : "打开悬浮助手"}
+            onClick={() => void handleFloatingAssistantAction()}
+          >
+            <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
+              {floatingMode ? (
+                <>
+                  <path d="M5 5h14v14H5Z" />
+                  <path d="M9 9l6 6M15 9l-6 6" />
+                </>
+              ) : (
+                <>
+                  <path d="M5 5h9v9H5Z" />
+                  <path d="M12 5h7v7" />
+                  <path d="M12 12 19 5" />
+                  <path d="M5 17h14v2H5Z" />
+                </>
+              )}
+            </svg>
+          </button>
+          <button
             className={
               browserControlEnabled
                 ? "ui-button-secondary app-header-icon-button browser-control-global-button-active"
@@ -122,6 +182,66 @@ export function App() {
       <NotificationHost />
     </main>
   );
+}
+
+function resolveFloatingTabId(tabId: string | null): number | undefined {
+  if (!tabId) {
+    return undefined;
+  }
+
+  const value = Number(tabId);
+  return Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+async function sendTabMessage<T>(tabId: number, message: unknown): Promise<T> {
+  const tabs = globalThis.chrome?.tabs;
+  if (!tabs?.sendMessage) {
+    return {
+      ok: false,
+      message: "当前环境不支持标签页消息请求",
+    } as T;
+  }
+
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const finish = (response: T) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(response);
+    };
+
+    try {
+      const maybePromise = tabs.sendMessage(tabId, message, (response: T) => {
+        const runtimeError = globalThis.chrome?.runtime?.lastError?.message;
+        if (runtimeError) {
+          finish({
+            ok: false,
+            message: runtimeError,
+          } as T);
+          return;
+        }
+
+        finish(response);
+      }) as Promise<T> | undefined;
+
+      if (maybePromise && typeof maybePromise.then === "function") {
+        void maybePromise.then(finish).catch((error) => {
+          finish({
+            ok: false,
+            message: error instanceof Error ? error.message : "标签页消息请求失败",
+          } as T);
+        });
+      }
+    } catch (error) {
+      finish({
+        ok: false,
+        message: error instanceof Error ? error.message : "标签页消息请求失败",
+      } as T);
+    }
+  });
 }
 
 function isBrowserControlDetachedEvent(message: unknown): message is BrowserControlRuntimeEvent {

@@ -1352,6 +1352,7 @@ export type StoreSetter = StoreApi<AppState>["setState"];
 
 export type AppChatSendMessage = {
   type: "chat.send";
+  tabId?: number;
   model: ReturnType<typeof createModelConfig>;
   messages: ChatMessage[];
   stream: boolean;
@@ -1366,6 +1367,13 @@ export type AppChatSendMessage = {
   extractionRules?: ExtractionRule[];
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
 };
+
+function resolveSelectedContextTabId(contextTabs: ContextTabCandidate[]): number | undefined {
+  const selectedTab = contextTabs.find((tab) => tab.selected && tab.active) ?? contextTabs.find((tab) => tab.selected);
+  const tabId = selectedTab?.tabId;
+
+  return typeof tabId === "number" && Number.isInteger(tabId) ? tabId : undefined;
+}
 
 interface SendChatMessageWithStateInput {
   content: string;
@@ -1744,8 +1752,10 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       : [];
     const enabledToolIds = enabledTools.map((tool) => tool.id);
     const requestStreamMode = input.state.streamMode;
+    const selectedContextTabId = resolveSelectedContextTabId(input.state.contextTabs);
     const request: AppChatSendMessage = {
       type: "chat.send",
+      ...(selectedContextTabId !== undefined ? { tabId: selectedContextTabId } : {}),
       model: modelConfig,
       messages: buildChatRequestMessages({
         model: modelConfig,

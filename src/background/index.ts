@@ -1,9 +1,13 @@
+import "../ai-assistant/assets/imagefree-tool-runtime.js";
 import { handleModelCatalogMessage, type ModelCatalogMessage } from "./modelCatalogMessageHandler";
+import { handleAgentToolsMessage, type AgentToolsMessage, type AgentToolsRuntimeMessage } from "./agentToolsMessageHandler";
 import {
   handleBrowserControlMessage,
   handleBrowserControlTabRemoved,
   type BrowserControlMessage,
 } from "./browserControlMessageHandler";
+import { createBackgroundToolExecutor, shouldExposeTool, type BackgroundToolExecutorOptions } from "./backgroundToolRuntime";
+import { handleSidePanelRuntimeMessage, initializeSidePanelController } from "./sidePanelController";
 import { handleChatSendMessage, type ChatSendMessage } from "./modelRequestHandler";
 import {
   handlePageContextListTabsMessage,
@@ -22,8 +26,22 @@ import {
   type UrlPatternGenerationMessage,
 } from "./urlPatternGenerationMessageHandler";
 import { handleMcpMessage, type McpMessage } from "./mcpMessageHandler";
+import { getRegisteredModelTools } from "../shared/models/toolRegistry";
+import type { SidePanelRuntimeMessage } from "../shared/sidePanelRuntime";
+import { createNetworkDevtoolsBridge } from "./networkDevtoolsBridge";
+import { BrowserNetworkToolExecutor } from "./browserControl/networkToolExecutor";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
+const networkDevtoolsBridge = createNetworkDevtoolsBridge();
+const DEVTOOLS_LEGACY_NETWORK_TOOL_IDS = new Set([
+  "network.list_requests",
+  "network.get_request_details",
+  "network.clear_requests",
+  "network.compare_requests",
+  "network.find_parameter_candidates",
+  "network.extract_js_candidates",
+]);
+const NETWORK_DEVTOOLS_NOT_CONNECTED_RESPONSE = { ok: false, message: "未检测到当前标签页 DevTools Network 连接。" } as const;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -38,39 +56,13 @@ chrome.runtime.onStartup.addListener(() => {
   runRestoreSyncAlarmFromSettings();
 });
 
+initializeSidePanelController();
+
 function runRestoreSyncAlarmFromSettings(): void {
   void restoreSyncAlarmFromSettings().catch((error) => {
     console.error("自动同步定时任务恢复失败", error);
   });
 }
-
-async function openSidePanel(tabId?: number) {
-  if (!tabId) {
-    return;
-  }
-
-  await chrome.sidePanel.open({ tabId });
-}
-
-chrome.action.onClicked.addListener((tab) => {
-  void openSidePanel(tab.id);
-});
-
-chrome.commands.onCommand.addListener((command) => {
-  if (command !== "open-side-panel") {
-    return;
-  }
-
-  void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => openSidePanel(tab?.id));
-});
-
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== "open-side-panel") {
-    return;
-  }
-
-  void openSidePanel(tab?.id);
-});
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   handleBrowserControlTabRemoved(tabId);
@@ -78,6 +70,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 type RuntimeMessage =
   | ModelCatalogMessage
+  | AgentToolsMessage
   | PageContextExtractMessage
   | PageContextListTabsMessage
   | UrlPatternGenerationMessage
@@ -86,7 +79,12 @@ type RuntimeMessage =
   | TabCaptureVisibleMessage
   | SyncBackupMessage
   | BrowserControlMessage
-  | McpMessage;
+  | McpMessage
+  | SidePanelRuntimeMessage
+  | { type: `networkContext.${string}`; tabId?: number; requestIds?: string[] };
+
+type NetworkContextRuntimeMessage = Extract<RuntimeMessage, { type: `networkContext.${string}` }>;
+type RuntimeAgentToolsPrefixMessage = Extract<AgentToolsRuntimeMessage, { type: `agentTools.${string}` }>;
 
 interface ChatStreamStartMessage {
   type: "chat.stream.start";
@@ -104,7 +102,23 @@ interface ChatStreamFollowUpMessage {
   };
 }
 
-chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentToolsPrefixMessage, sender, sendResponse) => {
+  if (isNetworkContextMessage(message)) {
+    const scopedMessage = resolveDirectNetworkContextMessage(message, sender);
+    if (!scopedMessage) {
+      sendResponse(NETWORK_DEVTOOLS_NOT_CONNECTED_RESPONSE);
+      return true;
+    }
+    void networkDevtoolsBridge.handleMessage(scopedMessage).then(sendResponse);
+    return true;
+  }
+
+  const sidePanelResponse = handleSidePanelRuntimeMessage(message as SidePanelRuntimeMessage);
+  if (sidePanelResponse) {
+    void sidePanelResponse.then(sendResponse);
+    return true;
+  }
+
   if (message.type === "extractionRule.generateUrlPatterns") {
     console.debug(`${DEBUG_PREFIX} background 入口收到 runtime 消息`, {
       type: message.type,
@@ -169,8 +183,15 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
   }
 
   if (message.type === "chat.send") {
+    const tabId = resolveChatRuntimeTabId(message, sender);
     // 非流式 sendMessage 没有稳定端口可推送中间事件，Token 用量随最终响应一次性返回给调用方。
-    void handleChatSendMessage(message).then(sendResponse);
+    void handleChatSendMessage(
+      message,
+      fetch,
+      {},
+      createBackgroundToolExecutor(message, fetch, { networkCompatibilityExecutor: createNetworkCompatibilityExecutor(tabId) }),
+      { shouldExposeTool: shouldExposeToolWithNetworkCompatibility(tabId) },
+    ).then(sendResponse);
     return true;
   }
 
@@ -183,7 +204,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
     message.type === "browserControl.setRuntimeReadonly" ||
     message.type === "browserControl.setAutomationMode" ||
     message.type === "browserControl.boundaryChoiceRespond") {
-    void handleBrowserControlMessage(message, _sender).then(sendResponse);
+    void handleBrowserControlMessage(message, sender).then(sendResponse);
     return true;
   }
 
@@ -197,6 +218,12 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
     return true;
   }
 
+  if (isAgentToolsMessage(message)) {
+    const builtInTools = getRegisteredModelTools().filter(shouldExposeToolWithNetworkCompatibility(getSenderTabId(sender)));
+    void handleAgentToolsMessage(message, fetch, builtInTools).then(sendResponse);
+    return true;
+  }
+
   if (message.type !== "modelCatalog.list" && message.type !== "modelCatalog.test") {
     return false;
   }
@@ -205,11 +232,23 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
   return true;
 });
 
+function isAgentToolsMessage(message: RuntimeMessage | RuntimeAgentToolsPrefixMessage): message is AgentToolsRuntimeMessage {
+  return typeof message.type === "string" && message.type.startsWith("agentTools.");
+}
+
+function isNetworkContextMessage(message: RuntimeMessage | RuntimeAgentToolsPrefixMessage): message is NetworkContextRuntimeMessage {
+  return typeof message.type === "string" && message.type.startsWith("networkContext.");
+}
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   void handleSyncAlarm(alarm);
 });
 
 chrome.runtime.onConnect.addListener((port) => {
+  if (networkDevtoolsBridge.handlePortConnect(port)) {
+    return;
+  }
+
   if (port.name !== "chat.stream") {
     return;
   }
@@ -250,7 +289,9 @@ chrome.runtime.onConnect.addListener((port) => {
       return;
     }
 
-    void handleChatSendMessage({ ...message.payload, signal: controller.signal }, fetch, {
+    const tabId = resolveChatRuntimeTabId(message.payload, port.sender);
+    const chatMessage = { ...message.payload, signal: controller.signal };
+    void handleChatSendMessage(chatMessage, fetch, {
       onContentChunk: (content) => postToPort({ type: "chunk", content }),
       onThinkingChunk: (content) => postToPort({ type: "thinking", content }),
       onRetryProgress: (progress) => postToPort({ type: "retry:progress", ...progress }),
@@ -261,7 +302,7 @@ chrome.runtime.onConnect.addListener((port) => {
       onToolCallComplete: (record: ChatToolCallRecord, attachments: ChatToolAttachment[]) => postToPort({ type: "tool:complete", record, attachments }),
       consumeGuidance: () => guidanceQueue.splice(0),
       onGuidanceConsumed: (followUpId: string) => postToPort({ type: "follow-up:consumed", followUpId }),
-    })
+    }, createBackgroundToolExecutor(chatMessage, fetch, { networkCompatibilityExecutor: createNetworkCompatibilityExecutor(tabId) }), { shouldExposeTool: shouldExposeToolWithNetworkCompatibility(tabId) })
       .then((response) => {
         if (disconnected) {
           return;
@@ -294,3 +335,101 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 export {};
+
+function getSenderTabId(sender?: chrome.runtime.MessageSender): number | undefined {
+  const tabId = sender?.tab?.id;
+  return typeof tabId === "number" && Number.isInteger(tabId) ? tabId : undefined;
+}
+
+function getMessageTabId(message: { tabId?: number }): number | undefined {
+  return typeof message.tabId === "number" && Number.isInteger(message.tabId) ? message.tabId : undefined;
+}
+
+function resolveChatRuntimeTabId(message: { tabId?: number }, sender?: chrome.runtime.MessageSender): number | undefined {
+  const senderTabId = getSenderTabId(sender);
+  if (senderTabId !== undefined) {
+    return senderTabId;
+  }
+  const requestedTabId = getMessageTabId(message);
+  return requestedTabId !== undefined && isSameExtensionPageSender(sender) ? requestedTabId : undefined;
+}
+
+function resolveDirectNetworkContextMessage(
+  message: NetworkContextRuntimeMessage,
+  sender?: chrome.runtime.MessageSender,
+): NetworkContextRuntimeMessage | undefined {
+  const senderTabId = getSenderTabId(sender);
+  const requestedTabId = getMessageTabId(message);
+  if (requestedTabId !== undefined) {
+    if (senderTabId !== undefined) {
+      return senderTabId === requestedTabId ? message : undefined;
+    }
+    return isTrustedNetworkContextExtensionSender(sender) ? message : undefined;
+  }
+  if (senderTabId === undefined) {
+    return undefined;
+  }
+  return { ...message, tabId: senderTabId };
+}
+
+function isSameExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
+  const senderUrl = typeof sender?.url === "string" ? sender.url : undefined;
+  if (!senderUrl) {
+    return false;
+  }
+  const extensionRoot = chrome.runtime?.getURL?.("");
+  if (!extensionRoot) {
+    return false;
+  }
+  try {
+    return isSameUrlAuthority(new URL(senderUrl), new URL(extensionRoot));
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedNetworkContextExtensionSender(sender?: chrome.runtime.MessageSender): boolean {
+  const senderUrl = typeof sender?.url === "string" ? sender.url : undefined;
+  if (!senderUrl) {
+    return false;
+  }
+  const devtoolsUrl = chrome.runtime?.getURL?.("src/ai-assistant/devtools.html");
+  if (!devtoolsUrl) {
+    return false;
+  }
+  try {
+    const senderParsed = new URL(senderUrl);
+    const devtoolsParsed = new URL(devtoolsUrl);
+    return isSameUrlAuthority(senderParsed, devtoolsParsed) && senderParsed.pathname === devtoolsParsed.pathname;
+  } catch {
+    return false;
+  }
+}
+
+function isSameUrlAuthority(left: URL, right: URL): boolean {
+  return left.protocol === right.protocol && left.host === right.host;
+}
+
+function createNetworkCompatibilityExecutor(tabId?: number): BackgroundToolExecutorOptions["networkCompatibilityExecutor"] {
+  if (tabId === undefined) {
+    return undefined;
+  }
+  const networkCompatibilityRecorder = networkDevtoolsBridge.createRecorderAdapter(tabId);
+  const executor = new BrowserNetworkToolExecutor(networkCompatibilityRecorder);
+  return async (toolCall, tool) => {
+    if (!networkCompatibilityRecorder.isEnabled() || !DEVTOOLS_LEGACY_NETWORK_TOOL_IDS.has(tool.id)) {
+      return undefined;
+    }
+    return executor.execute(toolCall);
+  };
+}
+
+function shouldExposeToolWithNetworkCompatibility(tabId?: number): (tool: ReturnType<typeof getRegisteredModelTools>[number]) => boolean {
+  const networkCompatibilityRecorder = tabId === undefined ? undefined : networkDevtoolsBridge.createRecorderAdapter(tabId);
+  return (tool) => {
+    if (shouldExposeTool(tool)) {
+      return true;
+    }
+    return DEVTOOLS_LEGACY_NETWORK_TOOL_IDS.has(tool.id) && networkCompatibilityRecorder?.isEnabled() === true;
+  };
+}
