@@ -99,6 +99,7 @@ import {
   filterModelToolsByClassification,
   getRegisteredModelTools,
   getModelToolGroups,
+  isToolRuntimeAvailable,
 } from "../../../src/shared/models/toolRegistry";
 
 describe("模型工具注册表", () => {
@@ -940,6 +941,29 @@ describe("模型工具注册表", () => {
         expect(MODEL_TOOL_CAPABILITY_VALUES).toContain(capability);
       }
     }
+  });
+
+  it("所有内置工具都有结构化分类并 obey 运行态可用矩阵", () => {
+    const tools = getRegisteredModelTools();
+    const byId = new Map(tools.map((tool) => [tool.id, tool]));
+
+    const invalidClassifications = tools.filter((tool) => {
+      const classification = tool.toolClassification;
+      return !classification ||
+        !MODEL_TOOL_RUNTIME_VALUES.includes(classification.runtime) ||
+        !MODEL_TOOL_RISK_VALUES.includes(classification.risk) ||
+        classification.capabilities.some((capability) => !MODEL_TOOL_CAPABILITY_VALUES.includes(capability));
+    });
+    expect(invalidClassifications).toEqual([]);
+
+    expect(isToolRuntimeAvailable(byId.get(CURRENT_TIME_TOOL_ID)!, false, "normal_restricted")).toBe(true);
+    expect(isToolRuntimeAvailable(byId.get(TAVILY_SEARCH_TOOL_ID)!, false, "normal_restricted")).toBe(true);
+    expect(isToolRuntimeAvailable(byId.get(BROWSER_TAKE_SNAPSHOT_TOOL_ID)!, false, "normal_restricted")).toBe(false);
+    expect(isToolRuntimeAvailable(byId.get(BROWSER_TAKE_SNAPSHOT_TOOL_ID)!, true, "normal_restricted")).toBe(true);
+    expect(isToolRuntimeAvailable(byId.get(BOUNDARY_REQUEST_USER_CHOICE_TOOL_ID)!, true, "normal_restricted")).toBe(false);
+    expect(isToolRuntimeAvailable(byId.get(BOUNDARY_REQUEST_USER_CHOICE_TOOL_ID)!, true, "controlled_enhanced")).toBe(true);
+    expect(isToolRuntimeAvailable(byId.get(FULL_ACCESS_EXECUTE_SCRIPT_TOOL_ID)!, true, "controlled_enhanced")).toBe(false);
+    expect(isToolRuntimeAvailable(byId.get(FULL_ACCESS_EXECUTE_SCRIPT_TOOL_ID)!, true, "full_access")).toBe(true);
   });
 
   it("现有工具分类矩阵覆盖本地、公开搜索、浏览器控制、受控增强和完全访问边界", () => {

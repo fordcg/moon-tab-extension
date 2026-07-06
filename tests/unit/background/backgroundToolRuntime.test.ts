@@ -160,6 +160,31 @@ describe("background 工具运行时封装", () => {
     expect(shouldExposeTool({ id: "full_access.execute_script", name: "full_access_execute_script", parameters: {} })).toBe(true);
   });
 
+  it("运行时暴露矩阵不会把受控增强和完全访问工具降级到普通浏览器控制", () => {
+    browserControlManagerMock.canExposeTakeSnapshotTool.mockReturnValue(true);
+    browserControlManagerMock.canExposeBrowserTool.mockReturnValue(true);
+    browserControlManagerMock.canExposeNetworkTool.mockReturnValue(true);
+    browserControlManagerMock.canExposeRuntimeReadTool.mockReturnValue(true);
+    browserControlManagerMock.canExposeBoundaryChoiceTool.mockReturnValue(false);
+    browserControlManagerMock.canExposeReplayTool.mockReturnValue(false);
+    browserControlManagerMock.canExposeFullAccessTool.mockReturnValue(false);
+
+    expect(shouldExposeTool({ id: "browser.click", name: "click", parameters: {} })).toBe(true);
+    expect(shouldExposeTool({ id: "network.list_requests", name: "network_list_requests", parameters: {} })).toBe(true);
+    expect(shouldExposeTool({ id: "runtime.inspect_globals", name: "runtime_inspect_globals", parameters: {} })).toBe(true);
+    expect(shouldExposeTool({ id: "boundary.request_user_choice", name: "boundary_request_user_choice", parameters: {} })).toBe(false);
+    expect(shouldExposeTool({ id: "replay.send_request", name: "replay_send_request", parameters: {} })).toBe(false);
+    expect(shouldExposeTool({ id: "full_access.fetch", name: "full_access_fetch", parameters: {} })).toBe(false);
+
+    browserControlManagerMock.canExposeBoundaryChoiceTool.mockReturnValue(true);
+    browserControlManagerMock.canExposeReplayTool.mockReturnValue(true);
+    browserControlManagerMock.canExposeFullAccessTool.mockReturnValue(true);
+
+    expect(shouldExposeTool({ id: "boundary.request_user_choice", name: "boundary_request_user_choice", parameters: {} })).toBe(true);
+    expect(shouldExposeTool({ id: "replay.send_request", name: "replay_send_request", parameters: {} })).toBe(true);
+    expect(shouldExposeTool({ id: "full_access.fetch", name: "full_access_fetch", parameters: {} })).toBe(true);
+  });
+
   it("Imagefree 图片生成注册为低风险本地工具并默认可暴露", () => {
     const imagefreeTool = getRegisteredModelTools().find((tool) => tool.id === IMAGEFREE_GENERATE_IMAGE_TOOL_ID);
 
