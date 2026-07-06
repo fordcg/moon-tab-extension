@@ -91,6 +91,22 @@ describe("浏览器控制全局运行态", () => {
     });
   });
 
+  it("工具偏好可以保存高风险工具 ID，但不会保存实时授权态", async () => {
+    await useAppStore.getState().updateChatPreferences({
+      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
+      defaultBrowserAutomationMode: "full_access",
+    });
+
+    const stored = await getAppSetting("chatPreferences");
+    expect(stored).toMatchObject({
+      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
+      defaultBrowserAutomationMode: "full_access",
+    });
+    expect(stored).not.toHaveProperty("browserControlEnabled");
+    expect(stored).not.toHaveProperty("browserAutomationMode");
+    expect(stored).not.toHaveProperty("pendingBoundaryChoice");
+  });
+
   it("默认自动化模式同步失败时保持浏览器控制开启并回退普通模式", async () => {
     const sendMessage = vi.fn((message: { type: string; enabled?: boolean; mode?: string }, callback: (response: unknown) => void) => {
       if (message.type === "browserControl.setAutomationMode") {

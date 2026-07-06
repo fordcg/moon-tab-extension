@@ -1397,6 +1397,119 @@ describe("background 入口", () => {
     });
   });
 
+  it("chat.send 会过滤偏好里当前运行态不可用的高风险工具", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        choices: [{ message: { content: "已过滤工具" } }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await import("../../../src/background/index");
+    const sendResponse = vi.fn();
+
+    const keepChannelOpen = mock.messageListeners[0](
+      {
+        type: "chat.send",
+        model: createTestModel(),
+        messages: [],
+        stream: false,
+        enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
+        toolChoice: "auto",
+      },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(keepChannelOpen).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: true, content: "已过滤工具" }));
+    });
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: Array<{ function: { name: string } }> };
+    expect(body.tools).toEqual([
+      expect.objectContaining({ function: expect.objectContaining({ name: "get_current_time" }) }),
+    ]);
+  });
+
+  it("chat.send 执行 allow-list 会拒绝模型返回的未暴露高风险工具调用", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [
+            {
+              message: {
+                content: "",
+                tool_calls: [
+                  {
+                    id: "call-full-access-fetch",
+                    type: "function",
+                    function: {
+                      name: "full_access_fetch",
+                      arguments: "{\"url\":\"https://example.com/private\"}",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: "工具决策完成" } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: "已拒绝未暴露高风险工具" } }],
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    await import("../../../src/background/index");
+    const sendResponse = vi.fn();
+
+    const keepChannelOpen = mock.messageListeners[0](
+      {
+        type: "chat.send",
+        model: createTestModel(),
+        messages: [],
+        stream: false,
+        enabledToolIds: ["system.current_time", "full_access.fetch"],
+        toolChoice: "auto",
+      },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(keepChannelOpen).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: true, content: "已拒绝未暴露高风险工具" }));
+    });
+    const initialBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: Array<{ function: { name: string } }> };
+    expect(initialBody.tools).toEqual([
+      expect.objectContaining({ function: expect.objectContaining({ name: "get_current_time" }) }),
+    ]);
+    const toolDecisionBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body)) as {
+      messages?: Array<{ role: string; name?: string; content?: string; is_error?: boolean }>;
+    };
+    expect(toolDecisionBody.messages).toContainEqual(expect.objectContaining({
+      role: "tool",
+      tool_call_id: "call-full-access-fetch",
+      name: "full_access_fetch",
+      content: "工具 full_access_fetch 未注册，已拒绝执行。",
+    }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(mock.chrome.debugger.sendCommand).not.toHaveBeenCalled();
+  });
+
   it.each(DEVTOOLS_LEGACY_NETWORK_CASES)("聊天工具链在仅有 DevTools Network bridge 连接时可执行旧 Network 工具 $id", async (legacyTool) => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome);
