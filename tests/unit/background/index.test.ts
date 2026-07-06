@@ -1581,6 +1581,43 @@ describe("background 入口", () => {
     ]);
   });
 
+  it("chat.send 在 DevTools 兼容层只暴露 extract_js_candidates 而不暴露 debugger-backed 工具", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        choices: [{ message: { content: "只读 Network 工具" } }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await import("../../../src/background/index");
+    connectDevtoolsNetworkBridge(mock);
+    const sendResponse = vi.fn();
+
+    const keepChannelOpen = mock.messageListeners[0](
+      {
+        type: "chat.send",
+        model: createTestModel(),
+        messages: [],
+        stream: false,
+        enabledToolIds: ["network.extract_js_candidates", "network.wait_for_requests", "js.search_sources", "runtime.inspect_globals", "full_access.fetch"],
+        toolChoice: "auto",
+      },
+      { tab: { id: 7 } as chrome.tabs.Tab },
+      sendResponse,
+    );
+
+    expect(keepChannelOpen).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: true, content: "只读 Network 工具" }));
+    });
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: Array<{ function: { name: string } }> };
+    expect(body.tools).toEqual([
+      expect.objectContaining({ function: expect.objectContaining({ name: "network_extract_js_candidates" }) }),
+    ]);
+  });
+
   it("chat.send 不会把其他标签页的 DevTools Network bridge 暴露给当前 sender tab", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome);
