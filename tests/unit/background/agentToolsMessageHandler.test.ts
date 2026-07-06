@@ -121,6 +121,24 @@ describe("AgentTools 兼容消息处理", () => {
     }));
   });
 
+  it("AgentTools 审计日志不会写入 MCP Bearer Token 或 Grok API Key 原文", async () => {
+    const fetcher = vi.fn().mockResolvedValue(createJsonResponse({ ok: true }));
+
+    await handleAgentToolsMessage({
+      type: "agentTools.configureMcp",
+      mcp: {
+        servers: [{ id: "mysql", name: "MySQL", endpointUrl: "https://trusted.example.com/mcp", enabled: true, bearerToken: "mcp-secret" }],
+        baseUrl: "http://127.0.0.1:17333/",
+        grokApiKey: "xai-secret",
+      },
+    }, fetcher as unknown as typeof fetch);
+
+    const audit = localStorage.data.get(AGENT_TOOLS_AUDIT_KEY);
+    expect(JSON.stringify(audit)).not.toContain("mcp-secret");
+    expect(JSON.stringify(audit)).not.toContain("xai-secret");
+    expect(JSON.stringify(audit)).toContain("[已脱敏]");
+  });
+
   it("远程 MCP bridge baseUrl 配置 Grok 时不推送 API Key", async () => {
     const fetcher = vi.fn().mockResolvedValue(createJsonResponse({ ok: true }));
 
@@ -310,12 +328,52 @@ describe("AgentTools 兼容消息处理", () => {
 
     expect(response).toEqual({ ok: true, content: "token=server-secret password=hidden" });
     const auditResponse = await handleAgentToolsMessage({ type: "agentTools.getAuditLog" });
-    expect(auditResponse).toMatchObject({ ok: true, auditLog: [expect.objectContaining({ tool: expect.objectContaining({ id: createMcpToolId("mysql", "query") }) })] });
+    expect(auditResponse).toMatchObject({
+      ok: true,
+      auditLog: expect.arrayContaining([expect.objectContaining({ tool: expect.objectContaining({ id: createMcpToolId("mysql", "query") }) })]),
+    });
     const auditText = JSON.stringify(localStorage.data.get(AGENT_TOOLS_AUDIT_KEY));
     expect(auditText).not.toContain("client-secret");
     expect(auditText).not.toContain("client-password");
     expect(auditText).not.toContain("server-secret");
     expect(auditText).not.toContain("hidden");
+    expect(auditText).toContain("[已脱敏]");
+  });
+
+  it("MCP 审计日志会完整脱敏字符串里的 Bearer Authorization", async () => {
+    await handleAgentToolsMessage({
+      type: "agentTools.configureMcp",
+      mcp: {
+        servers: [
+          {
+            id: "mysql",
+            name: "MySQL",
+            endpointUrl: "https://trusted.example.com/mcp",
+            enabled: true,
+            bearerToken: "secret",
+            tools: [{ name: "query", description: "Run SQL", inputSchema: { type: "object", properties: {} } }],
+          },
+        ],
+      },
+    });
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18" } }, { "Mcp-Session-Id": "session-1" }))
+      .mockResolvedValueOnce(createJsonResponse(null))
+      .mockResolvedValueOnce(createJsonResponse({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { content: [{ type: "text", text: "Authorization: Bearer mcp-secret\nauthorization=Bearer second-secret" }] },
+      }));
+
+    await handleAgentToolsMessage({
+      type: "agentTools.call",
+      toolId: createMcpToolId("mysql", "query"),
+      input: { sql: "select 1" },
+    }, fetcher as unknown as typeof fetch);
+
+    const auditText = JSON.stringify(localStorage.data.get(AGENT_TOOLS_AUDIT_KEY));
+    expect(auditText).not.toContain("mcp-secret");
+    expect(auditText).not.toContain("second-secret");
     expect(auditText).toContain("[已脱敏]");
   });
 

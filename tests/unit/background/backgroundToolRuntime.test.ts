@@ -10,6 +10,8 @@ import {
   getRegisteredModelTools,
   IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
   IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+  TAVILY_SEARCH_TOOL_ID,
+  TAVILY_SEARCH_TOOL_NAME,
 } from "../../../src/shared/models/toolRegistry";
 import type { ModelRequestMessage, ModelToolCall, ModelToolRegistryEntry, ModelToolResult } from "../../../src/shared/models/types";
 import type { ModelConfig } from "../../../src/shared/types";
@@ -488,6 +490,43 @@ describe("background 工具运行时封装", () => {
       isError: true,
     });
     expect(executeTavilySearchFromSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("Tavily 搜索拒绝空问题和额外参数，成功时只产出 web-search 附件", async () => {
+    const tavilyTool = getRegisteredModelTools().find((tool) => tool.id === TAVILY_SEARCH_TOOL_ID)!;
+    const executor = createBackgroundToolExecutor({ model: createModel() }, vi.fn() as unknown as typeof fetch);
+
+    await expect(executor(createToolCall(TAVILY_SEARCH_TOOL_NAME, { query: "" }), tavilyTool)).resolves.toMatchObject({
+      isError: true,
+      content: "Tavily 搜索问题不能为空",
+    });
+    await expect(executor(createToolCall(TAVILY_SEARCH_TOOL_NAME, { query: "Chrome", include_domains: ["example.com"] }), tavilyTool)).resolves.toMatchObject({
+      isError: true,
+      content: "Tavily 搜索工具只接受 query 参数",
+    });
+
+    executeTavilySearchFromSettingsMock.mockResolvedValueOnce({
+      ok: true,
+      attachment: {
+        provider: "tavily",
+        query: "Chrome 扩展",
+        answer: "Chrome 扩展文档摘要",
+        results: [{ title: "Chrome Extensions", url: "https://developer.chrome.com/docs/extensions", content: "Extensions docs." }],
+        truncated: false,
+        createdAt: 10,
+      },
+    });
+
+    const success = await executor(createToolCall(TAVILY_SEARCH_TOOL_NAME, { query: "Chrome 扩展" }), tavilyTool);
+    expect(success.isError).toBeUndefined();
+    expect(success.toolAttachments).toEqual([
+      expect.objectContaining({
+        kind: "web-search",
+        provider: "tavily",
+        query: "Chrome 扩展",
+        redacted: false,
+      }),
+    ]);
   });
 
   it("Imagefree 工具分发到全局运行时 hook，缺失 hook 时返回不可用错误", async () => {

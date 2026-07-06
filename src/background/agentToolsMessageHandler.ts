@@ -20,9 +20,10 @@ const DEFAULT_GROK_MODEL = "grok-4.20-multi-agent-xhigh";
 const AGENT_TOOL_AUDIT_MAX = 80;
 const REDACTED_VALUE = "[已脱敏]";
 const MAX_REDACTION_DEPTH = 8;
-const SENSITIVE_KEY_PATTERN = /(?:token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie)/i;
-const SENSITIVE_ASSIGNMENT_PATTERN = /\b(token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie)\b\s*([:=])\s*("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;&}]+)/gi;
-const SENSITIVE_JSON_STRING_PATTERN = /("(?:token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie)"\s*:\s*)"(?:\\.|[^"])*"/gi;
+const SENSITIVE_KEY_PATTERN = /(?:token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)/i;
+const SENSITIVE_ASSIGNMENT_PATTERN = /\b(token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)\b\s*([:=])\s*("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;&}]+)/gi;
+const SENSITIVE_JSON_STRING_PATTERN = /("(?:token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)"\s*:\s*)"(?:\\.|[^"])*"/gi;
+const SENSITIVE_BEARER_PATTERN = /\bBearer\s+("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;&}]+)/gi;
 
 type Fetcher = typeof fetch;
 
@@ -133,6 +134,7 @@ async function createStatusResponse(builtInTools: ModelToolRegistryEntry[]): Pro
 }
 
 async function configureMcp(rawMcpConfig: unknown, fetcher: Fetcher): Promise<void> {
+  const startedAt = Date.now();
   const currentSettings = await getMcpSettings();
   const mcpConfig = isRecord(rawMcpConfig) ? rawMcpConfig : {};
   const rawServers = Array.isArray(mcpConfig.servers) ? mcpConfig.servers : currentSettings.servers;
@@ -142,6 +144,17 @@ async function configureMcp(rawMcpConfig: unknown, fetcher: Fetcher): Promise<vo
   await persistMcpBearerTokens(rawServers, nextSettings.servers);
   await saveLegacyAgentToolsSettings(mcpConfig);
   await pushGrokBridgeConfig(mcpConfig, fetcher);
+  await appendAuditRecord(createAuditRecord({
+    toolId: "agentTools.configureMcp",
+    toolName: "agentTools.configureMcp",
+    displayName: "AgentTools.configureMcp",
+    serverId: "agentTools",
+    input: mcpConfig,
+    result: { ok: true },
+    startedAt,
+    completedAt: Date.now(),
+    status: "success",
+  }));
 }
 
 async function persistMcpBearerTokens(rawServers: unknown[], normalizedServers: McpServerConfig[]): Promise<void> {
@@ -314,7 +327,10 @@ async function readAuditLog(): Promise<Array<Record<string, unknown> | AgentTool
 }
 
 async function appendAuditRecord(record: AgentToolsAuditRecord): Promise<void> {
-  const nextLog = [...await readAuditLog(), record].slice(-AGENT_TOOL_AUDIT_MAX);
+  const nextLog = [...await readAuditLog(), record]
+    .map((item) => redactAgentToolValue(item))
+    .filter(isRecord)
+    .slice(-AGENT_TOOL_AUDIT_MAX);
   await storageSet({ [AGENT_TOOLS_AUDIT_KEY]: nextLog });
 }
 
@@ -392,6 +408,7 @@ function redactAgentToolValue(value: unknown, depth = 0, key = ""): unknown {
 
 function redactSensitiveText(value: string): string {
   return value
+    .replace(SENSITIVE_BEARER_PATTERN, `Bearer ${REDACTED_VALUE}`)
     .replace(SENSITIVE_JSON_STRING_PATTERN, `$1"${REDACTED_VALUE}"`)
     .replace(SENSITIVE_ASSIGNMENT_PATTERN, (_match, key: string, separator: string) => `${key}${separator}${REDACTED_VALUE}`);
 }
