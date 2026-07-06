@@ -13,6 +13,7 @@ function createToolCall(argumentsValue: Record<string, unknown>): ModelToolCall 
 }
 
 function createRequestArguments(): Record<string, unknown> {
+  const targetToolArguments = { draftId: "draft-1" };
   return {
     question: "是否允许本轮只发送一个不携带凭据的请求重放草案？",
     reason: "需要验证已采集接口在无登录凭据时的响应结构是否一致。",
@@ -34,11 +35,19 @@ function createRequestArguments(): Record<string, unknown> {
     ],
     allowMultiple: false,
     expiresInMs: 30000,
-    scopeKey: "replay_send_request\u0000draft-1",
+    targetToolName: "replay_send_request",
+    targetToolArguments,
   };
 }
 
-describe("受控增强边界确认执行器", () => {
+function createReplaySendScopeKey(): string {
+  return createBoundaryGrantScopeKey({
+    name: "replay_send_request",
+    arguments: { draftId: "draft-1" },
+  });
+}
+
+describe("边界确认工具执行器", () => {
   it("用户选择 AI 提供的动态选项后生成一次性授权", async () => {
     let pendingRequest: BrowserControlBoundaryChoiceRequestMessage | undefined;
     const executor = new BoundaryChoiceToolExecutor(
@@ -60,7 +69,7 @@ describe("受控增强边界确认执行器", () => {
     expect(executor.getCurrentGrantContext()).toMatchObject({
       tabId: 7,
       origin: "https://example.com",
-      scopeKey: "replay_send_request\u0000draft-1",
+      scopeKey: createReplaySendScopeKey(),
       grants: ["send_single_confirmed_replay_request_without_credentials"],
       selectedChoiceIds: ["send_once"],
     });
@@ -71,7 +80,7 @@ describe("受控增强边界确认执行器", () => {
     expect(executor.getCurrentGrantContext()).toMatchObject({
       tabId: 7,
       origin: "https://example.com",
-      scopeKey: "replay_send_request\u0000draft-1",
+      scopeKey: createReplaySendScopeKey(),
       grants: ["send_single_confirmed_replay_request_without_credentials"],
       selectedChoiceIds: ["send_once"],
     });
@@ -204,7 +213,91 @@ describe("受控增强边界确认执行器", () => {
     });
   });
 
-  it("AI 主动询问缺少目标工具绑定时不会生成无法消费的假授权", async () => {
+  it("目标工具参数里的 transient scopeKey 不会污染一次性授权作用域", async () => {
+    let pendingRequest: BrowserControlBoundaryChoiceRequestMessage | undefined;
+    const executor = new BoundaryChoiceToolExecutor(
+      vi.fn((request) => {
+        pendingRequest = request;
+      }),
+      () => ({ tabId: 7, origin: "https://example.com", enhanced: true }),
+    );
+    const targetArgumentsWithScopeKey = { requestIds: ["req-1"], scopeKey: "ignored-by-normalizer" };
+    const targetArgumentsWithoutScopeKey = { requestIds: ["req-1"] };
+    const expectedScopeKey = createBoundaryGrantScopeKey({
+      name: "network_get_request_details",
+      arguments: targetArgumentsWithoutScopeKey,
+    });
+
+    expect(createBoundaryGrantScopeKey({
+      name: "network_get_request_details",
+      arguments: targetArgumentsWithScopeKey,
+    })).toBe(expectedScopeKey);
+
+    const resultPromise = executor.execute(createToolCall({
+      ...createRequestArguments(),
+      scopeKey: undefined,
+      targetToolName: "network_get_request_details",
+      targetToolArguments: targetArgumentsWithScopeKey,
+    }));
+    await vi.waitFor(() => expect(pendingRequest).toBeDefined());
+    expect(executor.respond(pendingRequest!.requestId, { selectedChoiceIds: ["send_once"] })).toBe(true);
+    const result = await resultPromise;
+
+    expect(result.isError).toBeUndefined();
+    expect(executor.getCurrentGrantContext()).toMatchObject({
+      tabId: 7,
+      origin: "https://example.com",
+      scopeKey: expectedScopeKey,
+      grants: ["send_single_confirmed_replay_request_without_credentials"],
+    });
+  });
+
+  it("tab 或 origin 改变会立即清理当前一次性授权", async () => {
+    let currentContext = { tabId: 7, origin: "https://example.com", enhanced: true };
+    let pendingRequest: BrowserControlBoundaryChoiceRequestMessage | undefined;
+    const executor = new BoundaryChoiceToolExecutor(
+      vi.fn((request) => {
+        pendingRequest = request;
+      }),
+      () => currentContext,
+    );
+
+    const firstResultPromise = executor.execute(createToolCall({
+      ...createRequestArguments(),
+      scopeKey: undefined,
+      targetToolName: "network_get_request_details",
+      targetToolArguments: { requestIds: ["req-1"] },
+    }));
+    await vi.waitFor(() => expect(pendingRequest).toBeDefined());
+    expect(executor.respond(pendingRequest!.requestId, { selectedChoiceIds: ["send_once"] })).toBe(true);
+    await firstResultPromise;
+    expect(executor.getCurrentGrantContext()).toBeDefined();
+
+    currentContext = { tabId: 8, origin: "https://example.com", enhanced: true };
+    expect(executor.getCurrentGrantContext()).toBeUndefined();
+    currentContext = { tabId: 7, origin: "https://example.com", enhanced: true };
+    expect(executor.getCurrentGrantContext()).toBeUndefined();
+
+    pendingRequest = undefined;
+    currentContext = { tabId: 8, origin: "https://example.com", enhanced: true };
+    const secondResultPromise = executor.execute(createToolCall({
+      ...createRequestArguments(),
+      scopeKey: undefined,
+      targetToolName: "network_get_request_details",
+      targetToolArguments: { requestIds: ["req-1"] },
+    }));
+    await vi.waitFor(() => expect(pendingRequest).toBeDefined());
+    expect(executor.respond(pendingRequest!.requestId, { selectedChoiceIds: ["send_once"] })).toBe(true);
+    await secondResultPromise;
+    expect(executor.getCurrentGrantContext()).toBeDefined();
+
+    currentContext = { tabId: 8, origin: "https://other.example", enhanced: true };
+    expect(executor.getCurrentGrantContext()).toBeUndefined();
+    currentContext = { tabId: 8, origin: "https://example.com", enhanced: true };
+    expect(executor.getCurrentGrantContext()).toBeUndefined();
+  });
+
+  it("AI 主动询问只带顶层 scopeKey 缺少目标工具绑定时不会生成可消费授权", async () => {
     let pendingRequest: BrowserControlBoundaryChoiceRequestMessage | undefined;
     const executor = new BoundaryChoiceToolExecutor(
       vi.fn((request) => {
@@ -215,7 +308,9 @@ describe("受控增强边界确认执行器", () => {
 
     const resultPromise = executor.execute(createToolCall({
       ...createRequestArguments(),
-      scopeKey: undefined,
+      scopeKey: "replay_send_request\u0000draft-1",
+      targetToolName: undefined,
+      targetToolArguments: undefined,
     }));
     await vi.waitFor(() => expect(pendingRequest).toBeDefined());
     expect(executor.respond(pendingRequest!.requestId, { selectedChoiceIds: ["send_once"] })).toBe(true);

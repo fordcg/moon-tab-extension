@@ -311,10 +311,6 @@ function normalizeChoiceId(value: unknown): string | undefined {
 }
 
 function normalizeBoundaryScopeKey(args: Record<string, unknown>): string {
-  const explicitScopeKey = normalizeScopeKey(args.scopeKey);
-  if (explicitScopeKey) {
-    return explicitScopeKey;
-  }
   const targetToolName = normalizeScopeKey(args.targetToolName);
   if (!targetToolName || !args.targetToolArguments || typeof args.targetToolArguments !== "object" || Array.isArray(args.targetToolArguments)) {
     return "";

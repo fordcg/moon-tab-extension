@@ -1975,7 +1975,6 @@ export class BrowserControlManager {
   }
 
   private async applyAutomationBoundaryConfirmation(toolCall: ModelToolCall, result: ModelToolResult): Promise<ModelToolResult> {
-    const scopeKey = createBoundaryGrantScopeKey(toolCall);
     return applyAutomationBoundaryConfirmation(result, async (request) => {
       if (!this.canExposeBoundaryChoiceTool()) {
         return undefined;
@@ -1983,7 +1982,11 @@ export class BrowserControlManager {
       const confirmation = await this.boundaryChoiceToolExecutor.execute({
         id: `auto-boundary-${toolCall.id}-${Date.now()}`,
         name: "boundary_request_user_choice",
-        arguments: { ...request, scopeKey },
+        arguments: {
+          ...request,
+          targetToolName: toolCall.name,
+          targetToolArguments: toolCall.arguments,
+        },
       });
       return confirmation.content;
     });
