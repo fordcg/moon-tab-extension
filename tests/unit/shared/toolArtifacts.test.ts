@@ -109,6 +109,58 @@ describe("通用工具附件聚合", () => {
     expect(formatToolAttachmentForExport(attachment)).not.toContain("[已脱敏]");
   });
 
+  it("通用工具附件归一化会脱敏 token、api_key、cookie 和 bearer 文本", () => {
+    const attachment = normalizeToolAttachment({
+      id: "generic-sensitive-1",
+      kind: "mcp-result",
+      title: "MCP 工具结果",
+      summary: "Authorization=Bearer abc.def token=secret",
+      details: "api_key=xai-secret cookie=sid=secret password=123456 Bearer raw-token",
+      createdAt: 10,
+      redacted: false,
+      truncated: false,
+    });
+
+    expect(attachment).toMatchObject({ kind: "mcp-result", redacted: true });
+    const prompt = formatToolAttachmentForPrompt(attachment!);
+    const exported = formatToolAttachmentForExport(attachment!);
+    expect(prompt).not.toContain("xai-secret");
+    expect(prompt).not.toContain("sid=secret");
+    expect(prompt).not.toContain("raw-token");
+    expect(exported).not.toContain("xai-secret");
+    expect(exported).not.toContain("sid=secret");
+    expect(exported).not.toContain("raw-token");
+    expect(exported).toContain("[已脱敏]");
+  });
+
+  it("自动化报告会标记完全访问工具参与并脱敏证据", () => {
+    const report = createAutomationReportToolAttachment({
+      objective: "读取登录态 token=secret",
+      conclusion: "已读取 cookie=sid=secret",
+      records: [
+        createToolRecord({
+          id: "call-full-access",
+          toolId: "full_access.fetch",
+          name: "full_access_fetch",
+          displayName: "完全访问 Fetch",
+          resultSummary: "Authorization: Bearer secret api_key=xai-secret",
+          completedAt: 2,
+        }),
+      ],
+      createdAt: 3,
+    });
+
+    expect(report).toMatchObject({
+      kind: "automation-report",
+      redacted: true,
+      fullAccessIncluded: true,
+    });
+    const exported = formatToolAttachmentForExport(report!);
+    expect(exported).not.toContain("xai-secret");
+    expect(exported).not.toContain("Bearer secret");
+    expect(exported).toContain("[已脱敏]");
+  });
+
   it("会把同一条消息里的多次 Tavily 工具结果聚合成一个网络搜索附件", () => {
     const message = createAssistantMessage({
       toolCallRecords: [

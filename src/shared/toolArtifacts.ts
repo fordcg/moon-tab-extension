@@ -896,15 +896,19 @@ function normalizeGenericToolAttachment(source: Partial<ChatToolAttachment>, kin
     return undefined;
   }
 
-  const truncatedDetails = "details" in source && typeof source.details === "string" ? truncateText(source.details, GENERIC_DETAIL_LIMIT) : undefined;
+  const redactedSummary = redactInlineSensitiveText(summary);
+  const redactedDetails = "details" in source && typeof source.details === "string"
+    ? redactInlineSensitiveText(source.details)
+    : undefined;
+  const truncatedDetails = redactedDetails ? truncateText(redactedDetails, GENERIC_DETAIL_LIMIT) : undefined;
   return {
     id: normalizeId(source.id, `tool-attachment-${kind}-${normalizeTimestamp(source.createdAt)}`),
     kind,
     title,
-    summary,
+    summary: redactedSummary,
     sourceToolCallId: normalizeOptionalString(source.sourceToolCallId),
     createdAt: normalizeTimestamp(source.createdAt),
-    redacted: typeof source.redacted === "boolean" ? source.redacted : true,
+    redacted: true,
     truncated: source.truncated === true || Boolean(truncatedDetails?.truncated),
     details: truncatedDetails?.text,
   };
