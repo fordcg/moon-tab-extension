@@ -25,7 +25,7 @@ import type {
   SourceMapOriginalContext,
   SourceMapResolvedLocation,
 } from "./types";
-import { formatNetworkAttachmentForExport, formatNetworkAttachmentSummary, redactNetworkRequestDetail, redactNetworkText } from "./networkContext";
+import { formatNetworkAttachmentForExport, formatNetworkAttachmentSummary, redactNetworkRequestDetail, redactNetworkText, redactNetworkTextSnippets } from "./networkContext";
 import { isPngDataUrl } from "./tabCapture";
 import { createTavilySearchContextPrompt, formatTavilySearchAttachmentSummary } from "./webSearch/tavily";
 import { truncateText } from "./utils/text";
@@ -1595,9 +1595,10 @@ function redactAutomationText(value: string): string {
   const inlineRedacted = redactInlineSensitiveText(value);
   const trimmed = inlineRedacted.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[") || isPlainFormEncodedText(trimmed)) {
-    return redactNetworkText(trimmed);
+    return redactNetworkTextSnippets(redactNetworkText(trimmed));
   }
-  return inlineRedacted.replace(/https?:\/\/[^\s)）]+/g, (url) => redactNetworkText(url));
+  const urlRedacted = inlineRedacted.replace(/https?:\/\/[^\s)）]+/g, (url) => redactNetworkText(url));
+  return redactNetworkTextSnippets(urlRedacted);
 }
 
 function redactGenericToolText(value: string): string {

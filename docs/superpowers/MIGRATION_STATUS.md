@@ -96,6 +96,10 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "内嵌 JSON\|字符串化 JSON"` | RED 后通过 | 2026-07-07 Phase 5 embedded JSON snippet display fix；补丁前失败于 generic display summary 泄露 `xai-secret`，补丁后 1 file / 2 tests passed / 12 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 embedded JSON snippet redaction fix；2 files / 38 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 embedded JSON snippet redaction fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "直接内嵌 JSON\|内嵌 JSON\|字符串化 JSON"` | RED 后通过 | 2026-07-07 Phase 5 direct embedded JSON snippet redaction fix；补丁前失败于 direct generic summary 泄露 `xai-secret`、details 泄露 `123456` / `abc`，补丁后 1 file / 3 tests passed / 22 skipped |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "直接内嵌 JSON\|内嵌 JSON\|字符串化 JSON"` | RED 后通过 | 2026-07-07 Phase 5 direct embedded JSON snippet display fix；补丁前失败于 generic display summary/details 泄露 direct embedded JSON secrets，补丁后 1 file / 3 tests passed / 12 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 direct embedded JSON snippet redaction fix；2 files / 40 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 direct embedded JSON snippet redaction fix；tsc --noEmit |
 
 ## 未解决问题
 
