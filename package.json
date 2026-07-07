@@ -18,6 +18,7 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build:extension && npm run test && npm run test:legacy && npm run check:package",
+    "verify:release": "npm run check && npm run test:e2e && node scripts/verify-release-readiness.mjs",
     "mcp:grok-search": "node scripts/run_grok_search_mcp_bridge.mjs --model grok-4.20-multi-agent-xhigh",
     "mcp:grok-search:check": "node scripts/run_grok_search_mcp_bridge.mjs --model grok-4.20-multi-agent-xhigh --list-tools-once",
     "mcp:grok-search:start-bg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start_grok_search_mcp_bridge.ps1",
