@@ -109,6 +109,72 @@ describe("通用工具附件聚合", () => {
     expect(formatToolAttachmentForExport(attachment)).not.toContain("[已脱敏]");
   });
 
+  it("混合工具附件聚合会结构化脱敏 fullAccess Network 和 raw generic 内容", () => {
+    const message = createAssistantMessage({
+      toolCallRecords: [
+        createToolRecord({
+          id: "call-mixed-sensitive",
+          toolId: "browser.inspect_page",
+          name: "browser_inspect_page",
+          displayName: "页面巡检",
+        }),
+      ],
+      toolAttachments: [
+        {
+          id: "attachment-network-full-access-mixed",
+          kind: "network",
+          title: "Network 请求详情",
+          summary: "原始详情",
+          sourceToolCallId: "call-mixed-sensitive",
+          createdAt: 2,
+          redacted: false,
+          fullAccess: true,
+          truncated: false,
+          requests: [
+            {
+              id: "req-mixed-1",
+              url: "https://example.com/login?token=query-secret",
+              method: "POST",
+              requestHeaders: [{ name: "Authorization", value: "Bearer mixed-token" }],
+              requestBody: "{\"password\":\"123456\",\"access_token\":\"abc\"}",
+              responseBody: "{\"secret\":\"raw-json-secret\",\"ok\":true}",
+              redacted: false,
+              truncated: false,
+            },
+          ],
+        },
+        {
+          id: "attachment-page-context-raw-mixed",
+          kind: "page-context",
+          title: "页面上下文",
+          summary: "api_key=xai-secret",
+          details: "cookie: sid=secret Authorization: Bearer raw-token",
+          sourceToolCallId: "call-mixed-sensitive",
+          createdAt: 3,
+          redacted: false,
+          truncated: false,
+        },
+      ],
+    });
+
+    const [attachment] = collectMessageToolAttachments(message);
+    const prompt = formatToolAttachmentForPrompt(attachment);
+    const exported = formatToolAttachmentForExport(attachment);
+
+    expect(attachment).toMatchObject({ kind: "tool-result-set", redacted: true });
+    for (const output of [prompt, exported]) {
+      expect(output).not.toContain("query-secret");
+      expect(output).not.toContain("mixed-token");
+      expect(output).not.toContain("123456");
+      expect(output).not.toContain("abc");
+      expect(output).not.toContain("raw-json-secret");
+      expect(output).not.toContain("xai-secret");
+      expect(output).not.toContain("sid=secret");
+      expect(output).not.toContain("raw-token");
+      expect(output).toContain("[已脱敏]");
+    }
+  });
+
   it("通用工具附件归一化会脱敏 token、api_key、cookie 和 bearer 文本", () => {
     const attachment = normalizeToolAttachment({
       id: "generic-sensitive-1",

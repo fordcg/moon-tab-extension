@@ -67,6 +67,9 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npm run test:e2e` | 通过 | 2026-07-07 Phase 5 ledger verification；Playwright smoke 7 tests |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "live collection"` | RED 后通过 | 2026-07-07 Phase 5 final review patch；补丁前失败于 raw generic attachment `redacted: false`，补丁后 1 test passed / 19 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 final review patch；1 file / 20 tests |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "混合工具附件聚合"` | RED 后通过 | 2026-07-07 Phase 5 quality fix；补丁前失败于 mixed aggregate 泄露 Network JSON body `password` / `access_token` / `secret`，补丁后 1 test passed / 20 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 quality fix；1 file / 21 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 quality fix；tsc --noEmit |
 
 ## 未解决问题
 

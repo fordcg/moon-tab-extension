@@ -42,6 +42,13 @@ type ToolAttachmentAggregateGroup = {
   toolDisplayName?: string;
 };
 
+type MixedToolAttachmentAggregatePart = {
+  summary: string;
+  details: string;
+  redacted: boolean;
+  truncated: boolean;
+};
+
 export function createWebSearchToolAttachment(
   attachment: ChatWebSearchPayload,
   sourceToolCallId?: string,
@@ -429,8 +436,9 @@ function aggregateToolAttachmentGroup(group: ToolAttachmentAggregateGroup): Chat
 }
 
 function aggregateMixedKindToolAttachments(attachments: ChatToolAttachment[], toolDisplayName?: string): ChatGenericToolAttachment {
-  const details = redactInlineSensitiveText(uniqueNonEmptyStrings(attachments.map(formatToolAttachmentForExport)).join("\n\n"));
-  const summary = uniqueNonEmptyStrings(attachments.map((attachment) => redactInlineSensitiveText(attachment.summary))).join("\n");
+  const parts = attachments.map(formatToolAttachmentForMixedAggregate);
+  const details = uniqueNonEmptyStrings(parts.map((part) => part.details)).join("\n\n");
+  const summary = uniqueNonEmptyStrings(parts.map((part) => part.summary)).join("\n");
   const truncatedDetails = truncateText(details, GENERIC_DETAIL_LIMIT);
   return {
     id: `tool-attachment-tool-result-set-aggregated-${attachments.map((attachment) => attachment.id).join("-")}`,
@@ -438,9 +446,45 @@ function aggregateMixedKindToolAttachments(attachments: ChatToolAttachment[], to
     title: `${toolDisplayName ?? attachments[0].title}结果`,
     summary,
     createdAt: Math.max(...attachments.map((attachment) => attachment.createdAt)),
-    redacted: true,
-    truncated: attachments.some((attachment) => attachment.truncated) || truncatedDetails.truncated,
+    redacted: parts.every((part) => part.redacted),
+    truncated: parts.some((part) => part.truncated) || truncatedDetails.truncated,
     details: truncatedDetails.text || undefined,
+  };
+}
+
+function formatToolAttachmentForMixedAggregate(attachment: ChatToolAttachment): MixedToolAttachmentAggregatePart {
+  if (isNetworkToolAttachment(attachment)) {
+    const requests = attachment.requests.map(redactNetworkRequestDetail);
+    const summary = formatNetworkAttachmentSummary(requests);
+    return {
+      summary: attachment.summary,
+      details: ["# Network 请求详情附件", "", summary, "", formatNetworkAttachmentForExport(requests)].join("\n"),
+      redacted: true,
+      truncated: attachment.truncated || requests.some((request) => request.truncated),
+    };
+  }
+
+  if (
+    isWebSearchToolAttachment(attachment)
+    || isJsSourceToolAttachment(attachment)
+    || isSourceMapToolAttachment(attachment)
+    || isBrowserScreenshotToolAttachment(attachment)
+    || isAutomationReportToolAttachment(attachment)
+  ) {
+    return {
+      summary: attachment.summary,
+      details: formatToolAttachmentForExport(attachment),
+      redacted: attachment.redacted,
+      truncated: attachment.truncated,
+    };
+  }
+
+  const safeAttachment = sanitizeGenericToolAttachment(attachment);
+  return {
+    summary: safeAttachment.summary,
+    details: formatToolAttachmentForExport(safeAttachment),
+    redacted: safeAttachment.redacted,
+    truncated: safeAttachment.truncated,
   };
 }
 
