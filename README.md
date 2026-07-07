@@ -128,7 +128,7 @@ AI 侧边栏继续迁入低风险的 `network.clear_requests`：
 ## 目录结构
 
 - `public/manifest.json`: Vite/package 流程使用的 MV3 源清单；扩展加载使用构建输出 `dist/` 或打包产物，不直接加载仓库根目录。
-- `content/`: 注入普通网页的 content script，目前负责打开可拖动的 AI 悬浮窗。
+- `src/content/`: 注入普通网页的 content script 源码，目前负责页面上下文提取和可拖动 AI 悬浮窗激活；构建后输出为 `content/index.js`。
 - `src/background/`: Service Worker 入口和扩展级事件注册。
 - `src/shared/`: 跨页面共享的纯逻辑、协议和状态工具。
 - `src/pages/newtab/`: 新标签页功能。UI 控制器放在根层，纯逻辑放在 `helpers/` 或独立 service 模块。

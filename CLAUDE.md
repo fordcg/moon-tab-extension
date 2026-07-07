@@ -4,120 +4,71 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository scope
 
-This repository is a Manifest V3 browser extension that replaces the browser new tab page with a custom search UI.
+This repository is a Manifest V3 browser extension built with Vite, TypeScript, and React. The source manifest is `public/manifest.json`; do not treat the repository root as a directly loadable unpacked extension.
 
-The product code is the root `manifest.json` plus `src/`.
+Product source is under `src/` plus public build inputs under `public/`:
 
-Treat these directories carefully when exploring the repo:
-- `src/` — actual extension code.
-- `.tmp/` — scratch/verification artifacts. The only currently useful project helper here is `.tmp/verify_newtab_extension.py`.
-- `tmp/` — external/reference material, not part of the runtime extension shipped from this repo.
+- `public/manifest.json` - MV3 source manifest used by the Vite/package flow.
+- `src/content/` - content script source; the built extension emits `content/index.js`.
+- `src/background/` - service worker entry, extension event wiring, tool runtimes, and background message handlers.
+- `src/side-panel/` - Browser AI Assistant React side panel UI and runtime state.
+- `src/devtools/` - DevTools Network compatibility page and collector.
+- `src/pages/newtab/` - Moon Tab new-tab page.
+- `src/pages/game/` - game page, worker logic, assets, and tests.
+- `src/shared/` - cross-page protocols, pure helpers, tool contracts, and state utilities.
+- `.tmp/` and `tmp/` - scratch, verification, or external reference material; do not treat them as shipped runtime source.
 
 ## Commands
 
-There is currently **no root-level npm/pnpm/bun build, lint, or test setup** in this repository. Do not assume a JS bundler or package script exists.
+The current root npm scripts are defined in `package.json`:
 
-Use these commands instead:
+- `npm run dev` - start Vite dev server on `127.0.0.1`.
+- `npm run build` / `npm run build:extension` - build the extension into `dist/`.
+- `npm run package:extension` - build and create the packaged extension artifact.
+- `npm run check:package` - run package tests and package the extension.
+- `npm test` - run Vitest unit tests.
+- `npm run test:legacy` - run legacy script-based tests.
+- `npm run test:e2e` - run Playwright smoke tests.
+- `npm run typecheck` - run `tsc --noEmit`.
+- `npm run check` - run typecheck, extension build, Vitest, legacy tests, and package checks.
 
-- Load the extension for local development as an unpacked extension from the repository root (`manifest.json` is at the root). There is no build step.
-- Run the in-repo smoke test:
-  - `python .tmp/verify_newtab_extension.py`
-  - This launches Chromium through Playwright, loads the unpacked extension, and verifies the main flow: new-tab redirect, homepage render, settings open/close, and default Bing search.
-- The smoke test above is also the closest thing to a “single test” in the current repo; there is no separate unit test runner yet.
+For local Chrome/Edge extension testing, build first and load the generated `dist/` directory or packaged output as the unpacked extension. Do not load the repository root directly.
 
 ## High-level architecture
 
 ### 1. Extension boot flow
 
-- `manifest.json` declares a Manifest V3 extension with a background service worker at `src/background/newtab-redirect.js`.
-- `src/background/newtab-redirect.js` watches `chrome.tabs.onCreated` and `chrome.tabs.onUpdated`.
-- When the browser opens a native new-tab URL (`edge://newtab/`, `chrome://newtab/`, `about:newtab`, or `ntp.msn.*`), the worker redirects that tab to the extension page at `src/pages/newtab/index.html`.
+- `public/manifest.json` declares the MV3 extension entries consumed by the build/package flow.
+- `src/background/index.ts` is the source-owned service worker entry and wires extension events, runtime messages, side-panel behavior, browser-control tools, DevTools Network bridge state, and local tool runtimes.
+- `src/content/index.ts` is the content script source used for page context extraction and floating side-panel activation; the build emits it as `content/index.js`.
+- Built extension pages and scripts are loaded from `dist/` or the packaged artifact, not from source paths in the repository root.
 
-This project does **not** use a bundler or `chrome_url_overrides`; new-tab replacement is implemented through runtime tab redirection.
+### 2. Browser AI Assistant side panel
 
-### 2. New-tab page structure
+`src/side-panel/` owns the React side-panel UI, including chat, history, tool settings, MCP configuration, browser-control preferences, attachments, and runtime status surfaces. Keep new side-panel behavior in React components and local hooks instead of reintroducing generated DOM patch files.
 
-The new-tab page is a plain HTML + native ESM app:
+### 3. Background and tools
 
-- `src/pages/newtab/index.html` — DOM structure for the homepage, settings modal, AI preview panel, and search input.
-- `src/pages/newtab/index.mjs` — main orchestration layer.
-- `src/pages/newtab/styles/index.css` — all layout, modal layering, and visual states.
-- `src/pages/newtab/liquid-glass-bubble-layer.mjs` — animated liquid-glass background rendered with Three.js.
-- `src/pages/newtab/vendor/three.module.js` — vendored Three.js runtime.
+`src/background/` owns the service worker runtime. Key boundaries include:
 
-The page is tightly coupled by DOM ids/classes. If you change markup in `index.html`, expect corresponding updates in `index.mjs`, `settings/index.mjs`, and CSS selectors.
+- `agentToolsMessageHandler.ts` for `agentTools.*` configuration, MCP discovery/calls, and audit log messages.
+- `networkDevtoolsBridge.ts` and `browserControl/networkToolExecutor.ts` for DevTools Network snapshot/detail tooling.
+- `imagefreeToolRuntime.ts` for the Imagefree local tool hook.
+- `browserControl/` modules for page automation and controlled browser actions.
 
-### 3. Main runtime flow in `src/pages/newtab/index.mjs`
+Shared tool contracts and pure logic should live under `src/shared/` when they are consumed by multiple runtime surfaces.
 
-`src/pages/newtab/index.mjs` is the main coordinator. It owns:
-- DOM event wiring for the search form, AI toggle, preview actions, and suggestion buttons.
-- Search state (`isAiSearchEnabled`, pending/activating flags, active preview).
-- Fallback default behavior:
-  - direct navigation if the query looks like a URL;
-  - otherwise Bing search.
-- AI search orchestration when AI is enabled:
-  1. read persisted settings;
-  2. ensure origin permission for the configured endpoint;
-  3. request an AI decision;
-  4. normalize the response into a single internal decision shape;
-  5. enrich/fix up the decision;
-  6. optionally fetch candidate websites;
-  7. render a preview;
-  8. on second submit or button click, execute the selected action.
+### 4. DevTools Network compatibility
 
-Important behavior: if the current query already has an active preview, submitting the same query again executes the preview’s primary action instead of calling the AI again.
+`src/devtools/network.html` and `src/devtools/network.ts` own the DevTools Network compatibility page. They collect request snapshots/details through `chrome.devtools.network`, apply redaction before background handoff, and keep the bridge read-only by default.
 
-### 4. Settings module boundary
+### 5. New-tab page structure
 
-`src/pages/newtab/settings/index.mjs` is the boundary for:
-- modal open/close behavior and accessibility (`aria-hidden`, `inert`, focus trap, Escape handling);
-- Chrome extension storage (`chrome.storage.local`);
-- runtime origin permission requests (`chrome.permissions`);
-- endpoint/model validation for AI search;
-- syncing the persisted AI-enabled flag back into the homepage via callbacks.
+`src/pages/newtab/` owns the Moon Tab new-tab experience. Keep DOM orchestration, settings boundaries, and shared search helpers in the existing local structure unless a broader migration explicitly changes that ownership.
 
-Keep storage/permission logic here rather than spreading Chrome API access through `index.mjs`.
+### 6. Maintenance rules
 
-### 5. Shared AI contract and normalization
-
-`src/shared/search-ai-contract.mjs` is the shared contract for both search execution and settings-time validation. It centralizes:
-- the prompt sent to AI backends;
-- JSON fence removal and safe JSON parsing;
-- refusal-text detection;
-- HTML/gateway error detection;
-- heuristics for deciding whether a plain-text response can still be treated as a usable search query.
-
-If you change the expected AI schema or prompt format, review both:
-- `src/pages/newtab/index.mjs`
-- `src/pages/newtab/settings/index.mjs`
-
-They intentionally share the same parsing assumptions.
-
-### 6. Helper module responsibilities
-
-Two helper modules keep the main orchestrator smaller:
-
-- `src/pages/newtab/helpers/query-utils.mjs`
-  - text normalization;
-  - mixed Chinese/English term handling;
-  - URL/direct-navigation detection.
-
-- `src/pages/newtab/helpers/decision-utils.mjs`
-  - normalize heterogeneous AI payloads into the project’s internal decision shape;
-  - preserve English technical terms in mixed-language queries;
-  - enrich “no-op” search rewrites with better fallback queries;
-  - normalize/deduplicate candidate websites.
-
-When changing search semantics, inspect these helpers before editing `index.mjs` directly; many search edge cases are intentionally isolated there.
-
-### 7. UI state conventions worth preserving
-
-A lot of UI behavior is driven by `body` classes toggled from JS, especially in `index.mjs` and `settings/index.mjs`, including:
-- `is-settings-open`
-- `is-ai-search-enabled`
-- `is-ai-search-activating`
-- `is-ai-search-searching`
-
-CSS and JS are coupled through those state classes. Replacing them with ad hoc inline styles will usually break existing transitions and modal behavior.
-
-One subtle but important layering rule: the settings modal host must stay above the homepage search shell in CSS. If modal buttons stop receiving clicks, inspect selector specificity around `src/pages/newtab/styles/index.css` before changing JS.
+- Do not restore deleted no-build root extension artifacts such as a root manifest, root content script, or root service worker.
+- Keep extension loading guidance tied to build output (`dist/` or packaged artifact).
+- Prefer existing source-owned TypeScript/React modules over generated legacy bundles or DOM patch files.
+- When updating runtime behavior, run the narrowest relevant test first, then broaden to `npm run check` when the change affects shared contracts or build/package flow.
