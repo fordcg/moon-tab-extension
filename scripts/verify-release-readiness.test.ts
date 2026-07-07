@@ -106,6 +106,48 @@ describe("release readiness verifier", () => {
       },
     });
 
-    await expect(collectReleaseReadinessIssues(root)).resolves.toContain("package.json scripts.verify:release must run npm run test:e2e.");
+    await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
+      'package.json scripts.verify:release must equal "npm run check && npm run test:e2e && node scripts/verify-release-readiness.mjs".',
+    );
+  });
+
+  it("rejects release verification commands that contain the required commands in the wrong order", async () => {
+    const root = await createReadyRoot();
+    await writeJson(join(root, "package.json"), {
+      name: "moon-tab-extension",
+      version: "0.3.0",
+      scripts: {
+        check: "npm run typecheck && npm run build:extension",
+        "test:e2e": "playwright test",
+        "verify:release": "npm run test:e2e && npm run check && node scripts/verify-release-readiness.mjs",
+      },
+    });
+
+    await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
+      'package.json scripts.verify:release must equal "npm run check && npm run test:e2e && node scripts/verify-release-readiness.mjs".',
+    );
+  });
+
+  it("requires packaged artifacts to be regular files", async () => {
+    const root = await createReadyRoot();
+    const artifactPath = join(root, "artifacts", "chrome-extension", "content", "index.js");
+    await rm(artifactPath, { force: true });
+    await mkdir(artifactPath, { recursive: true });
+
+    await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
+      "Packaged artifact must be a file: artifacts/chrome-extension/content/index.js",
+    );
+  });
+
+  it("reports forbidden debugger permission in optional permissions", async () => {
+    const root = await createReadyRoot();
+    const manifestPath = join(root, "artifacts", "chrome-extension", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.optional_permissions = ["debugger"];
+    await writeJson(manifestPath, manifest);
+
+    await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
+      "artifacts/chrome-extension/manifest.json must not request debugger permission in the current release boundary.",
+    );
   });
 });

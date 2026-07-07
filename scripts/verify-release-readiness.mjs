@@ -1,11 +1,12 @@
 // @ts-check
-import { access, readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defaultRootDir = path.resolve(__dirname, "..");
+const REQUIRED_RELEASE_SCRIPT = "npm run check && npm run test:e2e && node scripts/verify-release-readiness.mjs";
 
 export const RELEASE_REQUIRED_ARTIFACT_PATHS = [
   "manifest.json",
@@ -32,12 +33,11 @@ async function readJsonFile(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-async function fileExists(filePath) {
+async function getPathStats(filePath) {
   try {
-    await access(filePath);
-    return true;
+    return await stat(filePath);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -56,28 +56,22 @@ async function listFiles(directory, baseDirectory = directory) {
 }
 
 function collectScriptIssues(packageJson) {
-  const issues = [];
   const scripts = packageJson.scripts ?? {};
   const verifyRelease = scripts["verify:release"];
   if (!verifyRelease) {
     return ["package.json must define scripts.verify:release."];
   }
-  if (!verifyRelease.includes("npm run check")) {
-    issues.push("package.json scripts.verify:release must run npm run check.");
+  if (verifyRelease !== REQUIRED_RELEASE_SCRIPT) {
+    return [`package.json scripts.verify:release must equal "${REQUIRED_RELEASE_SCRIPT}".`];
   }
-  if (!verifyRelease.includes("npm run test:e2e")) {
-    issues.push("package.json scripts.verify:release must run npm run test:e2e.");
-  }
-  if (!verifyRelease.includes("node scripts/verify-release-readiness.mjs")) {
-    issues.push("package.json scripts.verify:release must run node scripts/verify-release-readiness.mjs.");
-  }
-  return issues;
+  return [];
 }
 
 function collectManifestIssues(manifest, label) {
   const issues = [];
   const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
-  if (permissions.includes("debugger")) {
+  const optionalPermissions = Array.isArray(manifest.optional_permissions) ? manifest.optional_permissions : [];
+  if (permissions.includes("debugger") || optionalPermissions.includes("debugger")) {
     issues.push(`${label} must not request debugger permission in the current release boundary.`);
   }
   if (manifest.background?.service_worker !== "background/index.js") {
@@ -105,32 +99,45 @@ export async function collectReleaseReadinessIssues(rootDir = defaultRootDir) {
   const packageJsonPath = path.join(rootDir, "package.json");
   const distManifestPath = path.join(rootDir, "dist", "manifest.json");
   const artifactManifestPath = path.join(packageRoot, "manifest.json");
+  const packageJsonStats = await getPathStats(packageJsonPath);
+  const distManifestStats = await getPathStats(distManifestPath);
+  const artifactManifestStats = await getPathStats(artifactManifestPath);
 
-  if (!await fileExists(packageJsonPath)) {
+  if (!packageJsonStats) {
     issues.push("Missing package.json.");
+  } else if (!packageJsonStats.isFile()) {
+    issues.push("package.json must be a file.");
   } else {
     issues.push(...collectScriptIssues(await readJsonFile(packageJsonPath)));
   }
 
-  if (!await fileExists(distManifestPath)) {
+  if (!distManifestStats) {
     issues.push("Missing dist/manifest.json. Run npm run build:extension before release verification.");
+  } else if (!distManifestStats.isFile()) {
+    issues.push("dist/manifest.json must be a file.");
   } else {
     issues.push(...collectManifestIssues(await readJsonFile(distManifestPath), "dist/manifest.json"));
   }
 
-  if (!await fileExists(artifactManifestPath)) {
+  if (!artifactManifestStats) {
     issues.push("Missing artifacts/chrome-extension/manifest.json. Run npm run package:extension before release verification.");
+  } else if (!artifactManifestStats.isFile()) {
+    issues.push("artifacts/chrome-extension/manifest.json must be a file.");
   } else {
     issues.push(...collectManifestIssues(await readJsonFile(artifactManifestPath), "artifacts/chrome-extension/manifest.json"));
   }
 
   for (const relativePath of RELEASE_REQUIRED_ARTIFACT_PATHS) {
-    if (!await fileExists(path.join(packageRoot, relativePath))) {
+    const artifactStats = await getPathStats(path.join(packageRoot, relativePath));
+    if (!artifactStats) {
       issues.push(`Missing packaged artifact: artifacts/chrome-extension/${relativePath}`);
+    } else if (!artifactStats.isFile()) {
+      issues.push(`Packaged artifact must be a file: artifacts/chrome-extension/${relativePath}`);
     }
   }
 
-  if (await fileExists(packageRoot)) {
+  const packageRootStats = await getPathStats(packageRoot);
+  if (packageRootStats?.isDirectory()) {
     const packagedFiles = await listFiles(packageRoot);
     for (const file of packagedFiles) {
       if (forbiddenArtifactPatterns.some((pattern) => pattern.test(file))) {
