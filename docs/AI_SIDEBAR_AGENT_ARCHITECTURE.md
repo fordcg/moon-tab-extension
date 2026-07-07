@@ -73,7 +73,7 @@ Capability Services
 
 `src/shared/browser-extract-content.mjs` 定义 `browser.extract_content` 的工具 ID、模型函数名、参数 schema、选择器约束和结果格式化。该工具只读，复用现有 `pageContext.extract` 内容脚本路径，不执行模型自定义脚本，不读取 Cookie、Storage 或跨域 iframe。
 
-`src/ai-assistant/background/browser-extract-content-service.js` 是后台执行适配层，负责读取保存的提取规则、调用当前页面提取路径，并返回工具结果对象。`src/ai-assistant/background/index.js` 会把 `browser.extract_content` 暴露给聊天工具列表，并在通用 `browser.*` 分支之前分发到该适配层。
+后台执行适配层负责读取保存的提取规则、调用当前页面提取路径，并返回工具结果对象。当前 source-owned 后台入口会把 `browser.extract_content` 暴露给聊天工具列表，并在通用 `browser.*` 分支之前分发到该适配层。
 
 `browser.extract_content` 进入统一工具审计链路。审计记录只保存脱敏参数和结果摘要，优先使用工具返回的 `summary`，不保存页面正文、HTML 原文、Cookie、Storage 或跨域 iframe 内容。
 
@@ -88,7 +88,7 @@ Network 是开发辅助核心能力，但必须默认脱敏：
 - 返回结果保留 `redacted: true/false`，让 UI 和模型知道内容是否被处理过。
 - 如后续需要“包含敏感头/完整 body”，必须由用户对单次请求显式确认。
 
-当前已新增 `src/shared/network-redaction.mjs`，并让 `src/ai-assistant/devtools.js` 在进入后台前执行脱敏。
+当前已新增 `src/shared/network-redaction.mjs`，并让 `src/devtools/network.ts` 在进入后台前执行脱敏。
 
 ### Phase 3：network.* 只读工具
 
@@ -99,9 +99,9 @@ Phase 3 只迁入两个只读 Network 工具，使用已有 DevTools Network 桥
 
 `src/shared/network-tools.mjs` 负责工具 ID、模型函数名、参数 schema、参数归一化、输出格式化和结果摘要。所有输出会再次经过 Network 脱敏与长度截断，保留 `redacted` / `truncated` 标记。
 
-`src/ai-assistant/background/network-tools-service.js` 是后台执行适配层，负责校验参数、调用读取回调、格式化 tool message，并把 DevTools 未连接、参数非法和通道异常转为隔离的工具错误。
+`src/background/networkDevtoolsBridge.ts` 和 `src/background/browserControl/networkToolExecutor.ts` 是当前后台执行适配层，负责校验参数、调用读取回调、格式化 tool message，并把 DevTools 未连接、参数非法和通道异常转为隔离的工具错误。
 
-后台 wiring 仍复用既有 runtime 消息：`network.list_requests` 调用 `networkContext.getSnapshot`，`network.get_request_details` 调用 `networkContext.getDetails`。实际数据来源仍是 `src/ai-assistant/devtools.js` 中 `chrome.devtools.network` 采集到的 snapshot / details；目标标签页的 DevTools Network 面板必须保持打开并连接。
+后台 wiring 仍复用既有 runtime 消息：`network.list_requests` 调用 `networkContext.getSnapshot`，`network.get_request_details` 调用 `networkContext.getDetails`。实际数据来源仍是 `src/devtools/network.ts` 中 `chrome.devtools.network` 采集到的 snapshot / details；目标标签页的 DevTools Network 面板必须保持打开并连接。
 
 Phase 3 当时不迁入上游 Network 的差异分析、curl/fetch 生成、类型生成、HAR 导出、请求重放或独立录制器。Phase 4 已迁入基于已脱敏详情的只读差异分析和关键参数候选，Phase 5 已迁入 requestIds 约束版 JS 候选片段，Phase 6 已迁入只清空缓存的 `network.clear_requests`；`network.wait_for_requests`、curl/fetch 生成、类型生成、HAR 导出、请求重放、Replay、Runtime、Full Access、原始 Cookie / Authorization / Token / Secret 仍不作为默认模型工具暴露。
 
@@ -112,7 +112,7 @@ Phase 4 在 Phase 3 的已脱敏详情基础上继续迁入两个低风险 Netwo
 - `network.compare_requests`：读取 2 到 50 个请求详情，输出稳定字段、变化字段和疑似关键参数。
 - `network.find_parameter_candidates`：读取 1 到 50 个请求详情，从 query、请求头、JSON/form/text 请求体中提取签名、时间戳、随机数、请求 ID、凭据类字段和编码载荷候选。
 
-这两个工具仍由 `src/shared/network-tools.mjs` 定义参数和纯分析逻辑，由 `src/ai-assistant/background/network-tools-service.js` 调用 `networkContext.getDetails` 读取 DevTools 缓存。分析前会再次经过 `redactNetworkRecord()`，输出只包含脱敏、截断后的字段摘要。
+这两个工具仍由 `src/shared/network-tools.mjs` 定义参数和纯分析逻辑，由 `src/background/networkDevtoolsBridge.ts` 和 `src/background/browserControl/networkToolExecutor.ts` 调用 `networkContext.getDetails` 读取 DevTools 缓存。分析前会再次经过 `redactNetworkRecord()`，输出只包含脱敏、截断后的字段摘要。
 
 Phase 4 当时不新增 JS 候选片段、`network.clear_requests`、`network.wait_for_requests`、debugger-backed recorder、同源 JS fetch、SourceMap 读取、Runtime evaluate、请求重放或 Full Access。Phase 5 已覆盖 requestIds 约束版 `network.extract_js_candidates`，Phase 6 已覆盖只清空缓存的 `network.clear_requests`；`network.wait_for_requests`、无 requestIds 的全局 JS 搜索、JS/SourceMap、Runtime、Boundary、Replay 和 Full Access 需要后续独立设计授权边界、审计和 UI 确认。
 
@@ -124,7 +124,7 @@ Phase 5 迁入 requestIds 约束版 `network.extract_js_candidates`。该工具�
 
 ### Phase 6：network.clear_requests
 
-Phase 6 迁入只清空缓存的 `network.clear_requests`。该工具只通过既有 DevTools port 通知 `src/ai-assistant/devtools.js` 清空内存中的 `requestStore`，并同步清空后台 snapshot；随后 DevTools bridge 会推送空 snapshot，下一次 `network.list_requests` 只显示清空后新采集的请求。
+Phase 6 迁入只清空缓存的 `network.clear_requests`。该工具只通过既有 DevTools port 通知 `src/devtools/network.ts` 清空内存中的 `requestStore`，并同步清空后台 snapshot；随后 DevTools bridge 会推送空 snapshot，下一次 `network.list_requests` 只显示清空后新采集的请求。
 
 该阶段不迁入 `network.wait_for_requests`，因为等待新增请求需要后台和 DevTools 建立一次性等待 RPC、超时语义和断线恢复策略。`network.clear_requests` 不发送请求、不读取响应体、不补 fetch、不执行 Runtime、不接触 Cookie、Authorization、Token、Secret 或 Storage。
 
@@ -174,11 +174,7 @@ MCP 工具会被注册为稳定的 `mcp.<serverId>.<toolName>` 工具 ID，并�
 - 刷新并查看 MCP Server 已发现工具。
 - 查看最近工具调用审计日志和清空审计日志。
 
-为降低 `sidePanel-layout.js` 的长期维护成本，“工具和 MCP”浮层已拆到独立模块：
-
-- `src/ai-assistant/agent-tools-dialog.js`
-  - 负责读取工具状态、配置 MCP Bridge、展示 MCP 工具、展示/清空审计日志。
-  - `sidePanel-layout.js` 只保留历史抽屉入口编排。
+当前“工具和 MCP”浮层由 `src/side-panel/**` React 组件和设置面板维护，负责读取工具状态、配置 MCP Bridge、展示 MCP 工具、展示/清空审计日志，并与历史抽屉入口协同。
 
 工具摘要现在会返回风险信息：
 
@@ -227,7 +223,7 @@ MCP 工具会被注册为稳定的 `mcp.<serverId>.<toolName>` 工具 ID，并�
 
 1. 给当前侧边栏补 smoke test：打开、设置模型、发消息、上下文、Network、浏览器控制开关。
 2. 先封装 Tool Registry / Network redaction / Browser action queue，不直接大拆 UI bundle。
-3. 把 `sidePanel-layout.js` 中的 DOM patch 逐步迁回组件源码。
+3. 继续把侧栏运行态行为收敛在 `src/side-panel/**` React 组件和设置面板中。
 4. 给强能力加显式状态、错误隔离、重连和降级。
 5. 最后再收紧 manifest 权限；每收紧一个权限必须有对应降级路径。
 

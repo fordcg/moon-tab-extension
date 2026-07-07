@@ -127,13 +127,15 @@ AI 侧边栏继续迁入低风险的 `network.clear_requests`：
 
 ## 目录结构
 
-- `manifest.json`: MV3 权限、入口和资源暴露清单。
+- `public/manifest.json`: Vite/package 流程使用的 MV3 源清单；扩展加载使用构建输出 `dist/` 或打包产物，不直接加载仓库根目录。
 - `content/`: 注入普通网页的 content script，目前负责打开可拖动的 AI 悬浮窗。
 - `src/background/`: Service Worker 入口和扩展级事件注册。
 - `src/shared/`: 跨页面共享的纯逻辑、协议和状态工具。
 - `src/pages/newtab/`: 新标签页功能。UI 控制器放在根层，纯逻辑放在 `helpers/` 或独立 service 模块。
 - `src/pages/game/`: 游戏页面、物理/工人逻辑、素材和单测。
-- `src/ai-assistant/`: AI 侧边栏页面。`sidePanel.js`、`assets/`、`open-design-preview.html` 是打包/预览产物，手写适配层主要是 `sidePanel-layout.js`、`sidePanel-layout.css` 和 `agent-tools-dialog.js`。
+- `src/side-panel/`: Browser AI Assistant React 侧栏源码，包含聊天、工具设置、MCP、历史和运行态 UI。
+- `src/devtools/`: DevTools Network 兼容页源码，通过 `chrome.devtools.network` 采集脱敏请求并发给后台 bridge。
+- `src/background/imagefreeToolRuntime.ts`: Imagefree 图片生成工具的 source-owned 后台 runtime hook。
 - `scripts/`: 不依赖构建工具的测试和验证脚本。
 - `docs/`: 架构说明和较长的设计文档。
 

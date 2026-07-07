@@ -2,12 +2,12 @@
 
 ## 当前阶段
 
-Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Network、MCP、Tavily、Imagefree、工具附件和审计均通过运行态边界、脱敏和兼容层回归验证。
+Phase 6：旧产物清理已完成。DevTools Network 和 Imagefree 已迁入 source-owned TypeScript 入口，旧 AI sidebar bundle、DOM patch、root no-build manifest/content/service-worker 和生成 assets 已删除。
 
 ## 持久入口
 
 - 总设计：`docs/superpowers/specs/2026-07-05-full-upstream-engineering-migration-design.md`
-- 当前计划：`docs/superpowers/plans/2026-07-07-full-upstream-engineering-migration-phase-5.md`
+- 当前计划：`docs/superpowers/plans/2026-07-07-full-upstream-engineering-migration-phase-6.md`
 
 ## 已完成提交
 
@@ -47,6 +47,13 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 - 工具附件聚合、导出和后续追问上下文默认脱敏；完全访问结果用显式字段标记。
 - MCP Bearer Token 和 Grok API Key 保持本地存储边界，审计日志写入前脱敏。
 - Tavily、Imagefree 和 DevTools legacy Network 工具保留低风险或兼容路径，高风险 debugger-backed 工具不由 DevTools 兼容层静默启用。
+
+## 当前工作区 Phase 6 结果
+
+- DevTools Network 兼容层保留为只读脱敏路径，但页面和采集逻辑已从 `src/ai-assistant/devtools.html/js` 迁到 `src/devtools/network.html/ts`。
+- Imagefree 图片生成工具继续作为低风险本地工具暴露，后台 hook 已迁到 `src/background/imagefreeToolRuntime.ts`。
+- 旧 `src/ai-assistant` bundle、DOM patch、open-design preview、生成 assets、root `manifest.json`、root `content/index.js` 和 `src/background/service-worker.js` 已删除。
+- legacy 脚本和 smoke 脚本改为验证 Vite/React/TypeScript 当前源码入口。
 
 ## 当前验证状态
 
@@ -119,15 +126,19 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/shared/toolRegistry.test.ts tests/unit/background/backgroundToolRuntime.test.ts tests/unit/background/boundaryChoiceToolExecutor.test.ts tests/unit/background/browserControlMessageHandler.test.ts tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/browserControlPreferences.test.ts tests/unit/background/agentToolsMessageHandler.test.ts tests/unit/background/index.test.ts tests/unit/background/networkDevtoolsBridge.test.ts` | 通过 | 2026-07-07 Phase 5 final verification after JWT fix；9 files / 272 tests |
 | `npm run check` | 通过 | 2026-07-07 Phase 5 final verification after JWT fix；执行 typecheck、build:extension、npm test、test:legacy、check:package；Vitest 83 files / 1093 tests，package test 1 file / 12 tests；既有 Vite chunk/vendor/inlineDynamicImports 警告 |
 | `npm run test:e2e` | 通过 | 2026-07-07 Phase 5 final verification after JWT fix；Playwright smoke 7 tests；既有 Vite chunk/vendor/inlineDynamicImports 警告 |
+| `npx vitest run tests/unit/background/extensionBuildContract.test.ts tests/unit/background/networkDevtoolsBridge.test.ts tests/unit/background/index.test.ts tests/unit/background/backgroundToolRuntime.test.ts --testNamePattern "DevTools|Network|extension page|Imagefree|旧 AI sidebar|运行时入口|显式 tabId"` | 通过 | 2026-07-07 Phase 6 Task 6 focused verification；4 files / 44 tests passed / 55 skipped |
+| `npm run test:legacy` | 通过 | 2026-07-07 Phase 6 Task 6 legacy verification；legacy scripts and node tests passed |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 6 Task 6 typecheck；tsc --noEmit |
+| `npm run check` | 通过 | 2026-07-07 Phase 6 Task 6 full project check；fresh rerun passed after first full Vitest run hit a Tailwind test timeout, targeted retry passed；84 Vitest files / 1104 tests，package test 1 file / 12 tests；既有 Vite chunk/vendor/inlineDynamicImports 警告 |
+| `npm run test:e2e` | 通过 | 2026-07-07 Phase 6 Task 6 E2E smoke；Playwright 7 tests passed；既有 Vite chunk/vendor/inlineDynamicImports 警告 |
 
 ## 未解决问题
 
 - Phase 0-1 的 `dist/` 构建默认不声明 `debugger` 权限；debugger-backed browser control、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 和 `full_access.*` 只导入源码，可能出现在工具偏好设置中，但当前构建不会在运行时暴露为可用能力。
 - Moon Tab 新标签页和小游戏已进入 Vite 多入口构建；页面源码仍为 MJS/HTML/CSS，后续如需 TypeScript 化应单独规划。
-- Phase 3 的 AI 侧栏 React 源码迁移仍需按独立计划继续推进；旧 AI 侧栏 bundle、assets、DOM patch 和 open-design preview 仍在仓库中作为迁移参考，物理删除等待 Phase 6。
-- DevTools Network bridge 当前按 Phase 5 设计保留为脱敏只读兼容层；是否切换到远程 CDP Network recorder 留到后续阶段评估。
+- DevTools Network bridge 当前按 Phase 6 结果保留为脱敏只读兼容层；是否切换到远程 CDP Network recorder 留到后续阶段评估。
 - 高风险 `runtime.*`、`boundary.*`、`replay.*`、`full_access.*` 等工具继续受开关/授权控制，不在普通模式默认暴露。
 
 ## 下一阶段入口
 
-Phase 5 提交后，继续推进 Phase 3/Phase 6 的剩余迁移面：AI 侧栏 React 源码迁移、旧 bundle/DOM patch 物理清理和后续发布前收敛验证。
+Phase 6 提交后，继续推进发布前收敛验证、权限边界评估和后续远程 CDP Network recorder 方案评估。
