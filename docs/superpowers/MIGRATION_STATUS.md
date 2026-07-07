@@ -2,12 +2,12 @@
 
 ## 当前阶段
 
-Phase 6：旧产物清理已完成。DevTools Network 和 Imagefree 已迁入 source-owned TypeScript 入口，旧 AI sidebar bundle、DOM patch、root no-build manifest/content/service-worker 和生成 assets 已删除。
+Phase 7：验收与发布准备已完成。发布候选现在通过 `npm run verify:release` 收敛类型检查、构建、单元测试、legacy 回归、打包检查、Playwright E2E 和发布产物校验；验收矩阵记录在 `docs/superpowers/release-readiness.md`。
 
 ## 持久入口
 
 - 总设计：`docs/superpowers/specs/2026-07-05-full-upstream-engineering-migration-design.md`
-- 当前计划：`docs/superpowers/plans/2026-07-07-full-upstream-engineering-migration-phase-6.md`
+- 当前计划：`docs/superpowers/plans/2026-07-07-full-upstream-engineering-migration-phase-7.md`
 
 ## 已完成提交
 
@@ -55,10 +55,26 @@ Phase 6：旧产物清理已完成。DevTools Network 和 Imagefree 已迁入 so
 - 旧 `src/ai-assistant` bundle、DOM patch、open-design preview、生成 assets、root `manifest.json`、root `content/index.js` 和 `src/background/service-worker.js` 已删除。
 - legacy 脚本和 smoke 脚本改为验证 Vite/React/TypeScript 当前源码入口。
 
+## 当前工作区 Phase 7 结果
+
+- 新增 `npm run verify:release` 作为发布候选验收入口，依次执行 `check`、Playwright E2E 和发布产物检查。
+- 本地打包脚本现在要求 manifest 声明的 HTML 入口进入发布包并检查资源引用，包括 `src/devtools/network.html`。
+- 真实 Chrome 扩展 smoke 覆盖 AI 侧栏发布关键入口：悬浮助手、浏览器控制、设置、MCP 工具、聊天偏好和同步设置。
+- 发布验收矩阵已记录 AI 侧栏、新标签页、小游戏、悬浮助手、Grok/MCP、DevTools Network、浏览器控制基础工具、Imagefree/Tavily、打包产物和权限边界。
+- 当前发布 manifest 继续不声明 `debugger` 权限，debugger-backed/CDP recorder 不被静默启用。
+
 ## 当前验证状态
 
 | 命令 | 状态 | 备注 |
 |---|---|---|
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 7 final verification；tsc --noEmit |
+| `npm run build:extension` | 通过 | 2026-07-07 Phase 7 final verification；生成 dist 扩展产物 |
+| `npm test` | 通过 | 2026-07-07 Phase 7 final verification；Vitest 全量单元测试 |
+| `npm run test:legacy` | 通过 | 2026-07-07 Phase 7 final verification；legacy 脚本回归 |
+| `npm run check:package` | 通过 | 2026-07-07 Phase 7 final verification；打包脚本测试并生成 artifacts/chrome-extension |
+| `npm run check` | 通过 | 2026-07-07 Phase 7 final verification；类型、构建、单测、legacy 和打包综合门禁 |
+| `npm run test:e2e` | 通过 | 2026-07-07 Phase 7 final verification；Playwright preview 和真实扩展 smoke |
+| `npm run verify:release` | 通过 | 2026-07-07 Phase 7 release gate；check、E2E 和发布产物校验全部通过 |
 | `npx vitest run tests/unit/background/index.test.ts tests/unit/content/index.test.ts --testNamePattern "tab scoped\|floating\|页面\|活动标签页\|current\|侧边栏\|悬浮\|快捷键\|右键菜单"` | 通过 | Phase 4 side panel/content wiring focused，2 files / 16 tests |
 | `npx vitest run tests/unit/background/index.test.ts tests/unit/background/agentToolsMessageHandler.test.ts --testNamePattern "agentTools\|AgentTools\|MCP"` | 通过 | Phase 4 AgentTools/MCP focused，2 files / 6 tests |
 | `npx vitest run tests/unit/background/networkDevtoolsBridge.test.ts tests/unit/background/extensionBuildContract.test.ts` | 通过 | Phase 4 DevTools Network 兼容和构建合约，2 files / 10 tests |
@@ -141,4 +157,4 @@ Phase 6：旧产物清理已完成。DevTools Network 和 Imagefree 已迁入 so
 
 ## 下一阶段入口
 
-Phase 6 提交后，继续推进发布前收敛验证、权限边界评估和后续远程 CDP Network recorder 方案评估。
+全面迁移远程工程化结构的 Phase 0-7 已完成。后续如需启用 debugger-backed CDP Network recorder、Replay、Runtime 或 Full Access，应先写新的独立设计和计划，不能作为当前发布候选的隐式范围。
