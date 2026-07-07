@@ -37,6 +37,7 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | Phase 5 Direct Embedded JSON Snippet Fix | `5374208` | 脱敏直接普通文本中的内嵌 JSON 片段 |
 | Phase 5 Nested Embedded JSON Snippet Fix | `d52ce29` | 脱敏嵌套直接内嵌 JSON 片段 |
 | Phase 5 Inline Header Redaction Fix | `d0c84b8` | 脱敏内联 Authorization 和 Cookie 头 |
+| Phase 5 JWT Redaction Regression Fix | `b6683f4` | 修复 JWT 通用附件脱敏回归 |
 
 ## 当前工作区 Phase 5 结果
 
@@ -111,6 +112,10 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "Authorization\|Cookie\|授权头\|Header"` | RED 后通过 | 2026-07-07 Phase 5 inline header display redaction fix；补丁前失败于 generic display summary 泄露 Basic credential `dXNlcjpwYXNz`，补丁后 1 file / 1 test passed / 16 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 inline header redaction fix；2 files / 44 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 inline header redaction fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "JWT\|jwt"` | RED 后通过 | 2026-07-07 Phase 5 JWT redaction regression fix；补丁前泄露 `jwt=...`、JSON `jwt`、内嵌 JSON `jwt` 和字符串化 JSON `jwt`，补丁后 1 file / 1 test passed / 27 skipped |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "JWT\|jwt"` | RED 后通过 | 2026-07-07 Phase 5 JWT display redaction regression fix；补丁前 generic display 泄露 JWT，补丁后 1 file / 1 test passed / 17 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 JWT redaction regression fix；2 files / 46 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 JWT redaction regression fix；tsc --noEmit |
 
 ## 未解决问题
 
