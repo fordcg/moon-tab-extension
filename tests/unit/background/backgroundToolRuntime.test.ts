@@ -562,4 +562,19 @@ describe("background 工具运行时封装", () => {
       globalWithHook.__imagefreeGenerateTool = previousHook;
     }
   });
+
+  it("source-owned Imagefree runtime 注册全局生成 hook", async () => {
+    const globalWithHook = globalThis as typeof globalThis & {
+      __imagefreeGenerateTool?: (toolCall: ModelToolCall, fetcher: typeof fetch) => Promise<unknown>;
+    };
+    const previousHook = globalWithHook.__imagefreeGenerateTool;
+
+    try {
+      delete globalWithHook.__imagefreeGenerateTool;
+      await import("../../../src/background/imagefreeToolRuntime");
+      expect(globalWithHook.__imagefreeGenerateTool).toEqual(expect.any(Function));
+    } finally {
+      globalWithHook.__imagefreeGenerateTool = previousHook;
+    }
+  });
 });

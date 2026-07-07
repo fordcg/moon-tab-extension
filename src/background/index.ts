@@ -1,4 +1,4 @@
-import "../ai-assistant/assets/imagefree-tool-runtime.js";
+import "./imagefreeToolRuntime";
 import { handleModelCatalogMessage, type ModelCatalogMessage } from "./modelCatalogMessageHandler";
 import { handleAgentToolsMessage, type AgentToolsMessage, type AgentToolsRuntimeMessage } from "./agentToolsMessageHandler";
 import {
