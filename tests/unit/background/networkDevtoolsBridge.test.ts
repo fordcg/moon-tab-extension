@@ -175,6 +175,19 @@ describe("DevTools Network bridge 兼容层", () => {
     });
   });
 
+  it("拒绝旧路径 src/ai-assistant/devtools.html 的 DevTools port", async () => {
+    const bridge = createNetworkDevtoolsBridge();
+    const port = createPortMock("network.devtools", { url: "chrome-extension://moon-tab/src/ai-assistant/devtools.html" });
+
+    expect(bridge.handlePortConnect(port as unknown as chrome.runtime.Port)).toBe(false);
+    port.fireMessage({ type: "networkContext.devtoolsConnected", tabId: 7, requests: [createMeta()] });
+
+    await expect(bridge.handleMessage({ type: "networkContext.getSnapshot", tabId: 7 })).resolves.toMatchObject({
+      ok: false,
+      message: expect.stringContaining("DevTools Network"),
+    });
+  });
+
   it("多 tab 场景只按显式 tabId 路由快照，隐式请求不猜测 tab", async () => {
     const bridge = createNetworkDevtoolsBridge();
     const portA = createPortMock();

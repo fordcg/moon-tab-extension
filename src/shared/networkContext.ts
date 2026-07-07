@@ -2,11 +2,12 @@ import type { NetworkHeader, NetworkRequestDetail, NetworkRequestMeta } from "./
 import { truncateText } from "./utils/text";
 
 const REDACTED_VALUE = "[已脱敏]";
+const MAX_TEXT_LENGTH = 12000;
 const BODY_LIMIT = 6000;
 const FIELD_LIMIT = 1200;
 
 const SENSITIVE_NAME_PATTERN = /(authorization|cookie|set-cookie|token|access[_-]?token|refresh[_-]?token|jwt|api[_-]?key|secret|password|passwd|credential|session|sid|csrf|xsrf)/i;
-const BEARER_INLINE_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const AUTH_INLINE_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
 const SENSITIVE_INLINE_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|jwt|secret|password|passwd|credential|session|sid|csrf|xsrf)\s*[:=]\s*[^\s,;&"'}）]+/gi;
 const INLINE_HEADER_NAME_PATTERN = "(?:Proxy-Authorization|Authorization|Set-Cookie|Cookie)";
 const INLINE_HEADER_PATTERN = new RegExp(
@@ -47,7 +48,7 @@ export function redactNetworkTextSnippets(value: string): string {
 export function redactNetworkInlineSensitiveText(value: string): string {
   return value
     .replace(INLINE_HEADER_PATTERN, (_match, name: string, separator: string) => `${name}${separator}${REDACTED_VALUE}`)
-    .replace(BEARER_INLINE_PATTERN, "Bearer [已脱敏]")
+    .replace(AUTH_INLINE_PATTERN, (_match, scheme: string) => `${scheme} ${REDACTED_VALUE}`)
     .replace(SENSITIVE_INLINE_PATTERN, (_match, key: string) => `${key}=[已脱敏]`);
 }
 
@@ -216,7 +217,7 @@ function redactHeaders(headers: NetworkHeader[] | undefined): NetworkHeader[] | 
 
   return headers.map((header) => ({
     ...header,
-    value: isSensitiveName(header.name) ? REDACTED_VALUE : header.value,
+    value: isSensitiveName(header.name) ? REDACTED_VALUE : redactNetworkInlineSensitiveText(header.value),
   }));
 }
 
@@ -227,9 +228,9 @@ function redactUrl(value: string): string {
       `${encodeURIComponent(key)}=${isSensitiveName(key) ? REDACTED_VALUE : encodeURIComponent(paramValue)}`,
     );
     const query = redactedParams.length > 0 ? `?${redactedParams.join("&")}` : "";
-    return `${url.origin}${url.pathname}${query}${url.hash}`;
+    return truncateText(`${url.origin}${url.pathname}${query}${url.hash}`, MAX_TEXT_LENGTH).text;
   } catch {
-    return redactNonStandardUrl(value);
+    return truncateText(redactNonStandardUrl(value), MAX_TEXT_LENGTH).text;
   }
 }
 

@@ -604,6 +604,28 @@ describe("background 入口", () => {
     });
   });
 
+  it("direct networkContext.getSnapshot 拒绝旧路径 DevTools sender", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+    await import("../../../src/background/index");
+    connectDevtoolsNetworkBridge(mock, 7);
+    const sendResponse = vi.fn();
+
+    const keepChannelOpen = mock.messageListeners[0](
+      { type: "networkContext.getSnapshot", tabId: 7 },
+      { url: "chrome-extension://moon-tab/src/ai-assistant/devtools.html" } as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(keepChannelOpen).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: false,
+        message: "未检测到当前标签页 DevTools Network 连接。",
+      });
+    });
+  });
+
   it("direct networkContext.getSnapshot 在 sender tab 与显式 tabId 不一致时返回失败", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome);
