@@ -440,6 +440,45 @@ describe("MessageList 工具附件展示聚合", () => {
     }
   });
 
+  it("单个和多个通用展示附件会脱敏 JWT inline、JSON 和 snippet 值", () => {
+    const singleAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-jwt-a",
+        summary: "jwt=inline.jwt.secret",
+        details: '{"jwt":"json.jwt.secret"}',
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    const multiAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-jwt-b",
+        summary: "jwt: colon.jwt.secret",
+        details: 'payload={"jwt":"snippet.jwt.secret"}',
+      }),
+      createGenericAttachment({
+        id: "generic-display-jwt-c",
+        createdAt: 2,
+        summary: JSON.stringify({ requestBody: JSON.stringify({ jwt: "nested.jwt.secret" }) }),
+        details: '{"jwt":"second-json.jwt.secret"}',
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    for (const attachments of [singleAttachments, multiAttachments]) {
+      expect(attachments).toHaveLength(1);
+      const [attachment] = attachments;
+      expect(attachment.redacted).toBe(true);
+      for (const output of [attachment.summary, attachment.details]) {
+        expect(output).not.toContain("inline.jwt.secret");
+        expect(output).not.toContain("json.jwt.secret");
+        expect(output).not.toContain("colon.jwt.secret");
+        expect(output).not.toContain("snippet.jwt.secret");
+        expect(output).not.toContain("nested.jwt.secret");
+        expect(output).not.toContain("second-json.jwt.secret");
+        expect(output).toContain("[已脱敏]");
+      }
+    }
+  });
+
   it("通用展示附件会脱敏字符串化 JSON body", () => {
     const singleAttachments = aggregateDisplayAttachmentsByKind([
       createGenericAttachment({

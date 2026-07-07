@@ -202,6 +202,43 @@ describe("通用工具附件聚合", () => {
     expect(exported).toContain("[已脱敏]");
   });
 
+  it("通用工具附件归一化会脱敏 JWT inline、JSON 和 snippet 值", () => {
+    const cases = [
+      { value: "jwt=eyJhbGciOiJIUzI1NiJ9.secret", raw: "eyJhbGciOiJIUzI1NiJ9.secret" },
+      { value: "jwt: eyJhbGciOiJIUzI1NiJ9.secret", raw: "eyJhbGciOiJIUzI1NiJ9.secret" },
+      { value: '{"jwt":"json.jwt.secret"}', raw: "json.jwt.secret" },
+      { value: 'payload={"jwt":"snippet.jwt.secret"}', raw: "snippet.jwt.secret" },
+      { value: JSON.stringify({ requestBody: JSON.stringify({ jwt: "nested.jwt.secret" }) }), raw: "nested.jwt.secret" },
+    ];
+
+    for (const [index, testCase] of cases.entries()) {
+      const attachment = normalizeToolAttachment({
+        id: `generic-jwt-sensitive-${index}`,
+        kind: "mcp-result",
+        title: "MCP 工具结果",
+        summary: testCase.value,
+        details: testCase.value,
+        createdAt: 20 + index,
+        redacted: false,
+        truncated: false,
+      });
+
+      expect(attachment).toBeTruthy();
+      if (!attachment) {
+        throw new Error("JWT regression attachment should normalize");
+      }
+      const prompt = formatToolAttachmentForPrompt(attachment) ?? "";
+      const exported = formatToolAttachmentForExport(attachment);
+      const attachmentDetails = "details" in attachment ? attachment.details : undefined;
+
+      expect(attachment).toMatchObject({ kind: "mcp-result", redacted: true });
+      for (const output of [attachment.summary, attachmentDetails, prompt, exported]) {
+        expect(output).not.toContain(testCase.raw);
+        expect(output).toContain("[已脱敏]");
+      }
+    }
+  });
+
   it("通用工具附件在 live collection 聚合后会先脱敏再用于 prompt 和导出", () => {
     const message = createAssistantMessage({
       toolAttachments: [
