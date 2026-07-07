@@ -8,9 +8,10 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const packageDir = path.join(rootDir, "artifacts", "chrome-extension");
 
-const requiredDistPaths = [
+export const requiredDistPaths = [
   "manifest.json",
   "index.html",
+  "src/devtools/network.html",
   "src/pages/newtab/index.html",
   "src/pages/game/index.html",
   "src/pages/game/vendor/matter.min.js",
@@ -35,6 +36,39 @@ export function shouldExcludeFromPackage(relativePath) {
  */
 export function createPackagedManifest(manifest) {
   return manifest;
+}
+
+/**
+ * @param {Record<string, unknown>} manifest
+ * @returns {string[]}
+ */
+export function collectManifestHtmlEntries(manifest) {
+  const entries = new Set();
+  const sidePanel = manifest.side_panel;
+  if (sidePanel && typeof sidePanel === "object" && typeof sidePanel.default_path === "string") {
+    entries.add(sidePanel.default_path);
+  }
+  if (typeof manifest.devtools_page === "string" && manifest.devtools_page.endsWith(".html")) {
+    entries.add(manifest.devtools_page);
+  }
+  const chromeUrlOverrides = manifest.chrome_url_overrides;
+  if (chromeUrlOverrides && typeof chromeUrlOverrides === "object") {
+    for (const value of Object.values(chromeUrlOverrides)) {
+      if (typeof value === "string" && value.endsWith(".html")) {
+        entries.add(value);
+      }
+    }
+  }
+  const webAccessibleResources = Array.isArray(manifest.web_accessible_resources) ? manifest.web_accessible_resources : [];
+  for (const entry of webAccessibleResources) {
+    if (!entry || typeof entry !== "object" || !Array.isArray(entry.resources)) continue;
+    for (const resource of entry.resources) {
+      if (typeof resource === "string" && resource.endsWith(".html") && !resource.includes("*")) {
+        entries.add(resource);
+      }
+    }
+  }
+  return [...entries].sort();
 }
 
 /**
@@ -165,12 +199,13 @@ export async function removeJunkFiles(directory, baseDirectory = packageDir) {
   );
 }
 
-async function writePackagedManifest() {
-  const manifest = JSON.parse(await readFile(path.join(rootDir, "dist", "manifest.json"), "utf8"));
+async function writePackagedManifest(manifest) {
   await writeFile(path.join(packageDir, "manifest.json"), `${JSON.stringify(createPackagedManifest(manifest), null, 2)}\n`, "utf8");
 }
 
 async function main() {
+  const manifest = JSON.parse(await readFile(path.join(rootDir, "dist", "manifest.json"), "utf8"));
+
   for (const relativePath of requiredDistPaths) {
     await ensureDistPathExists(relativePath);
   }
@@ -182,9 +217,9 @@ async function main() {
     filter: (sourcePath) => !shouldExcludeFromPackage(path.relative(path.join(rootDir, "dist"), sourcePath)),
   });
 
-  await writePackagedManifest();
+  await writePackagedManifest(manifest);
   await removeJunkFiles(packageDir);
-  await ensureHtmlAssetReferences(packageDir, ["index.html", "src/pages/newtab/index.html", "src/pages/game/index.html"]);
+  await ensureHtmlAssetReferences(packageDir, collectManifestHtmlEntries(manifest));
 
   const packageJson = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
   await writeFile(path.join(packageDir, "build-info.json"), `${JSON.stringify(createBuildInfo(packageJson), null, 2)}\n`, "utf8");

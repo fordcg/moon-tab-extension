@@ -3,7 +3,15 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { collectHtmlAssetReferences, createBuildInfo, createPackagedManifest, ensureHtmlAssetReferences, removeJunkFiles, shouldExcludeFromPackage } from "./package-extension.mjs";
+import {
+  collectHtmlAssetReferences,
+  collectManifestHtmlEntries,
+  createBuildInfo,
+  createPackagedManifest,
+  ensureHtmlAssetReferences,
+  removeJunkFiles,
+  shouldExcludeFromPackage,
+} from "./package-extension.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, "..");
@@ -104,13 +112,29 @@ describe("本地扩展打包脚本", () => {
     await expect(ensureHtmlAssetReferences(packageRoot, ["src/pages/newtab/index.html"])).rejects.toThrow("src/pages/newtab/index.html -> ../../../../outside.js");
   });
 
+  it("从 manifest 收集发布包必须包含并检查资源引用的 HTML 入口", () => {
+    expect(collectManifestHtmlEntries({
+      side_panel: { default_path: "index.html" },
+      devtools_page: "src/devtools/network.html",
+      chrome_url_overrides: { newtab: "src/pages/newtab/index.html" },
+      web_accessible_resources: [
+        { resources: ["src/pages/game/index.html", "assets/*", "src/pages/game/vendor/matter.min.js"] },
+      ],
+    })).toEqual([
+      "index.html",
+      "src/devtools/network.html",
+      "src/pages/game/index.html",
+      "src/pages/newtab/index.html",
+    ]);
+  });
+
   it("打包脚本要求 Phase 2 的 newtab 和 game 构建产物", async () => {
     const scriptSource = await readFile(join(projectRoot, "scripts", "package-extension.mjs"), "utf8");
 
     expect(scriptSource).toContain('"src/pages/newtab/index.html"');
     expect(scriptSource).toContain('"src/pages/game/index.html"');
     expect(scriptSource).toContain('"src/pages/game/vendor/matter.min.js"');
-    expect(scriptSource).toContain('ensureHtmlAssetReferences(packageDir, ["index.html", "src/pages/newtab/index.html", "src/pages/game/index.html"])');
+    expect(scriptSource).toContain("ensureHtmlAssetReferences(packageDir, collectManifestHtmlEntries(manifest))");
   });
 
   it("清理复制后残留的测试文件和空测试目录", async () => {
@@ -151,10 +175,11 @@ describe("本地扩展打包脚本", () => {
     await expect(stat(join(projectRoot, ".env.chrome-webstore.example"))).rejects.toThrow();
   });
 
-  it("打包脚本不再要求 DevTools 页面产物", async () => {
+  it("打包脚本要求 manifest 声明的 DevTools 页面产物", async () => {
     const scriptSource = await readFile(join(projectRoot, "scripts", "package-extension.mjs"), "utf8");
 
-    expect(scriptSource).not.toContain('"devtools.html"');
-    expect(scriptSource).not.toContain("network.devtools");
+    expect(scriptSource).toContain('"src/devtools/network.html"');
+    expect(scriptSource).toContain("collectManifestHtmlEntries");
+    expect(scriptSource).toContain("ensureHtmlAssetReferences(packageDir, collectManifestHtmlEntries(manifest))");
   });
 });
