@@ -25,7 +25,14 @@ import type {
   SourceMapOriginalContext,
   SourceMapResolvedLocation,
 } from "./types";
-import { formatNetworkAttachmentForExport, formatNetworkAttachmentSummary, redactNetworkRequestDetail, redactNetworkText, redactNetworkTextSnippets } from "./networkContext";
+import {
+  formatNetworkAttachmentForExport,
+  formatNetworkAttachmentSummary,
+  redactNetworkInlineSensitiveText,
+  redactNetworkRequestDetail,
+  redactNetworkText,
+  redactNetworkTextSnippets,
+} from "./networkContext";
 import { isPngDataUrl } from "./tabCapture";
 import { createTavilySearchContextPrompt, formatTavilySearchAttachmentSummary } from "./webSearch/tavily";
 import { truncateText } from "./utils/text";
@@ -34,9 +41,6 @@ const TOOL_ATTACHMENT_KIND_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const GENERIC_DETAIL_LIMIT = 4000;
 const AUTOMATION_EVIDENCE_LIMIT = 500;
 const AUTOMATION_CONCLUSION_LIMIT = 800;
-const SENSITIVE_INLINE_PATTERN = /\b(token|access_token|refresh_token|password|passwd|secret|api[_-]?key|authorization|session|cookie|csrf|jwt)\s*[:=]\s*([^\s,;&"'<>]+)/gi;
-const BEARER_INLINE_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
-
 type ToolAttachmentAggregateGroup = {
   attachments: ChatToolAttachment[];
   toolDisplayName?: string;
@@ -1586,9 +1590,7 @@ function redactAndTruncateAutomationText(value: unknown, maxLength: number): str
 }
 
 function redactInlineSensitiveText(value: string): string {
-  return value
-    .replace(BEARER_INLINE_PATTERN, "Bearer [已脱敏]")
-    .replace(SENSITIVE_INLINE_PATTERN, (_match, key: string) => `${key}=[已脱敏]`);
+  return redactNetworkInlineSensitiveText(value);
 }
 
 function redactAutomationText(value: string): string {

@@ -106,6 +106,10 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "嵌套\|直接内嵌 JSON"` | RED 后通过 | 2026-07-07 Phase 5 nested direct embedded JSON snippet display fix；补丁前失败于 generic display summary 泄露 `123456`，补丁后 1 file / 2 tests passed / 14 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 nested direct embedded JSON snippet redaction fix；2 files / 42 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 nested direct embedded JSON snippet redaction fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "Authorization\|Cookie\|授权头\|Header"` | RED 后通过 | 2026-07-07 Phase 5 inline header redaction fix；补丁前失败于 generic summary 泄露 Basic credential `dXNlcjpwYXNz`，补丁后 1 file / 1 test passed / 26 skipped |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "Authorization\|Cookie\|授权头\|Header"` | RED 后通过 | 2026-07-07 Phase 5 inline header display redaction fix；补丁前失败于 generic display summary 泄露 Basic credential `dXNlcjpwYXNz`，补丁后 1 file / 1 test passed / 16 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 inline header redaction fix；2 files / 44 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 inline header redaction fix；tsc --noEmit |
 
 ## 未解决问题
 

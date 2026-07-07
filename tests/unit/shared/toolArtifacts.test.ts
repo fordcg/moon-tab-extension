@@ -385,6 +385,37 @@ describe("通用工具附件聚合", () => {
     }
   });
 
+  it("通用工具附件会脱敏 Authorization 和 Cookie header 文本", () => {
+    const attachment = normalizeToolAttachment({
+      id: "generic-header-sensitive-1",
+      kind: "page-context",
+      title: "页面上下文",
+      summary: "Authorization: Basic dXNlcjpwYXNz\nCookie: sid=secret; token=abc",
+      details: JSON.stringify({
+        copiedHeaders: 'Proxy-Authorization=Digest username="me", response="digest-secret"\nSet-Cookie: auth=server-cookie; Path=/',
+      }),
+      createdAt: 16,
+      redacted: false,
+      truncated: false,
+    });
+
+    expect(attachment).toBeTruthy();
+    const prompt = formatToolAttachmentForPrompt(attachment!);
+    const exported = formatToolAttachmentForExport(attachment!);
+    const attachmentDetails = attachment && "details" in attachment ? attachment.details : undefined;
+
+    expect(attachment).toMatchObject({ kind: "page-context", redacted: true });
+    for (const output of [attachment?.summary, attachmentDetails, prompt, exported]) {
+      expect(output).not.toContain("dXNlcjpwYXNz");
+      expect(output).not.toContain('username="me"');
+      expect(output).not.toContain('response="digest-secret"');
+      expect(output).not.toContain("sid=secret");
+      expect(output).not.toContain("token=abc");
+      expect(output).not.toContain("server-cookie");
+      expect(output).toContain("[已脱敏]");
+    }
+  });
+
   it("自动化报告会标记完全访问工具参与并脱敏证据", () => {
     const report = createAutomationReportToolAttachment({
       objective: "读取登录态 token=secret",

@@ -8,6 +8,11 @@ const FIELD_LIMIT = 1200;
 const SENSITIVE_NAME_PATTERN = /(authorization|cookie|set-cookie|token|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|password|passwd|credential|session|sid|csrf|xsrf)/i;
 const BEARER_INLINE_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const SENSITIVE_INLINE_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd|credential|session|sid|csrf|xsrf)\s*[:=]\s*[^\s,;&"'}）]+/gi;
+const INLINE_HEADER_NAME_PATTERN = "(?:Proxy-Authorization|Authorization|Set-Cookie|Cookie)";
+const INLINE_HEADER_PATTERN = new RegExp(
+  `\\b(${INLINE_HEADER_NAME_PATTERN})(\\s*[:=]\\s*)([^\\r\\n]*?)(?=\\r?\\n|$|\\b${INLINE_HEADER_NAME_PATTERN}\\s*[:=])`,
+  "gi",
+);
 
 export function redactNetworkRequestDetail(detail: NetworkRequestDetail): NetworkRequestDetail {
   return {
@@ -37,6 +42,13 @@ export function redactNetworkText(value: string): string {
 
 export function redactNetworkTextSnippets(value: string): string {
   return redactEmbeddedJsonSnippets(value);
+}
+
+export function redactNetworkInlineSensitiveText(value: string): string {
+  return value
+    .replace(INLINE_HEADER_PATTERN, (_match, name: string, separator: string) => `${name}${separator}${REDACTED_VALUE}`)
+    .replace(BEARER_INLINE_PATTERN, "Bearer [已脱敏]")
+    .replace(SENSITIVE_INLINE_PATTERN, (_match, key: string) => `${key}=[已脱敏]`);
 }
 
 export function parseRelevantNetworkRequestIds(content: string, availableRequests: string[] | NetworkRequestMeta[]): string[] {
@@ -381,9 +393,7 @@ function findBalancedJsonEnd(value: string, startIndex: number): number {
 }
 
 function redactInlineSensitiveText(value: string): string {
-  return value
-    .replace(BEARER_INLINE_PATTERN, "Bearer [已脱敏]")
-    .replace(SENSITIVE_INLINE_PATTERN, (_match, key: string) => `${key}=[已脱敏]`);
+  return redactNetworkInlineSensitiveText(value);
 }
 
 function redactFormEncodedBody(value: string): string {

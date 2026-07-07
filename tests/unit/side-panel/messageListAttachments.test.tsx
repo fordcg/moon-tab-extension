@@ -585,6 +585,45 @@ describe("MessageList 工具附件展示聚合", () => {
     }
   });
 
+  it("通用展示附件会脱敏 Authorization 和 Cookie header 文本", () => {
+    const singleAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-header-sensitive-a",
+        summary: "Authorization: Basic dXNlcjpwYXNz\nCookie: sid=secret; token=abc",
+        details: JSON.stringify({ copiedHeaders: 'Proxy-Authorization=Digest username="me", response="digest-secret"' }),
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    const multiAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-header-sensitive-b",
+        summary: "Authorization: Basic dXNlcjpwYXNz",
+        details: "Cookie: sid=secret; token=abc",
+      }),
+      createGenericAttachment({
+        id: "generic-display-header-sensitive-c",
+        createdAt: 2,
+        summary: 'Proxy-Authorization=Digest username="me", response="digest-secret"',
+        details: "Set-Cookie: auth=server-cookie; Path=/",
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    for (const attachments of [singleAttachments, multiAttachments]) {
+      expect(attachments).toHaveLength(1);
+      const [attachment] = attachments;
+      expect(attachment.redacted).toBe(true);
+      for (const output of [attachment.summary, attachment.details]) {
+        expect(output).not.toContain("dXNlcjpwYXNz");
+        expect(output).not.toContain('username="me"');
+        expect(output).not.toContain('response="digest-secret"');
+        expect(output).not.toContain("sid=secret");
+        expect(output).not.toContain("token=abc");
+        expect(output).not.toContain("server-cookie");
+        expect(output).toContain("[已脱敏]");
+      }
+    }
+  });
+
   it("同一气泡下多个 JS 源码附件聚合后仍保留结构化数据", () => {
     const attachments = aggregateDisplayAttachmentsByKind([
       createJsSourceAttachment({
