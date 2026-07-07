@@ -549,6 +549,42 @@ describe("MessageList 工具附件展示聚合", () => {
     }
   });
 
+  it("通用展示附件会脱敏嵌套直接内嵌 JSON snippet 的敏感父键", () => {
+    const singleAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-nested-direct-embedded-json-a",
+        summary: 'payload={"password":{"value":"123456"}}',
+        details: 'items={"items":[{"token":"abc"}]}',
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    const multiAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-nested-direct-embedded-json-b",
+        summary: 'payload={"password":{"value":"123456"}}',
+        details: 'items={"items":[{"token":"abc"}]}',
+      }),
+      createGenericAttachment({
+        id: "generic-display-nested-direct-embedded-json-c",
+        createdAt: 2,
+        summary: 'body={"api_key":{"value":"xai-secret"}}',
+        details: 'payload={"password":["123456"]}',
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    for (const attachments of [singleAttachments, multiAttachments]) {
+      expect(attachments).toHaveLength(1);
+      const [attachment] = attachments;
+      expect(attachment.redacted).toBe(true);
+      for (const output of [attachment.summary, attachment.details]) {
+        expect(output).not.toContain("123456");
+        expect(output).not.toContain("abc");
+        expect(output).not.toContain("xai-secret");
+        expect(output).toContain("[已脱敏]");
+      }
+    }
+  });
+
   it("同一气泡下多个 JS 源码附件聚合后仍保留结构化数据", () => {
     const attachments = aggregateDisplayAttachmentsByKind([
       createJsSourceAttachment({

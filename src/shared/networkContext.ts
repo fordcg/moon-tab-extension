@@ -302,16 +302,82 @@ function isFormEncodedLike(value: string): boolean {
 }
 
 function redactEmbeddedJsonSnippets(value: string): string {
-  return redactInlineSensitiveText(value.replace(/\{[^{}]*\}|\[[^\[\]]*\]/g, (snippet) => {
-    if (!isJsonLike(snippet.trim())) {
-      return snippet;
+  let redacted = "";
+  let index = 0;
+  while (index < value.length) {
+    const char = value[index];
+    if (char !== "{" && char !== "[") {
+      redacted += char;
+      index += 1;
+      continue;
     }
+
+    const endIndex = findBalancedJsonEnd(value, index);
+    if (endIndex === -1) {
+      redacted += char;
+      index += 1;
+      continue;
+    }
+
+    const snippet = value.slice(index, endIndex + 1);
     try {
-      return JSON.stringify(redactJsonValue(JSON.parse(snippet)));
+      redacted += JSON.stringify(redactJsonValue(JSON.parse(snippet)));
+      index = endIndex + 1;
     } catch {
-      return snippet;
+      redacted += char;
+      index += 1;
     }
-  }));
+  }
+
+  return redactInlineSensitiveText(redacted);
+}
+
+function findBalancedJsonEnd(value: string, startIndex: number): number {
+  const opening = value[startIndex];
+  const closing = opening === "{" ? "}" : "]";
+  const stack = [closing];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex + 1; index < value.length; index += 1) {
+    const char = value[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      stack.push("}");
+      continue;
+    }
+    if (char === "[") {
+      stack.push("]");
+      continue;
+    }
+
+    if (char === "}" || char === "]") {
+      if (char !== stack[stack.length - 1]) {
+        return -1;
+      }
+      stack.pop();
+      if (stack.length === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
 }
 
 function redactInlineSensitiveText(value: string): string {
