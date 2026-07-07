@@ -629,6 +629,20 @@ function aggregateDisplayAttachmentKindGroup(kind: string, attachments: ChatTool
     };
   }
 
+  if (kind === "automation-report") {
+    if (attachments.length === 1) {
+      return attachments[0];
+    }
+    const aggregated = aggregateToolAttachmentGroupByKind(attachments.filter(isAutomationReportToolAttachment));
+    if (!aggregated) {
+      return attachments[0];
+    }
+    return {
+      ...aggregated,
+      id: `message-display-automation-report-${attachments.map((attachment) => attachment.id).join("-")}`,
+    };
+  }
+
   if (attachments.length === 1) {
     const [attachment] = attachments;
     if (isBrowserScreenshotToolAttachment(attachment) || isAutomationReportToolAttachment(attachment)) {

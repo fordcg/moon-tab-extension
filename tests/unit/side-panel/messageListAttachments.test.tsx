@@ -179,6 +179,88 @@ describe("MessageList 工具附件展示聚合", () => {
     expect(screen.getByText(/失败工具：列出 Network 请求/)).toBeInTheDocument();
   });
 
+  it("多个自动化报告展示附件聚合后仍保留 typed 结构", () => {
+    const attachments = aggregateDisplayAttachmentsByKind([
+      createAutomationReportAttachment({ id: "report-a" }),
+      createAutomationReportAttachment({
+        id: "report-b",
+        createdAt: 2,
+        objective: "复查登录接口",
+        conclusion: "发现鉴权重试失败。",
+        fullAccessIncluded: true,
+        timeline: [
+          {
+            id: "event-3",
+            type: "tool_call",
+            at: 5,
+            label: "调用重试接口",
+            detail: "鉴权重试返回 401",
+            toolCallId: "call-3",
+            status: "error",
+          },
+        ],
+        steps: [
+          {
+            toolCallId: "call-3",
+            toolName: "network_replay_request",
+            displayName: "重放 Network 请求",
+            status: "error",
+            startedAt: 5,
+            completedAt: 6,
+            evidence: "鉴权重试返回 401",
+            attachmentKinds: ["network"],
+          },
+        ],
+        failureSummary: {
+          failedStepCount: 1,
+          failedTools: ["重放 Network 请求"],
+          recoverableActions: ["重新获取授权后重试。"],
+        },
+      }),
+    ]);
+
+    expect(attachments).toHaveLength(1);
+    const [attachment] = attachments;
+    expect(attachment.kind).toBe("automation-report");
+    expect("steps" in attachment && attachment.steps).toHaveLength(3);
+    expect("timeline" in attachment && attachment.timeline).toHaveLength(3);
+    expect("failureSummary" in attachment && attachment.failureSummary?.failedTools).toContain("重放 Network 请求");
+    expect("fullAccessIncluded" in attachment && attachment.fullAccessIncluded).toBe(true);
+    expect("details" in attachment).toBe(false);
+
+    const message: ChatMessage = {
+      id: "assistant-report-aggregated",
+      role: "assistant",
+      content: "已完成聚合排查",
+      createdAt: 1,
+      modelId: "model-1",
+      endpointType: "openai_chat",
+      streamMode: false,
+      systemPrompt: "",
+      contextPrompt: "",
+      contextMode: "text",
+      toolAttachments: attachments,
+    };
+
+    render(
+      <MessageList
+        messages={[message]}
+        retryProgressByMessageId={{}}
+        toolCallDisplayMode="assistant_grouped"
+        showToolCallProcessInAssistantMode
+        onRegenerateMessage={() => undefined}
+        onEditAndRegenerateUserMessage={() => undefined}
+        regenerating={false}
+      />,
+    );
+
+    expect(screen.getByText("自动化任务报告")).toBeInTheDocument();
+    expect(screen.getByText(/目标：排查登录失败；复查登录接口/)).toBeInTheDocument();
+    expect(screen.getByText(/完全访问原文结果：是/)).toBeInTheDocument();
+    expect(screen.getByText("重放 Network 请求")).toBeInTheDocument();
+    expect(screen.getByText(/失败工具：列出 Network 请求、重放 Network 请求/)).toBeInTheDocument();
+  });
+
   it("浏览器截图附件默认折叠且支持点击全屏预览", async () => {
     const user = userEvent.setup();
     const attachments = aggregateDisplayAttachmentsByKind([

@@ -81,6 +81,10 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 generic JSON redaction fix；1 file / 22 tests |
 | `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 generic display redaction fix；1 file / 11 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 generic redaction fix；tsc --noEmit |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "多个自动化报告"` | RED 后通过 | 2026-07-07 Phase 5 automation report display fix；补丁前失败于多个 automation-report 进入 generic 聚合后缺少 `steps`，补丁后 1 test passed / 11 skipped |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 automation report display fix；1 file / 12 tests |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 automation report display fix；2 files / 34 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 automation report display fix；tsc --noEmit |
 
 ## 未解决问题
 
