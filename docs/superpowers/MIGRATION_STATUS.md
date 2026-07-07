@@ -36,6 +36,7 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | Phase 5 Embedded JSON Snippet Fix | `08c0574` | 脱敏字符串中的内嵌 JSON 片段 |
 | Phase 5 Direct Embedded JSON Snippet Fix | `5374208` | 脱敏直接普通文本中的内嵌 JSON 片段 |
 | Phase 5 Nested Embedded JSON Snippet Fix | `d52ce29` | 脱敏嵌套直接内嵌 JSON 片段 |
+| Phase 5 Inline Header Redaction Fix | `d0c84b8` | 脱敏内联 Authorization 和 Cookie 头 |
 
 ## 当前工作区 Phase 5 结果
 
