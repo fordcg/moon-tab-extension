@@ -577,4 +577,24 @@ describe("background 工具运行时封装", () => {
       globalWithHook.__imagefreeGenerateTool = previousHook;
     }
   });
+
+  it("Imagefree runtime 保留数组 JSON 响应的 taskId 诊断兼容", async () => {
+    const { executeImagefreeGenerateTool } = await import("../../../src/background/imagefreeToolRuntime");
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response("<html></html>", { status: 200 }))
+      .mockResolvedValueOnce(Response.json([{ taskId: "task-1" }]));
+
+    await expect(executeImagefreeGenerateTool(
+      createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, {
+        prompt: "moon",
+        turnstile_token: "turnstile-token",
+      }),
+      fetcher as unknown as typeof fetch,
+    )).resolves.toMatchObject({
+      toolCallId: `call-${IMAGEFREE_GENERATE_IMAGE_TOOL_NAME}`,
+      name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+      isError: true,
+      content: expect.stringContaining("Imagefree 未返回 taskId：[{\"taskId\":\"task-1\"}]"),
+    });
+  });
 });

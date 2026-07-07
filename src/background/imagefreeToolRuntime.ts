@@ -227,7 +227,7 @@ async function generateImagefreeImage(input: ImagefreeInput, fetcher: typeof fet
     }),
   });
 
-  const taskId = typeof task?.taskId === "string" ? task.taskId.trim() : "";
+  const taskId = getStringProperty(task, "taskId").trim();
   if (!taskId) {
     throw new Error(`Imagefree 未返回 taskId：${summarizePayload(task)}`);
   }
@@ -241,8 +241,8 @@ async function generateImagefreeImage(input: ImagefreeInput, fetcher: typeof fet
   return {
     ok: true,
     taskId,
-    status: typeof statusPayload?.status === "string" ? statusPayload.status : "completed",
-    progress: typeof statusPayload?.progress === "number" ? statusPayload.progress : undefined,
+    status: getStringProperty(statusPayload, "status") || "completed",
+    progress: getNumberProperty(statusPayload, "progress"),
     image: imageUrl,
     imageUrl,
     prompt: input.prompt,
@@ -511,9 +511,9 @@ function normalizeTurnstileToken(token: unknown): string {
   return value;
 }
 
-async function pollImagefreeStatus(fetcher: typeof fetch, taskId: string): Promise<Record<string, unknown>> {
+async function pollImagefreeStatus(fetcher: typeof fetch, taskId: string): Promise<unknown> {
   const deadline = Date.now() + IMAGEFREE_TIMEOUT_MS;
-  let latest: Record<string, unknown> | undefined;
+  let latest: unknown;
 
   while (Date.now() < deadline) {
     latest = await requestImagefreeJson(
@@ -527,7 +527,7 @@ async function pollImagefreeStatus(fetcher: typeof fetch, taskId: string): Promi
       },
     );
 
-    const status = typeof latest?.status === "string" ? latest.status.toLowerCase() : "";
+    const status = getStringProperty(latest, "status").toLowerCase();
     if (findImageUrl(latest) || (status && status !== "pending")) {
       if (status === "failed" || status === "error") {
         throw new Error(`Imagefree 任务失败：${summarizePayload(latest)}`);
@@ -546,7 +546,7 @@ async function requestImagefreeJson(
   url: string,
   init: RequestInit,
   options: { allowNonJson?: boolean } = {},
-): Promise<Record<string, unknown>> {
+): Promise<unknown> {
   let response: Response;
   try {
     response = await fetcher(url, init);
@@ -564,8 +564,8 @@ async function requestImagefreeJson(
       `Imagefree 请求失败：${response.status} ${response.statusText}${hint}。${summarizePayload(payload ?? text)}`,
     );
   }
-  if (payload !== undefined && typeof payload === "object" && !Array.isArray(payload)) {
-    return payload as Record<string, unknown>;
+  if (payload !== undefined) {
+    return payload;
   }
   if (options.allowNonJson) {
     return { ok: true };
@@ -603,6 +603,22 @@ function findImageUrl(value: unknown, depth = 0): string {
     if (found) return found;
   }
   return "";
+}
+
+function getStringProperty(value: unknown, key: string): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+  const property = (value as Record<string, unknown>)[key];
+  return typeof property === "string" ? property : "";
+}
+
+function getNumberProperty(value: unknown, key: string): number | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const property = (value as Record<string, unknown>)[key];
+  return typeof property === "number" ? property : undefined;
 }
 
 function isImageUrl(value: string): boolean {
