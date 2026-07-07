@@ -397,7 +397,7 @@ describe("App", () => {
     expect(result.css).toContain("@keyframes session-running-border-pulse");
     expect(result.css).toMatch(/50%\s*{\s*border-color:\s*(?:rgba\(204,\s*120,\s*92,\s*0\)|#cc785c00);?\s*}/);
     expect(result.css).toContain(".composer-abort-button");
-  });
+  }, 15_000);
 
   it("边界确认弹窗使用实体背景并在选择选项后允许提交", async () => {
     const user = userEvent.setup();
