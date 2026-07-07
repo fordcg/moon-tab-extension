@@ -27,7 +27,7 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | Phase 5 Task 4 | `2bb6b95` | 加强工具附件脱敏 |
 | Phase 5 Task 5 | `41fa877` | 加固 MCP 和外部工具边界 |
 | Phase 5 Task 6 | `f0719a0` | 限定 DevTools Network 兼容边界 |
-| Phase 5 Final Review Patch | `测试：封堵工具附件原始脱敏旁路` | 封堵 raw generic tool attachment 在 prompt/export/aggregation 前绕过脱敏 |
+| Phase 5 Final Review Patch | `b209c58` | 封堵 raw generic tool attachment 在 prompt/export/aggregation 前绕过脱敏 |
 
 ## 当前工作区 Phase 5 结果
 
