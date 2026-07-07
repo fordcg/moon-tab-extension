@@ -70,6 +70,9 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "混合工具附件聚合"` | RED 后通过 | 2026-07-07 Phase 5 quality fix；补丁前失败于 mixed aggregate 泄露 Network JSON body `password` / `access_token` / `secret`，补丁后 1 test passed / 20 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 quality fix；1 file / 21 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 quality fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "混合工具附件聚合"` | RED 后通过 | 2026-07-07 Phase 5 mixed summary fix；补丁前失败于 mixed aggregate summary 泄露 raw Network summary `query-secret` / `mixed-token`，补丁后 1 test passed / 20 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 mixed summary fix；1 file / 21 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 mixed summary fix；tsc --noEmit |
 
 ## 未解决问题
 

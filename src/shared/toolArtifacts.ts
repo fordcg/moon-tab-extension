@@ -457,7 +457,7 @@ function formatToolAttachmentForMixedAggregate(attachment: ChatToolAttachment): 
     const requests = attachment.requests.map(redactNetworkRequestDetail);
     const summary = formatNetworkAttachmentSummary(requests);
     return {
-      summary: attachment.summary,
+      summary,
       details: ["# Network 请求详情附件", "", summary, "", formatNetworkAttachmentForExport(requests)].join("\n"),
       redacted: true,
       truncated: attachment.truncated || requests.some((request) => request.truncated),

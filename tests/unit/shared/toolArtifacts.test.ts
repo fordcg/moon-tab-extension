@@ -124,7 +124,7 @@ describe("通用工具附件聚合", () => {
           id: "attachment-network-full-access-mixed",
           kind: "network",
           title: "Network 请求详情",
-          summary: "原始详情",
+          summary: "Network summary token=query-secret Bearer mixed-token",
           sourceToolCallId: "call-mixed-sensitive",
           createdAt: 2,
           redacted: false,
@@ -162,6 +162,9 @@ describe("通用工具附件聚合", () => {
     const exported = formatToolAttachmentForExport(attachment);
 
     expect(attachment).toMatchObject({ kind: "tool-result-set", redacted: true });
+    expect(attachment.summary).not.toContain("query-secret");
+    expect(attachment.summary).not.toContain("mixed-token");
+    expect(attachment.summary).toContain("[已脱敏]");
     for (const output of [prompt, exported]) {
       expect(output).not.toContain("query-secret");
       expect(output).not.toContain("mixed-token");
@@ -789,7 +792,7 @@ describe("通用工具附件聚合", () => {
       expect.objectContaining({
         kind: "tool-result-set",
         title: "页面分析结果",
-        summary: "页面标题\n1 条请求",
+        summary: "页面标题\n已注入 1 个 Network 请求：GET unknown https://example.com/api",
         createdAt: 4,
         redacted: true,
       }),
