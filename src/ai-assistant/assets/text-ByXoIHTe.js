@@ -1,1 +1,0 @@
-function e(e,t){return e.length<=t?{text:e,truncated:!1}:{text:e.slice(0,t),truncated:!0}}export{e as t};

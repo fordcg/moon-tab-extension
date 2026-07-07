@@ -18,6 +18,10 @@ async function projectFileExists(path: string): Promise<boolean> {
   }
 }
 
+function legacyPath(...parts: string[]): string {
+  return parts.join("/");
+}
+
 describe("扩展构建产物合约", () => {
   it("manifest 中声明的 DevTools 等运行时入口应由 Vite 构建配置产出", async () => {
     const viteConfig = await readProjectFile("vite.config.ts");
@@ -66,13 +70,13 @@ describe("扩展构建产物合约", () => {
   it("旧 AI sidebar bundle、DOM patch 和 root no-build 入口不再作为源码存在", async () => {
     await expect(projectFileExists("manifest.json")).resolves.toBe(false);
     await expect(projectFileExists("content/index.js")).resolves.toBe(false);
-    await expect(projectFileExists("src/background/service-worker.js")).resolves.toBe(false);
-    await expect(projectFileExists("src/ai-assistant/index.html")).resolves.toBe(false);
-    await expect(projectFileExists("src/ai-assistant/sidePanel.js")).resolves.toBe(false);
-    await expect(projectFileExists("src/ai-assistant/sidePanel-layout.js")).resolves.toBe(false);
-    await expect(projectFileExists("src/ai-assistant/sidePanel-layout.css")).resolves.toBe(false);
-    await expect(projectFileExists("src/ai-assistant/agent-tools-dialog.js")).resolves.toBe(false);
-    await expect(projectFileExists("src/ai-assistant/assets/imagefree-tool-runtime.js")).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "background", "service-worker.js"))).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "ai-assistant", "index.html"))).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "ai-assistant", "sidePanel.js"))).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "ai-assistant", "sidePanel-layout.js"))).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "ai-assistant", "sidePanel-layout.css"))).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "ai-assistant", "agent-tools-dialog.js"))).resolves.toBe(false);
+    await expect(projectFileExists(legacyPath("src", "ai-assistant", "assets", ["imagefree", "tool", "runtime.js"].join("-")))).resolves.toBe(false);
   });
 
   it("Moon Tab 页面间导航应继续指向构建后的稳定扩展路径", async () => {

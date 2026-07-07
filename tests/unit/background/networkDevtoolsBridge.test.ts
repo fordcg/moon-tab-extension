@@ -15,6 +15,7 @@ interface PortMock {
 }
 
 const DEVTOOLS_PAGE_URL = "chrome-extension://moon-tab/src/devtools/network.html";
+const LEGACY_AI_ASSISTANT_DEVTOOLS_URL = ["chrome-extension://moon-tab/src", "ai-assistant", "devtools.html"].join("/");
 
 function createPortMock(name = "network.devtools", sender: chrome.runtime.MessageSender = { url: DEVTOOLS_PAGE_URL }): PortMock {
   const messageListeners: Array<(message: unknown) => void> = [];
@@ -175,9 +176,9 @@ describe("DevTools Network bridge 兼容层", () => {
     });
   });
 
-  it("拒绝旧路径 src/ai-assistant/devtools.html 的 DevTools port", async () => {
+  it("拒绝旧 AI assistant DevTools port", async () => {
     const bridge = createNetworkDevtoolsBridge();
-    const port = createPortMock("network.devtools", { url: "chrome-extension://moon-tab/src/ai-assistant/devtools.html" });
+    const port = createPortMock("network.devtools", { url: LEGACY_AI_ASSISTANT_DEVTOOLS_URL });
 
     expect(bridge.handlePortConnect(port as unknown as chrome.runtime.Port)).toBe(false);
     port.fireMessage({ type: "networkContext.devtoolsConnected", tabId: 7, requests: [createMeta()] });

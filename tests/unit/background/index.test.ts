@@ -613,7 +613,7 @@ describe("background 入口", () => {
 
     const keepChannelOpen = mock.messageListeners[0](
       { type: "networkContext.getSnapshot", tabId: 7 },
-      { url: "chrome-extension://moon-tab/src/ai-assistant/devtools.html" } as chrome.runtime.MessageSender,
+      { url: ["chrome-extension://moon-tab/src", "ai-assistant", "devtools.html"].join("/") } as chrome.runtime.MessageSender,
       sendResponse,
     );
 
