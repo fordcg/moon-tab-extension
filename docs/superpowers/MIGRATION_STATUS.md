@@ -31,6 +31,7 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | Phase 5 Quality Fix | `64f6736` | 收紧混合工具附件脱敏边界 |
 | Phase 5 Mixed Summary Fix | `ac11c5a` | 脱敏混合工具附件摘要 |
 | Phase 5 Generic Redaction Fix | `3d35e80` | 完善通用工具附件 JSON 和展示脱敏 |
+| Phase 5 Automation Report Display Fix | `57b591a` | 保留多个自动化报告展示附件的 typed 结构 |
 
 ## 当前工作区 Phase 5 结果
 
