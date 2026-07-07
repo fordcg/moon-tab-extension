@@ -50,4 +50,16 @@ describe("Phase 7 发布验收合约", () => {
     expect(manifest.devtools_page).toBe("src/devtools/network.html");
     expect(manifest.chrome_url_overrides.newtab).toBe("src/pages/newtab/index.html");
   });
+
+  it("README 和 CLAUDE 维护说明暴露发布验收入口", async () => {
+    const readme = await readProjectFile("README.md");
+    const claude = await readProjectFile("CLAUDE.md");
+
+    expect(readme).toContain("npm run verify:release");
+    expect(readme).toContain("artifacts/chrome-extension");
+    expect(readme).toContain("docs/superpowers/release-readiness.md");
+    expect(claude).toContain("npm run verify:release");
+    expect(claude).toContain("release readiness");
+    expect(claude).toContain("Do not load the repository root directly");
+  });
 });

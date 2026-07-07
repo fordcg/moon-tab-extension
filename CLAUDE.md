@@ -31,8 +31,11 @@ The current root npm scripts are defined in `package.json`:
 - `npm run test:e2e` - run Playwright smoke tests.
 - `npm run typecheck` - run `tsc --noEmit`.
 - `npm run check` - run typecheck, extension build, Vitest, legacy tests, and package checks.
+- `npm run verify:release` - run the full release readiness gate: `check`, Playwright E2E, and packaged artifact verification.
 
 For local Chrome/Edge extension testing, build first and load the generated `dist/` directory or packaged output as the unpacked extension. Do not load the repository root directly.
+
+Before claiming release readiness, run `npm run verify:release` and inspect the output. The release readiness matrix is `docs/superpowers/release-readiness.md`; keep it aligned with manifest entries, package artifacts, and the current no-`debugger` permission boundary.
 
 ## High-level architecture
 

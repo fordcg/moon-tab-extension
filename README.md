@@ -32,9 +32,21 @@ npm run build:extension
 npm test
 npm run test:legacy
 npm run test:e2e
+npm run check:package
+npm run verify:release
 ```
 
-`npm test` 运行工程化后的 Vitest 测试；`npm run test:legacy` 暂时保留迁移前的 Node 脚本回归，并在 Phase 2 的 `npm run check` 中覆盖小游戏 worker/sprite 逻辑；`npm run test:e2e` 验证构建后的侧栏、新标签页和游戏页面。
+`npm test` 运行工程化后的 Vitest 测试；`npm run test:legacy` 保留迁移期间仍有价值的 Node 脚本回归；`npm run test:e2e` 验证构建后的侧栏、新标签页、游戏页面和真实扩展加载 smoke；`npm run verify:release` 依次执行 `check`、E2E 和发布产物检查，是 Phase 7 发布候选验收入口。
+
+## 发布验收
+
+发布候选验收使用：
+
+```powershell
+npm run verify:release
+```
+
+该命令会生成 `dist/` 和 `artifacts/chrome-extension/`，并确认 manifest 声明入口、打包产物、测试排除、旧产物缺失和当前无 `debugger` 权限边界。验收矩阵维护在 `docs/superpowers/release-readiness.md`。
 
 启动本地 Grok Search MCP Bridge：
 
