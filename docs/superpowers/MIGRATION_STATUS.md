@@ -91,6 +91,10 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "字符串化 JSON\|JSON 形态\|generic\|通用"` | RED 后通过 | 2026-07-07 Phase 5 nested stringified JSON display fix；补丁前失败于 generic display summary 泄露 `xai-secret`，补丁后 1 file / 3 tests passed / 10 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 nested stringified JSON redaction fix；2 files / 36 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 nested stringified JSON redaction fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "内嵌 JSON\|字符串化 JSON"` | RED 后通过 | 2026-07-07 Phase 5 embedded JSON snippet redaction fix；补丁前失败于 `Request body: {"api_key":"xai-secret"}` 泄露，补丁后 1 file / 2 tests passed / 22 skipped |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "内嵌 JSON\|字符串化 JSON"` | RED 后通过 | 2026-07-07 Phase 5 embedded JSON snippet display fix；补丁前失败于 generic display summary 泄露 `xai-secret`，补丁后 1 file / 2 tests passed / 12 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 embedded JSON snippet redaction fix；2 files / 38 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 embedded JSON snippet redaction fix；tsc --noEmit |
 
 ## 未解决问题
 

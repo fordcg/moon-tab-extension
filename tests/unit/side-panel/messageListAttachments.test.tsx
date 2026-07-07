@@ -477,6 +477,42 @@ describe("MessageList 工具附件展示聚合", () => {
     }
   });
 
+  it("通用展示附件会脱敏内嵌 JSON snippet", () => {
+    const singleAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-embedded-json-a",
+        summary: JSON.stringify({ requestBody: 'Request body: {"api_key":"xai-secret"}' }),
+        details: JSON.stringify({ requestBody: 'payload={"password":"123456","access_token":"abc"}' }),
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    const multiAttachments = aggregateDisplayAttachmentsByKind([
+      createGenericAttachment({
+        id: "generic-display-embedded-json-b",
+        summary: JSON.stringify({ requestBody: 'Request body: {"api_key":"xai-secret"}' }),
+        details: JSON.stringify({ requestBody: 'payload={"password":"123456"}' }),
+      }),
+      createGenericAttachment({
+        id: "generic-display-embedded-json-c",
+        createdAt: 2,
+        summary: JSON.stringify({ responseBody: 'payload={"access_token":"abc"}' }),
+        details: JSON.stringify({ responseBody: 'Request body: {"api_key":"xai-secret"}' }),
+      }),
+    ]) as ChatGenericToolAttachment[];
+
+    for (const attachments of [singleAttachments, multiAttachments]) {
+      expect(attachments).toHaveLength(1);
+      const [attachment] = attachments;
+      expect(attachment.redacted).toBe(true);
+      for (const output of [attachment.summary, attachment.details]) {
+        expect(output).not.toContain("xai-secret");
+        expect(output).not.toContain("123456");
+        expect(output).not.toContain("abc");
+        expect(output).toContain("[已脱敏]");
+      }
+    }
+  });
+
   it("同一气泡下多个 JS 源码附件聚合后仍保留结构化数据", () => {
     const attachments = aggregateDisplayAttachmentsByKind([
       createJsSourceAttachment({

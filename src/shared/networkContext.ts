@@ -283,13 +283,31 @@ function redactJsonStringValue(value: string): string {
     }
   }
 
-  const formRedacted = redactFormEncodedBody(value);
-  const urlRedacted = formRedacted.includes("?") || /^https?:\/\//i.test(formRedacted) ? redactUrl(formRedacted) : formRedacted;
+  const formRedacted = isFormEncodedLike(trimmed) ? redactFormEncodedBody(value) : value;
+  const snippetRedacted = redactEmbeddedJsonSnippets(formRedacted);
+  const urlRedacted = snippetRedacted.includes("?") || /^https?:\/\//i.test(snippetRedacted) ? redactUrl(snippetRedacted) : snippetRedacted;
   return redactInlineSensitiveText(urlRedacted);
 }
 
 function isJsonLike(value: string): boolean {
   return (value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"));
+}
+
+function isFormEncodedLike(value: string): boolean {
+  return /^[^=\s]+=[^\s]+(?:&[^=\s]+=[^\s]+)*$/.test(value);
+}
+
+function redactEmbeddedJsonSnippets(value: string): string {
+  return redactInlineSensitiveText(value.replace(/\{[^{}]*\}|\[[^\[\]]*\]/g, (snippet) => {
+    if (!isJsonLike(snippet.trim())) {
+      return snippet;
+    }
+    try {
+      return JSON.stringify(redactJsonValue(JSON.parse(snippet)));
+    } catch {
+      return snippet;
+    }
+  }));
 }
 
 function redactInlineSensitiveText(value: string): string {
