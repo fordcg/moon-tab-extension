@@ -154,7 +154,7 @@ Phase 6 迁入只清空缓存的 `network.clear_requests`。该工具只通过�
 
 当前“工具和 MCP”入口是通用工具中心。Grok 搜索只是内置预设，不再是唯一 MCP 形态。
 
-当前后台已接入 source-owned `agent-tools-service.js` 路由：
+当前后台已接入 source-owned `src/background/agentToolsMessageHandler.ts` 路由，并由 `src/background/index.ts` 分发 `agentTools.*` runtime 消息：
 
 - `agentTools.getStatus`：读取内置工具、MCP Server 设置、已发现工具和最近审计日志。
 - `agentTools.configureMcp`：保存 MCP Server 列表，并按需把 Grok 预设配置同步写入本地 Bridge `/config`。
