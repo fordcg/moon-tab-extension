@@ -233,6 +233,39 @@ describe("通用工具附件聚合", () => {
     expect(exported).toContain("[已脱敏]");
   });
 
+  it("通用工具附件在 live collection 聚合后会脱敏 JSON 形态摘要和详情", () => {
+    const message = createAssistantMessage({
+      toolAttachments: [
+        {
+          id: "generic-json-sensitive-1",
+          kind: "page-context",
+          title: "页面上下文",
+          summary: "{\"api_key\":\"xai-secret\",\"token\":\"summary-token\"}",
+          details: "{\"password\":\"123456\",\"access_token\":\"abc\",\"secret\":\"raw-json-secret\"}",
+          sourceToolCallId: "call-generic-json",
+          createdAt: 11,
+          redacted: false,
+          truncated: false,
+        },
+      ],
+    });
+
+    const [attachment] = collectMessageToolAttachments(message);
+    const prompt = formatToolAttachmentForPrompt(attachment);
+    const exported = formatToolAttachmentForExport(attachment);
+    const attachmentDetails = "details" in attachment ? attachment.details : undefined;
+
+    expect(attachment).toMatchObject({ kind: "page-context", redacted: true });
+    for (const output of [attachment.summary, attachmentDetails, prompt, exported]) {
+      expect(output).not.toContain("xai-secret");
+      expect(output).not.toContain("summary-token");
+      expect(output).not.toContain("123456");
+      expect(output).not.toContain("abc");
+      expect(output).not.toContain("raw-json-secret");
+      expect(output).toContain("[已脱敏]");
+    }
+  });
+
   it("自动化报告会标记完全访问工具参与并脱敏证据", () => {
     const report = createAutomationReportToolAttachment({
       objective: "读取登录态 token=secret",

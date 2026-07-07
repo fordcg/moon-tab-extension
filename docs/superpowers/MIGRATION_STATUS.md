@@ -28,6 +28,8 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | Phase 5 Task 5 | `41fa877` | 加固 MCP 和外部工具边界 |
 | Phase 5 Task 6 | `f0719a0` | 限定 DevTools Network 兼容边界 |
 | Phase 5 Final Review Patch | `b209c58` | 封堵 raw generic tool attachment 在 prompt/export/aggregation 前绕过脱敏 |
+| Phase 5 Quality Fix | `64f6736` | 收紧混合工具附件脱敏边界 |
+| Phase 5 Mixed Summary Fix | `ac11c5a` | 脱敏混合工具附件摘要 |
 
 ## 当前工作区 Phase 5 结果
 
@@ -73,6 +75,11 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "混合工具附件聚合"` | RED 后通过 | 2026-07-07 Phase 5 mixed summary fix；补丁前失败于 mixed aggregate summary 泄露 raw Network summary `query-secret` / `mixed-token`，补丁后 1 test passed / 20 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 mixed summary fix；1 file / 21 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 mixed summary fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts -t "JSON 形态"` | RED 后通过 | 2026-07-07 Phase 5 generic JSON redaction fix；补丁前失败于 raw generic JSON summary 泄露 `xai-secret`，补丁后 1 test passed / 21 skipped |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "JSON 形态"` | RED 后通过 | 2026-07-07 Phase 5 generic display redaction fix；补丁前失败于 raw generic display attachment `redacted: false`，补丁后 2 tests passed / 9 skipped |
+| `npx vitest run tests/unit/shared/toolArtifacts.test.ts` | 通过 | 2026-07-07 Phase 5 generic JSON redaction fix；1 file / 22 tests |
+| `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 generic display redaction fix；1 file / 11 tests |
+| `npm run typecheck` | 通过 | 2026-07-07 Phase 5 generic redaction fix；tsc --noEmit |
 
 ## 未解决问题
 

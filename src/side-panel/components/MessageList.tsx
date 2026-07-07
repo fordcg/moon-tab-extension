@@ -14,6 +14,7 @@ import {
   isNetworkToolAttachment,
   isSourceMapToolAttachment,
   isWebSearchToolAttachment,
+  sanitizeGenericToolAttachment,
 } from "../../shared/toolArtifacts";
 import { createChatMessageMarkdown } from "../utils/chatMarkdownExport";
 import { copyOrDownloadMessageImage, copyTextToClipboard } from "../utils/messageClipboard";
@@ -545,11 +546,11 @@ function aggregateDisplayAttachmentKindGroup(kind: string, attachments: ChatTool
   if (attachments.length === 0) {
     return undefined;
   }
-  if (attachments.length === 1) {
-    return attachments[0];
-  }
 
   if (kind === "network") {
+    if (attachments.length === 1) {
+      return attachments[0];
+    }
     const networkAttachments = attachments.filter(isNetworkToolAttachment);
     const allFullAccessRaw = networkAttachments.every((attachment) => attachment.fullAccess === true && attachment.redacted === false);
     const canShowUnredacted = allFullAccessRaw || (networkAttachments.length === 1 && networkAttachments[0]?.redacted === false);
@@ -573,6 +574,9 @@ function aggregateDisplayAttachmentKindGroup(kind: string, attachments: ChatTool
   }
 
   if (kind === "web-search") {
+    if (attachments.length === 1) {
+      return attachments[0];
+    }
     const webSearchAttachments = attachments.filter(isWebSearchToolAttachment);
     const first = webSearchAttachments[0];
     if (!first) {
@@ -598,6 +602,9 @@ function aggregateDisplayAttachmentKindGroup(kind: string, attachments: ChatTool
   }
 
   if (kind === "js-source") {
+    if (attachments.length === 1) {
+      return attachments[0];
+    }
     const aggregated = aggregateToolAttachmentGroupByKind(attachments.filter(isJsSourceToolAttachment));
     if (!aggregated) {
       return attachments[0];
@@ -609,6 +616,9 @@ function aggregateDisplayAttachmentKindGroup(kind: string, attachments: ChatTool
   }
 
   if (kind === "source-map") {
+    if (attachments.length === 1) {
+      return attachments[0];
+    }
     const aggregated = aggregateToolAttachmentGroupByKind(attachments.filter(isSourceMapToolAttachment));
     if (!aggregated) {
       return attachments[0];
@@ -617,6 +627,13 @@ function aggregateDisplayAttachmentKindGroup(kind: string, attachments: ChatTool
       ...aggregated,
       id: `message-display-source-map-${attachments.map((attachment) => attachment.id).join("-")}`,
     };
+  }
+
+  if (attachments.length === 1) {
+    const [attachment] = attachments;
+    if (isBrowserScreenshotToolAttachment(attachment) || isAutomationReportToolAttachment(attachment)) {
+      return attachment;
+    }
   }
 
   return aggregateGenericDisplayAttachments(kind, attachments);
@@ -628,23 +645,24 @@ function getMaxCreatedAt(attachments: ChatToolAttachment[]): number {
 }
 
 function aggregateGenericDisplayAttachments(kind: string, attachments: ChatToolAttachment[]): ChatToolAttachment {
-  const first = attachments[0];
-  if (attachments.length === 1) {
+  const genericAttachments = attachments.map(sanitizeGenericToolAttachment);
+  const first = genericAttachments[0];
+  if (genericAttachments.length === 1) {
     return first;
   }
 
   const details = uniqueNonEmptyStrings(
-    attachments.map((attachment) => ("details" in attachment && typeof attachment.details === "string" ? attachment.details : undefined)),
+    genericAttachments.map((attachment) => attachment.details),
   ).join("\n\n");
 
   return {
-    id: `message-display-${kind}-${attachments.map((attachment) => attachment.id).join("-")}`,
+    id: `message-display-${kind}-${genericAttachments.map((attachment) => attachment.id).join("-")}`,
     kind,
     title: first.title,
-    summary: uniqueNonEmptyStrings(attachments.map((attachment) => attachment.summary)).join("\n"),
-    createdAt: getMaxCreatedAt(attachments),
-    redacted: attachments.every((attachment) => attachment.redacted),
-    truncated: attachments.some((attachment) => attachment.truncated),
+    summary: uniqueNonEmptyStrings(genericAttachments.map((attachment) => attachment.summary)).join("\n"),
+    createdAt: getMaxCreatedAt(genericAttachments),
+    redacted: genericAttachments.every((attachment) => attachment.redacted),
+    truncated: genericAttachments.some((attachment) => attachment.truncated),
     details: details || undefined,
   };
 }

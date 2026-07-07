@@ -488,14 +488,14 @@ function formatToolAttachmentForMixedAggregate(attachment: ChatToolAttachment): 
   };
 }
 
-function sanitizeGenericToolAttachment(attachment: ChatToolAttachment): ChatGenericToolAttachment {
+export function sanitizeGenericToolAttachment(attachment: ChatToolAttachment): ChatGenericToolAttachment {
   const normalized = normalizeGenericToolAttachment(attachment, attachment.kind);
   if (normalized) {
     return normalized;
   }
 
-  const redactedSummary = redactInlineSensitiveText(attachment.summary ?? "");
-  const redactedDetails = "details" in attachment && typeof attachment.details === "string" ? redactInlineSensitiveText(attachment.details) : undefined;
+  const redactedSummary = redactGenericToolText(attachment.summary ?? "");
+  const redactedDetails = "details" in attachment && typeof attachment.details === "string" ? redactGenericToolText(attachment.details) : undefined;
   const truncatedDetails = redactedDetails ? truncateText(redactedDetails, GENERIC_DETAIL_LIMIT) : undefined;
   return {
     ...attachment,
@@ -963,9 +963,9 @@ function normalizeGenericToolAttachment(source: Partial<ChatToolAttachment>, kin
     return undefined;
   }
 
-  const redactedSummary = redactInlineSensitiveText(summary);
+  const redactedSummary = redactGenericToolText(summary);
   const redactedDetails = "details" in source && typeof source.details === "string"
-    ? redactInlineSensitiveText(source.details)
+    ? redactGenericToolText(source.details)
     : undefined;
   const truncatedDetails = redactedDetails ? truncateText(redactedDetails, GENERIC_DETAIL_LIMIT) : undefined;
   return {
@@ -1598,6 +1598,10 @@ function redactAutomationText(value: string): string {
     return redactNetworkText(trimmed);
   }
   return inlineRedacted.replace(/https?:\/\/[^\s)）]+/g, (url) => redactNetworkText(url));
+}
+
+function redactGenericToolText(value: string): string {
+  return redactAutomationText(value);
 }
 
 function isPlainFormEncodedText(value: string): boolean {
