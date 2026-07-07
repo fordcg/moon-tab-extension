@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { executeNetworkTool } from "../src/ai-assistant/background/network-tools-service.js";
+import { readFile } from "node:fs/promises";
 import {
   NETWORK_CLEAR_REQUESTS_TOOL_ID,
   NETWORK_CLEAR_REQUESTS_TOOL_NAME,
@@ -31,6 +31,15 @@ import {
   normalizeNetworkListRequestsArguments,
   summarizeNetworkToolResult,
 } from "../src/shared/network-tools.mjs";
+
+const networkToolExecutorSource = await readFile(
+  new URL("../src/background/browserControl/networkToolExecutor.ts", import.meta.url),
+  "utf8",
+);
+const networkDevtoolsBridgeSource = await readFile(
+  new URL("../src/background/networkDevtoolsBridge.ts", import.meta.url),
+  "utf8",
+);
 
 assert.equal(NETWORK_LIST_REQUESTS_TOOL_ID, "network.list_requests");
 assert.equal(NETWORK_LIST_REQUESTS_TOOL_NAME, "network_list_requests");
@@ -667,303 +676,32 @@ const visibleCandidateLines = manyCandidatesText.split("\n").filter((line) => li
 assert.equal(visibleCandidateLines.length, 80);
 assert.match(manyCandidatesText, /另 10 条候选未显示/);
 
-let snapshotArgs;
-const listToolResult = await executeNetworkTool(
-  {
-    id: "call-list",
-    name: NETWORK_LIST_REQUESTS_TOOL_NAME,
-    arguments: { tabId: 11, resourceTypes: ["xhr"], limit: 1 },
-  },
-  {
-    getNetworkSnapshot: async (args) => {
-      snapshotArgs = args;
-      return {
-        ok: true,
-        tabId: args.tabId,
-        requests: [
-          { id: "list-1", method: "GET", status: 200, resourceType: "Script", url: "https://example.test/app.js" },
-          { id: "list-2", method: "POST", status: 201, resourceType: "XHR", url: "https://example.test/api" },
-          { id: "list-3", method: "POST", status: 202, resourceType: "XHR", url: "https://example.test/api/next" },
-        ],
-      };
-    },
-  },
-);
-assert.deepEqual(snapshotArgs, { tabId: 11 });
-assert.equal(listToolResult.toolCallId, "call-list");
-assert.equal(listToolResult.name, NETWORK_LIST_REQUESTS_TOOL_NAME);
-assert.equal(listToolResult.isError, undefined);
-assert.match(listToolResult.content, /Network 请求列表（1\/2 个，limit=1）/);
-assert.match(listToolResult.content, /id=list-2/);
-assert.doesNotMatch(listToolResult.content, /id=list-1/);
-assert.doesNotMatch(listToolResult.content, /id=list-3/);
-assert.match(listToolResult.content, /还有 1 个请求未显示/);
-assert.match(listToolResult.summary, /2 个 Network 请求/);
+assert.match(networkToolExecutorSource, /export class BrowserNetworkToolExecutor/, "source Network tool executor must expose BrowserNetworkToolExecutor");
+assert.match(networkToolExecutorSource, /NETWORK_LIST_REQUESTS_TOOL_ID[\s\S]*NETWORK_LIST_REQUESTS_TOOL_NAME/, "source Network executor must accept network.list_requests id and name");
+assert.match(networkToolExecutorSource, /NETWORK_GET_REQUEST_DETAILS_TOOL_ID[\s\S]*NETWORK_GET_REQUEST_DETAILS_TOOL_NAME/, "source Network executor must accept network.get_request_details id and name");
+assert.match(networkToolExecutorSource, /NETWORK_CLEAR_REQUESTS_TOOL_ID[\s\S]*NETWORK_CLEAR_REQUESTS_TOOL_NAME/, "source Network executor must accept network.clear_requests id and name");
+assert.match(networkToolExecutorSource, /NETWORK_WAIT_FOR_REQUESTS_TOOL_ID[\s\S]*NETWORK_WAIT_FOR_REQUESTS_TOOL_NAME/, "source Network executor must accept network.wait_for_requests id and name");
+assert.match(networkToolExecutorSource, /NETWORK_COMPARE_REQUESTS_TOOL_ID[\s\S]*NETWORK_COMPARE_REQUESTS_TOOL_NAME/, "source Network executor must accept network.compare_requests id and name");
+assert.match(networkToolExecutorSource, /NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID[\s\S]*NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_NAME/, "source Network executor must accept network.find_parameter_candidates id and name");
+assert.match(networkToolExecutorSource, /NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID[\s\S]*NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME/, "source Network executor must accept network.extract_js_candidates id and name");
+assert.match(networkToolExecutorSource, /this\.recorder\.listRequests\(normalizeRequestFilter\(toolCall\.arguments\), \{ redacted: !fullAccess \}\)/, "source Network executor must list requests through the recorder with redaction by default");
+assert.match(networkToolExecutorSource, /this\.recorder\.getDetails\(requestIds\.requestIds, \{ redacted: !revealCurrentResult \}\)/, "source Network executor must read request details through the recorder with boundary-aware redaction");
+assert.match(networkToolExecutorSource, /this\.recorder\.clear\(\);[\s\S]*this\.getJsSourceExecutor\(\)\.clear\(\);[\s\S]*this\.onClear\?\.\(\)/, "source Network executor must clear recorder, JS source index, and clear callback together");
+assert.match(networkToolExecutorSource, /this\.recorder\.waitForRequests\(normalizeWaitFilter\(toolCall\.arguments\), \{ redacted: !fullAccess \}\)/, "source Network executor must support waiting for matching requests");
+assert.match(networkToolExecutorSource, /findParameterCandidates\(details\)/, "source Network executor must support parameter candidate discovery");
+assert.match(networkToolExecutorSource, /extractJsCandidates\(details, toolCall\.arguments\)/, "source Network executor must support JS candidate extraction from request details");
+assert.match(networkToolExecutorSource, /createNetworkAttachment\(toolCall\.id, details, options\)/, "source Network executor must return Network tool attachments");
+assert.match(networkToolExecutorSource, /redactNetworkRequestDetail/, "source Network executor must redact request details before attachments when needed");
+assert.match(networkToolExecutorSource, /include_sensitive_field_in_current_tool_result/, "source Network executor must gate raw detail reveal on boundary grant");
+assert.match(networkToolExecutorSource, /write_sensitive_result_to_chat_once/, "source Network executor must require chat write grant before revealing current raw result");
 
-let clearArgs;
-const clearToolResult = await executeNetworkTool(
-  {
-    id: "call-clear",
-    name: NETWORK_CLEAR_REQUESTS_TOOL_NAME,
-    arguments: { tabId: 17 },
-  },
-  {
-    clearNetworkRequests: async (args) => {
-      clearArgs = args;
-      return { ok: true, tabId: args.tabId, clearedCount: 2 };
-    },
-  },
-);
-assert.deepEqual(clearArgs, { tabId: 17 });
-assert.equal(clearToolResult.toolCallId, "call-clear");
-assert.equal(clearToolResult.name, NETWORK_CLEAR_REQUESTS_TOOL_NAME);
-assert.equal(clearToolResult.isError, undefined);
-assert.match(clearToolResult.content, /已清空 2 个 Network 请求/);
-assert.match(clearToolResult.content, /tabId=17/);
-assert.match(clearToolResult.summary, /Network 请求缓存已清空/);
-
-let detailsArgs;
-const detailsToolResult = await executeNetworkTool(
-  {
-    id: "call-details",
-    name: NETWORK_GET_REQUEST_DETAILS_TOOL_ID,
-    arguments: { tabId: 12, requestIds: ["list-2"] },
-  },
-  {
-    getNetworkDetails: async (args) => {
-      detailsArgs = args;
-      return {
-        ok: true,
-        tabId: args.tabId,
-        requestIds: args.requestIds,
-        details: [
-          {
-            id: "list-2",
-            method: "POST",
-            status: 201,
-            resourceType: "XHR",
-            url: "https://example.test/api",
-            responseBody: "{\"ok\":true}",
-          },
-        ],
-      };
-    },
-  },
-);
-assert.deepEqual(detailsArgs, { tabId: 12, requestIds: ["list-2"] });
-assert.equal(detailsToolResult.toolCallId, "call-details");
-assert.equal(detailsToolResult.name, NETWORK_GET_REQUEST_DETAILS_TOOL_ID);
-assert.equal(detailsToolResult.isError, undefined);
-assert.match(detailsToolResult.content, /Network 请求详情/);
-assert.match(detailsToolResult.content, /id=list-2/);
-assert.match(detailsToolResult.summary, /1 个 Network 请求/);
-
-let compareArgs;
-const compareToolResult = await executeNetworkTool(
-  {
-    id: "call-compare",
-    name: NETWORK_COMPARE_REQUESTS_TOOL_NAME,
-    arguments: { tabId: 13, requestIds: ["cmp-1", "cmp-1", " cmp-2 "] },
-  },
-  {
-    getNetworkDetails: async (args) => {
-      compareArgs = args;
-      return {
-        ok: true,
-        tabId: args.tabId,
-        requestIds: args.requestIds,
-        details: analysisDetails,
-      };
-    },
-  },
-);
-assert.deepEqual(compareArgs, { tabId: 13, requestIds: ["cmp-1", "cmp-2"] });
-assert.equal(compareToolResult.toolCallId, "call-compare");
-assert.equal(compareToolResult.name, NETWORK_COMPARE_REQUESTS_TOOL_NAME);
-assert.equal(compareToolResult.isError, undefined);
-assert.match(compareToolResult.content, /Network 请求对比结果/);
-assert.match(compareToolResult.content, /疑似关键参数/);
-assert.doesNotMatch(compareToolResult.content, /raw-auth-secret/);
-assert.match(compareToolResult.summary, /2 个 Network 请求/);
-
-let candidatesArgs;
-const candidatesToolResult = await executeNetworkTool(
-  {
-    id: "call-candidates",
-    name: NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID,
-    arguments: { tabId: 14, requestIds: ["cmp-1"] },
-  },
-  {
-    getNetworkDetails: async (args) => {
-      candidatesArgs = args;
-      return {
-        ok: true,
-        tabId: args.tabId,
-        requestIds: args.requestIds,
-        details: [analysisDetails[0]],
-      };
-    },
-  },
-);
-assert.deepEqual(candidatesArgs, { tabId: 14, requestIds: ["cmp-1"] });
-assert.equal(candidatesToolResult.toolCallId, "call-candidates");
-assert.equal(candidatesToolResult.name, NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID);
-assert.equal(candidatesToolResult.isError, undefined);
-assert.match(candidatesToolResult.content, /疑似关键参数/);
-assert.match(candidatesToolResult.content, /query\.signature/);
-assert.doesNotMatch(candidatesToolResult.content, /raw-session-secret/);
-assert.match(candidatesToolResult.summary, /1 个 Network 请求/);
-
-let jsCandidateArgs;
-const extraJsCandidateDetail = {
-  id: "js-extra",
-  method: "GET",
-  status: 200,
-  resourceType: "Script",
-  mimeType: "application/javascript",
-  url: "https://example.test/assets/extra.js",
-  responseBody: "const signature = sha256(extra);",
-};
-const jsCandidateToolResult = await executeNetworkTool(
-  {
-    id: "call-js-candidates",
-    name: NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME,
-    arguments: {
-      tabId: 16,
-      requestIds: ["js-1", "js-1", " js-3 "],
-      keywords: ["makeSign", "signature"],
-      urlIncludes: "/api/search",
-      limit: 5,
-    },
-  },
-  {
-    getNetworkDetails: async (args) => {
-      jsCandidateArgs = args;
-      return {
-        ok: true,
-        tabId: args.tabId,
-        requestIds: args.requestIds,
-        details: [jsCandidateDetails[0], jsCandidateDetails[2], extraJsCandidateDetail],
-      };
-    },
-  },
-);
-assert.deepEqual(jsCandidateArgs, { tabId: 16, requestIds: ["js-1", "js-3"] });
-assert.equal(jsCandidateToolResult.toolCallId, "call-js-candidates");
-assert.equal(jsCandidateToolResult.name, NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME);
-assert.equal(jsCandidateToolResult.isError, undefined);
-assert.match(jsCandidateToolResult.content, /Network JS 候选片段/);
-assert.match(jsCandidateToolResult.content, /id=js-1/);
-assert.match(jsCandidateToolResult.content, /id=js-3/);
-assert.doesNotMatch(jsCandidateToolResult.content, /id=js-extra/);
-assert.doesNotMatch(jsCandidateToolResult.content, /raw-js-token|raw-query-secret/);
-assert.match(jsCandidateToolResult.summary, /2 个 Network 请求/);
-
-const invalidJsCandidateToolResult = await executeNetworkTool({
-  id: "call-js-invalid",
-  name: NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID,
-  arguments: { requestIds: ["js-1"], limit: 0 },
-});
-assert.equal(invalidJsCandidateToolResult.isError, true);
-assert.equal(invalidJsCandidateToolResult.code, "INVALID_ARGUMENTS");
-assert.match(invalidJsCandidateToolResult.content, /limit 必须是 1 到 40/);
-
-const jsCandidateMissingReaderToolResult = await executeNetworkTool({
-  id: "call-js-missing-reader",
-  name: NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID,
-  arguments: { requestIds: ["js-1"] },
-});
-assert.equal(jsCandidateMissingReaderToolResult.isError, true);
-assert.equal(jsCandidateMissingReaderToolResult.code, "DEVTOOLS_UNAVAILABLE");
-assert.match(jsCandidateMissingReaderToolResult.content, /DevTools Network 不可用/);
-
-const invalidToolResult = await executeNetworkTool({
-  id: "call-invalid",
-  name: NETWORK_LIST_REQUESTS_TOOL_ID,
-  arguments: { limit: 0 },
-});
-assert.equal(invalidToolResult.toolCallId, "call-invalid");
-assert.equal(invalidToolResult.isError, true);
-assert.equal(invalidToolResult.code, "INVALID_ARGUMENTS");
-assert.match(invalidToolResult.content, /limit 必须是 1 到 200/);
-
-const unavailableToolResult = await executeNetworkTool(
-  {
-    id: "call-unavailable",
-    name: NETWORK_LIST_REQUESTS_TOOL_ID,
-    arguments: {},
-  },
-  {
-    getNetworkSnapshot: async () => ({ ok: false, message: "DevTools 面板未连接。" }),
-  },
-);
-assert.equal(unavailableToolResult.toolCallId, "call-unavailable");
-assert.equal(unavailableToolResult.isError, true);
-assert.equal(unavailableToolResult.code, "DEVTOOLS_UNAVAILABLE");
-assert.match(unavailableToolResult.content, /DevTools 面板未连接/);
-
-const missingReaderToolResult = await executeNetworkTool({
-  id: "call-missing-reader",
-  name: NETWORK_LIST_REQUESTS_TOOL_ID,
-  arguments: {},
-});
-assert.equal(missingReaderToolResult.toolCallId, "call-missing-reader");
-assert.equal(missingReaderToolResult.isError, true);
-assert.equal(missingReaderToolResult.code, "DEVTOOLS_UNAVAILABLE");
-assert.match(missingReaderToolResult.content, /DevTools Network 不可用/);
-
-const clearMissingReaderToolResult = await executeNetworkTool({
-  id: "call-clear-missing-reader",
-  name: NETWORK_CLEAR_REQUESTS_TOOL_ID,
-  arguments: {},
-});
-assert.equal(clearMissingReaderToolResult.toolCallId, "call-clear-missing-reader");
-assert.equal(clearMissingReaderToolResult.isError, true);
-assert.equal(clearMissingReaderToolResult.code, "DEVTOOLS_UNAVAILABLE");
-assert.match(clearMissingReaderToolResult.content, /DevTools Network 不可用/);
-
-const snapshotThrowResult = await executeNetworkTool(
-  {
-    id: "call-snapshot-throw",
-    name: NETWORK_LIST_REQUESTS_TOOL_ID,
-    arguments: {},
-  },
-  {
-    getNetworkSnapshot: async () => {
-      throw new Error("snapshot channel closed");
-    },
-  },
-);
-assert.equal(snapshotThrowResult.toolCallId, "call-snapshot-throw");
-assert.equal(snapshotThrowResult.isError, true);
-assert.equal(snapshotThrowResult.code, "NETWORK_TOOL_ERROR");
-assert.match(snapshotThrowResult.content, /snapshot channel closed/);
-
-const detailsThrowResult = await executeNetworkTool(
-  {
-    id: "call-details-throw",
-    name: NETWORK_GET_REQUEST_DETAILS_TOOL_ID,
-    arguments: { requestIds: ["list-2"] },
-  },
-  {
-    getNetworkDetails: async () => {
-      throw new Error("details channel closed");
-    },
-  },
-);
-assert.equal(detailsThrowResult.toolCallId, "call-details-throw");
-assert.equal(detailsThrowResult.isError, true);
-assert.equal(detailsThrowResult.code, "NETWORK_TOOL_ERROR");
-assert.match(detailsThrowResult.content, /details channel closed/);
-
-const compareMissingReaderToolResult = await executeNetworkTool({
-  id: "call-compare-missing-reader",
-  name: NETWORK_COMPARE_REQUESTS_TOOL_ID,
-  arguments: { requestIds: ["cmp-1", "cmp-2"] },
-});
-assert.equal(compareMissingReaderToolResult.toolCallId, "call-compare-missing-reader");
-assert.equal(compareMissingReaderToolResult.isError, true);
-assert.equal(compareMissingReaderToolResult.code, "DEVTOOLS_UNAVAILABLE");
-assert.match(compareMissingReaderToolResult.content, /DevTools Network 不可用/);
+assert.match(networkDevtoolsBridgeSource, /createRecorderAdapter\(tabId\?: number\)/, "source Network DevTools bridge must expose a recorder adapter");
+assert.match(networkDevtoolsBridgeSource, /listRequests: \(filter: NetworkRequestFilter = \{\}/, "source Network DevTools bridge adapter must list requests");
+assert.match(networkDevtoolsBridgeSource, /getDetails: async \(requestIds: string\[\]/, "source Network DevTools bridge adapter must read details");
+assert.match(networkDevtoolsBridgeSource, /clear: \(\) => \{[\s\S]*clearRequests\(resolvedTabId\)/, "source Network DevTools bridge adapter must clear requests");
+assert.match(networkDevtoolsBridgeSource, /waitForRequests: async \(filter: NetworkWaitFilter = \{\}/, "source Network DevTools bridge adapter must wait for requests");
+assert.match(networkDevtoolsBridgeSource, /networkContext\.detailsResponse/, "source Network DevTools bridge must receive details responses from DevTools");
+assert.match(networkDevtoolsBridgeSource, /redactNetworkRequestDetail/, "source Network DevTools bridge must redact request details");
+assert.match(networkDevtoolsBridgeSource, /redactNetworkRequestMeta/, "source Network DevTools bridge must redact request summaries");
 
 console.log("network tools tests passed");

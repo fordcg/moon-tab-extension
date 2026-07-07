@@ -205,7 +205,7 @@ def main():
                 target_page.wait_for_selector("#primary-action", timeout=10000)
 
                 extension_page = context.new_page()
-                extension_page.goto(f"chrome-extension://{extension_id}/src/ai-assistant/index.html", wait_until="domcontentloaded")
+                extension_page.goto(f"chrome-extension://{extension_id}/index.html", wait_until="domcontentloaded")
                 extension_page.wait_for_selector(".app-shell", timeout=15000)
 
                 response = extension_page.evaluate(

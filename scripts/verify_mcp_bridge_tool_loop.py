@@ -202,7 +202,7 @@ def main():
                 add_check(result, "extension service worker is available", bool(extension_id), actual=service_worker.url)
 
                 page = context.new_page()
-                page.goto(f"chrome-extension://{extension_id}/src/ai-assistant/index.html", wait_until="domcontentloaded")
+                page.goto(f"chrome-extension://{extension_id}/index.html", wait_until="domcontentloaded")
                 page.wait_for_selector(".app-shell", timeout=15000)
 
                 response = page.evaluate(

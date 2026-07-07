@@ -1,15 +1,12 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "[1/12] syntax: sidePanel-layout.js"
-node --check src\ai-assistant\sidePanel-layout.js
-node --check src\ai-assistant\agent-tools-dialog.js
+Write-Host "[1/12] typecheck: current source-owned sidebar/background/runtime"
+npm run typecheck
 
-Write-Host "[2/12] syntax: devtools.js"
-node --check src\ai-assistant\devtools.js
+Write-Host "[2/12] unit: legacy convergence suite"
+npm run test:legacy
 
-Write-Host "[3/12] syntax: background and shared modules"
-node --check src\ai-assistant\background\index.js
-node --check src\ai-assistant\assets\tabCapture-CF6ZxIgy.js
+Write-Host "[3/12] syntax: shared modules"
 node --check src\shared\network-redaction.mjs
 node --check src\shared\agent-tool-registry.mjs
 node --check src\shared\browser-control-contract.mjs
