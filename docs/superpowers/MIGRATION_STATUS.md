@@ -116,6 +116,9 @@ Phase 5：工具与安全边界已完成。工具注册、浏览器控制、Netw
 | `npx vitest run tests/unit/side-panel/messageListAttachments.test.tsx -t "JWT\|jwt"` | RED 后通过 | 2026-07-07 Phase 5 JWT display redaction regression fix；补丁前 generic display 泄露 JWT，补丁后 1 file / 1 test passed / 17 skipped |
 | `npx vitest run tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/messageListAttachments.test.tsx` | 通过 | 2026-07-07 Phase 5 JWT redaction regression fix；2 files / 46 tests |
 | `npm run typecheck` | 通过 | 2026-07-07 Phase 5 JWT redaction regression fix；tsc --noEmit |
+| `npx vitest run tests/unit/shared/toolRegistry.test.ts tests/unit/background/backgroundToolRuntime.test.ts tests/unit/background/boundaryChoiceToolExecutor.test.ts tests/unit/background/browserControlMessageHandler.test.ts tests/unit/shared/toolArtifacts.test.ts tests/unit/side-panel/browserControlPreferences.test.ts tests/unit/background/agentToolsMessageHandler.test.ts tests/unit/background/index.test.ts tests/unit/background/networkDevtoolsBridge.test.ts` | 通过 | 2026-07-07 Phase 5 final verification after JWT fix；9 files / 272 tests |
+| `npm run check` | 通过 | 2026-07-07 Phase 5 final verification after JWT fix；执行 typecheck、build:extension、npm test、test:legacy、check:package；Vitest 83 files / 1093 tests，package test 1 file / 12 tests；既有 Vite chunk/vendor/inlineDynamicImports 警告 |
+| `npm run test:e2e` | 通过 | 2026-07-07 Phase 5 final verification after JWT fix；Playwright smoke 7 tests；既有 Vite chunk/vendor/inlineDynamicImports 警告 |
 
 ## 未解决问题
 
