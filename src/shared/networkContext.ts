@@ -6,6 +6,8 @@ const BODY_LIMIT = 6000;
 const FIELD_LIMIT = 1200;
 
 const SENSITIVE_NAME_PATTERN = /(authorization|cookie|set-cookie|token|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|password|passwd|credential|session|sid|csrf|xsrf)/i;
+const BEARER_INLINE_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const SENSITIVE_INLINE_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd|credential|session|sid|csrf|xsrf)\s*[:=]\s*[^\s,;&"'}）]+/gi;
 
 export function redactNetworkRequestDetail(detail: NetworkRequestDetail): NetworkRequestDetail {
   return {
@@ -264,7 +266,36 @@ function redactJsonValue(value: unknown, key = ""): unknown {
     return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactJsonValue(entryValue, entryKey)]));
   }
 
+  if (typeof value === "string") {
+    return redactJsonStringValue(value);
+  }
+
   return value;
+}
+
+function redactJsonStringValue(value: string): string {
+  const trimmed = value.trim();
+  if (isJsonLike(trimmed)) {
+    try {
+      return JSON.stringify(redactJsonValue(JSON.parse(trimmed)));
+    } catch {
+      // Fall through to lighter-weight redaction for malformed or partial payload snippets.
+    }
+  }
+
+  const formRedacted = redactFormEncodedBody(value);
+  const urlRedacted = formRedacted.includes("?") || /^https?:\/\//i.test(formRedacted) ? redactUrl(formRedacted) : formRedacted;
+  return redactInlineSensitiveText(urlRedacted);
+}
+
+function isJsonLike(value: string): boolean {
+  return (value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"));
+}
+
+function redactInlineSensitiveText(value: string): string {
+  return value
+    .replace(BEARER_INLINE_PATTERN, "Bearer [已脱敏]")
+    .replace(SENSITIVE_INLINE_PATTERN, (_match, key: string) => `${key}=[已脱敏]`);
 }
 
 function redactFormEncodedBody(value: string): string {
