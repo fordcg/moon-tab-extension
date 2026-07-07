@@ -492,7 +492,8 @@ function imagefreeTurnstileTokenScript(siteKey: string, timeoutMs: number): Prom
           },
         });
       } catch (error) {
-        done({ ok: false, message: `Imagefree 真人验证组件加载失败：${formatError(error)}` });
+        const message = error instanceof Error && error.message ? error.message : String(error);
+        done({ ok: false, message: `Imagefree 真人验证组件加载失败：${message}` });
       }
     };
 

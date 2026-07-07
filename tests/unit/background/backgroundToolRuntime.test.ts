@@ -570,6 +570,7 @@ describe("background 工具运行时封装", () => {
     const previousHook = globalWithHook.__imagefreeGenerateTool;
 
     try {
+      vi.resetModules();
       delete globalWithHook.__imagefreeGenerateTool;
       await import("../../../src/background/imagefreeToolRuntime");
       expect(globalWithHook.__imagefreeGenerateTool).toEqual(expect.any(Function));
@@ -596,5 +597,61 @@ describe("background 工具运行时封装", () => {
       isError: true,
       content: expect.stringContaining("Imagefree 未返回 taskId：[{\"taskId\":\"task-1\"}]"),
     });
+  });
+
+  it("Imagefree Turnstile 注入脚本独立格式化 render 异常", async () => {
+    vi.useFakeTimers();
+    const previousChrome = globalThis.chrome;
+    const { executeImagefreeGenerateTool } = await import("../../../src/background/imagefreeToolRuntime");
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response("<html></html>", { status: 200 }));
+    const listenerApi = { addListener: vi.fn(), removeListener: vi.fn() };
+    const chromeMock = {
+      runtime: {},
+      tabs: {
+        query: vi.fn((_queryInfo, callback) => callback([])),
+        create: vi.fn((_createProperties, callback) => callback({ id: 42, status: "complete" })),
+        get: vi.fn((_tabId, callback) => callback({ id: 42, status: "complete" })),
+        update: vi.fn((_tabId, _updateProperties, callback) => callback({ id: 42 })),
+        onUpdated: listenerApi,
+      },
+      windows: { update: vi.fn((_windowId, _updateInfo, callback) => callback({})) },
+      scripting: {
+        executeScript: vi.fn((injection, callback) => {
+          const serialized = `return (${injection.func.toString()})(...arguments)`;
+          const isolatedFunc = new Function(serialized);
+          const previousTurnstile = (window as typeof window & { turnstile?: unknown }).turnstile;
+          (window as typeof window & { turnstile?: unknown }).turnstile = {
+            render: () => {
+              throw new Error("render exploded");
+            },
+          };
+          const result = isolatedFunc(...injection.args);
+          Promise.resolve(result).then((value) => {
+            (window as typeof window & { turnstile?: unknown }).turnstile = previousTurnstile;
+            callback([{ result: value }]);
+          });
+        }),
+      },
+    };
+    Object.defineProperty(globalThis, "chrome", { value: chromeMock, configurable: true });
+
+    try {
+      const resultPromise = executeImagefreeGenerateTool(
+        createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, { prompt: "moon" }),
+        fetcher as unknown as typeof fetch,
+      );
+      await vi.runOnlyPendingTimersAsync();
+
+      await expect(resultPromise).resolves.toMatchObject({
+        isError: true,
+        content: "Imagefree 真人验证组件加载失败：render exploded",
+      });
+    } finally {
+      vi.useRealTimers();
+      Object.defineProperty(globalThis, "chrome", { value: previousChrome, configurable: true });
+      document.getElementById("moon-tab-imagefree-turnstile")?.remove();
+      delete (window as typeof window & { __moonTabImagefreeTurnstileTokenPromise?: unknown }).__moonTabImagefreeTurnstileTokenPromise;
+    }
   });
 });
