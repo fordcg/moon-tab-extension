@@ -9,7 +9,8 @@ from pathlib import Path
 from playwright.sync_api import Error, TimeoutError, sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
-EXTENSION_PATH = str(ROOT)
+DIST_DIR = ROOT / "dist"
+EXTENSION_PATH = str(DIST_DIR)
 OUT_DIR = ROOT / ".tmp"
 OUT_DIR.mkdir(exist_ok=True)
 
@@ -36,6 +37,9 @@ def add_check(result, name, ok, actual=None, expected=None):
 
 
 def main():
+    if not (DIST_DIR / "manifest.json").exists():
+        raise FileNotFoundError("缺少 dist/manifest.json，请先运行 npm run build:extension")
+
     result = {
         "ok": False,
         "extension_id": "",

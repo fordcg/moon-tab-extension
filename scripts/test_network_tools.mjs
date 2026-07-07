@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import {
   NETWORK_CLEAR_REQUESTS_TOOL_ID,
   NETWORK_CLEAR_REQUESTS_TOOL_NAME,
@@ -32,14 +32,13 @@ import {
   summarizeNetworkToolResult,
 } from "../src/shared/network-tools.mjs";
 
-const networkToolExecutorSource = await readFile(
-  new URL("../src/background/browserControl/networkToolExecutor.ts", import.meta.url),
-  "utf8",
-);
-const networkDevtoolsBridgeSource = await readFile(
-  new URL("../src/background/networkDevtoolsBridge.ts", import.meta.url),
-  "utf8",
-);
+const require = createRequire(import.meta.url);
+const { createJiti } = require("jiti");
+const jiti = createJiti(import.meta.url, { interopDefault: true });
+const { BrowserNetworkToolExecutor } = jiti("../src/background/browserControl/networkToolExecutor.ts");
+const { createNetworkDevtoolsBridge } = jiti("../src/background/networkDevtoolsBridge.ts");
+const NETWORK_WAIT_FOR_REQUESTS_TOOL_ID = "network.wait_for_requests";
+const NETWORK_WAIT_FOR_REQUESTS_TOOL_NAME = "network_wait_for_requests";
 
 assert.equal(NETWORK_LIST_REQUESTS_TOOL_ID, "network.list_requests");
 assert.equal(NETWORK_LIST_REQUESTS_TOOL_NAME, "network_list_requests");
@@ -676,32 +675,267 @@ const visibleCandidateLines = manyCandidatesText.split("\n").filter((line) => li
 assert.equal(visibleCandidateLines.length, 80);
 assert.match(manyCandidatesText, /另 10 条候选未显示/);
 
-assert.match(networkToolExecutorSource, /export class BrowserNetworkToolExecutor/, "source Network tool executor must expose BrowserNetworkToolExecutor");
-assert.match(networkToolExecutorSource, /NETWORK_LIST_REQUESTS_TOOL_ID[\s\S]*NETWORK_LIST_REQUESTS_TOOL_NAME/, "source Network executor must accept network.list_requests id and name");
-assert.match(networkToolExecutorSource, /NETWORK_GET_REQUEST_DETAILS_TOOL_ID[\s\S]*NETWORK_GET_REQUEST_DETAILS_TOOL_NAME/, "source Network executor must accept network.get_request_details id and name");
-assert.match(networkToolExecutorSource, /NETWORK_CLEAR_REQUESTS_TOOL_ID[\s\S]*NETWORK_CLEAR_REQUESTS_TOOL_NAME/, "source Network executor must accept network.clear_requests id and name");
-assert.match(networkToolExecutorSource, /NETWORK_WAIT_FOR_REQUESTS_TOOL_ID[\s\S]*NETWORK_WAIT_FOR_REQUESTS_TOOL_NAME/, "source Network executor must accept network.wait_for_requests id and name");
-assert.match(networkToolExecutorSource, /NETWORK_COMPARE_REQUESTS_TOOL_ID[\s\S]*NETWORK_COMPARE_REQUESTS_TOOL_NAME/, "source Network executor must accept network.compare_requests id and name");
-assert.match(networkToolExecutorSource, /NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID[\s\S]*NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_NAME/, "source Network executor must accept network.find_parameter_candidates id and name");
-assert.match(networkToolExecutorSource, /NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID[\s\S]*NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME/, "source Network executor must accept network.extract_js_candidates id and name");
-assert.match(networkToolExecutorSource, /this\.recorder\.listRequests\(normalizeRequestFilter\(toolCall\.arguments\), \{ redacted: !fullAccess \}\)/, "source Network executor must list requests through the recorder with redaction by default");
-assert.match(networkToolExecutorSource, /this\.recorder\.getDetails\(requestIds\.requestIds, \{ redacted: !revealCurrentResult \}\)/, "source Network executor must read request details through the recorder with boundary-aware redaction");
-assert.match(networkToolExecutorSource, /this\.recorder\.clear\(\);[\s\S]*this\.getJsSourceExecutor\(\)\.clear\(\);[\s\S]*this\.onClear\?\.\(\)/, "source Network executor must clear recorder, JS source index, and clear callback together");
-assert.match(networkToolExecutorSource, /this\.recorder\.waitForRequests\(normalizeWaitFilter\(toolCall\.arguments\), \{ redacted: !fullAccess \}\)/, "source Network executor must support waiting for matching requests");
-assert.match(networkToolExecutorSource, /findParameterCandidates\(details\)/, "source Network executor must support parameter candidate discovery");
-assert.match(networkToolExecutorSource, /extractJsCandidates\(details, toolCall\.arguments\)/, "source Network executor must support JS candidate extraction from request details");
-assert.match(networkToolExecutorSource, /createNetworkAttachment\(toolCall\.id, details, options\)/, "source Network executor must return Network tool attachments");
-assert.match(networkToolExecutorSource, /redactNetworkRequestDetail/, "source Network executor must redact request details before attachments when needed");
-assert.match(networkToolExecutorSource, /include_sensitive_field_in_current_tool_result/, "source Network executor must gate raw detail reveal on boundary grant");
-assert.match(networkToolExecutorSource, /write_sensitive_result_to_chat_once/, "source Network executor must require chat write grant before revealing current raw result");
+function createToolCall(id, name, args = {}) {
+  return { id, name, arguments: args };
+}
 
-assert.match(networkDevtoolsBridgeSource, /createRecorderAdapter\(tabId\?: number\)/, "source Network DevTools bridge must expose a recorder adapter");
-assert.match(networkDevtoolsBridgeSource, /listRequests: \(filter: NetworkRequestFilter = \{\}/, "source Network DevTools bridge adapter must list requests");
-assert.match(networkDevtoolsBridgeSource, /getDetails: async \(requestIds: string\[\]/, "source Network DevTools bridge adapter must read details");
-assert.match(networkDevtoolsBridgeSource, /clear: \(\) => \{[\s\S]*clearRequests\(resolvedTabId\)/, "source Network DevTools bridge adapter must clear requests");
-assert.match(networkDevtoolsBridgeSource, /waitForRequests: async \(filter: NetworkWaitFilter = \{\}/, "source Network DevTools bridge adapter must wait for requests");
-assert.match(networkDevtoolsBridgeSource, /networkContext\.detailsResponse/, "source Network DevTools bridge must receive details responses from DevTools");
-assert.match(networkDevtoolsBridgeSource, /redactNetworkRequestDetail/, "source Network DevTools bridge must redact request details");
-assert.match(networkDevtoolsBridgeSource, /redactNetworkRequestMeta/, "source Network DevTools bridge must redact request summaries");
+function createFakeRecorder(overrides = {}) {
+  const calls = [];
+  const recorder = {
+    calls,
+    isEnabled: true,
+    listRequests(filter, options) {
+      calls.push(["listRequests", filter, options]);
+      const url = options?.redacted === false
+        ? "https://example.test/api/orders?token=raw-list-secret"
+        : "https://example.test/api/orders?token=[已脱敏]";
+      return [
+        {
+          id: "list-1",
+          method: "POST",
+          status: 200,
+          resourceType: "XHR",
+          url,
+        },
+      ];
+    },
+    async getDetails(requestIds, options) {
+      calls.push(["getDetails", requestIds, options]);
+      return requestIds.map((id, index) => ({
+        id,
+        method: "POST",
+        status: 200 + index,
+        resourceType: index === 0 ? "Script" : "XHR",
+        mimeType: index === 0 ? "application/javascript" : "application/json",
+        url: options?.redacted === false
+          ? `https://example.test/api/orders?signature=sig-${index}&token=raw-detail-secret-${index}`
+          : `https://example.test/api/orders?signature=sig-${index}&token=[已脱敏]`,
+        requestHeaders: [
+          { name: "content-type", value: index === 0 ? "application/javascript" : "application/json" },
+          { name: "authorization", value: options?.redacted === false ? `Bearer raw-header-secret-${index}` : "[已脱敏]" },
+        ],
+        requestBody: JSON.stringify({
+          timestamp: 1710000000 + index,
+          nonce: `nonce-${index}`,
+          token: options?.redacted === false ? `raw-body-secret-${index}` : "[已脱敏]",
+        }),
+        responseBody: index === 0 ? "function makeSign(input) { return md5(input + token); }" : JSON.stringify({ ok: true }),
+      }));
+    },
+    clear() {
+      calls.push(["clear"]);
+    },
+    async waitForRequests(filter, options) {
+      calls.push(["waitForRequests", filter, options]);
+      const url = options?.redacted === false
+        ? "https://example.test/api/wait?token=raw-wait-secret"
+        : "https://example.test/api/wait?token=[已脱敏]";
+      return [
+        {
+          id: "wait-1",
+          method: "GET",
+          status: 204,
+          resourceType: "Fetch",
+          url,
+        },
+      ];
+    },
+    ...overrides,
+  };
+  return recorder;
+}
+
+function assertModelToolResult(result, toolCall, { isError = false, attachments = false } = {}) {
+  assert.equal(result.toolCallId, toolCall.id);
+  assert.equal(result.name, toolCall.name);
+  assert.equal(typeof result.content, "string");
+  assert.equal(result.isError === true, isError);
+  if (attachments) {
+    assert.equal(result.toolAttachments?.length, 1);
+    assert.equal(result.toolAttachments[0].kind, "network");
+    assert.equal(result.toolAttachments[0].sourceToolCallId, toolCall.id);
+  } else {
+    assert.equal(result.toolAttachments, undefined);
+  }
+}
+
+const clearEvents = [];
+let fullAccess = false;
+let boundaryGrant;
+const executableRecorder = createFakeRecorder();
+const executableExecutor = new BrowserNetworkToolExecutor(
+  executableRecorder,
+  () => clearEvents.push("cleared"),
+  () => boundaryGrant,
+  () => fullAccess,
+);
+
+const listCall = createToolCall("exec-list", NETWORK_LIST_REQUESTS_TOOL_ID, {
+  urlIncludes: " /api/orders ",
+  method: " post ",
+  resourceType: " xhr ",
+  status: 200,
+  limit: 9.8,
+});
+const listResult = await executableExecutor.execute(listCall);
+assertModelToolResult(listResult, listCall, { attachments: true });
+assert.match(listResult.content, /id=list-1/);
+assert.deepEqual(executableRecorder.calls.at(-1), [
+  "listRequests",
+  { urlIncludes: "/api/orders", method: "post", resourceType: "xhr", status: 200, limit: 9 },
+  { redacted: true },
+]);
+assert.equal(listResult.toolAttachments[0].redacted, true);
+assert.doesNotMatch(JSON.stringify(listResult), /raw-list-secret/);
+
+fullAccess = true;
+const waitCall = createToolCall("exec-wait", NETWORK_WAIT_FOR_REQUESTS_TOOL_ID, { timeoutMs: 12, limit: 1 });
+const waitResult = await executableExecutor.execute(waitCall);
+assertModelToolResult(waitResult, waitCall, { attachments: true });
+assert.match(waitResult.content, /已捕获 1 个匹配的 Network 请求/);
+assert.deepEqual(executableRecorder.calls.at(-1), [
+  "waitForRequests",
+  { urlIncludes: undefined, method: undefined, resourceType: undefined, status: undefined, limit: 1, timeoutMs: 12 },
+  { redacted: false },
+]);
+assert.equal(waitResult.toolAttachments[0].redacted, false);
+
+fullAccess = false;
+const detailsCall = createToolCall("exec-details", NETWORK_GET_REQUEST_DETAILS_TOOL_NAME, { requestIds: [" req-1 ", "req-1", "req-2"] });
+const detailsResult = await executableExecutor.execute(detailsCall);
+assertModelToolResult(detailsResult, detailsCall, { attachments: true });
+assert.match(detailsResult.content, /Network 工具读取请求详情/);
+assert.deepEqual(executableRecorder.calls.at(-1), ["getDetails", ["req-1", "req-2"], { redacted: true }]);
+assert.equal(detailsResult.toolAttachments[0].redacted, true);
+assert.doesNotMatch(JSON.stringify(detailsResult), /raw-detail-secret|raw-header-secret|raw-body-secret/);
+
+boundaryGrant = {
+  grants: ["include_sensitive_field_in_current_tool_result", "write_sensitive_result_to_chat_once"],
+};
+const compareCall = createToolCall("exec-compare", NETWORK_COMPARE_REQUESTS_TOOL_NAME, { requestIds: ["cmp-1", "cmp-2"] });
+const compareResult = await executableExecutor.execute(compareCall);
+assertModelToolResult(compareResult, compareCall, { attachments: true });
+assert.match(compareResult.content, /Network 请求对比结果/);
+assert.match(compareResult.content, /疑似关键参数/);
+assert.deepEqual(executableRecorder.calls.at(-1), ["getDetails", ["cmp-1", "cmp-2"], { redacted: false }]);
+assert.equal(compareResult.toolAttachments[0].redacted, false);
+assert.match(JSON.stringify(compareResult.toolAttachments[0].requests), /raw-detail-secret/);
+
+const candidateCall = createToolCall("exec-candidates", NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID, { requestIds: ["cand-1", "cand-2"] });
+const candidateResult = await executableExecutor.execute(candidateCall);
+assertModelToolResult(candidateResult, candidateCall, { attachments: true });
+assert.match(candidateResult.content, /疑似签名字段|疑似时间戳字段|疑似随机数或请求标识字段|疑似凭据字段/);
+
+const jsCandidateCall = createToolCall("exec-js-candidates", NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME, {
+  requestIds: ["js-current", "xhr-current"],
+  keywords: ["makeSign"],
+  urlIncludes: "/api/orders",
+});
+const jsCandidateResult = await executableExecutor.execute(jsCandidateCall);
+assertModelToolResult(jsCandidateResult, jsCandidateCall, { attachments: true });
+assert.match(jsCandidateResult.content, /JS 候选资源/);
+assert.match(jsCandidateResult.content, /makeSign/);
+
+const clearCall = createToolCall("exec-clear", NETWORK_CLEAR_REQUESTS_TOOL_NAME);
+const clearResult = await executableExecutor.execute(clearCall);
+assertModelToolResult(clearResult, clearCall);
+assert.match(clearResult.content, /已清空当前受控页面的 Network 请求缓存/);
+assert.deepEqual(executableRecorder.calls.at(-1), ["clear"]);
+assert.deepEqual(clearEvents, ["cleared"]);
+
+const disabledCall = createToolCall("exec-disabled", NETWORK_LIST_REQUESTS_TOOL_NAME);
+const disabledResult = await new BrowserNetworkToolExecutor(createFakeRecorder({ isEnabled: () => false })).execute(disabledCall);
+assertModelToolResult(disabledResult, disabledCall, { isError: true });
+assert.match(disabledResult.content, /Network 采集尚未启用/);
+
+const unknownCall = createToolCall("exec-unknown", "network_unknown_tool");
+const unknownResult = await executableExecutor.execute(unknownCall);
+assertModelToolResult(unknownResult, unknownCall, { isError: true });
+assert.match(unknownResult.content, /未知的 Network 工具/);
+
+const invalidDetailsCall = createToolCall("exec-invalid-details", NETWORK_GET_REQUEST_DETAILS_TOOL_ID, { requestIds: [] });
+const invalidDetailsResult = await executableExecutor.execute(invalidDetailsCall);
+assertModelToolResult(invalidDetailsResult, invalidDetailsCall, { isError: true });
+assert.match(invalidDetailsResult.content, /requestIds 必须是包含 1 到 100/);
+
+const throwingCall = createToolCall("exec-throw", NETWORK_LIST_REQUESTS_TOOL_ID);
+const throwingResult = await new BrowserNetworkToolExecutor(createFakeRecorder({ listRequests: () => { throw new Error("boom"); } })).execute(throwingCall);
+assertModelToolResult(throwingResult, throwingCall, { isError: true });
+assert.match(throwingResult.content, /Network 工具执行失败，请稍后重试/);
+
+const previousChrome = globalThis.chrome;
+const bridgePostedMessages = [];
+globalThis.chrome = {
+  runtime: {
+    getURL: (path) => `chrome-extension://test-extension/${path}`,
+  },
+};
+try {
+  const bridge = createNetworkDevtoolsBridge();
+  const listeners = [];
+  const disconnectListeners = [];
+  const fakePort = {
+    name: "network.devtools",
+    sender: { url: "chrome-extension://test-extension/src/devtools/network.html" },
+    onMessage: { addListener: (listener) => listeners.push(listener) },
+    onDisconnect: { addListener: (listener) => disconnectListeners.push(listener) },
+    postMessage: (message) => bridgePostedMessages.push(message),
+  };
+  assert.equal(bridge.handlePortConnect(fakePort), true);
+  assert.equal(disconnectListeners.length, 1);
+  listeners[0]({
+    type: "networkContext.snapshotUpdated",
+    tabId: 42,
+    requests: [
+      { id: "bridge-1", url: "https://example.test/api/orders?token=raw-bridge-list", method: "POST", status: 201, resourceType: "XHR" },
+      { id: "bridge-2", url: "https://example.test/assets/app.js", method: "GET", status: 200, resourceType: "Script" },
+    ],
+  });
+  const bridgeAdapter = bridge.createRecorderAdapter(42);
+  assert.equal(bridgeAdapter.isEnabled(), true);
+  const bridgeList = bridgeAdapter.listRequests({ urlIncludes: "/api/orders", method: "post", limit: 1 }, { redacted: false });
+  assert.equal(bridgeList.length, 1);
+  assert.equal(bridgeList[0].id, "bridge-1");
+  assert.doesNotMatch(JSON.stringify(bridgeList), /raw-bridge-list/);
+
+  const bridgeDetailsPromise = bridgeAdapter.getDetails(["bridge-1"], { redacted: false });
+  const detailsRequestMessage = bridgePostedMessages.at(-1);
+  assert.equal(detailsRequestMessage.type, "networkContext.getDetails");
+  assert.equal(detailsRequestMessage.tabId, 42);
+  assert.deepEqual(detailsRequestMessage.requestIds, ["bridge-1"]);
+  listeners[0]({
+    type: "networkContext.detailsResponse",
+    rpcId: detailsRequestMessage.rpcId,
+    response: {
+      ok: true,
+      details: [
+        {
+          id: "bridge-1",
+          url: "https://example.test/api/orders?token=raw-bridge-detail",
+          method: "POST",
+          requestHeaders: [{ name: "authorization", value: "Bearer raw-bridge-header" }],
+          responseBody: "{\"token\":\"raw-bridge-body\"}",
+        },
+      ],
+    },
+  });
+  const bridgeDetails = await bridgeDetailsPromise;
+  assert.equal(bridgeDetails.length, 1);
+  assert.equal(bridgeDetails[0].id, "bridge-1");
+  assert.doesNotMatch(JSON.stringify(bridgeDetails), /raw-bridge-detail|raw-bridge-header|raw-bridge-body/);
+
+  const bridgeWait = await bridgeAdapter.waitForRequests({ resourceType: "script", timeoutMs: 1 }, { redacted: true });
+  assert.equal(bridgeWait.length, 1);
+  assert.equal(bridgeWait[0].id, "bridge-2");
+  bridgeAdapter.clear();
+  assert.deepEqual(bridgePostedMessages.at(-1), { type: "networkContext.clearRequests", tabId: 42 });
+  assert.deepEqual(bridgeAdapter.listRequests({}, { redacted: true }), []);
+} finally {
+  if (previousChrome === undefined) {
+    delete globalThis.chrome;
+  } else {
+    globalThis.chrome = previousChrome;
+  }
+}
 
 console.log("network tools tests passed");
