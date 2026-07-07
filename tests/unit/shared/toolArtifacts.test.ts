@@ -133,6 +133,37 @@ describe("通用工具附件聚合", () => {
     expect(exported).toContain("[已脱敏]");
   });
 
+  it("通用工具附件在 live collection 聚合后会先脱敏再用于 prompt 和导出", () => {
+    const message = createAssistantMessage({
+      toolAttachments: [
+        {
+          id: "generic-raw-sensitive-1",
+          kind: "mcp-result",
+          title: "MCP 工具结果",
+          summary: "raw summary api_key=xai-secret",
+          details: "cookie: sid=secret Authorization: Bearer raw-token",
+          sourceToolCallId: "call-generic",
+          createdAt: 10,
+          redacted: false,
+          truncated: false,
+        },
+      ],
+    });
+
+    const [attachment] = collectMessageToolAttachments(message);
+    const prompt = formatToolAttachmentForPrompt(attachment);
+    const exported = formatToolAttachmentForExport(attachment);
+
+    expect(attachment).toMatchObject({ kind: "mcp-result", redacted: true });
+    expect(prompt).not.toContain("xai-secret");
+    expect(prompt).not.toContain("sid=secret");
+    expect(prompt).not.toContain("raw-token");
+    expect(exported).not.toContain("xai-secret");
+    expect(exported).not.toContain("sid=secret");
+    expect(exported).not.toContain("raw-token");
+    expect(exported).toContain("[已脱敏]");
+  });
+
   it("自动化报告会标记完全访问工具参与并脱敏证据", () => {
     const report = createAutomationReportToolAttachment({
       objective: "读取登录态 token=secret",

@@ -171,11 +171,12 @@ export function formatToolAttachmentForPrompt(attachment: ChatToolAttachment): s
     return ["后续追问需要继续参考以下自动化任务报告：", formatAutomationReportAttachmentForText(attachment)].join("\n");
   }
 
-  if (attachment.details?.trim()) {
-    return [`后续追问需要继续参考以下历史工具附件：${attachment.title}`, attachment.details.trim()].join("\n");
+  const safeAttachment = sanitizeGenericToolAttachment(attachment);
+  if (safeAttachment.details?.trim()) {
+    return [`后续追问需要继续参考以下历史工具附件：${safeAttachment.title}`, safeAttachment.details.trim()].join("\n");
   }
 
-  return attachment.summary.trim() ? [`后续追问需要继续参考以下历史工具附件：${attachment.title}`, attachment.summary.trim()].join("\n") : undefined;
+  return safeAttachment.summary.trim() ? [`后续追问需要继续参考以下历史工具附件：${safeAttachment.title}`, safeAttachment.summary.trim()].join("\n") : undefined;
 }
 
 export function formatToolAttachmentForExport(attachment: ChatToolAttachment): string {
@@ -204,7 +205,8 @@ export function formatToolAttachmentForExport(attachment: ChatToolAttachment): s
     return ["# 自动化任务报告附件", "", formatAutomationReportAttachmentForText(attachment)].join("\n");
   }
 
-  return ["# 工具结果附件", "", attachment.summary, "", attachment.details ?? ""].join("\n").trim();
+  const safeAttachment = sanitizeGenericToolAttachment(attachment);
+  return ["# 工具结果附件", "", safeAttachment.summary, "", safeAttachment.details ?? ""].join("\n").trim();
 }
 
 export function normalizeToolAttachment(value: unknown): ChatToolAttachment | undefined {
@@ -418,25 +420,46 @@ function aggregateToolAttachmentGroup(group: ToolAttachmentAggregateGroup): Chat
     return aggregateAutomationReportToolAttachments(attachments.filter(isAutomationReportToolAttachment));
   }
 
-  if (attachments.length === 1) {
-    return attachments[0];
+  const genericAttachments = attachments.map(sanitizeGenericToolAttachment);
+  if (genericAttachments.length === 1) {
+    return genericAttachments[0];
   }
 
-  return aggregateGenericToolAttachments(kind, attachments);
+  return aggregateGenericToolAttachments(kind, genericAttachments);
 }
 
 function aggregateMixedKindToolAttachments(attachments: ChatToolAttachment[], toolDisplayName?: string): ChatGenericToolAttachment {
-  const details = uniqueNonEmptyStrings(attachments.map(formatToolAttachmentForExport)).join("\n\n");
+  const details = redactInlineSensitiveText(uniqueNonEmptyStrings(attachments.map(formatToolAttachmentForExport)).join("\n\n"));
+  const summary = uniqueNonEmptyStrings(attachments.map((attachment) => redactInlineSensitiveText(attachment.summary))).join("\n");
   const truncatedDetails = truncateText(details, GENERIC_DETAIL_LIMIT);
   return {
     id: `tool-attachment-tool-result-set-aggregated-${attachments.map((attachment) => attachment.id).join("-")}`,
     kind: "tool-result-set",
     title: `${toolDisplayName ?? attachments[0].title}结果`,
-    summary: uniqueNonEmptyStrings(attachments.map((attachment) => attachment.summary)).join("\n"),
+    summary,
     createdAt: Math.max(...attachments.map((attachment) => attachment.createdAt)),
-    redacted: attachments.every((attachment) => attachment.redacted),
+    redacted: true,
     truncated: attachments.some((attachment) => attachment.truncated) || truncatedDetails.truncated,
     details: truncatedDetails.text || undefined,
+  };
+}
+
+function sanitizeGenericToolAttachment(attachment: ChatToolAttachment): ChatGenericToolAttachment {
+  const normalized = normalizeGenericToolAttachment(attachment, attachment.kind);
+  if (normalized) {
+    return normalized;
+  }
+
+  const redactedSummary = redactInlineSensitiveText(attachment.summary ?? "");
+  const redactedDetails = "details" in attachment && typeof attachment.details === "string" ? redactInlineSensitiveText(attachment.details) : undefined;
+  const truncatedDetails = redactedDetails ? truncateText(redactedDetails, GENERIC_DETAIL_LIMIT) : undefined;
+  return {
+    ...attachment,
+    title: normalizeOptionalString(attachment.title) ?? attachment.kind,
+    summary: redactedSummary,
+    redacted: true,
+    truncated: attachment.truncated || Boolean(truncatedDetails?.truncated),
+    details: truncatedDetails?.text,
   };
 }
 
