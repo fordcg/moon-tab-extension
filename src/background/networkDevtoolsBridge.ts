@@ -351,7 +351,7 @@ function delay(ms: number): Promise<void> {
 
 function isTrustedDevtoolsPortSender(sender?: chrome.runtime.MessageSender): boolean {
   const senderUrl = typeof sender?.url === "string" ? sender.url : undefined;
-  const devtoolsUrl = chrome.runtime?.getURL?.("src/ai-assistant/devtools.html");
+  const devtoolsUrl = chrome.runtime?.getURL?.("src/devtools/network.html");
   if (!senderUrl || !devtoolsUrl) {
     return false;
   }

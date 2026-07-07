@@ -107,7 +107,7 @@ function createTestModel() {
 
 function connectDevtoolsNetworkBridge(mock: ReturnType<typeof createChromeMock>, tabId = 7) {
   const devtoolsPort = createPortMock("network.devtools", {
-    url: mock.chrome.runtime.getURL("src/ai-assistant/devtools.html"),
+    url: mock.chrome.runtime.getURL("src/devtools/network.html"),
   });
   mock.connectListeners[0](devtoolsPort);
   devtoolsPort.emitMessage({
@@ -568,7 +568,7 @@ describe("background 入口", () => {
 
     const keepChannelOpen = mock.messageListeners[0](
       { type: "networkContext.getSnapshot", tabId: 7 },
-      { url: "chrome-extension://moon-tab/src/ai-assistant/devtools.html" } as chrome.runtime.MessageSender,
+      { url: "chrome-extension://moon-tab/src/devtools/network.html" } as chrome.runtime.MessageSender,
       sendResponse,
     );
 
@@ -591,7 +591,7 @@ describe("background 入口", () => {
 
     const keepChannelOpen = mock.messageListeners[0](
       { type: "networkContext.getSnapshot", tabId: 7 },
-      { url: "chrome-extension://other-extension/src/ai-assistant/devtools.html" } as chrome.runtime.MessageSender,
+      { url: "chrome-extension://other-extension/src/devtools/network.html" } as chrome.runtime.MessageSender,
       sendResponse,
     );
 

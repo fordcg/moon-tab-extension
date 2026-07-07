@@ -15,7 +15,7 @@
   "side_panel": {
     "default_path": "index.html"
   },
-  "devtools_page": "src/ai-assistant/devtools.html",
+  "devtools_page": "src/devtools/network.html",
   "chrome_url_overrides": {
     "newtab": "src/pages/newtab/index.html"
   },

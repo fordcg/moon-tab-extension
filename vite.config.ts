@@ -60,7 +60,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         sidePanel: resolve(rootDir, "index.html"),
-        devtools: resolve(rootDir, "src/ai-assistant/devtools.html"),
+        devtools: resolve(rootDir, "src/devtools/network.html"),
         newtab: resolve(rootDir, "src/pages/newtab/index.html"),
         game: resolve(rootDir, "src/pages/game/index.html"),
         "background/index": resolve(rootDir, "src/background/index.ts"),

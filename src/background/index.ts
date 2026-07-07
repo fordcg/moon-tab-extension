@@ -393,7 +393,7 @@ function isTrustedNetworkContextExtensionSender(sender?: chrome.runtime.MessageS
   if (!senderUrl) {
     return false;
   }
-  const devtoolsUrl = chrome.runtime?.getURL?.("src/ai-assistant/devtools.html");
+  const devtoolsUrl = chrome.runtime?.getURL?.("src/devtools/network.html");
   if (!devtoolsUrl) {
     return false;
   }
