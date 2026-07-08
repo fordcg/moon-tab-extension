@@ -2,11 +2,13 @@ import {
   BROWSER_CONTROL_AUTOMATION_MODE_CHANGED_MESSAGE_TYPE,
   BROWSER_CONTROL_BOUNDARY_CHOICE_RESPOND_MESSAGE_TYPE,
   BROWSER_CONTROL_DETACHED_MESSAGE_TYPE,
+  BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_AUTOMATION_MODE_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_RUNTIME_READONLY_MESSAGE_TYPE,
   getBrowserControlTabUrl,
   isBrowserControlRestrictedUrl,
+  type BrowserControlDiagnostics,
   type BrowserControlBoundaryChoiceRequestMessage,
   type BrowserControlMessage,
   type BrowserControlResponse,
@@ -37,7 +39,10 @@ import {
   RUNTIME_DESCRIBE_FUNCTION_TOOL_NAME,
   RUNTIME_INSPECT_GLOBALS_TOOL_NAME,
   RUNTIME_SEARCH_MODULES_TOOL_NAME,
+  getRegisteredModelTools,
 } from "../shared/models/toolRegistry";
+import { resolveModelToolAvailability } from "../shared/models/toolAvailability";
+import type { BrowserAutomationNetworkSource } from "../shared/models/types";
 import { isPngDataUrl } from "../shared/tabCapture";
 import {
   BrowserControlActionExecutor,
@@ -969,6 +974,25 @@ export class BrowserControlManager {
     return attachResult;
   }
 
+  getDiagnostics(checkedAt = Date.now()): BrowserControlDiagnostics {
+    const runtime = {
+      debuggerPermissionDeclared: Boolean(this.chromeApi?.debugger?.attach),
+      browserControlEnabled: this.desiredEnabled,
+      browserControlAttached: this.connection.isAttached && typeof this.connection.attachedTabId === "number",
+      browserAutomationMode: this.browserAutomationMode,
+      networkSource: this.resolveNetworkSource(),
+    };
+    const statuses = getRegisteredModelTools().map((tool) => resolveModelToolAvailability(tool, runtime, checkedAt));
+
+    return {
+      ...runtime,
+      tabId: this.connection.attachedTabId,
+      availableToolCount: statuses.filter((status) => status.available).length,
+      disabledToolCount: statuses.filter((status) => !status.available).length,
+      checkedAt,
+    };
+  }
+
   canExposeTakeSnapshotTool(): boolean {
     return this.desiredEnabled && this.connection.isAttached && Boolean(this.connection.attachedTabId);
   }
@@ -1016,6 +1040,10 @@ export class BrowserControlManager {
 
   canExposeNetworkTool(): boolean {
     return this.canExposeBrowserTool() && this.networkRecorder.isEnabled;
+  }
+
+  private resolveNetworkSource(): BrowserAutomationNetworkSource {
+    return this.canExposeNetworkTool() ? "debugger_recorder" : "unavailable";
   }
 
   canExposeRuntimeReadTool(): boolean {
@@ -3710,6 +3738,10 @@ export async function handleBrowserControlMessage(
   sender?: chrome.runtime.MessageSender,
   manager = browserControlManager,
 ): Promise<BrowserControlResponse> {
+  if (message.type === BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE) {
+    return { ok: true, diagnostics: manager.getDiagnostics() };
+  }
+
   if (message.type === BROWSER_CONTROL_SET_AUTOMATION_MODE_MESSAGE_TYPE) {
     return manager.setAutomationMode(message.mode, message.reason);
   }

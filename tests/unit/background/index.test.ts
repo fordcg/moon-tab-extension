@@ -359,6 +359,33 @@ describe("background 入口", () => {
     expect(mock.chrome.sidePanel.open).toHaveBeenNthCalledWith(3, { tabId: 9 });
   });
 
+  it("runtime 消息返回浏览器自动化诊断状态", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+
+    await import("../../../src/background/index");
+    const sendResponse = vi.fn();
+
+    const keepChannelOpen = mock.messageListeners[0](
+      { type: "browserControl.getDiagnostics" },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(keepChannelOpen).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        diagnostics: expect.objectContaining({
+          debuggerPermissionDeclared: true,
+          networkSource: expect.any(String),
+          availableToolCount: expect.any(Number),
+          disabledToolCount: expect.any(Number),
+        }),
+      });
+    });
+  });
+
   it("快捷键无 tab fallback 查询当前活动页并打开 tab scoped 侧边栏", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome);

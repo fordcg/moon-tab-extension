@@ -118,6 +118,10 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
     }
 
     if (tool.id.startsWith("network.")) {
+      if (browserControlManager.canExposeNetworkTool()) {
+        return browserControlManager.executeNetworkTool(toolCall);
+      }
+
       const compatibilityResult = await options.networkCompatibilityExecutor?.(toolCall, tool);
       if (compatibilityResult !== undefined) {
         return compatibilityResult;

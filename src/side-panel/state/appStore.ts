@@ -74,10 +74,12 @@ import type {
 } from "../../shared/types";
 import {
   BROWSER_CONTROL_BOUNDARY_CHOICE_RESPOND_MESSAGE_TYPE,
+  BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_AUTOMATION_MODE_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_RUNTIME_READONLY_MESSAGE_TYPE,
   type BrowserControlBoundaryChoiceRequestMessage,
+  type BrowserControlDiagnostics,
   type BrowserControlResponse,
 } from "../../shared/browserControl";
 import type { BrowserAutomationMode } from "../../shared/toolAuthorization";
@@ -253,6 +255,7 @@ export interface AppState {
   browserControlEnabled: boolean;
   browserAutomationMode: BrowserAutomationMode;
   runtimeReadonlyEnabled: boolean;
+  browserAutomationDiagnostics?: BrowserControlDiagnostics;
   pendingBoundaryChoice?: BrowserControlBoundaryChoiceRequestMessage;
   activeSessionId: string;
   privateModeActive: boolean;
@@ -295,6 +298,7 @@ export interface AppState {
   setBrowserControlEnabled: (enabled: boolean) => Promise<void>;
   setBrowserAutomationMode: (mode: BrowserAutomationMode) => Promise<void>;
   setRuntimeReadonlyEnabled: (enabled: boolean) => Promise<void>;
+  refreshBrowserAutomationDiagnostics: () => Promise<void>;
   markBrowserControlDetached: () => void;
   markBrowserAutomationModeChanged: (mode: BrowserAutomationMode) => void;
   markRuntimeReadonlyChanged: (enabled: boolean) => void;
@@ -416,6 +420,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   browserControlEnabled: false,
   browserAutomationMode: "normal_restricted",
   runtimeReadonlyEnabled: false,
+  browserAutomationDiagnostics: undefined,
   pendingBoundaryChoice: undefined,
   activeSessionId: "",
   privateModeActive: false,
@@ -728,8 +733,27 @@ export const useAppStore = create<AppState>()((set, get) => ({
       });
     }
   },
+  refreshBrowserAutomationDiagnostics: async () => {
+    const response = await sendRuntimeMessage<{
+      ok: boolean;
+      diagnostics?: BrowserControlDiagnostics;
+      message?: string;
+    }>({
+      type: BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE,
+    });
+
+    if (response?.ok && response.diagnostics) {
+      set({ browserAutomationDiagnostics: response.diagnostics });
+    }
+  },
   markBrowserControlDetached: () => {
-    set({ browserControlEnabled: false, runtimeReadonlyEnabled: false, browserAutomationMode: "normal_restricted", pendingBoundaryChoice: undefined });
+    set({
+      browserControlEnabled: false,
+      runtimeReadonlyEnabled: false,
+      browserAutomationMode: "normal_restricted",
+      browserAutomationDiagnostics: undefined,
+      pendingBoundaryChoice: undefined,
+    });
   },
   markBrowserAutomationModeChanged: (mode) => {
     set((state) => ({
@@ -1294,6 +1318,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
       defaultChatModelId: "",
       chatPreferences: createDefaultChatPreferences(),
       automationPlaybookSettings: normalizeAutomationPlaybookSettings(undefined),
+      browserControlEnabled: false,
+      browserAutomationMode: "normal_restricted",
+      runtimeReadonlyEnabled: false,
+      browserAutomationDiagnostics: undefined,
       activeSessionId: "",
       privateModeActive: false,
       privateChatSession: undefined,
@@ -1312,9 +1340,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
       webSearchSettings: DEFAULT_WEB_SEARCH_SETTINGS,
       mcpSettings: { servers: [] },
       mcpBearerTokens: {},
-      browserControlEnabled: false,
-      browserAutomationMode: "normal_restricted",
-      runtimeReadonlyEnabled: false,
       pendingBoundaryChoice: undefined,
       syncOperation: {
         loading: false,

@@ -71,8 +71,11 @@ function collectManifestIssues(manifest, label) {
   const issues = [];
   const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
   const optionalPermissions = Array.isArray(manifest.optional_permissions) ? manifest.optional_permissions : [];
-  if (permissions.includes("debugger") || optionalPermissions.includes("debugger")) {
-    issues.push(`${label} must not request debugger permission in the current release boundary.`);
+  if (!permissions.includes("debugger")) {
+    issues.push(`${label} must request debugger permission for the full browser automation release boundary.`);
+  }
+  if (optionalPermissions.includes("debugger")) {
+    issues.push(`${label} must not put debugger in optional_permissions; this release uses an explicit debugger permission boundary.`);
   }
   if (manifest.background?.service_worker !== "background/index.js") {
     issues.push(`${label} must use background/index.js as the MV3 service worker.`);

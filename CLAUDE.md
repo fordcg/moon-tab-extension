@@ -35,7 +35,7 @@ The current root npm scripts are defined in `package.json`:
 
 For local Chrome/Edge extension testing, build first and load the generated `dist/` directory or packaged output as the unpacked extension. Do not load the repository root directly.
 
-Before claiming release readiness, run `npm run verify:release` and inspect the output. The release readiness matrix is `docs/superpowers/release-readiness.md`; keep it aligned with manifest entries, package artifacts, and the current no-`debugger` permission boundary.
+Before claiming release readiness, run `npm run verify:release` and inspect the output. The release readiness matrix is `docs/superpowers/release-readiness.md`; keep it aligned with manifest entries, package artifacts, and the current debugger permission boundary. Full browser automation releases declare `debugger`; browser control still defaults off and must only attach after an explicit user action.
 
 ## High-level architecture
 

@@ -34,7 +34,7 @@ async function createReadyRoot(): Promise<string> {
     manifest_version: 3,
     name: "月标签",
     version: "0.3.0",
-    permissions: ["sidePanel", "storage", "contextMenus", "activeTab", "scripting", "alarms", "tabs"],
+    permissions: ["sidePanel", "storage", "contextMenus", "activeTab", "scripting", "alarms", "tabs", "debugger"],
     background: { service_worker: "background/index.js", type: "module" },
     side_panel: { default_path: "index.html" },
     devtools_page: "src/devtools/network.html",
@@ -79,19 +79,36 @@ describe("release readiness verifier", () => {
     await expect(verifyReleaseReadiness(root)).resolves.toBeUndefined();
   });
 
-  it("reports missing packaged artifacts and forbidden debugger permission", async () => {
+  it("reports missing packaged artifacts and missing debugger permission", async () => {
     const root = await createReadyRoot();
     const manifestPath = join(root, "artifacts", "chrome-extension", "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.permissions.push("debugger");
+    manifest.permissions = manifest.permissions.filter((permission: string) => permission !== "debugger");
     await writeJson(manifestPath, manifest);
     await rm(join(root, "artifacts", "chrome-extension", "src", "devtools", "network.html"), { force: true });
 
     const issues = await collectReleaseReadinessIssues(root);
 
-    expect(issues).toContain("artifacts/chrome-extension/manifest.json must not request debugger permission in the current release boundary.");
+    expect(issues).toContain("artifacts/chrome-extension/manifest.json must request debugger permission for the full browser automation release boundary.");
     expect(issues).toContain("Missing packaged artifact: artifacts/chrome-extension/src/devtools/network.html");
     await expect(verifyReleaseReadiness(root)).rejects.toThrow("Release readiness verification failed");
+  });
+
+  it("reports missing debugger permission in built and packaged manifests", async () => {
+    const root = await createReadyRoot();
+    for (const manifestPath of [
+      join(root, "dist", "manifest.json"),
+      join(root, "artifacts", "chrome-extension", "manifest.json"),
+    ]) {
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.permissions = manifest.permissions.filter((permission: string) => permission !== "debugger");
+      await writeJson(manifestPath, manifest);
+    }
+
+    const issues = await collectReleaseReadinessIssues(root);
+
+    expect(issues).toContain("dist/manifest.json must request debugger permission for the full browser automation release boundary.");
+    expect(issues).toContain("artifacts/chrome-extension/manifest.json must request debugger permission for the full browser automation release boundary.");
   });
 
   it("requires the release verification command to run check, E2E, and artifact verification", async () => {
@@ -139,7 +156,7 @@ describe("release readiness verifier", () => {
     );
   });
 
-  it("reports forbidden debugger permission in optional permissions", async () => {
+  it("reports debugger permission in optional permissions", async () => {
     const root = await createReadyRoot();
     const manifestPath = join(root, "artifacts", "chrome-extension", "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -147,7 +164,7 @@ describe("release readiness verifier", () => {
     await writeJson(manifestPath, manifest);
 
     await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
-      "artifacts/chrome-extension/manifest.json must not request debugger permission in the current release boundary.",
+      "artifacts/chrome-extension/manifest.json must not put debugger in optional_permissions; this release uses an explicit debugger permission boundary.",
     );
   });
 });

@@ -221,6 +221,34 @@ describe("浏览器控制地基", () => {
     expect(chromeMock.debugger.sendCommand).toHaveBeenCalledWith({ tabId: 9 }, "Log.enable", {}, expect.any(Function));
   });
 
+  it("返回浏览器自动化诊断状态", async () => {
+    const chromeMock = createChromeMock();
+    const connection = new BrowserDebuggerConnection(chromeMock);
+    const manager = new BrowserControlManager(connection, chromeMock);
+
+    expect(manager.getDiagnostics(1)).toMatchObject({
+      debuggerPermissionDeclared: true,
+      browserControlEnabled: false,
+      browserControlAttached: false,
+      browserAutomationMode: "normal_restricted",
+      networkSource: "unavailable",
+      availableToolCount: expect.any(Number),
+      disabledToolCount: expect.any(Number),
+      checkedAt: 1,
+    });
+
+    await manager.setEnabled(true, 7);
+
+    expect(manager.getDiagnostics(2)).toMatchObject({
+      debuggerPermissionDeclared: true,
+      browserControlEnabled: true,
+      browserControlAttached: true,
+      tabId: 7,
+      networkSource: "debugger_recorder",
+      checkedAt: 2,
+    });
+  });
+
   it("底层调试连接运行时拒绝未允许的 CDP 方法", async () => {
     const chromeMock = createChromeMock();
     const connection = new BrowserDebuggerConnection(chromeMock);
@@ -734,7 +762,7 @@ describe("浏览器控制地基", () => {
     }));
   });
 
-  it("已有请求重放授权时 send 只发送一次并立即消费授权", async () => {
+  it("已有请求重放授权时 send 只发送一次并立即消费一次性授权", async () => {
     const fetchMock = vi.fn(async () => new Response("{\"ok\":true}", {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -776,6 +804,7 @@ describe("浏览器控制地基", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const secondSend = await manager.executeReplayTool(createNamedToolCall("replay_send_request", { draftId }));
     expect(secondSend.isError).toBe(true);
+    expect(secondSend.content).toContain("一次性授权");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });

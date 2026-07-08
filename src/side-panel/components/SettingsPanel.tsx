@@ -3,6 +3,7 @@ import { ChannelManagement } from "./settings/ChannelManagement";
 import { ChatPreferenceSettings } from "./settings/ChatPreferenceSettings";
 import { ExtractionRules } from "./settings/ExtractionRules";
 import { AutomationPlaybookSettings } from "./settings/AutomationPlaybookSettings";
+import { AutomationDiagnostics } from "./settings/AutomationDiagnostics";
 import { PromptTemplateSettings } from "./settings/PromptTemplateSettings";
 import { SyncSettings } from "./settings/SyncSettings";
 import { McpToolSettings } from "./settings/McpToolSettings";
@@ -48,7 +49,8 @@ export function SettingsPanel() {
             ))}
           </div>
         </div>
-        <div className="min-w-0">
+        <div className="grid min-w-0 gap-4">
+          <AutomationDiagnostics />
           {activeTab === "channels" ? <ChannelManagement /> : null}
           {activeTab === "rules" ? <ExtractionRules /> : null}
           {activeTab === "chat" ? <ChatPreferenceSettings /> : null}

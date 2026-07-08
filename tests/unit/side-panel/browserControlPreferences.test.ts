@@ -174,4 +174,32 @@ describe("浏览器控制全局运行态", () => {
     expect(useAppStore.getState().browserControlEnabled).toBe(false);
     expect(useAppStore.getState().failure?.message).toBe("当前页面无法开启浏览器控制");
   });
+
+  it("刷新浏览器自动化诊断状态", async () => {
+    const sendMessage = vi.fn((_message: { type: string }, callback: (response: unknown) => void) => {
+      callback({
+        ok: true,
+        diagnostics: {
+          debuggerPermissionDeclared: true,
+          browserControlEnabled: false,
+          browserControlAttached: false,
+          browserAutomationMode: "normal_restricted",
+          networkSource: "unavailable",
+          availableToolCount: 2,
+          disabledToolCount: 30,
+          checkedAt: 1,
+        },
+      });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+
+    await useAppStore.getState().refreshBrowserAutomationDiagnostics();
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: "browserControl.getDiagnostics" }, expect.any(Function));
+    expect(useAppStore.getState().browserAutomationDiagnostics).toMatchObject({
+      debuggerPermissionDeclared: true,
+      networkSource: "unavailable",
+    });
+  });
 });

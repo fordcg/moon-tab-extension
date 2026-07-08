@@ -2,6 +2,7 @@ import "./imagefreeToolRuntime";
 import { handleModelCatalogMessage, type ModelCatalogMessage } from "./modelCatalogMessageHandler";
 import { handleAgentToolsMessage, type AgentToolsMessage, type AgentToolsRuntimeMessage } from "./agentToolsMessageHandler";
 import {
+  browserControlManager,
   handleBrowserControlMessage,
   handleBrowserControlTabRemoved,
   type BrowserControlMessage,
@@ -201,6 +202,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
   }
 
   if (message.type === "browserControl.setEnabled" ||
+    message.type === "browserControl.getDiagnostics" ||
     message.type === "browserControl.setRuntimeReadonly" ||
     message.type === "browserControl.setAutomationMode" ||
     message.type === "browserControl.boundaryChoiceRespond") {
@@ -220,7 +222,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
 
   if (isAgentToolsMessage(message)) {
     const builtInTools = getRegisteredModelTools().filter(shouldExposeToolWithNetworkCompatibility(getSenderTabId(sender)));
-    void handleAgentToolsMessage(message, fetch, builtInTools).then(sendResponse);
+    void handleAgentToolsMessage(message, fetch, builtInTools, browserControlManager.getDiagnostics()).then(sendResponse);
     return true;
   }
 

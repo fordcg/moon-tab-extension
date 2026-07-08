@@ -13,8 +13,9 @@ type RevokeMock = ReturnType<typeof vi.fn<() => void>>;
 
 describe("完全访问工具执行器", () => {
   it("非完全访问模式下伪造调用会 fail closed", async () => {
+    const evaluate = vi.fn();
     const executor = new FullAccessToolExecutor(
-      { evaluate: vi.fn() },
+      { evaluate },
       { isEnabled: true, getDetails: vi.fn() },
       () => ({ tabId: 7, origin: "https://example.com", fullAccess: false }),
       vi.fn(),
@@ -26,6 +27,11 @@ describe("完全访问工具执行器", () => {
       isError: true,
       content: "当前不是完全访问模式，已拒绝执行 full_access.* 工具。",
     });
+    await expect(executor.execute(createToolCall("full_access_fetch", { url: "/api" }))).resolves.toMatchObject({
+      isError: true,
+      content: expect.stringContaining("完全访问模式"),
+    });
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it("execute_script 执行任意脚本并返回 Runtime 原始结果", async () => {

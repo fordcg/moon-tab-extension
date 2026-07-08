@@ -149,6 +149,10 @@ export class ReplayToolExecutor {
     }
     const draft = this.getUsableDraft(draftId);
     if (!draft) {
+      const sentDraft = this.getCurrentPageDraft(draftId);
+      if (sentDraft?.sendResult) {
+        return createErrorResult(toolCall, "本次一次性授权已使用，不能重复发送请求重放。");
+      }
       return createErrorResult(toolCall, "请求重放草案不存在、已过期或不属于当前页面。");
     }
     const grant = this.getContext().grant;
@@ -245,12 +249,20 @@ export class ReplayToolExecutor {
 
   private getUsableDraft(draftId: string, allowSent = false): ReplayDraft | undefined {
     this.removeExpiredDrafts();
-    const draft = this.drafts.get(draftId);
-    const context = this.getContext();
-    if (!draft || draft.tabId !== context.tabId || draft.origin !== context.origin) {
+    const draft = this.getCurrentPageDraft(draftId);
+    if (!draft) {
       return undefined;
     }
     if (!allowSent && draft.sendResult) {
+      return undefined;
+    }
+    return draft;
+  }
+
+  private getCurrentPageDraft(draftId: string): ReplayDraft | undefined {
+    const draft = this.drafts.get(draftId);
+    const context = this.getContext();
+    if (!draft || draft.tabId !== context.tabId || draft.origin !== context.origin) {
       return undefined;
     }
     return draft;

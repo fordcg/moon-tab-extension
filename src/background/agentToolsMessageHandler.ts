@@ -9,6 +9,8 @@ import {
 } from "../shared/mcp/settings";
 import { createMcpToolName, createMcpToolRegistryEntries, parseMcpToolId } from "../shared/mcp/toolAdapter";
 import type { ModelToolRegistryEntry } from "../shared/models/types";
+import { resolveModelToolAvailability } from "../shared/models/toolAvailability";
+import type { BrowserControlDiagnostics } from "../shared/browserControl";
 import type { McpServerConfig, McpSettings } from "../shared/types";
 
 export const AGENT_TOOLS_SETTINGS_KEY = "aiSidebar.agentTools.v1";
@@ -77,9 +79,10 @@ export async function handleAgentToolsMessage(
   message: AgentToolsRuntimeMessage,
   fetcher: Fetcher = fetch,
   builtInTools: ModelToolRegistryEntry[] = [],
+  diagnostics?: BrowserControlDiagnostics,
 ): Promise<Record<string, unknown>> {
   try {
-    return await routeAgentToolsMessage(message, fetcher, builtInTools);
+    return await routeAgentToolsMessage(message, fetcher, builtInTools, diagnostics);
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "工具管理请求失败。" };
   }
@@ -89,19 +92,20 @@ async function routeAgentToolsMessage(
   message: AgentToolsRuntimeMessage,
   fetcher: Fetcher,
   builtInTools: ModelToolRegistryEntry[],
+  diagnostics: BrowserControlDiagnostics | undefined,
 ): Promise<Record<string, unknown>> {
   if (message.type === "agentTools.getStatus") {
-    return createStatusResponse(builtInTools);
+    return createStatusResponse(builtInTools, diagnostics);
   }
 
   if (message.type === "agentTools.configureMcp") {
     await configureMcp(message.mcp, fetcher);
-    return createStatusResponse(builtInTools);
+    return createStatusResponse(builtInTools, diagnostics);
   }
 
   if (message.type === "agentTools.refreshMcp") {
     await refreshMcpTools(typeof message.serverId === "string" ? message.serverId.trim() : "", fetcher);
-    return createStatusResponse(builtInTools);
+    return createStatusResponse(builtInTools, diagnostics);
   }
 
   if (message.type === "agentTools.call") {
@@ -120,14 +124,27 @@ async function routeAgentToolsMessage(
   return { ok: false, message: "未知工具管理请求。" };
 }
 
-async function createStatusResponse(builtInTools: ModelToolRegistryEntry[]): Promise<Record<string, unknown>> {
+async function createStatusResponse(
+  builtInTools: ModelToolRegistryEntry[],
+  diagnostics?: BrowserControlDiagnostics,
+): Promise<Record<string, unknown>> {
   const settings = await getMcpSettings();
   const mcpTools = createMcpToolRegistryEntries(settings.servers);
+  const builtInToolsWithHealth = diagnostics ? builtInTools.map((tool) => ({
+    ...tool,
+    availability: resolveModelToolAvailability(tool, {
+      debuggerPermissionDeclared: diagnostics.debuggerPermissionDeclared,
+      browserControlEnabled: diagnostics.browserControlEnabled,
+      browserControlAttached: diagnostics.browserControlAttached,
+      browserAutomationMode: diagnostics.browserAutomationMode,
+      networkSource: diagnostics.networkSource,
+    }),
+  })) : builtInTools;
   return {
     ok: true,
     settings: { mcp: settings },
-    builtInTools,
-    tools: [...builtInTools, ...mcpTools],
+    builtInTools: builtInToolsWithHealth,
+    tools: [...builtInToolsWithHealth, ...mcpTools],
     mcp: { servers: settings.servers, tools: mcpTools },
     auditLog: (await readAuditLog()).slice().reverse(),
   };

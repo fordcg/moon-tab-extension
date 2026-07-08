@@ -438,7 +438,32 @@ describe("background 工具运行时封装", () => {
     });
   });
 
-  it("network 工具优先使用注入的 DevTools 兼容执行器", async () => {
+  it("network 工具优先使用 debugger-backed 浏览器控制执行器", async () => {
+    browserControlManagerMock.canExposeNetworkTool.mockReturnValue(true);
+    browserControlManagerMock.executeNetworkTool.mockResolvedValue({ toolCallId: "call-network_list_requests", name: "network_list_requests", content: "Browser Control Network" });
+    const compatibilityResult: ModelToolResult = {
+      toolCallId: "call-network_list_requests",
+      name: "network_list_requests",
+      content: "DevTools Network",
+    };
+    const networkCompatibilityExecutor = vi.fn().mockResolvedValue(compatibilityResult);
+    const executor = createBackgroundToolExecutor(
+      { model: createModel(), tavily: undefined },
+      vi.fn() as unknown as typeof fetch,
+      { networkCompatibilityExecutor },
+    );
+    const toolCall = createToolCall("network_list_requests");
+    const tool = { id: "network.list_requests", name: "network_list_requests", parameters: {} };
+
+    await expect(executor(toolCall, tool)).resolves.toMatchObject({
+      content: "Browser Control Network",
+    });
+    expect(networkCompatibilityExecutor).not.toHaveBeenCalled();
+    expect(browserControlManagerMock.executeNetworkTool).toHaveBeenCalledWith(toolCall);
+  });
+
+  it("network 工具在 debugger recorder 不可用时使用 DevTools fallback", async () => {
+    browserControlManagerMock.canExposeNetworkTool.mockReturnValue(false);
     browserControlManagerMock.executeNetworkTool.mockResolvedValue({ toolCallId: "call-network_list_requests", name: "network_list_requests", content: "Browser Control Network" });
     const compatibilityResult: ModelToolResult = {
       toolCallId: "call-network_list_requests",
@@ -460,6 +485,7 @@ describe("background 工具运行时封装", () => {
   });
 
   it("network 兼容执行器不可用时回退到浏览器控制 Network 执行器", async () => {
+    browserControlManagerMock.canExposeNetworkTool.mockReturnValue(false);
     browserControlManagerMock.executeNetworkTool.mockResolvedValue({ toolCallId: "call-network_list_requests", name: "network_list_requests", content: "Browser Control Network" });
     const networkCompatibilityExecutor = vi.fn().mockResolvedValue(undefined);
     const executor = createBackgroundToolExecutor(

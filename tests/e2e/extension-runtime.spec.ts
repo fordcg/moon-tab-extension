@@ -14,6 +14,11 @@ test("真实扩展侧边栏暴露发布验收所需的工具、MCP、同步和�
   const page = await extensionContext.newPage();
 
   await page.goto(`chrome-extension://${extensionId}/index.html`);
+  const manifestText = await page.evaluate(async () => {
+    const response = await fetch(chrome.runtime.getURL("manifest.json"));
+    return response.text();
+  });
+  expect(manifestText).toContain('"debugger"');
 
   await expect(page.getByRole("button", { name: "打开悬浮助手" })).toBeVisible();
   await expect(page.getByRole("button", { name: "浏览器控制" })).toBeVisible();
@@ -21,6 +26,8 @@ test("真实扩展侧边栏暴露发布验收所需的工具、MCP、同步和�
 
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await expect(page.getByRole("heading", { name: "设置" })).toBeVisible();
+  await expect(page.getByText("浏览器自动化诊断")).toBeVisible();
+  await expect(page.getByText(/debugger_recorder|unavailable/)).toBeVisible();
   await expect(page.getByRole("tab", { name: "渠道管理" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "MCP 工具" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "聊天偏好" })).toBeVisible();

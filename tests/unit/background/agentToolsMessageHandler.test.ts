@@ -395,4 +395,49 @@ describe("AgentTools 兼容消息处理", () => {
     await expect(handleAgentToolsMessage({ type: "agentTools.clearAuditLog" })).resolves.toEqual({ ok: true, auditLog: [] });
     expect(localStorage.data.has(AGENT_TOOLS_AUDIT_KEY)).toBe(false);
   });
+
+  it("AgentTools 状态返回内置工具健康信息但不授予 MCP 调用本地浏览器工具的能力", async () => {
+    const response = await handleAgentToolsMessage({
+      type: "agentTools.getStatus",
+    }, fetch, [
+      {
+        id: "network.list_requests",
+        name: "network_list_requests",
+        displayName: "Network 请求列表",
+        parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+        toolClassification: { runtime: "browser_control", capabilities: ["observe_page"], risk: "low" },
+      },
+    ], {
+      debuggerPermissionDeclared: true,
+      browserControlEnabled: false,
+      browserControlAttached: false,
+      browserAutomationMode: "normal_restricted",
+      networkSource: "unavailable",
+      availableToolCount: 1,
+      disabledToolCount: 1,
+      checkedAt: 1,
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      builtInTools: [
+        expect.objectContaining({
+          id: "network.list_requests",
+          availability: expect.objectContaining({
+            available: false,
+            reasonCode: "browser_control_disabled",
+            requiresDebugger: true,
+          }),
+        }),
+      ],
+    });
+    expect(JSON.stringify(response)).not.toContain("full_access.fetch");
+
+    const callResponse = await handleAgentToolsMessage({
+      type: "agentTools.call",
+      toolId: "network.list_requests",
+      input: {},
+    });
+    expect(callResponse).toMatchObject({ ok: false, message: "MCP 工具标识无效。" });
+  });
 });

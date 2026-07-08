@@ -47,6 +47,7 @@ function createExecutor(options: {
   fetcher?: typeof fetch;
   origin?: string;
   enabled?: boolean;
+  enhanced?: boolean;
 } = {}): ReplayToolExecutor {
   const meta = options.meta ?? createMeta();
   const recorder = {
@@ -67,7 +68,7 @@ function createExecutor(options: {
   return new ReplayToolExecutor(
     recorder,
     fetcher,
-    () => ({ tabId: 7, origin: options.origin ?? "https://example.com", enhanced: true, grant: options.getGrant?.() ?? options.grant }),
+    () => ({ tabId: 7, origin: options.origin ?? "https://example.com", enhanced: options.enhanced ?? true, grant: options.getGrant?.() ?? options.grant }),
   );
 }
 
@@ -80,6 +81,17 @@ async function prepareDraft(executor: ReplayToolExecutor): Promise<string> {
 }
 
 describe("请求重放沙箱执行器", () => {
+  it("非受控增强模式下 replay_send_request fail closed", async () => {
+    const fetcher = vi.fn(async () => new Response("{}")) as unknown as typeof fetch;
+    const executor = createExecutor({ enhanced: false, fetcher });
+
+    await expect(executor.execute(createToolCall("replay_send_request", { draftId: "draft-1" }))).resolves.toMatchObject({
+      isError: true,
+      content: expect.stringContaining("受控增强模式"),
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("prepare 只生成草案且未确认时不能发送", async () => {
     const fetcher = vi.fn(async () => new Response("{}")) as unknown as typeof fetch;
     const executor = createExecutor({ fetcher });
@@ -150,6 +162,25 @@ describe("请求重放沙箱执行器", () => {
       }),
     );
     expect(sendResult.content).not.toContain("secret");
+  });
+
+  it("一次性授权第一次可发送，第二次重复使用会失败", async () => {
+    const fetcher = vi.fn(async () => new Response("{\"ok\":true}", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+    let grant: BoundaryGrantContext | undefined;
+    const executor = createExecutor({ fetcher, getGrant: () => grant });
+
+    const draftId = await prepareDraft(executor);
+    grant = createGrant({ scopeKey: createBoundaryGrantScopeKey(createToolCall("replay_send_request", { draftId })) });
+    const firstSend = await executor.execute(createToolCall("replay_send_request", { draftId }));
+    expect(firstSend.isError).toBeUndefined();
+    await expect(executor.execute(createToolCall("replay_send_request", { draftId }))).resolves.toMatchObject({
+      isError: true,
+      content: expect.stringContaining("一次性授权"),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("发送时保留重复 Header 且只跟随一次同源重定向", async () => {

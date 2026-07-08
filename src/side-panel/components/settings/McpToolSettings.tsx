@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ModelToolAvailabilityStatus } from "../../../shared/models/types";
 import type { McpServerConfig } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
+import { sendRuntimeMessage } from "../../state/runtimeMessage";
 import { useComposedTextInput } from "../useComposedTextInput";
 
 interface McpServerDraft {
@@ -9,6 +11,18 @@ interface McpServerDraft {
   endpointUrl: string;
   bearerToken: string;
   enabled: boolean;
+}
+
+interface BuiltInToolHealth {
+  id: string;
+  name: string;
+  displayName?: string;
+  availability?: ModelToolAvailabilityStatus;
+}
+
+interface AgentToolsStatusResponse {
+  ok: boolean;
+  builtInTools?: BuiltInToolHealth[];
 }
 
 const EMPTY_DRAFT: McpServerDraft = {
@@ -28,9 +42,26 @@ export function McpToolSettings() {
   const [draft, setDraft] = useState<McpServerDraft>(EMPTY_DRAFT);
   const [message, setMessage] = useState("");
   const [expandedToolServerIds, setExpandedToolServerIds] = useState<string[]>([]);
+  const [builtInTools, setBuiltInTools] = useState<BuiltInToolHealth[]>([]);
   const nameInput = useComposedTextInput(draft.name, (name) => setDraft((current) => ({ ...current, name })));
   const endpointInput = useComposedTextInput(draft.endpointUrl, (endpointUrl) => setDraft((current) => ({ ...current, endpointUrl })));
   const tokenInput = useComposedTextInput(draft.bearerToken, (bearerToken) => setDraft((current) => ({ ...current, bearerToken })));
+  const unavailableBuiltInTools = builtInTools.filter((tool) => tool.availability && !tool.availability.available);
+
+  useEffect(() => {
+    if (!globalThis.chrome?.runtime?.onMessage?.addListener) {
+      return;
+    }
+    let active = true;
+    void sendRuntimeMessage<AgentToolsStatusResponse>({ type: "agentTools.getStatus" }).then((response) => {
+      if (active && response?.ok && Array.isArray(response.builtInTools)) {
+        setBuiltInTools(response.builtInTools);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const editServer = (server: McpServerConfig) => {
     setDraft({
@@ -74,6 +105,23 @@ export function McpToolSettings() {
     <section className="grid w-full gap-4" aria-label="MCP 工具">
       <h3 className="text-base font-semibold">MCP 工具</h3>
       <p className="ui-muted text-xs">MVP 仅支持 HTTP/Streamable HTTP MCP Tools。启用 Server 和具体工具后，模型可直接调用。</p>
+      {builtInTools.some((tool) => tool.availability) ? (
+        <section className="grid gap-2" aria-label="内置工具健康">
+          <h4 className="text-sm font-semibold">内置工具健康</h4>
+          {unavailableBuiltInTools.length > 0 ? (
+            <div className="mcp-server-tool-list">
+              {unavailableBuiltInTools.map((tool) => (
+                <div key={tool.id} className="mcp-server-tool-item">
+                  <span className="mcp-server-tool-item-title">{tool.displayName ?? tool.name}</span>
+                  <span className="mcp-server-tool-item-description">{tool.availability?.reason}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="ui-muted text-xs">全部可用</p>
+          )}
+        </section>
+      ) : null}
       <div className="grid gap-3">
         <label className="grid gap-1 text-sm">
           名称

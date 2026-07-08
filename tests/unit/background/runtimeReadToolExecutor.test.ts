@@ -32,6 +32,10 @@ describe("运行时只读工具执行器", () => {
     const connection = { evaluate: vi.fn() };
     const executor = new RuntimeReadToolExecutor(connection, () => createAuthorization("runtime_readonly"));
 
+    await expect(executor.execute(createToolCall("runtime_inspect_globals", { expression: "document.cookie" }))).resolves.toMatchObject({
+      isError: true,
+      content: expect.stringContaining("不能传入任意 JavaScript"),
+    });
     await expect(executor.execute(createToolCall("runtime_inspect_globals", { paths: ["window.fetch('https://evil.example')"] }))).resolves.toMatchObject({
       isError: true,
       content: expect.stringContaining("不能传入 JavaScript 表达式"),

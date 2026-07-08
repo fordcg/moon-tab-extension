@@ -818,6 +818,56 @@ describe("App", () => {
     expect(styles).toContain("align-items: start;");
   });
 
+  it("设置页展示浏览器自动化诊断和 Network 来源", async () => {
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      if (message.type === "browserControl.getDiagnostics") {
+        callback({
+          ok: true,
+          diagnostics: {
+            debuggerPermissionDeclared: true,
+            browserControlEnabled: true,
+            browserControlAttached: true,
+            browserAutomationMode: "normal_restricted",
+            networkSource: "debugger_recorder",
+            availableToolCount: 12,
+            disabledToolCount: 4,
+            checkedAt: 1,
+          },
+        });
+        return undefined;
+      }
+
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          text: "页面内容",
+          truncated: false,
+          usedFallback: true,
+        });
+        return undefined;
+      }
+
+      callback({ ok: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+        onMessage: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      },
+    });
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "设置" }));
+
+    expect(await screen.findByText("浏览器自动化诊断")).toBeInTheDocument();
+    expect(screen.getByText("debugger_recorder")).toBeInTheDocument();
+    expect(screen.getByText("12 可用 / 4 不可用")).toBeInTheDocument();
+  });
+
   it("全局系统提示词使用中文输入法组合输入时只保存最终文本", async () => {
     const updateChatPreferences = vi.fn(async (updates) => {
       useAppStore.setState((state) => ({
@@ -1537,6 +1587,82 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "启用筛选结果" }));
 
     expect(updateChatPreferences).toHaveBeenCalledWith({ enabledToolIds: ["mcp.mysql.query"] });
+  });
+
+  it("MCP 设置页展示内置工具不可用原因", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      if (message.type === "agentTools.getStatus") {
+        callback({
+          ok: true,
+          builtInTools: [
+            {
+              id: "network.list_requests",
+              name: "network_list_requests",
+              displayName: "Network 请求列表",
+              parameters: { type: "object", properties: {}, additionalProperties: false },
+              availability: {
+                available: false,
+                reasonCode: "browser_control_disabled",
+                reason: "浏览器控制未开启。",
+                requiresDebugger: true,
+                networkSource: "unavailable",
+                checkedAt: 1,
+              },
+            },
+          ],
+        });
+        return undefined;
+      }
+
+      if (message.type === "browserControl.getDiagnostics") {
+        callback({
+          ok: true,
+          diagnostics: {
+            debuggerPermissionDeclared: true,
+            browserControlEnabled: false,
+            browserControlAttached: false,
+            browserAutomationMode: "normal_restricted",
+            networkSource: "unavailable",
+            availableToolCount: 2,
+            disabledToolCount: 30,
+            checkedAt: 1,
+          },
+        });
+        return undefined;
+      }
+
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          text: "页面内容",
+          truncated: false,
+          usedFallback: true,
+        });
+        return undefined;
+      }
+
+      callback({ ok: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+        onMessage: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      },
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.click(screen.getByRole("tab", { name: "MCP 工具" }));
+
+    expect(await screen.findByText("内置工具健康")).toBeInTheDocument();
+    expect(screen.getByText("Network 请求列表")).toBeInTheDocument();
+    expect(screen.getByText("浏览器控制未开启。")).toBeInTheDocument();
   });
 
   it("MCP 设置页可以在 Server 列表中禁用远程工具注册", async () => {

@@ -163,6 +163,9 @@ function validateRuntimeReadArguments(toolCall: ModelToolCall): { ok: true; args
   if (toolCall.name === RUNTIME_INSPECT_GLOBALS_TOOL_NAME) {
     const extraKeys = Object.keys(toolCall.arguments).filter((key) => !["paths", "maxDepth", "limit"].includes(key));
     if (extraKeys.length > 0) {
+      if (extraKeys.includes("expression")) {
+        return { ok: false, message: "runtime.inspect_globals 不能传入任意 JavaScript；请使用 paths 安全点号路径。" };
+      }
       return { ok: false, message: `runtime.inspect_globals 不接受参数：${extraKeys.join("、")}。` };
     }
     const paths = normalizePaths(toolCall.arguments.paths, 10);

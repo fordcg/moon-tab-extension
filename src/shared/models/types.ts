@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatTokenUsageEntry, ChatToolAttachment, ChatToolCallRecord } from "../types";
+import type { BrowserAutomationMode } from "../toolAuthorization";
 import type { ToolRiskCapability } from "../toolAuthorization";
 
 export interface ModelRequestPayload {
@@ -39,6 +40,35 @@ export interface ModelToolRegistryEntry extends ModelToolDefinition {
   groupId?: string;
   requiredCapabilities?: ToolRiskCapability[];
   toolClassification?: ModelToolClassification;
+}
+
+export type ModelToolAvailabilityReasonCode =
+  | "available"
+  | "debugger_permission_missing"
+  | "browser_control_disabled"
+  | "browser_control_not_attached"
+  | "controlled_enhanced_required"
+  | "full_access_required"
+  | "network_unavailable";
+
+export type BrowserAutomationNetworkSource = "debugger_recorder" | "devtools_fallback" | "unavailable";
+
+export interface ModelToolAvailabilityRuntime {
+  debuggerPermissionDeclared: boolean;
+  browserControlEnabled: boolean;
+  browserControlAttached: boolean;
+  browserAutomationMode: BrowserAutomationMode;
+  networkSource: BrowserAutomationNetworkSource;
+}
+
+export interface ModelToolAvailabilityStatus {
+  available: boolean;
+  reasonCode: ModelToolAvailabilityReasonCode;
+  reason: string;
+  requiresDebugger: boolean;
+  requiresAutomationMode?: BrowserAutomationMode;
+  networkSource: BrowserAutomationNetworkSource;
+  checkedAt: number;
 }
 
 export interface ModelToolCall {

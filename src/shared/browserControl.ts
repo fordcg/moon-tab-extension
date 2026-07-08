@@ -1,6 +1,8 @@
 export const BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE = "browserControl.setEnabled";
+export const BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE = "browserControl.getDiagnostics";
 export const BROWSER_CONTROL_DETACHED_MESSAGE_TYPE = "browserControl.detached";
 import type { BrowserAutomationGrant, BrowserAutomationMode } from "./toolAuthorization";
+import type { BrowserAutomationNetworkSource } from "./models/types";
 
 export const BROWSER_CONTROL_SET_RUNTIME_READONLY_MESSAGE_TYPE = "browserControl.setRuntimeReadonly";
 export const BROWSER_CONTROL_RUNTIME_READONLY_CHANGED_MESSAGE_TYPE = "browserControl.runtimeReadonlyChanged";
@@ -12,6 +14,22 @@ export const BROWSER_CONTROL_BOUNDARY_CHOICE_RESPOND_MESSAGE_TYPE = "browserCont
 export interface BrowserControlSetEnabledMessage {
   type: typeof BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE;
   enabled: boolean;
+  tabId?: number;
+}
+
+export interface BrowserControlGetDiagnosticsMessage {
+  type: typeof BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE;
+}
+
+export interface BrowserControlDiagnostics {
+  debuggerPermissionDeclared: boolean;
+  browserControlEnabled: boolean;
+  browserControlAttached: boolean;
+  browserAutomationMode: BrowserAutomationMode;
+  networkSource: BrowserAutomationNetworkSource;
+  availableToolCount: number;
+  disabledToolCount: number;
+  checkedAt: number;
   tabId?: number;
 }
 
@@ -76,6 +94,7 @@ export interface BrowserControlBoundaryChoiceRespondMessage {
 
 export type BrowserControlMessage =
   | BrowserControlSetEnabledMessage
+  | BrowserControlGetDiagnosticsMessage
   | BrowserControlSetRuntimeReadonlyMessage
   | BrowserControlSetAutomationModeMessage
   | BrowserControlBoundaryChoiceRespondMessage;
@@ -92,6 +111,10 @@ export type BrowserControlResponse =
       tabId?: number;
       expiresAt?: number;
       message: string;
+    }
+  | {
+      ok: true;
+      diagnostics: BrowserControlDiagnostics;
     }
   | {
       ok: false;

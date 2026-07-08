@@ -18,11 +18,13 @@ describe("Phase 7 发布验收合约", () => {
       "小游戏",
       "悬浮助手",
       "Grok/MCP Bridge",
-      "DevTools Network 兼容工具",
+      "Debugger 浏览器自动化",
+      "Debugger Network 主路径",
+      "DevTools Network fallback",
       "浏览器控制基础工具",
       "Imagefree 与 Tavily",
       "打包产物",
-      "权限边界",
+      "高风险权限边界",
     ];
 
     for (const area of requiredAreas) {
@@ -43,8 +45,8 @@ describe("Phase 7 发布验收合约", () => {
     }
   });
 
-  it("当前发布 manifest 保持无 debugger 权限并声明构建输出入口", () => {
-    expect(manifest.permissions).not.toContain("debugger");
+  it("当前发布 manifest 声明 debugger 权限并声明构建输出入口", () => {
+    expect(manifest.permissions).toContain("debugger");
     expect(manifest.background.service_worker).toBe("background/index.js");
     expect(manifest.side_panel.default_path).toBe("index.html");
     expect(manifest.devtools_page).toBe("src/devtools/network.html");

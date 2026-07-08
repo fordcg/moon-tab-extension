@@ -22,7 +22,7 @@ npm run build:extension
 
 Phase 2 起，`dist/` 同时包含 Moon Tab 新标签页和小游戏页面。新标签页由构建后的 `src/pages/newtab/index.html` 提供，游戏页面由 `src/pages/game/index.html` 提供；页面间导航继续使用这两个扩展内路径。
 
-Phase 0-1 的 `dist/` 是降权工程化基线：默认不声明 `debugger` 权限。上游 debugger-backed browser control、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 和 `full_access.*` 源码已导入，可能出现在工具偏好设置中，但当前构建不会在运行时暴露为可用能力；后续按独立 Phase 启用。
+当前发布声明 `debugger` 权限，但浏览器控制默认关闭；只有用户在侧边栏显式开启浏览器控制后，background 才会 attach 当前普通网页。DevTools Network 兼容层继续保留为只读 fallback，主要 Network 能力走 debugger-backed recorder。
 
 ## 常用命令
 
@@ -46,7 +46,13 @@ npm run verify:release
 npm run verify:release
 ```
 
-该命令会生成 `dist/` 和 `artifacts/chrome-extension/`，并确认 manifest 声明入口、打包产物、测试排除、旧产物缺失和当前无 `debugger` 权限边界。验收矩阵维护在 `docs/superpowers/release-readiness.md`。
+该命令会生成 `dist/` 和 `artifacts/chrome-extension/`，并确认 manifest 声明入口、`debugger` 发布边界、打包产物、测试排除和旧产物缺失。验收矩阵维护在 `docs/superpowers/release-readiness.md`。
+
+## Debugger 浏览器自动化
+
+当前发布声明 `debugger` 权限。浏览器控制默认关闭，只有用户在 AI 侧边栏显式开启后才会 attach 当前普通网页。普通模式默认脱敏和截断；受控增强模式用于一次性边界确认和请求重放；完全访问模式需要用户显式切换，并可随时撤销。
+
+Network 工具优先使用 debugger-backed recorder。DevTools Network 页面保留为只读 fallback，只有在目标标签页 DevTools Network 已连接且 debugger recorder 不可用时使用。
 
 启动本地 Grok Search MCP Bridge：
 
@@ -99,16 +105,16 @@ AI 侧边栏已迁入上游的低风险浏览器任务策略地基和只读页�
 
 Phase 2 仍不迁入 Console、Performance、Debugger Network recorder、`network.*`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*`、上游 React/TypeScript/Vite 设置页或高风险表单交互 Playbook。
 
-### Phase 3：DevTools Network 只读工具
+### Phase 3：DevTools Network 只读工具（历史阶段）
 
-AI 侧边栏已迁入两个只读 Network 工具，复用现有 DevTools Network 面板桥接，不启用 debugger-backed Network recorder：
+Phase 3 当时迁入两个只读 Network 工具，复用 DevTools Network 面板桥接，尚未启用 debugger-backed Network recorder：
 
 - `network.list_requests`：列出 DevTools 已采集并脱敏、截断的请求摘要，可按资源类型过滤。
 - `network.get_request_details`：根据 `network.list_requests` 返回的 `requestIds` 读取请求/响应详情，详情同样先脱敏、截断再进入模型和审计。
 
-使用前必须保持目标标签页的 DevTools Network 面板打开并连接；否则工具只返回不可用错误，不另建采集通道。
+Phase 3 当时使用前必须保持目标标签页的 DevTools Network 面板打开并连接；当前发布中 DevTools Network 只作为 debugger recorder 不可用时的 fallback。
 
-Phase 3 的边界：URL query、headers、body 和响应体中的 Cookie、Authorization、Token、Secret、密码、API Key 等敏感信息默认脱敏，长文本在工具边界截断。当前仍不迁入 Replay、Runtime、Full Access、Debugger Network recorder，也不向模型暴露原始凭据。
+Phase 3 的边界：URL query、headers、body 和响应体中的 Cookie、Authorization、Token、Secret、密码、API Key 等敏感信息默认脱敏，长文本在工具边界截断。Phase 3 当时仍不迁入 Replay、Runtime、Full Access、Debugger Network recorder，也不向模型暴露原始凭据。
 
 ### Phase 4：DevTools Network 只读分析
 
@@ -117,7 +123,7 @@ AI 侧边栏继续基于 Phase 3 的已脱敏 Network 详情增加两个只读�
 - `network.compare_requests`：对多个请求做稳定字段、变化字段和疑似关键参数对比。
 - `network.find_parameter_candidates`：从 query、请求头和请求体中提取签名、时间戳、随机数、请求 ID、凭据类字段候选。
 
-这两个工具只读取 `network.list_requests` 返回的 `requestIds` 对应详情，不新增 debugger-backed recorder，不发送请求，不执行页面脚本。输出会再次脱敏和截断；Phase 4 当时不迁入 JS 候选片段、`network.clear_requests`、`network.wait_for_requests`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*` 或原始凭据读取。
+这两个工具在 Phase 4 当时只读取 `network.list_requests` 返回的 `requestIds` 对应详情，不新增 debugger-backed recorder，不发送请求，不执行页面脚本。输出会再次脱敏和截断；Phase 4 当时不迁入 JS 候选片段、`network.clear_requests`、`network.wait_for_requests`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*` 或原始凭据读取。
 
 ### Phase 5：DevTools Network JS 候选片段
 
@@ -135,7 +141,7 @@ AI 侧边栏继续迁入低风险的 `network.clear_requests`：
 - 清空后 DevTools bridge 会推送空 snapshot，后续 `network.list_requests` 从新请求重新开始。
 - 不发送网络请求，不读取额外详情，不执行页面脚本，不关闭 DevTools。
 
-当前仍不迁入 `network.wait_for_requests`、无 requestIds 的全局 JS 搜索、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 或 `full_access.*`。
+Phase 6 当时仍不迁入 `network.wait_for_requests`、无 requestIds 的全局 JS 搜索、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*` 或 `full_access.*`。
 
 ## 目录结构
 
