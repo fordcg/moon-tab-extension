@@ -106,6 +106,16 @@ function getSessionListNewChatButton(): HTMLElement {
   return within(screen.getByLabelText("历史会话")).getByRole("button", { name: "新对话" });
 }
 
+async function openHistoryPanel(user: ReturnType<typeof userEvent.setup> = userEvent.setup()): Promise<HTMLElement> {
+  const existingHistoryPanel = screen.queryByLabelText("历史会话");
+  if (existingHistoryPanel instanceof HTMLElement) {
+    return existingHistoryPanel;
+  }
+
+  await user.click(await screen.findByRole("button", { name: "展开历史对话" }));
+  return screen.findByLabelText("历史会话");
+}
+
 function createDataTransfer() {
   const values = new Map<string, string>();
   return {
@@ -308,10 +318,16 @@ describe("App", () => {
     await clearDatabase();
   });
 
-  it("渲染侧边栏应用标题", () => {
+  it("渲染 Gemini 风格白底侧边栏入口", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
+    const theme = readFileSync(resolve(process.cwd(), "src/side-panel/themes/claude-light.css"), "utf8");
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Browser AI Assistant" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "月标签 AI 助手" })).toBeInTheDocument();
+    expect(theme).toContain("--color-primary: #145fd7");
+    expect(theme).toContain("--color-canvas: #ffffff");
+    expect(styles).toContain("Gemini-style white sidebar skin");
+    expect(styles).toContain("background: #ffffff");
   });
 
   it("顶部操作区提供新建对话入口并复用会话创建行为", async () => {
@@ -321,13 +337,23 @@ describe("App", () => {
       useAppStore.setState({ composerHasDraft: true });
     });
 
-    const header = screen.getByRole("heading", { name: "Browser AI Assistant" }).closest(".app-header");
+    const header = screen.getByRole("heading", { name: "月标签 AI 助手" }).closest(".app-header");
     const headerActions = header?.querySelector(".app-header-actions");
     const newChatButton = within(headerActions as HTMLElement).getByRole("button", { name: "新建对话" });
     await user.click(newChatButton);
 
     await waitFor(() => expect(useAppStore.getState().chatSessions[0]?.title).toBe("新对话"));
     expect(useAppStore.getState().activeSessionId).toBe(useAppStore.getState().chatSessions[0]?.id);
+  });
+
+  it("默认保持旧版单栏聊天布局并收起历史会话栏", async () => {
+    render(<App />);
+
+    await screen.findByRole("button", { name: "展开历史对话" });
+    expect(screen.getByRole("main")).toHaveClass("sidebar-shell");
+    expect(screen.getByLabelText("消息列表")).toHaveTextContent("今天需要我做些什么？");
+    expect(screen.getByText("你好")).toHaveClass("sidepanel-empty-hello");
+    expect(screen.queryByLabelText("历史会话")).not.toBeInTheDocument();
   });
 
   it("会话任务状态通过边框类名展示且不渲染可见文案", async () => {
@@ -353,6 +379,7 @@ describe("App", () => {
     });
 
     render(<App />);
+    await openHistoryPanel();
 
     const runningItem = (await screen.findByRole("button", { name: "后台生成" })).closest(".session-item");
     const completedItem = (await screen.findByRole("button", { name: "已经完成" })).closest(".session-item");
@@ -472,6 +499,22 @@ describe("App", () => {
     );
   });
 
+  it("剩余浮层沿用旧版轻量弹窗和线性图标尺寸", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
+
+    expect(styles).toContain("Native remaining popup parity");
+    expect(styles).toMatch(/\.slash-command-menu\s*{(?=[^}]*position:\s*fixed !important;)(?=[^}]*background:\s*var\(--sidepanel-blue-soft\) !important;)(?=[^}]*box-shadow:\s*0 4px 8px rgb\(0 0 0 \/ 14%\), 0 1px 3px rgb\(0 0 0 \/ 10%\) !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-mode-menu\s*{(?=[^}]*background:\s*var\(--sidepanel-blue-soft\) !important;)(?=[^}]*border-radius:\s*0\.875rem !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-mode-option-icon\s*{(?=[^}]*height:\s*1\.25rem !important;)(?=[^}]*width:\s*1\.25rem !important;)(?=[^}]*stroke-width:\s*1\.8;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-tool-menu\s*{(?=[^}]*background:\s*var\(--sidepanel-blue-soft\) !important;)(?=[^}]*box-shadow:\s*0 4px 8px rgb\(0 0 0 \/ 14%\), 0 1px 3px rgb\(0 0 0 \/ 10%\) !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-tool-menu-action,\s*\.composer-tool-menu-item\s*{(?=[^}]*background:\s*transparent !important;)(?=[^}]*border-color:\s*transparent !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.image-preview-close\s*{(?=[^}]*height:\s*2\.25rem !important;)(?=[^}]*width:\s*2\.25rem !important;)(?=[^}]*font-size:\s*0 !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.image-preview-close::before\s*{(?=[^}]*height:\s*1\.25rem;)(?=[^}]*width:\s*1\.25rem;)[^}]*}/s);
+    expect(styles).toMatch(/\.boundary-choice-dialog\s*{(?=[^}]*width:\s*var\(--sidepanel-popover-width\) !important;)(?=[^}]*background:\s*var\(--sidepanel-canvas\) !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.notification\s*{(?=[^}]*background:\s*var\(--sidepanel-canvas\) !important;)(?=[^}]*border-radius:\s*0\.875rem !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.notification-icon\s*{(?=[^}]*height:\s*1\.25rem !important;)(?=[^}]*width:\s*1\.25rem !important;)[^}]*}/s);
+  });
+
   it("边界确认提交后会立即禁用按钮避免重复提交", async () => {
     const user = userEvent.setup();
     const sendMessage = vi.fn((_message: unknown, _callback?: (response: unknown) => void) => undefined);
@@ -583,6 +626,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(portMessageListener).toBeTypeOf("function");
     });
+    await openHistoryPanel(user);
     const firstSessionButton = await screen.findByRole("button", { name: "第一问" });
     await user.click(getSessionListNewChatButton());
 
@@ -655,6 +699,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(portMessageListener).toBeTypeOf("function");
     });
+    await openHistoryPanel(user);
     const firstSessionButton = await screen.findByRole("button", { name: "第一问" });
     await user.click(getSessionListNewChatButton());
     expect(firstSessionButton.closest(".session-item")).toHaveClass("session-item-running");
@@ -731,6 +776,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(portMessageListener).toBeTypeOf("function");
     });
+    await openHistoryPanel(user);
     const firstSessionButton = await screen.findByRole("button", { name: "第一问" });
     await user.click(getSessionListNewChatButton());
     expect(firstSessionButton.closest(".session-item")).toHaveClass("session-item-running");
@@ -939,11 +985,20 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "历史" }));
 
-    expect(screen.getByRole("dialog", { name: "历史记录" })).toHaveClass("history-drawer");
-    expect(styles).toMatch(/\.drawer-panel\s*\{[^}]*right-0/s);
-    expect(styles).toMatch(/\.history-drawer\s*\{[^}]*left:\s*0;/s);
-    expect(styles).toMatch(/\.history-drawer\s*\{[^}]*right:\s*auto;/s);
-    expect(styles).toMatch(/\.history-drawer\s*\{[^}]*border-right:\s*1px solid var\(--color-hairline\);/s);
+    const historyDialog = screen.getByRole("dialog", { name: "历史记录" });
+    expect(historyDialog).toHaveClass("history-drawer");
+    expect(within(historyDialog).queryByRole("button", { name: "关闭历史记录" })).not.toBeInTheDocument();
+    expect(within(historyDialog).getByRole("button", { name: "浏览器控制" })).toHaveClass("sidepanel-drawer-action", "sidepanel-browser-control-action");
+    expect(within(historyDialog).getByRole("button", { name: "浏览器控制" })).toHaveTextContent("已关闭");
+    expect(within(historyDialog).getByRole("button", { name: "工具和 MCP" })).toHaveClass("sidepanel-drawer-action");
+    expect(within(historyDialog).getByRole("button", { name: "设置和帮助" })).toHaveClass("sidepanel-drawer-action", "sidepanel-drawer-action-chevron");
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*right:\s*var\(--sidepanel-popover-right\);/s);
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*top:\s*3\.875rem;/s);
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*width:\s*var\(--sidepanel-popover-width\);/s);
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*border-radius:\s*0\.875rem;/s);
+    expect(styles).toMatch(/body:has\(\.drawer-panel\.history-drawer\) \.dialog-overlay\s*\{[^}]*background:\s*transparent;/s);
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer \.drawer-header\s*\{[^}]*display:\s*none;/s);
+    expect(styles).toMatch(/\.sidepanel-drawer-action svg\s*\{[^}]*height:\s*1\.1875rem;[^}]*width:\s*1\.1875rem;/s);
     expect(styles).toMatch(/\.history-drawer\[data-state="open"\]\s*\{[^}]*animation:\s*history-drawer-fade-in/s);
     expect(styles).toMatch(/\.history-drawer\[data-state="closed"\]\s*\{[^}]*animation:\s*history-drawer-fade-out/s);
     expect(styles).toContain("@keyframes dialog-overlay-fade-in");
@@ -952,7 +1007,8 @@ describe("App", () => {
     expect(styles).toContain("@keyframes history-drawer-fade-out");
     expect(styles).toMatch(/@media \(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*\.history-drawer\[data-state\][\s\S]*animation:\s*none;/s);
 
-    await userEvent.click(screen.getByRole("button", { name: "关闭历史记录" }));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "历史记录" })).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "打开当前聊天设置" }));
 
     expect(screen.getByRole("dialog", { name: "当前聊天设置" })).toBeInTheDocument();
@@ -960,6 +1016,103 @@ describe("App", () => {
     expect(screen.getByRole("textbox", { name: "当前聊天系统提示词" })).toBeInTheDocument();
     expect(screen.getByRole("spinbutton", { name: "当前聊天 temperature" })).toHaveClass("chat-preference-number-input");
     expect(screen.getByRole("spinbutton", { name: "当前聊天 top_k" }).closest("label")).toHaveClass("chat-preference-field");
+  });
+
+  it("历史抽屉里的设置入口打开旧版紧凑设置弹窗并可返回近期对话", async () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "历史" }));
+    const openingHistoryDialog = screen.getByRole("dialog", { name: "历史记录" });
+    fireEvent.click(within(openingHistoryDialog).getByRole("button", { name: "设置和帮助" }));
+
+    expect(openingHistoryDialog).toHaveClass("is-slide-out-left");
+    expect(document.querySelector(".settings-dialog-background-snapshot")).not.toBeInTheDocument();
+    expect(document.querySelector(".chat-main-layout")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "设置" })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "设置" })).toBeInTheDocument());
+    const settingsDialog = screen.getByRole("dialog", { name: "设置" });
+    const backgroundChatLayout = document.querySelector(".chat-main-layout");
+    expect(backgroundChatLayout).toHaveClass("chat-main-layout-settings-background");
+    expect(backgroundChatLayout).toHaveAttribute("aria-hidden", "true");
+    expect(settingsDialog).toHaveClass("settings-dialog");
+    expect(settingsDialog).toHaveClass("is-slide-in-from-right");
+    expect(settingsDialog.closest(".settings-main-layout")).toHaveClass("settings-dialog-layer");
+    expect(within(settingsDialog).getByRole("button", { name: "返回近期对话" })).toHaveClass("settings-dialog-nav");
+    expect(within(settingsDialog).getByRole("button", { name: "关闭设置" })).toHaveClass("settings-dialog-back");
+    expect(styles).toMatch(/\.settings-main-layout\.settings-dialog-layer\s*\{[^}]*position:\s*fixed/s);
+    expect(styles).toMatch(/\.settings-dialog\s*\{[^}]*right:\s*var\(--sidepanel-popover-right\) !important;/s);
+    expect(styles).toMatch(/\.settings-dialog\s*\{[^}]*top:\s*3\.875rem !important;/s);
+    expect(styles).toMatch(/\.settings-dialog\s*\{[^}]*width:\s*var\(--sidepanel-popover-width\) !important;/s);
+    expect(styles).toMatch(/\.settings-dialog-header\s*\{[^}]*min-height:\s*2\.5rem;/s);
+    expect(styles).toMatch(/\.settings-dialog h2:first-child\s*\{[^}]*display:\s*none !important;/s);
+    expect(styles).toMatch(/\.settings-dialog \.settings-tabs-scroll button\[aria-selected="true"\]\s*\{[^}]*background:\s*var\(--sidepanel-blue\) !important;/s);
+    expect(styles).toMatch(/\.settings-dialog \.ui-panel,\s*\.settings-dialog \.ui-card[\s\S]*background:\s*transparent !important;/s);
+    expect(styles).toMatch(/\.settings-dialog \.ui-input,\s*\.settings-dialog textarea,\s*\.settings-dialog input,\s*\.settings-dialog select\s*\{[^}]*min-height:\s*2\.25rem !important;/s);
+    expect(styles).toMatch(/\.chat-main-layout\.chat-main-layout-settings-background\s*\{[^}]*pointer-events:\s*none;/s);
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*box-sizing:\s*border-box;[^}]*max-width:\s*var\(--sidepanel-popover-width\);/s);
+    expect(styles).toMatch(/\.settings-dialog\s*\{[^}]*box-sizing:\s*border-box;/s);
+    expect(styles).toMatch(/\.history-drawer\.is-slide-out-left,\s*\.settings-dialog\.is-slide-out-left,[\s\S]*\.settings-dialog\.is-slide-out-right\s*\{[^}]*animation:\s*none !important;[^}]*box-sizing:\s*border-box !important;[^}]*transform:\s*none !important;[^}]*width:\s*var\(--sidepanel-popover-width\) !important;/s);
+    expect(styles).toMatch(/\.history-drawer\.is-slide-out-left > \*,\s*\.settings-dialog\.is-slide-out-left > \*\s*\{[^}]*animation:\s*sidepanel-slide-out-left/s);
+    expect(styles).toMatch(/\.history-drawer\.is-slide-in-from-left > \*,\s*\.settings-dialog\.is-slide-in-from-left > \*\s*\{[^}]*animation:\s*sidepanel-slide-in-from-left/s);
+    expect(styles).toMatch(/\.history-drawer\.is-slide-in-from-right > \*,\s*\.settings-dialog\.is-slide-in-from-right > \*\s*\{[^}]*animation:\s*sidepanel-slide-in-from-right/s);
+    expect(styles).toMatch(/\.history-drawer\.is-slide-out-right > \*,\s*\.settings-dialog\.is-slide-out-right > \*\s*\{[^}]*animation:\s*sidepanel-slide-out-right/s);
+    expect(styles).toContain("@keyframes sidepanel-slide-in-from-right");
+    expect(styles).toContain("@keyframes sidepanel-slide-out-right");
+    expect(styles).toContain("@keyframes sidepanel-slide-in-from-left");
+    expect(styles).toContain("@keyframes sidepanel-slide-out-left");
+
+    fireEvent.click(within(settingsDialog).getByRole("button", { name: "返回近期对话" }));
+
+    expect(settingsDialog).toHaveClass("is-slide-out-right");
+    expect(screen.queryByRole("dialog", { name: "历史记录" })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "历史记录" })).toHaveClass("history-drawer", "is-slide-in-from-left"));
+    expect(document.querySelector(".settings-dialog-background-snapshot")).not.toBeInTheDocument();
+    expect(document.querySelector(".chat-main-layout")).not.toHaveClass("chat-main-layout-settings-background");
+  });
+
+  it("历史抽屉超过 5 条时使用旧版更多页布局", async () => {
+    const user = userEvent.setup();
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
+    for (let index = 0; index < 7; index += 1) {
+      await saveChatSession(
+        createChatSession({
+          id: `history-session-${index}`,
+          title: `历史会话 ${index + 1}`,
+          sortOrder: index,
+          createdAt: index,
+          updatedAt: index,
+        }),
+      );
+    }
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "历史" }));
+
+    const historyDialog = await screen.findByRole("dialog", { name: "历史记录" });
+    expect(historyDialog).toHaveAttribute("data-sidepanel-history-mode", "compact");
+    expect(within(historyDialog).getByRole("button", { name: "查看更多近期对话" })).toHaveClass("sidepanel-history-more-action");
+    expect(historyDialog.querySelectorAll(".session-item.sidepanel-history-hidden-compact")).toHaveLength(2);
+    expect(styles).toMatch(/\.drawer-panel\.history-drawer\.is-history-expanded\s*\{[^}]*max-height:\s*var\(--sidepanel-history-expanded-height\);/s);
+    expect(styles).toMatch(/\.sidepanel-history-more-action::before\s*\{[^}]*radial-gradient/s);
+    expect(styles).toMatch(/\.sidepanel-history-scrollbar-thumb\s*\{[^}]*min-height:\s*1\.875rem;/s);
+
+    await user.click(within(historyDialog).getByRole("button", { name: "查看更多近期对话" }));
+
+    expect(historyDialog).toHaveAttribute("data-sidepanel-history-mode", "expanded");
+    expect(historyDialog).toHaveClass("is-history-expanded");
+    expect(within(historyDialog).getByRole("button", { name: "返回近期对话菜单" })).toHaveClass("sidepanel-history-back");
+    expect(historyDialog.querySelectorAll(".session-item.sidepanel-history-hidden-compact")).toHaveLength(0);
+    expect(historyDialog.querySelector(".sidepanel-history-scrollbar")).toBeInTheDocument();
+
+    await user.click(within(historyDialog).getByRole("button", { name: "返回近期对话菜单" }));
+
+    expect(historyDialog).toHaveAttribute("data-sidepanel-history-mode", "compact");
+    expect(historyDialog).not.toHaveClass("is-history-expanded");
   });
 
   it("导出按钮位于当前聊天设置右侧并提供 Markdown、Word、PDF 格式", async () => {
@@ -1096,6 +1249,7 @@ describe("App", () => {
     );
 
     render(<App />);
+    await openHistoryPanel(user);
     await user.click(getSessionListNewChatButton());
     await user.click(screen.getByRole("button", { name: "进入隐私模式" }));
     await user.type(screen.getByRole("textbox", { name: "对话输入" }), "隐私问题");
@@ -1154,6 +1308,7 @@ describe("App", () => {
     );
 
     render(<App />);
+    await openHistoryPanel(user);
     await user.click(getSessionListNewChatButton());
     await user.click(screen.getByRole("button", { name: "进入隐私模式" }));
     await user.type(screen.getByRole("textbox", { name: "对话输入" }), "隐私问题");
@@ -1915,7 +2070,7 @@ describe("App", () => {
     expect(updateChatPreferences).toHaveBeenCalledWith({ extractHtmlByDefault: true });
   });
 
-  it("历史展开按钮位于模型选择器左侧，折叠时左侧面板不占宽", async () => {
+  it("旧版单栏布局隐藏常驻历史列并把历史入口固定在右上角", async () => {
     await saveAppSetting({
       key: "chatPreferences",
       value: {
@@ -1930,33 +2085,75 @@ describe("App", () => {
 
     render(<App />);
 
-    const modelSelector = document.querySelector(".model-selector");
-    const toggleButton = screen.getByRole("button", { name: "折叠历史对话" });
+    const toggleButton = await screen.findByRole("button", { name: "展开历史对话" });
 
-    expect(modelSelector?.previousElementSibling).toBe(toggleButton);
-    await userEvent.click(toggleButton);
+    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByLabelText("历史会话")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开历史对话" })).toHaveAttribute("aria-expanded", "false");
-    expect(styles).toContain("grid-template-columns: 0 minmax(0, 1fr);");
-    expect(styles).toContain("transition:");
-    expect(styles).toContain("transform:");
-    expect(styles).toContain("opacity:");
-    expect(styles).toContain(".chat-model-row {");
-    expect(styles).toContain("position: relative;");
-    expect(styles).toContain(".chat-history-panel-toggle");
-    expect(styles).toMatch(/\.chat-history-panel-toggle\s*\{[^}]*display:\s*none;/s);
-    expect(styles).toMatch(/@media \(min-width:\s*720px\)\s*\{[^}]*\.chat-history-panel-toggle\s*\{[^}]*display:\s*grid;/s);
-    expect(styles).toContain("left: 0;");
-    expect(styles).toContain("top: 50%;");
-    expect(styles).toContain("transform: translate(-50%, -50%);");
-    expect(styles).toContain("border-radius: 9999px;");
-    expect(styles).toMatch(/\.chat-panel\s*\{[^}]*overflow:\s*visible;/s);
-    expect(styles).toContain(".chat-history-panel-toggle::before");
-    expect(styles).toContain("box-shadow:");
-    expect(styles).toContain("0 -4px 0 currentColor");
-    expect(styles).toContain("0 4px 0 currentColor");
-    expect(styles).toContain("left: 50%;");
-    expect(styles).toContain("top: 50%;");
+
+    await userEvent.click(toggleButton);
+    expect(screen.getByLabelText("历史会话")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "折叠历史对话" })).toHaveAttribute("aria-expanded", "true");
+
+    const inputShell = document.querySelector(".chat-input-shell");
+    const composerActions = document.querySelector(".composer-actions");
+    const composerSwitches = document.querySelector(".composer-switches");
+    const contextStrip = document.querySelector(".context-strip");
+    const modelSelector = document.querySelector(".model-selector");
+    const footerSpacer = document.querySelector(".sidepanel-footer-spacer");
+    const visibleToolsToggle = screen.getByRole("button", { name: "工具" });
+    const toolCallingButton = screen.getByRole("button", { name: /工具调用：/ });
+    const addTabButton = screen.getByRole("button", { name: "添加标签页" });
+    const imageUploadButton = screen.getByTitle("当前模型不支持视觉理解");
+    const sendButton = screen.getByRole("button", { name: "发送" });
+
+    expect(inputShell).toContainElement(composerActions as HTMLElement);
+    expect(contextStrip).toHaveClass("is-page-banner-empty");
+    expect(document.querySelector(".chat-model-row .model-selector")).toBeNull();
+    expect(composerActions).toContainElement(modelSelector as HTMLElement);
+    expect(composerActions).toContainElement(footerSpacer as HTMLElement);
+    expect(composerActions).toContainElement(visibleToolsToggle);
+    expect(composerActions).toContainElement(addTabButton);
+    expect(composerActions).toContainElement(sendButton);
+    expect(composerSwitches).toContainElement(imageUploadButton);
+    expect(composerSwitches).toContainElement(toolCallingButton);
+    expect(sendButton).toHaveAttribute("data-sending", "false");
+    expect(sendButton).toHaveAttribute("data-stop-generation", "false");
+    expect(visibleToolsToggle.closest(".composer-switches")).toBeNull();
+    expect(addTabButton.closest(".composer-switches")).toBeNull();
+
+    const footerChildren = Array.from(composerActions?.children ?? []);
+    expect(footerChildren[0]).toBe(visibleToolsToggle);
+    expect(footerChildren.indexOf(addTabButton)).toBeGreaterThan(footerChildren.indexOf(visibleToolsToggle));
+    expect(footerChildren.indexOf(footerSpacer as Element)).toBeLessThan(footerChildren.indexOf(modelSelector as Element));
+    expect(footerChildren.indexOf(modelSelector as Element)).toBeLessThan(footerChildren.indexOf(sendButton));
+
+    await userEvent.click(visibleToolsToggle);
+    expect(screen.getByLabelText("聊天输入区")).toHaveClass("is-tools-open");
+    expect(visibleToolsToggle).toHaveAttribute("aria-expanded", "true");
+
+    expect(styles).toContain("Native side-panel layout parity");
+    expect(styles).toMatch(/\.sidebar-shell \.chat-main-layout,[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) !important;/);
+    expect(styles).toMatch(/\.sidebar-shell \.session-list:not\(\.session-list-compact\),\s*\.sidebar-shell \.session-list-placeholder\s*\{[^}]*display:\s*none !important;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.chat-history-panel-toggle\s*\{[^}]*clip:\s*rect\(0, 0, 0, 0\);/s);
+    expect(styles).toMatch(/\.sidebar-shell \.chat-model-row\s*\{[^}]*right:\s*8\.125rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon-button\[aria-label="新建对话"\]\s*\{[^}]*right:\s*5\.75rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell:not\(:has\(\.message-entry\)\) \.app-header-icon-button\[aria-label="新建对话"\]\s*\{[^}]*display:\s*none;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.chat-history-trigger\s*\{[^}]*position:\s*fixed;[^}]*right:\s*3\.25rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon-button\[aria-label="打开悬浮助手"\],[\s\S]*right:\s*0\.75rem;/);
+    expect(styles).toMatch(/\.sidebar-shell \.chat-drawer-trigger,[\s\S]*\.sidebar-shell \.chat-private-trigger\s*\{[^}]*display:\s*none !important;/);
+    expect(styles).toMatch(/\.sidebar-shell:has\(\.message-entry\) \.chat-model-row\s*\{[^}]*right:\s*8\.125rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.chat-input\s*\{[^}]*min-height:\s*3rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches\s*\{[^}]*position:\s*absolute;[^}]*max-width:\s*0;[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.chat-composer\.is-tools-open \.composer-switches\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*1;[^}]*pointer-events:\s*auto;/s);
+    expect(styles).toContain(".sidebar-shell .sidepanel-footer-spacer");
+    expect(styles).toContain(".model-select-trigger");
+    expect(styles).toMatch(/\.sidebar-shell \.context-strip\s*\{[^}]*margin:\s*0 0 -0\.75rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.context-strip\.is-page-banner-empty\s*\{[^}]*display:\s*none !important;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.image-upload-button\s*\{[^}]*position:\s*relative;/s);
+    expect(styles).toMatch(/\.composer-actions \.ui-button-primary\s*\{(?=[^}]*height:\s*1\.875rem;)(?=[^}]*width:\s*1\.875rem;)(?=[^}]*font-size:\s*0;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-actions \.ui-button-primary::before\s*\{(?=[^}]*height:\s*1\.125rem;)(?=[^}]*width:\s*1\.125rem;)(?=[^}]*mask:[^;]*rect x='4')[^}]*}/s);
+    expect(styles).toMatch(/\.composer-actions \.ui-button-primary::after\s*\{(?=[^}]*height:\s*0\.5rem;)(?=[^}]*width:\s*0\.5rem;)(?=[^}]*mask:[^;]*L14\.2 9\.8)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-actions \.ui-button-primary\[data-sending="true"\]::before\s*\{[^}]*animation:\s*sidepanel-spin/s);
   });
 
   it("聊天主区域固定在面板内并只让消息列表内部滚动", async () => {
@@ -2211,7 +2408,12 @@ describe("App", () => {
     expect(buttons[1].closest(".message-regenerate-action")).toHaveClass("message-regenerate-action-assistant");
 
     await user.click(buttons[1]);
-    expect(screen.getByRole("dialog", { name: "确认重新生成" })).toBeInTheDocument();
+    const regenerateDialog = screen.getByRole("dialog", { name: "确认重新生成" });
+    expect(regenerateDialog).toBeInTheDocument();
+    await waitFor(() => expect(regenerateDialog).toHaveClass("sidepanel-positioned-popover"));
+    expect(regenerateDialog.style.width).toBe("224px");
+    expect(regenerateDialog.style.left).not.toBe("");
+    expect(regenerateDialog.style.top).not.toBe("");
     expect(screen.getByText("重新生成会丢弃这条消息后面的聊天记录。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认重新生成" }));
 
@@ -2428,7 +2630,7 @@ describe("App", () => {
 
     await user.click(buttons[1]);
     expect(screen.getByRole("dialog", { name: "确认重新生成" })).toBeInTheDocument();
-    await user.click(screen.getByRole("heading", { name: "Browser AI Assistant" }));
+    await user.click(screen.getByRole("heading", { name: "月标签 AI 助手" }));
 
     expect(screen.queryByRole("dialog", { name: "确认重新生成" })).not.toBeInTheDocument();
     expect(regenerateMessage).not.toHaveBeenCalled();
@@ -2683,6 +2885,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-archived-long-title", title: "看看这个仓库是做什么的 sdfsadfsadfsadfsdfsdf", archived: true }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
     const activeTitle = await screen.findByText(/sdfsadfsadfsadfsdfsdfs/);
@@ -2723,6 +2926,7 @@ describe("App", () => {
     );
 
     render(<App />);
+    await openHistoryPanel(user);
 
     expect(await screen.findByText("第一条内容")).toBeInTheDocument();
     const secondRow = screen.getByText("第二条历史").closest(".session-item-row");
@@ -2740,6 +2944,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-title-generating", title: "第一问", titleGenerating: true } as Partial<ChatSession>));
 
     render(<App />);
+    await openHistoryPanel();
 
     const title = await screen.findByText("生成标题中...");
     expect(title).toHaveClass("session-item-title");
@@ -4429,7 +4634,10 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "查看图片 粘贴.png" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看图片 选择.png" }));
     expect(screen.getByRole("dialog", { name: "图片预览" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "关闭图片预览" }));
+    const draftPreviewClose = screen.getByRole("button", { name: "关闭图片预览" });
+    expect(draftPreviewClose).toHaveClass("image-preview-close");
+    expect(draftPreviewClose).toHaveTextContent("");
+    await user.click(draftPreviewClose);
 
     await user.type(textInput, "请描述图片");
     await user.click(screen.getByRole("button", { name: "发送" }));
@@ -4441,7 +4649,10 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "查看已发送图片 选择.png" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看已发送图片 选择.png" }));
     expect(screen.getByRole("dialog", { name: "图片预览" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "关闭图片预览" }));
+    const sentPreviewClose = screen.getByRole("button", { name: "关闭图片预览" });
+    expect(sentPreviewClose).toHaveClass("image-preview-close");
+    expect(sentPreviewClose).toHaveTextContent("");
+    await user.click(sentPreviewClose);
     expect(screen.queryByRole("button", { name: "查看图片 选择.png" })).not.toBeInTheDocument();
   });
 
@@ -4787,6 +4998,7 @@ describe("App", () => {
   });
 
   it("可以在已添加模型设置弹窗中切换视觉理解能力并持久化", async () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
     const provider: ModelProvider = {
       id: "provider-vision",
       name: "视觉渠道",
@@ -4821,7 +5033,12 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(await screen.findByRole("button", { name: "设置 gpt-vision" }));
 
-    expect(screen.getByRole("dialog", { name: "模型设置" })).toBeInTheDocument();
+    const modelSettingsDialog = screen.getByRole("dialog", { name: "模型设置" });
+    expect(modelSettingsDialog).toBeInTheDocument();
+    expect(modelSettingsDialog).toHaveClass("model-settings-dialog");
+    expect(styles).toMatch(/\.model-settings-dialog\s*\{[^}]*width:\s*min\(22rem, calc\(100vw - 2rem\)\) !important;/s);
+    expect(styles).toMatch(/\.model-settings-dialog \.context-dialog-close\s*\{[^}]*height:\s*2\.25rem !important;[^}]*width:\s*2\.25rem !important;/s);
+    expect(styles).toMatch(/\.model-settings-dialog \.context-dialog-close::before\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;/s);
     const visionSwitch = screen.getByRole("checkbox", { name: "支持视觉理解" });
     expect(visionSwitch).not.toBeChecked();
     expect(screen.getByText("当前不支持视觉理解")).toBeInTheDocument();
@@ -5184,6 +5401,10 @@ describe("App", () => {
     expect(dialog).toHaveTextContent("这是一段提取后的页面正文");
     expect(screen.getByRole("button", { name: /注入 文章页/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /注入 资料页/ })).toHaveAttribute("aria-pressed", "false");
+    const selectedArticleButton = screen.getByRole("button", { name: /注入 文章页/ });
+    const selectedBadge = selectedArticleButton.querySelector(".context-tab-selected-badge");
+    expect(selectedBadge).toBeInTheDocument();
+    expect(selectedBadge?.parentElement).toBe(selectedArticleButton);
 
     await user.click(screen.getByRole("button", { name: /注入 资料页/ }));
     expect(screen.getByRole("button", { name: /注入 资料页/ })).toHaveAttribute("aria-pressed", "true");
@@ -5201,6 +5422,238 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "关闭标签页选择" }));
 
     expect(screen.queryByRole("dialog", { name: "选择注入标签页" })).not.toBeInTheDocument();
+  });
+
+  it("当前页上下文恢复旧版分享 banner，并支持多标签展开和移除", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((message: { type: string; tabId?: number }, callback: (response: unknown) => void) => {
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          url: "https://example.com/article",
+          title: "文章页",
+          text: "这是一段提取后的页面正文",
+          truncated: false,
+          usedFallback: false,
+        });
+        return undefined;
+      }
+
+      callback({ ok: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(document.querySelector(".sidepanel-page-banner")).toBeInTheDocument());
+    const singleBanner = document.querySelector(".sidepanel-page-banner") as HTMLElement;
+    expect(singleBanner).toHaveTextContent("正在分享“文章页”标签页");
+    expect(singleBanner).not.toHaveClass("is-multi");
+    expect(singleBanner.querySelector(".sidepanel-page-banner-close")).toBeInTheDocument();
+
+    act(() => {
+      useAppStore.setState({
+        pageContext: {
+          loading: false,
+          title: "2 个标签页",
+          text: "多个标签页内容",
+          extractMode: "text",
+          truncated: false,
+          usedFallback: false,
+          formatted: true,
+        },
+        contextTabs: [
+          { tabId: 7, title: "文章页", url: "https://example.com/article", active: true, selected: true },
+          { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false, selected: true },
+        ],
+      });
+    });
+
+    const multiBanner = document.querySelector(".sidepanel-page-banner") as HTMLElement;
+    expect(multiBanner).toHaveClass("is-multi");
+    expect(multiBanner).toHaveTextContent("正在分享 2 个标签页");
+    expect(multiBanner.querySelector(".sidepanel-page-banner-stack")).toBeInTheDocument();
+    expect(multiBanner.querySelector(".sidepanel-shared-drawer")).toBeInTheDocument();
+    expect(multiBanner).not.toHaveClass("is-open");
+
+    await user.click(multiBanner.querySelector(".sidepanel-page-banner-header") as HTMLElement);
+
+    expect(multiBanner).toHaveClass("is-open");
+    expect(multiBanner.querySelector(".sidepanel-shared-drawer")).toBeVisible();
+    expect(multiBanner.querySelectorAll(".sidepanel-shared-row")).toHaveLength(2);
+
+    await user.click(within(multiBanner).getByRole("button", { name: "移除 资料页" }));
+
+    await waitFor(() => expect(document.querySelector(".sidepanel-page-banner")).toHaveTextContent("正在分享“文章页”标签页"));
+    expect(useAppStore.getState().contextTabs.find((tab) => tab.tabId === 9)?.selected).toBe(false);
+  });
+
+  it("添加网页弹窗恢复旧版当前页行结构且蓝勾保持同一行", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: vi.fn((message: { type: string; tabId?: number }, callback: (response: unknown) => void) => {
+          if (message.type === "pageContext.listTabs") {
+            callback({
+              ok: true,
+              tabs: [
+                { tabId: 7, title: "文章页", url: "https://example.com/article", active: true },
+                { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false },
+              ],
+            });
+            return undefined;
+          }
+
+          if (message.type === "pageContext.extract") {
+            callback({
+              ok: true,
+              url: message.tabId === 9 ? "https://docs.example.com/guide" : "https://example.com/article",
+              title: message.tabId === 9 ? "资料页" : "文章页",
+              text: "页面内容",
+              truncated: false,
+              usedFallback: false,
+            });
+            return undefined;
+          }
+
+          callback({ ok: true });
+          return undefined;
+        }),
+      },
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "添加标签页" }));
+    const dialog = await screen.findByRole("dialog", { name: "选择注入标签页" });
+    const currentRow = within(dialog).getByRole("button", { name: /注入 文章页/ });
+
+    expect(currentRow).toHaveClass("sidepanel-current-tab-row", "context-tab-item-active");
+    expect(currentRow.querySelector(".context-tab-title-row")).toContainElement(currentRow.querySelector(".context-tab-active-badge"));
+    expect(currentRow.querySelector(".context-tab-selected-badge")?.parentElement).toBe(currentRow);
+  });
+
+  it("添加标签页按钮复用旧版弹窗切换和透明遮罩关闭逻辑", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((message: { type: string; tabId?: number }, callback: (response: unknown) => void) => {
+      if (message.type === "pageContext.listTabs") {
+        callback({
+          ok: true,
+          tabs: [
+            { tabId: 7, title: "文章页", url: "https://example.com/article", active: true },
+            { tabId: 9, title: "资料页", url: "https://docs.example.com/guide", active: false },
+          ],
+        });
+        return undefined;
+      }
+
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          text: "页面内容",
+          truncated: false,
+          usedFallback: true,
+        });
+        return undefined;
+      }
+
+      callback({ ok: true, content: "AI 回复" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    const addTabButton = screen.getByRole("button", { name: "添加标签页" });
+    await user.click(addTabButton);
+
+    const dialog = await screen.findByRole("dialog", { name: "选择注入标签页" });
+    expect(dialog).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /注入 文章页/ }));
+    expect(screen.getByRole("dialog", { name: "选择注入标签页" })).toBeInTheDocument();
+
+    const overlay = document.querySelector(".dialog-overlay");
+    expect(overlay).toBeInTheDocument();
+    await user.click(overlay as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "选择注入标签页" })).not.toBeInTheDocument());
+
+    await user.click(addTabButton);
+    expect(await screen.findByRole("dialog", { name: "选择注入标签页" })).toBeInTheDocument();
+    await user.click(addTabButton);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "选择注入标签页" })).not.toBeInTheDocument());
+  });
+
+  it("历史抽屉里的工具和 MCP 打开旧版独立工具弹窗而不是设置页", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      if (message.type === "agentTools.getStatus" || message.type === "agentTools.refreshMcp") {
+        callback({
+          ok: true,
+          mcp: { state: "connected", message: "MCP 已连接" },
+          settings: {
+            mcp: {
+              baseUrl: "http://127.0.0.1:17333/",
+              enabled: true,
+              grokBaseUrl: "https://api.x.ai/v1",
+              grokModel: "grok-4.20-multi-agent-xhigh",
+              servers: [
+                { id: "grok", name: "Grok 搜索", endpointUrl: "http://127.0.0.1:17333/", enabled: true, tools: [{ name: "search" }] },
+              ],
+            },
+          },
+          tools: [
+            { id: "browser.take_snapshot", name: "take_snapshot", description: "读取当前页面结构快照" },
+          ],
+          auditLog: [
+            { id: "audit-1", toolName: "take_snapshot", status: "success", arguments: { selector: "main" } },
+          ],
+        });
+        return undefined;
+      }
+
+      callback({ ok: true, text: "页面内容", truncated: false, usedFallback: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "历史" }));
+    await user.click(screen.getByRole("button", { name: "工具和 MCP" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "工具和 MCP" });
+    expect(dialog).toHaveClass("sidepanel-agent-tools-dialog");
+    expect(document.querySelector(".settings-dialog")).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent("MCP 已连接");
+    expect(dialog).toHaveTextContent("Grok 搜索");
+    expect(dialog).toHaveTextContent("take_snapshot");
+    expect(dialog).toHaveTextContent("Grok 搜索预设配置");
+    expect(screen.getByLabelText("Grok API Key")).toHaveAttribute("placeholder", "xai-... / gsk-...");
+    expect(screen.getByDisplayValue("https://api.x.ai/v1")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("grok-4.20-multi-agent-xhigh")).toBeInTheDocument();
+    expect(dialog.querySelector(".sidepanel-agent-tools-switch-control")).toBeInTheDocument();
+    expect(sendMessage).toHaveBeenCalledWith({ type: "agentTools.getStatus" }, expect.any(Function));
+
+    await user.click(screen.getByRole("button", { name: "刷新工具" }));
+    expect(sendMessage).toHaveBeenCalledWith({ type: "agentTools.refreshMcp" }, expect.any(Function));
+    expect(sendMessage).not.toHaveBeenCalledWith({ type: "agentTools.refreshMcpTools" }, expect.any(Function));
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "工具和 MCP" })).not.toBeInTheDocument());
   });
 
   it("非流式聊天请求携带当前选中标签页 ID", async () => {
@@ -5411,6 +5864,58 @@ describe("App", () => {
     expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("title", "提取所有");
   });
 
+  it("工具浮层行项目使用旧版图标标题勾三列结构，视觉标题不混入状态文本", async () => {
+    const user = userEvent.setup();
+    registeredModelToolsMock.tools = [
+      {
+        id: "local.debug_tool",
+        name: "debug_tool",
+        description: "调试工具",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
+        toolClassification: { runtime: "local", capabilities: ["system_context"], risk: "low" },
+      },
+    ];
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "工具" }));
+
+    const toolShelf = document.querySelector(".composer-switches");
+    const streamSwitch = screen.getByRole("switch", { name: "流式响应" });
+    const appendContextSwitch = screen.getByRole("switch", { name: "拼接上下文" });
+    const toolCallingButton = screen.getByRole("button", { name: "工具调用：已启用" });
+    const extractModeSwitch = screen.getByRole("switch", { name: "提取模式" });
+    const imageUploadButton = screen.getByTitle("当前模型不支持视觉理解");
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
+
+    expect(screen.getByLabelText("聊天输入区")).toHaveClass("is-tools-open");
+    expect(toolShelf).toContainElement(imageUploadButton);
+    expect(streamSwitch).toHaveAttribute("data-label", "流式响应");
+    expect(appendContextSwitch).toHaveAttribute("data-label", "拼接上下文");
+    expect(toolCallingButton).toHaveAttribute("data-label", "工具调用");
+    expect(extractModeSwitch).toHaveAttribute("data-label", "提取文本");
+    expect(toolCallingButton).toHaveAttribute("title", "工具调用：已启用");
+
+    await user.click(toolCallingButton);
+    const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
+    const availableToolItem = Array.from(toolDialog.querySelectorAll(".composer-tool-menu-item")).find((item) => !item.hasAttribute("disabled"));
+    expect(availableToolItem).toBeInstanceOf(HTMLElement);
+    await user.click(availableToolItem as HTMLElement);
+    await waitFor(() => {
+      const activeToolItem = toolDialog.querySelector(".composer-tool-menu-item-active");
+      const activeToolCheck = activeToolItem?.querySelector(".composer-tool-menu-item-check");
+      expect(activeToolCheck).toBeInTheDocument();
+      expect(activeToolCheck).toHaveTextContent("✓");
+    });
+
+    expect(styles).toMatch(/\.sidebar-shell \.chat-composer\.is-tools-open \.composer-switches\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\);)(?=[^}]*transform:\s*none;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-tool-menu\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\) !important;)(?=[^}]*overflow-y:\s*auto !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.composer-tool-menu-item-check\s*\{(?=[^}]*height:\s*0\.75rem !important;)(?=[^}]*width:\s*0\.75rem !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch,\s*\.sidebar-shell \.composer-switches \.composer-mode-trigger,\s*\.sidebar-shell \.composer-switches \.image-upload-button\s*\{(?=[^}]*display:\s*flex !important;)(?=[^}]*height:\s*2\.25rem;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch::after\s*\{(?=[^}]*content:\s*attr\(data-label\);)(?=[^}]*flex:\s*1 1 auto;)(?=[^}]*order:\s*2;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch-icon,\s*\.sidebar-shell \.composer-switches \.image-upload-button::before\s*\{(?=[^}]*order:\s*1;)(?=[^}]*width:\s*1\.25rem;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch\[aria-checked="true"\]::before,\s*\.sidebar-shell \.composer-switches \.composer-switch\[aria-pressed="true"\]::before\s*\{(?=[^}]*height:\s*0\.75rem;)(?=[^}]*width:\s*0\.75rem;)(?=[^}]*order:\s*3;)(?=[^}]*margin-left:\s*auto;)[^}]*}/s);
+  });
+
   it("全局浏览器控制按钮位于设置按钮左侧并更新运行态", async () => {
     const user = userEvent.setup();
     const setBrowserControlEnabled = vi.fn(async (enabled: boolean) => {
@@ -5451,6 +5956,9 @@ describe("App", () => {
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
     expect(styles).toContain(".app-header-icon-button");
+    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switch-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.message-icon-button svg\s*\{[^}]*height:\s*1rem;[^}]*width:\s*1rem;[^}]*stroke-width:\s*1\.8;/s);
     expect(styles.indexOf(".ui-button-secondary.browser-control-global-button-active")).toBeGreaterThan(styles.indexOf(".ui-button-secondary"));
     expect(styles).toContain(".composer-mode-trigger");
     expect(styles).toContain(".composer-mode-menu-header");
@@ -5759,6 +6267,165 @@ describe("App", () => {
     expect(styles).toMatch(/\.composer-tool-menu\s*\{[^}]*@apply\s+fixed/s);
   });
 
+  it("设置弹窗里的 select 恢复旧版自定义蓝勾菜单", async () => {
+    const user = userEvent.setup();
+    const updateChatPreferences = vi.fn(async (updates) => {
+      useAppStore.setState((state) => ({
+        chatPreferences: {
+          ...state.chatPreferences,
+          ...updates,
+        },
+      }));
+    });
+    useAppStore.setState({ updateChatPreferences });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
+
+    const trigger = screen.getByRole("button", { name: "发送快捷键" });
+    const wrapper = trigger.closest(".sidepanel-settings-select");
+    const sendShortcutSelect = wrapper?.nextElementSibling as HTMLSelectElement;
+    expect(wrapper).toHaveClass("model-select-label", "sidepanel-settings-select", "sidepanel-channel-select");
+    expect(sendShortcutSelect).toHaveAttribute("tabindex", "-1");
+    expect(sendShortcutSelect).toHaveAttribute("aria-label", "发送快捷键");
+
+    expect(trigger).toHaveClass("model-select-trigger");
+    expect(trigger).toHaveTextContent("Enter");
+
+    await user.click(trigger);
+
+    const menu = screen.getByRole("listbox", { name: "发送快捷键" });
+    expect(menu).toHaveClass("model-select-menu");
+    expect(within(menu).getByRole("option", { name: "Enter" })).toHaveClass("model-select-option-active");
+    expect(within(menu).getByRole("option", { name: "Enter" }).querySelector(".model-select-option-check")).toHaveTextContent("✓");
+
+    await user.click(within(menu).getByRole("option", { name: "Ctrl+Enter" }));
+
+    expect(updateChatPreferences).toHaveBeenCalledWith({ sendShortcut: "ctrl_enter" });
+    await waitFor(() => {
+      const updatedSelect = document.querySelector('select[aria-label="发送快捷键"]') as HTMLSelectElement;
+      expect(updatedSelect).toHaveDisplayValue("Ctrl+Enter");
+    });
+    expect(trigger).toHaveTextContent("Ctrl+Enter");
+    expect(screen.queryByRole("listbox", { name: "发送快捷键" })).not.toBeInTheDocument();
+
+    act(() => {
+      useAppStore.setState({
+        providers: [
+          {
+            id: "provider-settings-select",
+            name: "选择菜单渠道",
+            endpointType: "openai_chat",
+            endpointUrl: "https://api.example.com",
+            apiKey: "sk-test",
+            enabled: true,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        models: [
+          {
+            id: "model-settings-select",
+            providerId: "provider-settings-select",
+            displayName: "选择菜单模型",
+            modelId: "gpt-select",
+            temperature: 0.7,
+            maxTokens: 1024,
+            systemPrompt: "你是网页助手",
+            isTitleModel: false,
+            enabled: true,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      });
+    });
+
+    await user.click(screen.getByRole("tab", { name: "渠道管理" }));
+    await user.click(screen.getByRole("button", { name: /选择菜单渠道/ }));
+
+    const endpointTrigger = screen.getByRole("button", { name: "端点类型菜单" });
+    expect(endpointTrigger.closest(".sidepanel-settings-select")).toHaveClass("sidepanel-channel-select");
+    await user.click(endpointTrigger);
+    expect(screen.getByRole("listbox", { name: "端点类型" })).toHaveClass("model-select-menu");
+    await user.keyboard("{Escape}");
+
+    const tavilyTrigger = screen.getByRole("button", { name: "Tavily 综合答案菜单" });
+    expect(tavilyTrigger.closest(".sidepanel-settings-select")).toHaveClass("sidepanel-channel-select");
+    await user.click(tavilyTrigger);
+    expect(screen.getByRole("listbox", { name: "Tavily 综合答案" })).toHaveClass("model-select-menu");
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("tab", { name: "同步设置" }));
+    const backupTargetTrigger = screen.getByRole("button", { name: "备份目标菜单" });
+    expect(backupTargetTrigger.closest(".sidepanel-settings-select")).toHaveClass("sidepanel-channel-select");
+    expect(backupTargetTrigger).toHaveTextContent("Chrome Sync");
+  });
+
+  it("长用户消息恢复旧版折叠按钮并可展开收起", async () => {
+    const user = userEvent.setup();
+    const longContent = Array.from({ length: 12 }, (_, index) => `第 ${index + 1} 行很长的用户输入内容，用于验证旧版长消息折叠。`).join("\n");
+    await saveChatSession(
+      createChatSession({
+        id: "session-long-user-message",
+        title: "长消息",
+        messages: [
+          createChatMessage({
+            id: "message-long-user",
+            role: "user",
+            content: longContent,
+            createdAt: 1,
+          }),
+        ],
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByText(/第 1 行很长/);
+    const wrap = document.querySelector(".message-row-user .message-bubble-wrap") as HTMLElement;
+    expect(wrap).toHaveClass("message-bubble-wrap-long");
+    expect(wrap).not.toHaveClass("message-bubble-wrap-expanded");
+
+    const toggle = screen.getByRole("button", { name: "展开完整消息" });
+    expect(toggle).toHaveClass("message-long-toggle");
+
+    await user.click(toggle);
+
+    expect(wrap).toHaveClass("message-bubble-wrap-expanded");
+    expect(screen.getByRole("button", { name: "收起消息" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "收起消息" }));
+
+    expect(wrap).not.toHaveClass("message-bubble-wrap-expanded");
+  });
+
+  it("发送中恢复旧版正在思考状态条", async () => {
+    await saveChatSession(
+      createChatSession({
+        id: "session-thinking-status",
+        title: "发送中",
+        messages: [
+          createChatMessage({
+            id: "message-thinking-user",
+            role: "user",
+            content: "请总结当前页",
+            createdAt: 1,
+          }),
+        ],
+      }),
+    );
+    useAppStore.setState({ sending: true });
+
+    render(<App />);
+
+    const thinking = await screen.findByRole("status", { name: "正在思考" });
+    expect(thinking).toHaveClass("sidepanel-thinking");
+    expect(thinking.querySelector(".sidepanel-thinking-dots")).toBeInTheDocument();
+    expect(document.querySelector(".message-list")).toHaveClass("message-list-thinking");
+  });
+
   it("浏览器自动化工具样式只跟随浏览器控制运行态激活", async () => {
     const user = userEvent.setup();
     registeredModelToolsMock.tools = [
@@ -5968,6 +6635,7 @@ describe("App", () => {
     );
 
     render(<App />);
+    await openHistoryPanel();
 
     await screen.findByText("重试进度");
     act(() => {
@@ -6129,6 +6797,7 @@ describe("App", () => {
   it("历史会话菜单展示重命名归档删除且删除需要二次确认", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await openHistoryPanel(user);
 
     expect(screen.queryByText(/›|⌄/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /›|⌄/ })).not.toBeInTheDocument();
@@ -6145,6 +6814,10 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "删 新对话" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "会话操作 新对话" }));
+    const sessionMenu = screen.getByRole("menu");
+    expect(sessionMenu).toHaveClass("sidepanel-menu-floating");
+    expect((sessionMenu as HTMLElement).style.getPropertyValue("--sidepanel-session-menu-left")).not.toBe("");
+    expect((sessionMenu as HTMLElement).style.getPropertyValue("--sidepanel-session-menu-top")).not.toBe("");
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "归档" })).toBeInTheDocument();
 
@@ -6165,6 +6838,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-archived-menu", title: "底部归档", archived: true }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(screen.getByRole("button", { name: /已归档/ }));
     await user.click(await screen.findByRole("button", { name: "会话操作 底部归档" }));
@@ -6177,6 +6851,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-rename", title: "旧标题" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "会话操作 旧标题" }));
     await user.click(screen.getByRole("menuitem", { name: "重命名" }));
@@ -6194,6 +6869,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-enter-blur", title: "初始标题" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "会话操作 初始标题" }));
     await user.click(screen.getByRole("menuitem", { name: "重命名" }));
@@ -6218,6 +6894,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-escape-blur", title: "保留标题" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "会话操作 保留标题" }));
     await user.click(screen.getByRole("menuitem", { name: "重命名" }));
@@ -6240,6 +6917,7 @@ describe("App", () => {
   it("新建文件夹后进入文件夹名编辑并可保存自定义名称", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(screen.getByRole("button", { name: "新建文件夹" }));
     const input = await screen.findByLabelText("重命名文件夹");
@@ -6257,6 +6935,7 @@ describe("App", () => {
     await saveChatFolder(createChatFolder({ id: "folder-rename", name: "旧文件夹" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "文件夹操作 旧文件夹" }));
     await user.click(screen.getByRole("menuitem", { name: "重命名" }));
@@ -6273,6 +6952,7 @@ describe("App", () => {
     await saveChatFolder(createChatFolder({ id: "folder-enter-blur", name: "初始文件夹" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "文件夹操作 初始文件夹" }));
     await user.click(screen.getByRole("menuitem", { name: "重命名" }));
@@ -6297,9 +6977,14 @@ describe("App", () => {
     await saveChatFolder(createChatFolder({ id: "folder-menu", name: "菜单文件夹" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "文件夹操作 菜单文件夹" }));
 
+    const folderMenu = screen.getByRole("menu");
+    expect(folderMenu).toHaveClass("sidepanel-menu-floating");
+    expect((folderMenu as HTMLElement).style.getPropertyValue("--sidepanel-session-menu-left")).not.toBe("");
+    expect((folderMenu as HTMLElement).style.getPropertyValue("--sidepanel-session-menu-top")).not.toBe("");
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
 
@@ -6315,6 +7000,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-in-folder", title: "文件夹内会话", folderId: "folder-non-empty-delete" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(await screen.findByRole("button", { name: "文件夹操作 空文件夹" }));
     await user.click(screen.getByRole("menuitem", { name: "删除" }));
@@ -6339,6 +7025,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-drag", title: "拖拽会话" }));
 
     render(<App />);
+    await openHistoryPanel();
 
     const sessionButton = await screen.findByRole("button", { name: "拖拽会话" });
     const folderButton = (await screen.findByText("目标文件夹")).closest("button");
@@ -6357,6 +7044,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-drag-default", folderId: "folder-source", title: "回默认会话" }));
 
     render(<App />);
+    await openHistoryPanel();
 
     const sourceFolderButton = (await screen.findByText("来源文件夹")).closest("button");
     expect(sourceFolderButton).toBeInTheDocument();
@@ -6378,6 +7066,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-archived-drag", title: "归档拖拽", archived: true }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     await user.click(screen.getByRole("button", { name: /已归档/ }));
     const sessionButton = await screen.findByRole("button", { name: "归档拖拽" });
@@ -6391,6 +7080,7 @@ describe("App", () => {
     const dataTransfer = createDataTransfer();
 
     render(<App />);
+    await openHistoryPanel();
 
     const sessionButton = await screen.findByRole("button", { name: "数据拖拽" });
     const folderButton = (await screen.findByText("数据文件夹")).closest("button");
@@ -6429,6 +7119,7 @@ describe("App", () => {
     await saveChatSession(createChatSession({ id: "session-collapse", folderId: "folder-collapse", title: "资料会话" }));
 
     render(<App />);
+    await openHistoryPanel(user);
 
     const folderButton = (await screen.findByText("项目资料")).closest("button");
     expect(folderButton).toBeInTheDocument();
@@ -6706,6 +7397,10 @@ describe("App", () => {
     await userEvent.click(toolButton);
 
     const dialog = await screen.findByRole("dialog", { name: "Sequential Thinking 调用详情" });
+    await waitFor(() => expect(dialog).toHaveClass("sidepanel-positioned-popover"));
+    expect(dialog.style.width).toBe("448px");
+    expect(dialog.style.left).not.toBe("");
+    expect(dialog.style.top).not.toBe("");
     expect(dialog).toHaveTextContent("\"thought\": \"第一步验证通过，MCP 工具确实被成功调用。\"");
   });
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
+import { SettingsSelect } from "./SettingsSelect";
 
 export function SyncSettings() {
   const syncSettings = useAppStore((state) => state.syncSettings);
@@ -103,20 +104,21 @@ export function SyncSettings() {
         </span>
         <span className="chat-preference-switch-label">开启自动同步</span>
       </label>
-      <label className="grid gap-1 text-sm">
-        备份目标
-        <select
-          className="ui-input"
-          aria-label="备份目标"
+      <div className="grid gap-1 text-sm">
+        <span>备份目标</span>
+        <SettingsSelect
+          ariaLabel="备份目标"
+          triggerAriaLabel="备份目标菜单"
           value={syncSettings.provider}
           disabled={!syncSettings.syncEnabled}
-          onChange={(event) => void updateSyncSettings({ provider: event.target.value as typeof syncSettings.provider })}
-        >
-          <option value="chrome_sync">Chrome Sync</option>
-          <option value="webdav">WebDAV</option>
-          <option value="s3">S3 兼容存储</option>
-        </select>
-      </label>
+          options={[
+            { value: "chrome_sync", label: "Chrome Sync" },
+            { value: "webdav", label: "WebDAV" },
+            { value: "s3", label: "S3 兼容存储" },
+          ]}
+          onChange={(value) => void updateSyncSettings({ provider: value as typeof syncSettings.provider })}
+        />
+      </div>
       <label className="grid gap-1 text-sm">
         备份前缀
         <input

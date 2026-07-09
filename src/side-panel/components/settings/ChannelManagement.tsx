@@ -6,6 +6,7 @@ import { useAppStore } from "../../state/appStore";
 import { formatModelLabelWithVision, ModelVisionIcon } from "../ModelVisionIndicator";
 import { useComposedTextInput } from "../useComposedTextInput";
 import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
+import { SettingsSelect } from "./SettingsSelect";
 
 const draftProvider: ModelProvider = {
   id: "draft-provider",
@@ -232,18 +233,19 @@ export function ChannelManagement() {
             onChange={(event) => updateProvider(ensureSelectedProvider().id, { name: event.target.value })}
           />
         </label>
-        <label className="grid gap-1 text-sm">
-          端点类型
-          <select
-            className="ui-input"
-            aria-label="端点类型"
+        <div className="grid gap-1 text-sm">
+          <span>端点类型</span>
+          <SettingsSelect
+            ariaLabel="端点类型"
+            triggerAriaLabel="端点类型菜单"
             value={selectedProvider.endpointType}
-            onChange={(event) => updateProvider(ensureSelectedProvider().id, { endpointType: event.target.value as ModelProvider["endpointType"] })}
-          >
-            <option value="openai_chat">OpenAI Chat Completions</option>
-            <option value="anthropic_messages">Anthropic Messages</option>
-          </select>
-        </label>
+            options={[
+              { value: "openai_chat", label: "OpenAI Chat Completions" },
+              { value: "anthropic_messages", label: "Anthropic Messages" },
+            ]}
+            onChange={(value) => updateProvider(ensureSelectedProvider().id, { endpointType: value as ModelProvider["endpointType"] })}
+          />
+        </div>
         <label className="grid gap-1 text-sm">
           端点地址
           <input
@@ -266,38 +268,32 @@ export function ChannelManagement() {
       </section>
       ) : null}
       <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="AI 标题生成">
-        <label className="grid gap-1 text-sm">
-          默认对话模型
-          <select
-            className="ui-input"
-            aria-label="默认对话模型"
+        <div className="grid gap-1 text-sm">
+          <span>默认对话模型</span>
+          <SettingsSelect
+            ariaLabel="默认对话模型"
+            triggerAriaLabel="默认对话模型菜单"
             value={defaultChatModelId}
-            onChange={(event) => void setDefaultChatModel(event.target.value)}
-          >
-            <option value="">使用第一个可用模型</option>
-            {titleModelOptions.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          AI 标题生成模型
-          <select
-            className="ui-input"
-            aria-label="AI 标题生成模型"
+            options={[
+              { value: "", label: "使用第一个可用模型" },
+              ...titleModelOptions.map((model) => ({ value: model.id, label: model.label })),
+            ]}
+            onChange={(value) => void setDefaultChatModel(value)}
+          />
+        </div>
+        <div className="grid gap-1 text-sm">
+          <span>AI 标题生成模型</span>
+          <SettingsSelect
+            ariaLabel="AI 标题生成模型"
+            triggerAriaLabel="AI 标题生成模型菜单"
             value={selectedTitleModelId}
-            onChange={(event) => setTitleModel(event.target.value)}
-          >
-            <option value="">不开启自动标题生成</option>
-            {titleModelOptions.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={[
+              { value: "", label: "不开启自动标题生成" },
+              ...titleModelOptions.map((model) => ({ value: model.id, label: model.label })),
+            ]}
+            onChange={(value) => setTitleModel(value)}
+          />
+        </div>
         <p className="text-xs text-[var(--color-muted)]">选择后仅在首轮对话完成后额外发起一次非流式标题请求。</p>
       </section>
 
@@ -454,68 +450,71 @@ export function ChannelManagement() {
           </span>
           <span className="ui-muted text-xs">多个 API Key 请使用英文逗号分隔。</span>
         </label>
-        <label className="grid gap-1 text-sm">
-          Tavily API Key 使用策略
-          <select
-            className="ui-input"
-            aria-label="Tavily API Key 使用策略"
+        <div className="grid gap-1 text-sm">
+          <span>Tavily API Key 使用策略</span>
+          <SettingsSelect
+            ariaLabel="Tavily API Key 使用策略"
+            triggerAriaLabel="Tavily API Key 使用策略菜单"
             value={webSearchSettings.tavily.apiKeyStrategy}
-            onChange={(event) =>
+            options={[
+              { value: "round_robin", label: "轮询" },
+              { value: "random", label: "随机" },
+            ]}
+            onChange={(value) =>
               void updateWebSearchSettings({
                 tavily: {
                   ...webSearchSettings.tavily,
-                  apiKeyStrategy: event.target.value === "random" ? "random" : "round_robin",
+                  apiKeyStrategy: value === "random" ? "random" : "round_robin",
                 },
               })
             }
-          >
-            <option value="round_robin">轮询</option>
-            <option value="random">随机</option>
-          </select>
-        </label>
+          />
+        </div>
         <div className="chat-preference-grid">
-          <label className="chat-preference-field">
-            综合答案
-            <select
-              className="ui-input chat-preference-shortcut-select"
-              aria-label="Tavily 综合答案"
+          <div className="chat-preference-field">
+            <span>综合答案</span>
+            <SettingsSelect
+              ariaLabel="Tavily 综合答案"
+              triggerAriaLabel="Tavily 综合答案菜单"
               value={String(webSearchSettings.tavily.includeAnswer)}
-              onChange={(event) =>
+              options={[
+                { value: "basic", label: "基础答案" },
+                { value: "advanced", label: "深入答案" },
+                { value: "true", label: "开启" },
+                { value: "false", label: "关闭" },
+              ]}
+              onChange={(value) =>
                 void updateWebSearchSettings({
                   tavily: {
                     ...webSearchSettings.tavily,
-                    includeAnswer: parseTavilyIncludeAnswerInput(event.target.value),
+                    includeAnswer: parseTavilyIncludeAnswerInput(value),
                   },
                 })
               }
-            >
-              <option value="basic">基础答案</option>
-              <option value="advanced">深入答案</option>
-              <option value="true">开启</option>
-              <option value="false">关闭</option>
-            </select>
-          </label>
-          <label className="chat-preference-field">
-            原始内容
-            <select
-              className="ui-input chat-preference-shortcut-select"
-              aria-label="Tavily 原始内容"
+            />
+          </div>
+          <div className="chat-preference-field">
+            <span>原始内容</span>
+            <SettingsSelect
+              ariaLabel="Tavily 原始内容"
+              triggerAriaLabel="Tavily 原始内容菜单"
               value={String(webSearchSettings.tavily.includeRawContent)}
-              onChange={(event) =>
+              options={[
+                { value: "false", label: "关闭" },
+                { value: "true", label: "开启" },
+                { value: "markdown", label: "Markdown" },
+                { value: "text", label: "纯文本" },
+              ]}
+              onChange={(value) =>
                 void updateWebSearchSettings({
                   tavily: {
                     ...webSearchSettings.tavily,
-                    includeRawContent: parseTavilyIncludeRawContentInput(event.target.value),
+                    includeRawContent: parseTavilyIncludeRawContentInput(value),
                   },
                 })
               }
-            >
-              <option value="false">关闭</option>
-              <option value="true">开启</option>
-              <option value="markdown">Markdown</option>
-              <option value="text">纯文本</option>
-            </select>
-          </label>
+            />
+          </div>
           <GlobalPreferenceNumberInput
             label="Tavily 最大结果数"
             value={webSearchSettings.tavily.maxResults}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ChatFolder, ChatSession } from "../../shared/types";
@@ -7,9 +7,13 @@ import type { ChatTaskMap, ChatTaskStatus } from "../state/appStoreChatTasks";
 
 interface SessionListProps {
   compact?: boolean;
+  compactExpanded?: boolean;
+  compactVisibleLimit?: number;
 }
 
 type DropTargetFolderId = string | undefined;
+const SESSION_MENU_VIEWPORT_MARGIN = 8;
+const SESSION_MENU_ANCHOR_GAP = 4;
 
 interface SessionFolderProps {
   folderId?: string;
@@ -54,11 +58,13 @@ interface SessionFolderProps {
   onSessionRenameCancel: () => void;
   onSessionRenameSave: () => void;
   onSessionRenameCommit: () => void;
+  isCompactSessionHidden?: (sessionId: string) => boolean;
 }
 
 interface SessionItemProps {
   session: ChatSession;
   active: boolean;
+  compactHidden?: boolean;
   menuOpen: boolean;
   menuPlacement: "down" | "up";
   renaming: boolean;
@@ -80,7 +86,43 @@ interface SessionItemProps {
   onRenameCommit: () => void;
 }
 
-export function SessionList({ compact = false }: SessionListProps) {
+function positionFloatingSessionMenu(menu: HTMLElement, button: HTMLElement) {
+  const drawer = menu.closest(".history-drawer");
+  const drawerRect = drawer instanceof HTMLElement
+    ? drawer.getBoundingClientRect()
+    : ({
+        left: 0,
+        right: window.innerWidth,
+        top: 0,
+        bottom: window.innerHeight,
+      } as DOMRect);
+  const buttonRect = button.getBoundingClientRect();
+  const menuWidth = Math.max(menu.offsetWidth || menu.getBoundingClientRect().width, 120);
+  const menuHeight = Math.max(menu.offsetHeight || menu.getBoundingClientRect().height, 112);
+  const leftMin = Math.max(SESSION_MENU_VIEWPORT_MARGIN, drawerRect.left + SESSION_MENU_VIEWPORT_MARGIN);
+  const leftMax = Math.max(
+    leftMin,
+    Math.min(window.innerWidth - menuWidth - SESSION_MENU_VIEWPORT_MARGIN, drawerRect.right - menuWidth - SESSION_MENU_VIEWPORT_MARGIN),
+  );
+  const topMin = Math.max(SESSION_MENU_VIEWPORT_MARGIN, drawerRect.top + SESSION_MENU_VIEWPORT_MARGIN);
+  const topMax = Math.max(
+    topMin,
+    Math.min(window.innerHeight - menuHeight - SESSION_MENU_VIEWPORT_MARGIN, drawerRect.bottom - menuHeight - SESSION_MENU_VIEWPORT_MARGIN),
+  );
+
+  let left = buttonRect.right - menuWidth;
+  let top = buttonRect.bottom + SESSION_MENU_ANCHOR_GAP;
+  if (top + menuHeight > drawerRect.bottom - SESSION_MENU_VIEWPORT_MARGIN) {
+    top = buttonRect.top - menuHeight - SESSION_MENU_ANCHOR_GAP;
+  }
+
+  left = Math.max(leftMin, Math.min(left, leftMax));
+  top = Math.max(topMin, Math.min(top, topMax));
+  menu.style.setProperty("--sidepanel-session-menu-left", `${Math.round(left)}px`);
+  menu.style.setProperty("--sidepanel-session-menu-top", `${Math.round(top)}px`);
+}
+
+export function SessionList({ compact = false, compactExpanded = false, compactVisibleLimit = 5 }: SessionListProps) {
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(new Set());
   const [archivedCollapsed, setArchivedCollapsed] = useState(true);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string>();
@@ -139,6 +181,34 @@ export function SessionList({ compact = false }: SessionListProps) {
   const sessionsByFolder = useMemo(() => {
     return new Map(chatFolders.map((folder) => [folder.id, activeSessions.filter((session) => session.folderId === folder.id)]));
   }, [activeSessions, chatFolders]);
+  const compactSessionIndexById = useMemo(() => {
+    if (!compact) {
+      return new Map<string, number>();
+    }
+
+    const orderedSessionIds: string[] = [];
+    if (!collapsedFolderIds.has("default")) {
+      orderedSessionIds.push(...defaultSessions.map((session) => session.id));
+    }
+    for (const folder of chatFolders) {
+      if (!collapsedFolderIds.has(folder.id)) {
+        orderedSessionIds.push(...(sessionsByFolder.get(folder.id) ?? []).map((session) => session.id));
+      }
+    }
+    if (!archivedCollapsed) {
+      orderedSessionIds.push(...archivedSessions.map((session) => session.id));
+    }
+
+    return new Map(orderedSessionIds.map((sessionId, index) => [sessionId, index]));
+  }, [archivedCollapsed, archivedSessions, chatFolders, collapsedFolderIds, compact, defaultSessions, sessionsByFolder]);
+  const isCompactSessionHidden = (sessionId: string) => {
+    if (!compact || compactExpanded) {
+      return false;
+    }
+
+    const index = compactSessionIndexById.get(sessionId);
+    return typeof index === "number" && index >= compactVisibleLimit;
+  };
 
   useEffect(() => {
     setCollapsedFolderIds((current) => {
@@ -410,6 +480,7 @@ export function SessionList({ compact = false }: SessionListProps) {
               onSessionRenameCancel={cancelRenameSessionByKey}
               onSessionRenameSave={saveRenameSessionOnBlur}
               onSessionRenameCommit={commitRenameSessionByKey}
+              isCompactSessionHidden={isCompactSessionHidden}
             />
             {chatFolders.map((folder) => (
               <SessionFolder
@@ -458,6 +529,7 @@ export function SessionList({ compact = false }: SessionListProps) {
                 onSessionRenameCancel={cancelRenameSessionByKey}
                 onSessionRenameSave={saveRenameSessionOnBlur}
                 onSessionRenameCommit={commitRenameSessionByKey}
+                isCompactSessionHidden={isCompactSessionHidden}
               />
             ))}
           </div>
@@ -497,6 +569,7 @@ export function SessionList({ compact = false }: SessionListProps) {
             onSessionRenameCancel={cancelRenameSessionByKey}
             onSessionRenameSave={saveRenameSessionOnBlur}
             onSessionRenameCommit={commitRenameSessionByKey}
+            isCompactSessionHidden={isCompactSessionHidden}
           />
       </div>
       <Dialog.Root open={Boolean(pendingPrivateSwitchSessionId)} onOpenChange={(open) => {
@@ -569,8 +642,31 @@ function SessionFolder({
   onSessionRenameCancel,
   onSessionRenameSave,
   onSessionRenameCommit,
+  isCompactSessionHidden,
 }: SessionFolderProps) {
+  const folderMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
   const folderClassName = dragOver ? "session-folder session-folder-drop-active" : "session-folder";
+
+  useLayoutEffect(() => {
+    if (!folderMenuOpen) {
+      return undefined;
+    }
+
+    const updatePosition = () => {
+      if (folderMenuRef.current && folderMenuButtonRef.current) {
+        positionFloatingSessionMenu(folderMenuRef.current, folderMenuButtonRef.current);
+      }
+    };
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [folderMenuOpen]);
 
   return (
     <section
@@ -611,6 +707,7 @@ function SessionFolder({
           {onStartRenameFolder ? (
             <div className="session-folder-menu-wrap" onClick={(event) => event.stopPropagation()}>
               <button
+                ref={folderMenuButtonRef}
                 className="session-folder-rename-button"
                 type="button"
                 aria-label={`文件夹操作 ${title}`}
@@ -624,7 +721,7 @@ function SessionFolder({
                 ⋯
               </button>
               {folderMenuOpen ? (
-                <div className="session-menu" role="menu">
+                <div ref={folderMenuRef} className="session-menu sidepanel-menu-floating" role="menu">
                   <button className="session-menu-item" type="button" role="menuitem" onClick={onStartRenameFolder}>
                     重命名
                   </button>
@@ -659,6 +756,7 @@ function SessionFolder({
                 renaming={session.id === renamingSessionId}
                 renamingValue={renamingSessionValue}
                 pendingDelete={session.id === pendingDeleteSessionId}
+                compactHidden={isCompactSessionHidden?.(session.id) ?? false}
                 onSelect={onSelect}
                 onArchive={onArchive}
                 onRename={onRenameSession}
@@ -684,6 +782,7 @@ function SessionFolder({
 function SessionItem({
   session,
   active,
+  compactHidden = false,
   taskStatus,
   menuOpen,
   menuPlacement,
@@ -704,10 +803,32 @@ function SessionItem({
   onRenameSave,
   onRenameCommit,
 }: SessionItemProps) {
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const visibleTitle = session.titleGenerating ? "生成标题中..." : session.title;
   const taskClassName = resolveSessionTaskStatusClassName(taskStatus);
-  const className = ["session-item", active ? "session-item-active" : "", taskClassName].filter(Boolean).join(" ");
+  const className = ["session-item", active ? "session-item-active" : "", compactHidden ? "sidepanel-history-hidden-compact" : "", taskClassName].filter(Boolean).join(" ");
   const statusAriaLabel = resolveSessionTaskStatusAriaLabel(taskStatus);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      return undefined;
+    }
+
+    const updatePosition = () => {
+      if (menuRef.current && menuButtonRef.current) {
+        positionFloatingSessionMenu(menuRef.current, menuButtonRef.current);
+      }
+    };
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [menuOpen]);
 
   return (
     <article
@@ -752,6 +873,7 @@ function SessionItem({
         )}
         <div className="session-item-menu-wrap" onClick={(event) => event.stopPropagation()}>
           <button
+            ref={menuButtonRef}
             className="session-menu-button"
             type="button"
             aria-label={`会话操作 ${session.title}`}
@@ -765,7 +887,11 @@ function SessionItem({
             ⋯
           </button>
           {menuOpen ? (
-            <div className={menuPlacement === "up" ? "session-menu session-menu-up" : "session-menu"} role="menu">
+            <div
+              ref={menuRef}
+              className={menuPlacement === "up" ? "session-menu session-menu-up sidepanel-menu-floating" : "session-menu sidepanel-menu-floating"}
+              role="menu"
+            >
               <button className="session-menu-item" type="button" role="menuitem" onClick={() => onRename(session.id)}>
                 重命名
               </button>

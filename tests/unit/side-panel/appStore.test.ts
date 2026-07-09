@@ -1537,7 +1537,7 @@ describe("appStore", () => {
 
     await useAppStore.getState().loadChannelConfig();
 
-    expect(useAppStore.getState().chatPreferences.historyDrawerDefaultOpen).toBe(true);
+    expect(useAppStore.getState().chatPreferences.historyDrawerDefaultOpen).toBe(false);
     expect(useAppStore.getState().chatPreferences.injectPageContextByDefault).toBe(true);
     expect(useAppStore.getState().chatPreferences.extractHtmlByDefault).toBe(false);
     expect(useAppStore.getState().chatPreferences.aiRequestRetryCount).toBe(5);

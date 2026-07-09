@@ -26,6 +26,10 @@ import { PromptInlineEditor, PromptTokenContent } from "./PromptInlineEditor";
 import type { ChatRetryProgress } from "../state/appStore";
 
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 8;
+const MESSAGE_POPOVER_VIEWPORT_PADDING = 12;
+const MESSAGE_POPOVER_GAP = 6;
+const LONG_USER_MESSAGE_CHAR_THRESHOLD = 420;
+const LONG_USER_MESSAGE_LINE_THRESHOLD = 8;
 interface MessageListProps {
   messages: ChatMessage[];
   retryProgressByMessageId: Record<string, ChatRetryProgress>;
@@ -34,6 +38,78 @@ interface MessageListProps {
   onRegenerateMessage: (messageId: string) => void;
   onEditAndRegenerateUserMessage: (messageId: string, content: string, promptInvocations?: ChatPromptInvocation[]) => void;
   regenerating: boolean;
+}
+
+function positionAnchoredMessagePopover(
+  popover: HTMLElement,
+  anchor: Element,
+  options: { align?: "left" | "right"; maxWidth?: number } = {},
+) {
+  const anchorRect = anchor.getBoundingClientRect();
+  const composerTop = document.querySelector(".chat-composer")?.getBoundingClientRect().top ?? window.innerHeight;
+  const bottomLimit = Math.max(MESSAGE_POPOVER_VIEWPORT_PADDING, composerTop - 8);
+  const width = Math.max(
+    180,
+    Math.min(options.maxWidth ?? 448, window.innerWidth - MESSAGE_POPOVER_VIEWPORT_PADDING * 2),
+  );
+
+  popover.classList.add("sidepanel-positioned-popover");
+  popover.style.width = `${width}px`;
+
+  let left = options.align === "right" ? anchorRect.right - width : anchorRect.left;
+  left = Math.min(
+    Math.max(MESSAGE_POPOVER_VIEWPORT_PADDING, left),
+    window.innerWidth - width - MESSAGE_POPOVER_VIEWPORT_PADDING,
+  );
+
+  const popoverHeight = popover.getBoundingClientRect().height;
+  const belowTop = anchorRect.bottom + MESSAGE_POPOVER_GAP;
+  const aboveTop = anchorRect.top - popoverHeight - MESSAGE_POPOVER_GAP;
+  let top = belowTop;
+
+  if (belowTop + popoverHeight > bottomLimit && aboveTop >= MESSAGE_POPOVER_VIEWPORT_PADDING) {
+    top = aboveTop;
+  } else if (belowTop + popoverHeight > bottomLimit) {
+    top = Math.max(MESSAGE_POPOVER_VIEWPORT_PADDING, bottomLimit - popoverHeight);
+  }
+
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
+function resetAnchoredMessagePopover(popover?: HTMLElement | null) {
+  if (!popover) {
+    return;
+  }
+
+  popover.classList.remove("sidepanel-positioned-popover");
+  popover.style.left = "";
+  popover.style.top = "";
+  popover.style.width = "";
+}
+
+function positionOpenMessagePopovers(regeneratePopover?: HTMLElement | null, toolCallPopover?: HTMLElement | null) {
+  if (regeneratePopover) {
+    const action = regeneratePopover.closest(".message-regenerate-action");
+    if (action) {
+      positionAnchoredMessagePopover(regeneratePopover, action, {
+        align: action.classList.contains("message-regenerate-action-user") ? "right" : "left",
+        maxWidth: 224,
+      });
+    } else {
+      resetAnchoredMessagePopover(regeneratePopover);
+    }
+  }
+
+  if (toolCallPopover) {
+    const row = toolCallPopover.closest(".message-tool-call-row");
+    const trigger = row?.querySelector(".message-tool-call-trigger");
+    if (trigger) {
+      positionAnchoredMessagePopover(toolCallPopover, trigger, { align: "left", maxWidth: 448 });
+    } else {
+      resetAnchoredMessagePopover(toolCallPopover);
+    }
+  }
 }
 
 export function MessageList({
@@ -50,6 +126,7 @@ export function MessageList({
   const [editingMessageId, setEditingMessageId] = useState<string | undefined>();
   const [editingContent, setEditingContent] = useState("");
   const [editingPromptInvocations, setEditingPromptInvocations] = useState<ChatPromptInvocation[]>([]);
+  const [expandedLongMessageIds, setExpandedLongMessageIds] = useState<Set<string>>(() => new Set());
   const [messageActionFeedback, setMessageActionFeedback] = useState<{ messageId: string; text: string; tone: "success" | "error" } | undefined>();
   const [activeToolCallId, setActiveToolCallId] = useState<string | undefined>();
   const messageListRef = useRef<HTMLElement>(null);
@@ -91,9 +168,18 @@ export function MessageList({
         setPendingRegenerateMessageId(undefined);
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPendingRegenerateMessageId(undefined);
+      }
+    };
 
     document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [pendingRegenerateMessageId]);
 
   useEffect(() => {
@@ -121,6 +207,33 @@ export function MessageList({
     };
   }, [activeToolCallId]);
 
+  useLayoutEffect(() => {
+    if (!pendingRegenerateMessageId && !activeToolCallId) {
+      return undefined;
+    }
+
+    let frameId = window.requestAnimationFrame(() => {
+      positionOpenMessagePopovers(regeneratePopoverRef.current, toolCallPopoverRef.current);
+    });
+    const updatePosition = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        positionOpenMessagePopovers(regeneratePopoverRef.current, toolCallPopoverRef.current);
+      });
+    };
+
+    positionOpenMessagePopovers(regeneratePopoverRef.current, toolCallPopoverRef.current);
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+      resetAnchoredMessagePopover(regeneratePopoverRef.current);
+      resetAnchoredMessagePopover(toolCallPopoverRef.current);
+    };
+  }, [activeToolCallId, pendingRegenerateMessageId]);
+
   useEffect(() => {
     if (!messageActionFeedback) {
       return;
@@ -147,17 +260,44 @@ export function MessageList({
       setMessageActionFeedback({ messageId: message.id, text: "导出图片失败，请重试", tone: "error" });
     }
   };
+  const toggleLongMessageExpanded = (messageId: string) => {
+    setExpandedLongMessageIds((current) => {
+      const next = new Set(current);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  };
 
   if (messages.length === 0) {
     return (
       <section aria-label="消息列表" className="message-list" ref={messageListRef} onScroll={handleMessageListScroll}>
-        <p className="ui-muted text-sm">暂无消息</p>
+        <div className="sidepanel-empty-state" aria-label="快捷提问">
+          <div className="sidepanel-empty-copy">
+            <p className="sidepanel-empty-hello">你好</p>
+            <p className="sidepanel-empty-title">今天需要我做些什么？</p>
+          </div>
+          <div className="sidepanel-empty-suggestions" aria-label="建议问题">
+            <button className="sidepanel-suggestion" type="button">
+              你能做些什么？
+            </button>
+            <button className="sidepanel-suggestion" type="button">
+              我可以问哪些类型的问题？
+            </button>
+            <button className="sidepanel-suggestion" type="button">
+              帮我理清思路，解决问题
+            </button>
+          </div>
+        </div>
       </section>
     );
   }
 
   return (
-    <section aria-label="消息列表" className="message-list" ref={messageListRef} onScroll={handleMessageListScroll}>
+    <section aria-label="消息列表" className={regenerating ? "message-list message-list-thinking" : "message-list"} ref={messageListRef} onScroll={handleMessageListScroll}>
       {messages.map((message) => {
         const isToolCallTurn = message.role === "assistant" && message.assistantMessageKind === "tool_call_turn";
         const toolCallRecords = message.toolCallRecords ?? [];
@@ -167,6 +307,8 @@ export function MessageList({
         const hasVisibleContent = Boolean(message.content.trim()) && !hideToolTurnContent;
         const hasPromptTokens = message.role === "user" && Boolean(message.promptInvocations?.length);
         const shouldRenderMessageBubble = hasVisibleContent || hasPromptTokens;
+        const isLongUserMessage = message.role === "user" && shouldRenderMessageBubble && isLongUserMessageContent(message.content);
+        const isLongUserMessageExpanded = expandedLongMessageIds.has(message.id);
         const displayAttachments = displayAttachmentGroups.get(message.id) ?? [];
         const retryProgress = message.role === "assistant" ? retryProgressByMessageId[message.id] : undefined;
         const hasVisibleArticle =
@@ -201,7 +343,16 @@ export function MessageList({
           <div className="message-avatar" aria-hidden="true">
             {message.role === "user" ? "我" : "AI"}
           </div>
-          <div className="message-bubble-wrap">
+          <div
+            className={[
+              "message-bubble-wrap",
+              isLongUserMessage ? "message-bubble-wrap-long" : "",
+              isLongUserMessage && isLongUserMessageExpanded ? "message-bubble-wrap-expanded" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            data-long-expanded={isLongUserMessage ? String(isLongUserMessageExpanded) : undefined}
+          >
             {hasVisibleThinking ? (
               <details className="message-thinking" open={shouldOpenThinking(message) || undefined}>
                 <summary>{message.streaming ? "思考中" : "思考过程"}</summary>
@@ -283,6 +434,16 @@ export function MessageList({
                   </ReactMarkdown>
                 ) : null}
               </div>
+            ) : null}
+            {isLongUserMessage && editingMessageId !== message.id ? (
+              <button
+                className="message-long-toggle"
+                type="button"
+                aria-label={isLongUserMessageExpanded ? "收起消息" : "展开完整消息"}
+                onClick={() => toggleLongMessageExpanded(message.id)}
+              >
+                {isLongUserMessageExpanded ? "收起" : "展开"}
+              </button>
             ) : null}
             {message.role === "assistant" ? <ToolAttachmentList attachments={displayAttachments} onPreviewImage={setPreviewAttachment} /> : null}
             {!isToolCallTurn ? (
@@ -377,19 +538,31 @@ export function MessageList({
         </div>
       );
       })}
+      {regenerating ? (
+        <div className="sidepanel-thinking" role="status" aria-live="polite" aria-atomic="true" aria-label="正在思考">
+          <span className="sidepanel-thinking-dots" aria-hidden="true" />
+          <span className="sidepanel-thinking-text">正在思考</span>
+        </div>
+      ) : null}
       {previewAttachment ? (
         <>
           <div className="dialog-overlay" aria-hidden="true" />
           <section className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-            <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)}>
-              关闭
-            </button>
+            <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
             <img src={previewAttachment.dataUrl} alt={previewAttachment.name} />
           </section>
         </>
       ) : null}
     </section>
   );
+}
+
+function isLongUserMessageContent(content: string): boolean {
+  const text = content.trim();
+  if (!text) {
+    return false;
+  }
+  return text.length > LONG_USER_MESSAGE_CHAR_THRESHOLD || text.split(/\r\n|\r|\n/).length > LONG_USER_MESSAGE_LINE_THRESHOLD;
 }
 
 function isMessageListAtBottom(messageList: HTMLElement): boolean {

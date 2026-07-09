@@ -10,8 +10,9 @@ import {
 import { hasTokenUsage, sumSessionTokenUsage } from "../../shared/chat/tokenUsage";
 import { isPngDataUrl, isTabCaptureImageAttachment, TAB_CAPTURE_VISIBLE_MESSAGE_TYPE, type TabCaptureVisibleResponse } from "../../shared/tabCapture";
 import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, PromptTemplate, SendShortcut } from "../../shared/types";
-import { useAppStore, type ChatFollowUpItem } from "../state/appStore";
+import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
+import { ModelSelector } from "./ModelSelector";
 import { PromptInlineEditor } from "./PromptInlineEditor";
 
 const MAX_IMAGE_ATTACHMENTS = 5;
@@ -27,6 +28,7 @@ const SWITCH_ICON_PATHS = {
   extractText: "M6 4h12M6 8h12M6 12h8M6 16h12M6 20h8",
   extractAll: "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8M8 13h8M8 17h5",
 } as const;
+const TOOLS_TOGGLE_ICON_PATH = "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4";
 
 type SwitchIconName = keyof typeof SWITCH_ICON_PATHS;
 type BrowserAutomationMode = "normal_restricted" | "controlled_enhanced" | "full_access";
@@ -66,6 +68,16 @@ interface ComposerSwitchProps {
   onToggle: () => void;
 }
 
+interface SharedContextTab {
+  active: boolean;
+  favIconUrl?: string;
+  pageContextKey?: string;
+  selected: boolean;
+  tabId?: number;
+  title: string;
+  url: string;
+}
+
 function ComposerSwitch({ ariaLabel, checked, disabled, icon, label, onToggle }: ComposerSwitchProps) {
   return (
     <button
@@ -74,6 +86,7 @@ function ComposerSwitch({ ariaLabel, checked, disabled, icon, label, onToggle }:
       role="switch"
       aria-label={ariaLabel}
       aria-checked={checked}
+      data-label={label}
       disabled={disabled}
       title={label}
       onClick={onToggle}
@@ -96,12 +109,16 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [attachmentError, setAttachmentError] = useState("");
   const [previewAttachment, setPreviewAttachment] = useState<ChatImageAttachment | undefined>();
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
+  const [sharedBannerOpen, setSharedBannerOpen] = useState(false);
+  const [dismissedPageContextKey, setDismissedPageContextKey] = useState<string | undefined>();
+  const [toolShelfOpen, setToolShelfOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [followUpQueueOpen, setFollowUpQueueOpen] = useState(false);
   const [toolMenuPosition, setToolMenuPosition] = useState<{ left: number; top: number } | undefined>();
   const [composing, setComposing] = useState(false);
   const imageInputId = useId();
+  const contextDialogRef = useRef<HTMLElement | null>(null);
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const toolMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
@@ -161,6 +178,17 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       .map((tool) => tool.id),
     [browserControlEnabled, effectiveBrowserAutomationMode, registeredTools],
   );
+  const pageContextKey = `${pageContext.url ?? ""}\u0001${pageContext.title ?? ""}\u0001${pageContext.text}`;
+  const sharedContextTabs = useMemo(
+    () => buildSharedContextTabs(contextTabs, pageContext, pageContextKey, dismissedPageContextKey),
+    [contextTabs, dismissedPageContextKey, pageContext, pageContextKey],
+  );
+
+  useEffect(() => {
+    if (sharedContextTabs.length < 2 && sharedBannerOpen) {
+      setSharedBannerOpen(false);
+    }
+  }, [sharedBannerOpen, sharedContextTabs.length]);
 
   useEffect(() => {
     setComposerHasDraft(input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0);
@@ -175,14 +203,33 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       return undefined;
     }
 
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setContextDialogOpen(false);
+        return;
+      }
+      if (contextDialogRef.current?.contains(target)) {
+        return;
+      }
+      if (target instanceof Element && target.closest(".sidepanel-add-tab-button, .context-view-button")) {
+        return;
+      }
+
+      setContextDialogOpen(false);
+    };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setContextDialogOpen(false);
       }
     };
 
+    document.addEventListener("pointerdown", closeOnPointerDown);
     document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
   }, [contextDialogOpen]);
 
   useEffect(() => {
@@ -215,6 +262,34 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       window.removeEventListener("scroll", updateToolMenuPosition, true);
     };
   }, [toolMenuOpen]);
+
+  useEffect(() => {
+    if (!toolShelfOpen) {
+      return undefined;
+    }
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(".composer-actions")) {
+        return;
+      }
+
+      setToolShelfOpen(false);
+      setToolMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setToolShelfOpen(false);
+        setToolMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [toolShelfOpen]);
 
   useEffect(() => {
     if (!modeMenuOpen) {
@@ -483,19 +558,52 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setToolMenuOpen((value) => !value);
   };
 
+  const toggleToolShelf = () => {
+    setModeMenuOpen(false);
+    setToolMenuOpen(false);
+    setToolShelfOpen((open) => !open);
+  };
+
+  const toggleContextDialog = () => {
+    setToolShelfOpen(false);
+    setToolMenuOpen(false);
+    setModeMenuOpen(false);
+    if (contextDialogOpen) {
+      setContextDialogOpen(false);
+      return;
+    }
+
+    setContextDialogOpen(true);
+    void loadContextTabs();
+  };
+
   const contextModeLabel = contextMode === "all" ? "提取所有" : "提取文本";
   const toolCallingLabel = `工具调用：${toolCallingEnabled ? "已启用" : "已关闭"}`;
-  const browserAutomationModeLabel = BROWSER_AUTOMATION_MODE_OPTIONS.find((option) => option.mode === effectiveBrowserAutomationMode)?.label ?? "普通模式";
+  const browserAutomationModeOption = BROWSER_AUTOMATION_MODE_OPTIONS.find((option) => option.mode === effectiveBrowserAutomationMode) ?? BROWSER_AUTOMATION_MODE_OPTIONS[0];
+  const browserAutomationModeLabel = browserAutomationModeOption.label;
   const filteredPromptTemplates = filterPromptTemplates(promptTemplates, slashQuery);
   const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
+  const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
   const canSubmit = canSend && hasDraft;
   const sessionTokenUsage = sumSessionTokenUsage(activeSession);
   const submitButtonLabel = sending && !hasDraft ? "终止" : "发送";
   const visibleQueuedFollowUps = activeFollowUps.filter((item) => item.behavior === "queue");
   const nextFollowUp = visibleQueuedFollowUps[0];
+  const removeSharedContextTab = (tab: SharedContextTab) => {
+    if (sharedContextTabs.length <= 2) {
+      setSharedBannerOpen(false);
+    }
+    if (typeof tab.tabId === "number") {
+      toggleContextTabSelection(tab.tabId);
+      return;
+    }
+    if (tab.pageContextKey) {
+      setDismissedPageContextKey(tab.pageContextKey);
+    }
+  };
 
   return (
-    <section className="chat-composer" aria-label="聊天输入区">
+    <section className={toolShelfOpen ? "chat-composer is-tools-open" : "chat-composer"} aria-label="聊天输入区">
       {activeSession && visibleQueuedFollowUps.length > 0 ? (
         <div className={followUpQueueOpen ? "follow-up-queue follow-up-queue-expanded" : "follow-up-queue follow-up-queue-collapsed"} aria-label="排队对话">
           {followUpQueueOpen ? (
@@ -595,15 +703,20 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           ))}
         </div>
       ) : null}
-      <div className="context-strip">
+      <div className={contextStripClassName}>
+        {sharedContextTabs.length > 0 ? (
+          <SharedContextBanner
+            expanded={sharedBannerOpen}
+            tabs={sharedContextTabs}
+            onExpandedChange={setSharedBannerOpen}
+            onRemove={removeSharedContextTab}
+          />
+        ) : null}
         <TokenUsageMeter usage={sessionTokenUsage} sending={sending} />
         <button
           className="ui-button-secondary context-view-button"
           type="button"
-          onClick={() => {
-            setContextDialogOpen(true);
-            void loadContextTabs();
-          }}
+          onClick={toggleContextDialog}
         >
           选择标签页
         </button>
@@ -631,13 +744,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           disabled={!currentModelSupportsVision}
           onChange={handleImageInputChange}
         />
-        <label
-          className={`image-upload-button${currentModelSupportsVision ? "" : " image-upload-button-disabled"}`}
-          htmlFor={imageInputId}
-          title={currentModelSupportsVision ? "上传图片" : "当前模型不支持视觉理解"}
-        >
-          <span aria-hidden="true">▣</span>
-        </label>
         <PromptInlineEditor
           className="ui-input chat-input"
           ariaLabel="对话输入"
@@ -676,200 +782,245 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             )}
           </div>
         ) : null}
-      </div>
-      <div className="composer-actions">
-        <div className="composer-switches">
-          <div className="composer-mode-menu-wrap">
-            <button
-              className={`composer-mode-trigger composer-mode-trigger-${effectiveBrowserAutomationMode}`}
-              type="button"
-              aria-label="浏览器自动化模式"
-              aria-haspopup="listbox"
-              aria-expanded={modeMenuOpen}
-              disabled={!browserControlEnabled}
-              title="浏览器自动化模式"
-              onClick={() => setModeMenuOpen((open) => !open)}
+        <div className="composer-actions">
+          <button
+            className="composer-switch sidepanel-tools-toggle"
+            type="button"
+            aria-label="工具"
+            aria-expanded={toolShelfOpen}
+            aria-controls="composer-switches"
+            title="工具"
+            onClick={toggleToolShelf}
+          >
+            <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d={TOOLS_TOGGLE_ICON_PATH} />
+            </svg>
+          </button>
+          <div className="composer-switches" id="composer-switches" data-open={toolShelfOpen}>
+            <label
+              className={`image-upload-button${currentModelSupportsVision ? "" : " image-upload-button-disabled"}`}
+              htmlFor={imageInputId}
+              data-label="上传图片"
+              title={currentModelSupportsVision ? "上传图片" : "当前模型不支持视觉理解"}
             >
-              <span>{browserAutomationModeLabel}</span>
-              <span className="composer-mode-chevron" aria-hidden="true" />
-            </button>
-            {modeMenuOpen && browserControlEnabled ? (
-              <div className="composer-mode-menu" role="listbox" aria-label="浏览器自动化模式">
-                <div className="composer-mode-menu-header">
-                  <span>选择浏览器自动化模式</span>
-                  <span>本轮生效</span>
-                </div>
-                {BROWSER_AUTOMATION_MODE_OPTIONS.map((option) => (
-                  <button
-                    key={option.mode}
-                    className={`composer-mode-option composer-mode-option-${option.mode}`}
-                    type="button"
-                    role="option"
-                    aria-selected={option.mode === effectiveBrowserAutomationMode}
-                    onClick={() => {
-                      setModeMenuOpen(false);
-                      void setBrowserAutomationMode(option.mode);
-                    }}
-                  >
-                    <svg className="composer-mode-option-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d={option.iconPath} />
-                    </svg>
-                    <span className="composer-mode-option-copy">
-                      <span className="composer-mode-option-title">{option.label}</span>
-                      <span className="composer-mode-option-description">{option.description}</span>
-                    </span>
-                    <span className="composer-mode-option-check" aria-hidden="true">
-                      {option.mode === effectiveBrowserAutomationMode ? "✓" : ""}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          <ComposerSwitch ariaLabel="流式响应" checked={streamMode} icon="stream" label="流式响应" onToggle={() => setStreamMode(!streamMode)} />
-          <div className="composer-tool-menu-wrap" ref={toolMenuRef}>
-            <button
-              ref={toolMenuButtonRef}
-              className="composer-switch"
-              type="button"
-              aria-label={toolCallingLabel}
-              aria-expanded={toolMenuOpen}
-              aria-haspopup="dialog"
-              aria-pressed={toolCallingEnabled}
-              title={toolCallingLabel}
-              onClick={toggleToolMenu}
-            >
-              <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d={SWITCH_ICON_PATHS.toolCalling} />
-              </svg>
-            </button>
-            {toolMenuOpen ? (
-              <div
-                className="composer-tool-menu"
-                role="dialog"
-                aria-label="工具调用设置"
-                style={toolMenuPosition ? { left: toolMenuPosition.left, top: toolMenuPosition.top } : undefined}
+              <span aria-hidden="true">▣</span>
+            </label>
+            <div className="composer-mode-menu-wrap">
+              <button
+                className={`composer-mode-trigger composer-mode-trigger-${effectiveBrowserAutomationMode}`}
+                type="button"
+                aria-label="浏览器自动化模式"
+                aria-haspopup="listbox"
+                aria-expanded={modeMenuOpen}
+                disabled={!browserControlEnabled}
+                title="浏览器自动化模式"
+                onClick={() => setModeMenuOpen((open) => !open)}
               >
-                <div className="composer-tool-menu-actions">
-                  <button
-                    className="composer-tool-menu-action"
-                    type="button"
-                    onClick={() => void updateActiveSessionChatPreferences({ toolCallingEnabled: true })}
-                  >
-                    启用
-                  </button>
-                  <button
-                    className="composer-tool-menu-action"
-                    type="button"
-                    onClick={() =>
-                      void updateActiveSessionChatPreferences({
-                        toolCallingEnabled: true,
-                        enabledToolIds: runtimeEditableToolIds,
-                      })
-                    }
-                  >
-                    启用全部
-                  </button>
-                  <button
-                    className="composer-tool-menu-action"
-                    type="button"
-                    onClick={() => void updateActiveSessionChatPreferences({ toolCallingEnabled: false })}
-                  >
-                    关闭
-                  </button>
-                </div>
-                {registeredTools.length > 0 ? (
-                  <div className="composer-tool-menu-list">
-                    {registeredToolGroups.map((group) => (
-                      <div key={group.id} className="composer-tool-menu-group">
-                        <div className="composer-tool-menu-group-title">{group.label}</div>
-                        {group.id === MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID && !browserControlEnabled ? (
-                          <p className="composer-tool-menu-group-hint">需开启浏览器控制后才能启用本组工具。</p>
-                        ) : null}
-                        {group.tools.map((tool) => {
-                          const toolDisplayName = tool.groupId === "mcp_remote" ? (tool.displayName ?? tool.name) : tool.name;
-                          const runtimeAvailable = isToolRuntimeAvailable(tool, browserControlEnabled, effectiveBrowserAutomationMode);
-                          const debuggerRuntime = tool.toolClassification ? isDebuggerRuntimeRequirement(tool.toolClassification.runtime) : false;
-                          const active = runtimeAvailable && enabledToolIds.includes(tool.id);
-                          const disabled = !runtimeAvailable;
-                          return (
-                            <button
-                              key={tool.id}
-                              className={
-                                [
-                                  "composer-tool-menu-item",
-                                  active ? "composer-tool-menu-item-active" : "",
-                                  debuggerRuntime ? "composer-tool-menu-item-readonly" : "",
-                                ]
-                                  .filter(Boolean)
-                                  .join(" ")
-                            }
-                            type="button"
-                            aria-pressed={active}
-                            aria-label={`${toolDisplayName} ${tool.description ?? ""}`.trim()}
-                            disabled={disabled}
-                            onClick={() => handleToolToggle(tool.id, !active)}
-                          >
-                            <span className="composer-tool-menu-item-name">{toolDisplayName}</span>
-                            {!runtimeAvailable ? <span className="composer-tool-menu-item-description">需开启浏览器控制</span> : null}
-                            {tool.description ? <span className="composer-tool-menu-item-description">{tool.description}</span> : null}
-                          </button>
-                          );
-                        })}
-                      </div>
-                    ))}
+                <svg className="composer-switch-icon composer-mode-trigger-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d={browserAutomationModeOption.iconPath} />
+                </svg>
+                <span className="composer-mode-trigger-label">{browserAutomationModeLabel}</span>
+                <span className="composer-mode-chevron" aria-hidden="true" />
+              </button>
+              {modeMenuOpen && browserControlEnabled ? (
+                <div className="composer-mode-menu" role="listbox" aria-label="浏览器自动化模式">
+                  <div className="composer-mode-menu-header">
+                    <span>选择浏览器自动化模式</span>
+                    <span>本轮生效</span>
                   </div>
-                ) : (
-                  <p className="composer-tool-menu-empty">暂无可用工具</p>
-                )}
-              </div>
-            ) : null}
+                  {BROWSER_AUTOMATION_MODE_OPTIONS.map((option) => (
+                    <button
+                      key={option.mode}
+                      className={`composer-mode-option composer-mode-option-${option.mode}`}
+                      type="button"
+                      role="option"
+                      aria-selected={option.mode === effectiveBrowserAutomationMode}
+                      onClick={() => {
+                        setModeMenuOpen(false);
+                        void setBrowserAutomationMode(option.mode);
+                      }}
+                    >
+                      <svg className="composer-mode-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d={option.iconPath} />
+                      </svg>
+                      <span className="composer-mode-option-copy">
+                        <span className="composer-mode-option-title">{option.label}</span>
+                        <span className="composer-mode-option-description">{option.description}</span>
+                      </span>
+                      <span className="composer-mode-option-check" aria-hidden="true">
+                        {option.mode === effectiveBrowserAutomationMode ? "✓" : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <ComposerSwitch ariaLabel="流式响应" checked={streamMode} icon="stream" label="流式响应" onToggle={() => setStreamMode(!streamMode)} />
+            <div className="composer-tool-menu-wrap" ref={toolMenuRef}>
+              <button
+                ref={toolMenuButtonRef}
+                className="composer-switch sidepanel-tool-calling-switch"
+                type="button"
+                aria-label={toolCallingLabel}
+                aria-expanded={toolMenuOpen}
+                aria-haspopup="dialog"
+                aria-pressed={toolCallingEnabled}
+                data-label="工具调用"
+                title={toolCallingLabel}
+                onClick={toggleToolMenu}
+              >
+                <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d={SWITCH_ICON_PATHS.toolCalling} />
+                </svg>
+              </button>
+              {toolMenuOpen ? (
+                <div
+                  className="composer-tool-menu"
+                  role="dialog"
+                  aria-label="工具调用设置"
+                  style={toolMenuPosition ? { left: toolMenuPosition.left, top: toolMenuPosition.top } : undefined}
+                >
+                  <div className="composer-tool-menu-actions">
+                    <button
+                      className="composer-tool-menu-action"
+                      type="button"
+                      onClick={() => void updateActiveSessionChatPreferences({ toolCallingEnabled: true })}
+                    >
+                      启用
+                    </button>
+                    <button
+                      className="composer-tool-menu-action"
+                      type="button"
+                      onClick={() =>
+                        void updateActiveSessionChatPreferences({
+                          toolCallingEnabled: true,
+                          enabledToolIds: runtimeEditableToolIds,
+                        })
+                      }
+                    >
+                      启用全部
+                    </button>
+                    <button
+                      className="composer-tool-menu-action"
+                      type="button"
+                      onClick={() => void updateActiveSessionChatPreferences({ toolCallingEnabled: false })}
+                    >
+                      关闭
+                    </button>
+                  </div>
+                  {registeredTools.length > 0 ? (
+                    <div className="composer-tool-menu-list">
+                      {registeredToolGroups.map((group) => (
+                        <div key={group.id} className="composer-tool-menu-group">
+                          <div className="composer-tool-menu-group-title">{group.label}</div>
+                          {group.id === MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID && !browserControlEnabled ? (
+                            <p className="composer-tool-menu-group-hint">需开启浏览器控制后才能启用本组工具。</p>
+                          ) : null}
+                          {group.tools.map((tool) => {
+                            const toolDisplayName = tool.groupId === "mcp_remote" ? (tool.displayName ?? tool.name) : tool.name;
+                            const runtimeAvailable = isToolRuntimeAvailable(tool, browserControlEnabled, effectiveBrowserAutomationMode);
+                            const debuggerRuntime = tool.toolClassification ? isDebuggerRuntimeRequirement(tool.toolClassification.runtime) : false;
+                            const active = runtimeAvailable && enabledToolIds.includes(tool.id);
+                            const disabled = !runtimeAvailable;
+                            return (
+                              <button
+                                key={tool.id}
+                                className={
+                                  [
+                                    "composer-tool-menu-item",
+                                    active ? "composer-tool-menu-item-active" : "",
+                                    debuggerRuntime ? "composer-tool-menu-item-readonly" : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")
+                                }
+                                type="button"
+                                aria-pressed={active}
+                                aria-label={`${toolDisplayName} ${tool.description ?? ""}`.trim()}
+                                disabled={disabled}
+                                onClick={() => handleToolToggle(tool.id, !active)}
+                              >
+                                <span className="composer-tool-menu-item-copy">
+                                  <span className="composer-tool-menu-item-name">{toolDisplayName}</span>
+                                  {!runtimeAvailable ? <span className="composer-tool-menu-item-description">需开启浏览器控制</span> : null}
+                                  {tool.description ? <span className="composer-tool-menu-item-description">{tool.description}</span> : null}
+                                </span>
+                                {active ? (
+                                  <span className="composer-tool-menu-item-check" aria-hidden="true">
+                                    ✓
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="composer-tool-menu-empty">暂无可用工具</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <ComposerSwitch
+              ariaLabel="拼接上下文"
+              checked={appendPageContextToSystemPrompt}
+              icon="appendContext"
+              label="拼接上下文"
+              onToggle={() => setAppendPageContextToSystemPrompt(!appendPageContextToSystemPrompt)}
+            />
+            <ComposerSwitch
+              ariaLabel="提取模式"
+              checked={contextMode === "all"}
+              icon={contextMode === "all" ? "extractAll" : "extractText"}
+              label={contextModeLabel}
+              onToggle={() => setContextMode(contextMode === "all" ? "text" : "all")}
+            />
           </div>
-          <ComposerSwitch
-            ariaLabel="拼接上下文"
-            checked={appendPageContextToSystemPrompt}
-            icon="appendContext"
-            label="拼接上下文"
-            onToggle={() => setAppendPageContextToSystemPrompt(!appendPageContextToSystemPrompt)}
-          />
-          <ComposerSwitch
-            ariaLabel="提取模式"
-            checked={contextMode === "all"}
-            icon={contextMode === "all" ? "extractAll" : "extractText"}
-            label={contextModeLabel}
-            onToggle={() => setContextMode(contextMode === "all" ? "text" : "all")}
-          />
+          <button
+            className="composer-switch sidepanel-add-tab-button"
+            type="button"
+            aria-label="添加标签页"
+            title="添加标签页"
+            onClick={toggleContextDialog}
+          >
+            <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <span className="sidepanel-footer-spacer" aria-hidden="true" />
+          <ModelSelector />
+          <button
+            className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
+            type="button"
+            data-sending={sending && !hasDraft ? "true" : "false"}
+            data-stop-generation={sending && !hasDraft ? "true" : "false"}
+            disabled={sending ? false : !canSubmit}
+            onClick={() => {
+              if (sending && !hasDraft) {
+                abortActiveChatTask();
+                return;
+              }
+              void (sending ? submitFollowUp() : submit());
+            }}
+          >
+            {submitButtonLabel}
+          </button>
         </div>
-        <button
-          className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
-          type="button"
-          disabled={sending ? false : !canSubmit}
-          onClick={() => {
-            if (sending && !hasDraft) {
-              abortActiveChatTask();
-              return;
-            }
-            void (sending ? submitFollowUp() : submit());
-          }}
-        >
-          {submitButtonLabel}
-        </button>
       </div>
       {previewAttachment ? (
         <>
           <div className="dialog-overlay" aria-hidden="true" />
           <section className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-            <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)}>
-              关闭
-            </button>
+            <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
             <img src={previewAttachment.dataUrl} alt={previewAttachment.name} />
           </section>
         </>
       ) : null}
       {contextDialogOpen ? (
         <>
-          <div className="dialog-overlay" aria-hidden="true" />
-          <section className="context-dialog" role="dialog" aria-modal="true" aria-labelledby="context-dialog-title">
+          <div className="dialog-overlay" aria-hidden="true" onClick={() => setContextDialogOpen(false)} />
+          <section ref={contextDialogRef} className="context-dialog" role="dialog" aria-modal="true" aria-labelledby="context-dialog-title">
             <div className="context-dialog-header">
               <h2 className="context-dialog-title" id="context-dialog-title">
                 选择注入标签页
@@ -885,7 +1036,13 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               {contextTabs.map((tab) => (
                 <button
                   key={tab.tabId}
-                  className={`context-tab-item${tab.selected ? " context-tab-item-active" : ""}`}
+                  className={[
+                    "context-tab-item",
+                    tab.active ? "sidepanel-current-tab-row" : "",
+                    tab.selected ? "context-tab-item-active" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   type="button"
                   aria-pressed={tab.selected}
                   aria-label={`注入 ${tab.title}`}
@@ -894,8 +1051,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   <span className="context-tab-title-row">
                     <span className="context-tab-title">{tab.title}</span>
                     {tab.active ? <span className="context-tab-active-badge">当前</span> : null}
-                    {tab.selected ? <span className="context-tab-selected-badge">注入</span> : null}
                   </span>
+                  {tab.selected ? <span className="context-tab-selected-badge">注入</span> : null}
                   <span className="context-tab-url">{tab.url}</span>
                   {tab.error ? <span className="context-tab-error">{tab.error}</span> : null}
                 </button>
@@ -913,6 +1070,145 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       ) : null}
     </section>
   );
+}
+
+function SharedContextBanner({
+  expanded,
+  tabs,
+  onExpandedChange,
+  onRemove,
+}: {
+  expanded: boolean;
+  tabs: SharedContextTab[];
+  onExpandedChange: (expanded: boolean) => void;
+  onRemove: (tab: SharedContextTab) => void;
+}) {
+  const isMulti = tabs.length > 1;
+  if (!isMulti) {
+    const only = tabs[0];
+    return (
+      <div className="sidepanel-page-banner">
+        <BannerFavicon src={only.favIconUrl} className="sidepanel-page-banner-favicon" />
+        <span className="sidepanel-page-banner-text">{`正在分享“${only.title}”标签页`}</span>
+        <button className="sidepanel-page-banner-close" type="button" aria-label="移除该标签页" onClick={() => onRemove(only)}>
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={expanded ? "sidepanel-page-banner is-multi is-open" : "sidepanel-page-banner is-multi"} aria-expanded={expanded}>
+      <button
+        className="sidepanel-page-banner-header"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => onExpandedChange(!expanded)}
+      >
+        <span className="sidepanel-page-banner-stack" aria-hidden="true">
+          {tabs.slice(0, 2).map((tab) => (
+            <BannerFavicon key={`${tab.tabId ?? tab.url}-${tab.title}`} src={tab.favIconUrl} className="sidepanel-page-banner-favicon" />
+          ))}
+        </span>
+        <span className="sidepanel-page-banner-text">{`正在分享 ${tabs.length} 个标签页`}</span>
+        <svg className="sidepanel-page-banner-chevron" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      <div className="sidepanel-shared-drawer">
+        <div className="sidepanel-shared-drawer-inner">
+          {tabs.map((tab) => (
+            <div key={`${tab.tabId ?? tab.url}-${tab.title}`} className={tab.active ? "sidepanel-shared-row is-current" : "sidepanel-shared-row"}>
+              <BannerFavicon src={tab.favIconUrl} className="sidepanel-shared-row-favicon" />
+              <span className="sidepanel-shared-row-text">
+                <span className="sidepanel-shared-row-title">{tab.title}</span>
+                {formatSharedTabSubtitle(tab.url, tab.title) ? (
+                  <span className="sidepanel-shared-row-subtitle">{formatSharedTabSubtitle(tab.url, tab.title)}</span>
+                ) : null}
+              </span>
+              <button
+                className="sidepanel-shared-row-remove"
+                type="button"
+                aria-label={`移除 ${tab.title}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove(tab);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BannerFavicon({ className, src }: { className: string; src?: string }) {
+  return <img className={className} src={src || undefined} alt="" hidden={!src} />;
+}
+
+function buildSharedContextTabs(
+  contextTabs: ContextTabCandidate[],
+  pageContext: { loading: boolean; title?: string; url?: string; text: string },
+  pageContextKey: string,
+  dismissedPageContextKey?: string,
+): SharedContextTab[] {
+  const selectedTabs = contextTabs
+    .filter((tab) => tab.selected)
+    .map((tab) => ({
+      active: tab.active,
+      selected: tab.selected,
+      tabId: tab.tabId,
+      title: tab.title || formatPageContextTitle(tab.url),
+      url: tab.url,
+    }));
+
+  if (selectedTabs.length > 0) {
+    return selectedTabs;
+  }
+
+  const hasPageContext = pageContext.loading || Boolean(pageContext.text.trim() || pageContext.title?.trim() || pageContext.url?.trim());
+  if (!hasPageContext || dismissedPageContextKey === pageContextKey) {
+    return [];
+  }
+
+  return [
+    {
+      active: true,
+      pageContextKey,
+      selected: true,
+      title: pageContext.title?.trim() || formatPageContextTitle(pageContext.url),
+      url: pageContext.url ?? "",
+    },
+  ];
+}
+
+function formatPageContextTitle(url?: string): string {
+  if (!url) {
+    return "当前页面";
+  }
+  try {
+    return new URL(url).hostname || "当前页面";
+  } catch {
+    return "当前页面";
+  }
+}
+
+function formatSharedTabSubtitle(url: string, title: string): string {
+  if (!url) {
+    return "";
+  }
+  try {
+    const parsed = new URL(url);
+    const path = `${parsed.pathname || ""}${parsed.search || ""}${parsed.hash || ""}`;
+    const subtitle = `${parsed.host}${path && path !== "/" ? path : ""}`.slice(0, 96);
+    return subtitle && subtitle !== title ? subtitle : "";
+  } catch {
+    const subtitle = url.slice(0, 96);
+    return subtitle !== title ? subtitle : "";
+  }
 }
 
 function TokenUsageMeter({ usage, sending }: { usage: ChatTokenUsage; sending: boolean }) {

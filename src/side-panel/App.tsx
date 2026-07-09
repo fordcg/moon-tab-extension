@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AgentToolsDialog } from "./components/AgentToolsDialog";
 import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
-import { SettingsPanel } from "./components/SettingsPanel";
+import { SettingsPanel, type SettingsTab } from "./components/SettingsPanel";
 import { SessionList } from "./components/SessionList";
 import { useAppStore } from "./state/appStore";
 import { sendRuntimeMessage } from "./state/runtimeMessage";
@@ -20,13 +21,23 @@ interface SidePanelActionResponse {
   message?: string;
 }
 
+const SETTINGS_HISTORY_SLIDE_MS = 180;
+type SettingsHistoryTransitionClass = "is-slide-out-left" | "is-slide-out-right" | "is-slide-in-from-left" | "is-slide-in-from-right" | "";
+
 export function App() {
   const [showSettings, setShowSettings] = useState(false);
+  const [agentToolsOpen, setAgentToolsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("channels");
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyTransitionClass, setHistoryTransitionClass] = useState<SettingsHistoryTransitionClass>("");
+  const [settingsTransitionClass, setSettingsTransitionClass] = useState<SettingsHistoryTransitionClass>("");
+  const transitionTimerRef = useRef<number | undefined>(undefined);
   const searchParams = new URLSearchParams(window.location.search);
   const floatingMode = searchParams.get("floating") === "1";
   const floatingTabId = resolveFloatingTabId(searchParams.get("tabId"));
   const historyPanelDefaultOpen = useAppStore((state) => state.chatPreferences.historyDrawerDefaultOpen);
-  const [historyPanelOpen, setHistoryPanelOpen] = useState(historyPanelDefaultOpen);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const historyPanelUserToggled = useRef(false);
   const loadChannelConfig = useAppStore((state) => state.loadChannelConfig);
   const loadExtractionRules = useAppStore((state) => state.loadExtractionRules);
   const loadPromptTemplates = useAppStore((state) => state.loadPromptTemplates);
@@ -68,13 +79,99 @@ export function App() {
     addNotification({ type: "success", title: "悬浮助手已打开", message: response?.message ?? "悬浮助手已打开" });
   };
 
+  const handleToggleHistoryPanel = () => {
+    historyPanelUserToggled.current = true;
+    setHistoryPanelOpen((value) => !value);
+  };
+
+  const clearTransitionTimers = () => {
+    if (transitionTimerRef.current) {
+      window.clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = undefined;
+    }
+  };
+
+  const openSettings = (tab: SettingsTab = "channels") => {
+    setAgentToolsOpen(false);
+    setSettingsInitialTab(tab);
+    if (historyDialogOpen) {
+      clearTransitionTimers();
+      setHistoryTransitionClass("is-slide-out-left");
+      transitionTimerRef.current = window.setTimeout(() => {
+        setHistoryDialogOpen(false);
+        setHistoryTransitionClass("");
+        setSettingsTransitionClass("is-slide-in-from-right");
+        setShowSettings(true);
+        transitionTimerRef.current = undefined;
+      }, SETTINGS_HISTORY_SLIDE_MS);
+      return;
+    }
+
+    setHistoryDialogOpen(false);
+    setHistoryTransitionClass("");
+    setSettingsTransitionClass("");
+    setShowSettings(true);
+  };
+
+  const closeSettings = () => {
+    if (!showSettings) {
+      return;
+    }
+
+    clearTransitionTimers();
+    setSettingsTransitionClass("is-slide-out-right");
+    transitionTimerRef.current = window.setTimeout(() => {
+      setShowSettings(false);
+      setSettingsTransitionClass("");
+      transitionTimerRef.current = undefined;
+    }, SETTINGS_HISTORY_SLIDE_MS);
+  };
+
+  const openAgentTools = () => {
+    clearTransitionTimers();
+    setShowSettings(false);
+    setSettingsTransitionClass("");
+    setHistoryTransitionClass("");
+    setHistoryDialogOpen(false);
+    setAgentToolsOpen(true);
+  };
+
+  const returnSettingsToHistory = () => {
+    if (!showSettings) {
+      setHistoryDialogOpen(true);
+      setHistoryTransitionClass("is-slide-in-from-left");
+      return;
+    }
+
+    clearTransitionTimers();
+    setSettingsTransitionClass("is-slide-out-right");
+    transitionTimerRef.current = window.setTimeout(() => {
+      setShowSettings(false);
+      setSettingsTransitionClass("");
+      setHistoryTransitionClass("is-slide-in-from-left");
+      setHistoryDialogOpen(true);
+      transitionTimerRef.current = undefined;
+    }, SETTINGS_HISTORY_SLIDE_MS);
+  };
+
+  const handleHistoryDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      setHistoryTransitionClass("");
+    }
+    setHistoryDialogOpen(open);
+  };
+
   useEffect(() => {
     void Promise.all([loadChannelConfig(), loadExtractionRules(), loadPromptTemplates(), loadChatData(), loadSyncSettings()]).then(() => refreshPageContext());
   }, [loadChannelConfig, loadExtractionRules, loadPromptTemplates, loadChatData, loadSyncSettings, refreshPageContext]);
 
   useEffect(() => {
-    setHistoryPanelOpen(historyPanelDefaultOpen);
+    if (!historyPanelDefaultOpen && !historyPanelUserToggled.current) {
+      setHistoryPanelOpen(false);
+    }
   }, [historyPanelDefaultOpen]);
+
+  useEffect(() => () => clearTransitionTimers(), []);
 
   useEffect(() => {
     const runtime = globalThis.chrome?.runtime;
@@ -104,10 +201,18 @@ export function App() {
     };
   }, [markBrowserAutomationModeChanged, markBrowserControlDetached, showBoundaryChoiceRequest]);
 
+  const chatMainLayoutClassName = [
+    "chat-main-layout",
+    historyPanelOpen ? "" : "chat-main-layout-history-collapsed",
+    showSettings ? "chat-main-layout-settings-background" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <main className="app-shell">
-      <section className="app-header">
-        <h1 className="app-title">Browser AI Assistant</h1>
+    <main className="app-shell sidebar-shell">
+      <section className="app-header sidebar-topbar" aria-label="侧栏操作">
+        <h1 className="app-title sidebar-topbar-title">月标签 AI 助手</h1>
         <div className="app-header-actions">
           <button
             className="ui-button-secondary app-header-icon-button"
@@ -161,7 +266,13 @@ export function App() {
               <path d="M3 9h18M12 12v4M10 14h4" />
             </svg>
           </button>
-          <button className="ui-button-secondary app-header-icon-button" type="button" aria-label="设置" title="设置" onClick={() => setShowSettings((value) => !value)}>
+          <button
+            className="ui-button-secondary app-header-icon-button"
+            type="button"
+            aria-label="设置"
+            title="设置"
+            onClick={() => (showSettings ? closeSettings() : openSettings("channels"))}
+          >
             <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" />
@@ -169,16 +280,26 @@ export function App() {
           </button>
         </div>
       </section>
-      <section className={showSettings ? "settings-main-layout" : (historyPanelOpen ? "chat-main-layout" : "chat-main-layout chat-main-layout-history-collapsed")}>
-        {showSettings ? (
-          <SettingsPanel />
-        ) : (
-          <>
-            {historyPanelOpen ? <SessionList /> : <div aria-hidden="true" className="session-list-placeholder" />}
-            <ChatPanel historyPanelOpen={historyPanelOpen} onToggleHistoryPanel={() => setHistoryPanelOpen((value) => !value)} />
-          </>
-        )}
+      <section className={chatMainLayoutClassName} aria-hidden={showSettings ? true : undefined}>
+        {historyPanelOpen ? <SessionList /> : <div aria-hidden="true" className="session-list-placeholder" />}
+        <ChatPanel
+          historyDialogOpen={historyDialogOpen}
+          historyTransitionClassName={historyTransitionClass}
+          historyPanelOpen={historyPanelOpen}
+          browserControlEnabled={browserControlEnabled}
+          onHistoryDialogOpenChange={handleHistoryDialogOpenChange}
+          onOpenSettings={openSettings}
+          onOpenAgentTools={openAgentTools}
+          onToggleBrowserControl={() => void setBrowserControlEnabled(!browserControlEnabled)}
+          onToggleHistoryPanel={handleToggleHistoryPanel}
+        />
       </section>
+      {showSettings ? (
+        <section className="settings-main-layout settings-dialog-layer">
+          <SettingsPanel initialTab={settingsInitialTab} transitionClassName={settingsTransitionClass} onBackToHistory={returnSettingsToHistory} onClose={closeSettings} />
+        </section>
+      ) : null}
+      <AgentToolsDialog open={agentToolsOpen} onOpenChange={setAgentToolsOpen} />
       <NotificationHost />
     </main>
   );

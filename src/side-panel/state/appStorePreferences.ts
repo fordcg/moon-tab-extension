@@ -24,7 +24,7 @@ export function createDefaultChatPreferences(): ChatPreferenceValues {
     topK: undefined,
     sendShortcut: "enter",
     followUpBehavior: "queue",
-    historyDrawerDefaultOpen: true,
+    historyDrawerDefaultOpen: false,
     injectPageContextByDefault: true,
     extractHtmlByDefault: false,
   };

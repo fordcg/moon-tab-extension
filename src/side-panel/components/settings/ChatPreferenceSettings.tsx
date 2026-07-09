@@ -13,6 +13,7 @@ import type { ChatPreferenceValues, SendShortcut } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
 import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
+import { SettingsSelect } from "./SettingsSelect";
 
 const sendShortcutOptions: Array<{ value: SendShortcut; label: string }> = [
   { value: "enter", label: "Enter" },
@@ -119,18 +120,12 @@ export function ChatPreferenceSettings() {
         />
         <label className="chat-preference-field">
           浏览器自动化默认模式
-          <select
-            className="ui-input chat-preference-shortcut-select"
-            aria-label="浏览器自动化默认模式"
+          <SettingsSelect
+            ariaLabel="浏览器自动化默认模式"
             value={chatPreferences.defaultBrowserAutomationMode ?? "normal_restricted"}
-            onChange={(event) => void updateChatPreferences({ defaultBrowserAutomationMode: event.target.value as BrowserAutomationMode })}
-          >
-            {browserAutomationModeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={browserAutomationModeOptions}
+            onChange={(value) => void updateChatPreferences({ defaultBrowserAutomationMode: value as BrowserAutomationMode })}
+          />
         </label>
         <GlobalPreferenceNumberInput
           label="temperature"
@@ -173,45 +168,39 @@ export function ChatPreferenceSettings() {
         <div className="chat-preference-tool-filter-grid">
           <label className="chat-preference-field">
             能力
-            <select
-              className="ui-input chat-preference-shortcut-select"
-              aria-label="工具能力筛选"
+            <SettingsSelect
+              ariaLabel="工具能力筛选"
               value={capabilityFilter}
-              onChange={(event) => setCapabilityFilter(event.target.value as ModelToolCapability | "")}
-            >
-              <option value="">全部能力</option>
-              {MODEL_TOOL_CAPABILITY_VALUES.map((capability) => (
-                <option key={capability} value={capability}>{toolCapabilityLabels[capability]}</option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "全部能力" },
+                ...MODEL_TOOL_CAPABILITY_VALUES.map((capability) => ({ value: capability, label: toolCapabilityLabels[capability] })),
+              ]}
+              onChange={(value) => setCapabilityFilter(value as ModelToolCapability | "")}
+            />
           </label>
           <label className="chat-preference-field">
             运行要求
-            <select
-              className="ui-input chat-preference-shortcut-select"
-              aria-label="工具运行要求筛选"
+            <SettingsSelect
+              ariaLabel="工具运行要求筛选"
               value={runtimeFilter}
-              onChange={(event) => setRuntimeFilter(event.target.value as ModelToolRuntimeRequirement | "")}
-            >
-              <option value="">全部运行要求</option>
-              {MODEL_TOOL_RUNTIME_VALUES.map((runtime) => (
-                <option key={runtime} value={runtime}>{toolRuntimeLabels[runtime]}</option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "全部运行要求" },
+                ...MODEL_TOOL_RUNTIME_VALUES.map((runtime) => ({ value: runtime, label: toolRuntimeLabels[runtime] })),
+              ]}
+              onChange={(value) => setRuntimeFilter(value as ModelToolRuntimeRequirement | "")}
+            />
           </label>
           <label className="chat-preference-field">
             风险
-            <select
-              className="ui-input chat-preference-shortcut-select"
-              aria-label="工具风险筛选"
+            <SettingsSelect
+              ariaLabel="工具风险筛选"
               value={riskFilter}
-              onChange={(event) => setRiskFilter(event.target.value as ModelToolRisk | "")}
-            >
-              <option value="">全部风险</option>
-              {MODEL_TOOL_RISK_VALUES.map((risk) => (
-                <option key={risk} value={risk}>{toolRiskLabels[risk]}</option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "全部风险" },
+                ...MODEL_TOOL_RISK_VALUES.map((risk) => ({ value: risk, label: toolRiskLabels[risk] })),
+              ]}
+              onChange={(value) => setRiskFilter(value as ModelToolRisk | "")}
+            />
           </label>
         </div>
         <div className="chat-preference-tool-bulk-actions">
@@ -246,15 +235,15 @@ export function ChatPreferenceSettings() {
       </fieldset>
       <label className="chat-preference-field">
         工具调用展示方式
-        <select
-          className="ui-input chat-preference-shortcut-select"
-          aria-label="工具调用展示方式"
+        <SettingsSelect
+          ariaLabel="工具调用展示方式"
           value={chatPreferences.toolCallDisplayMode}
-          onChange={(event) => void updateChatPreferences({ toolCallDisplayMode: event.target.value as ChatPreferenceValues["toolCallDisplayMode"] })}
-        >
-          <option value="assistant_grouped">AI 回复与工具分组</option>
-          <option value="compact">紧凑工具过程</option>
-        </select>
+          options={[
+            { value: "assistant_grouped", label: "AI 回复与工具分组" },
+            { value: "compact", label: "紧凑工具过程" },
+          ]}
+          onChange={(value) => void updateChatPreferences({ toolCallDisplayMode: value as ChatPreferenceValues["toolCallDisplayMode"] })}
+        />
       </label>
       <label className="chat-preference-switch">
         <input
@@ -270,33 +259,21 @@ export function ChatPreferenceSettings() {
       </label>
       <label className="chat-preference-field">
         发送快捷键
-        <select
-          className="ui-input chat-preference-shortcut-select"
-          aria-label="发送快捷键"
+        <SettingsSelect
+          ariaLabel="发送快捷键"
           value={chatPreferences.sendShortcut}
-          onChange={(event) => void updateChatPreferences({ sendShortcut: event.target.value as SendShortcut })}
-        >
-          {sendShortcutOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={sendShortcutOptions}
+          onChange={(value) => void updateChatPreferences({ sendShortcut: value as SendShortcut })}
+        />
       </label>
       <label className="chat-preference-field">
         跟进行为
-        <select
-          className="ui-input chat-preference-shortcut-select"
-          aria-label="跟进行为"
+        <SettingsSelect
+          ariaLabel="跟进行为"
           value={chatPreferences.followUpBehavior}
-          onChange={(event) => void updateChatPreferences({ followUpBehavior: event.target.value as ChatPreferenceValues["followUpBehavior"] })}
-        >
-          {followUpBehaviorOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={followUpBehaviorOptions}
+          onChange={(value) => void updateChatPreferences({ followUpBehavior: value as ChatPreferenceValues["followUpBehavior"] })}
+        />
         <span className="ui-muted text-xs">运行中发送草稿时使用；Ctrl+Shift+Enter 会执行相反操作。</span>
       </label>
       <label className="chat-preference-switch">
