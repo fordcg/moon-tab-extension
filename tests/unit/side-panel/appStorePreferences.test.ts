@@ -11,7 +11,23 @@ import {
   normalizeEnabledToolIds,
 } from "../../../src/shared/models/toolRegistry";
 import type { ModelToolRegistryEntry } from "../../../src/shared/models/types";
-import { resolveRuntimeEnabledToolIds } from "../../../src/side-panel/state/appStorePreferences";
+import {
+  createDefaultChatPreferences,
+  normalizeChatPreferences,
+  resolveRuntimeEnabledToolIds,
+} from "../../../src/side-panel/state/appStorePreferences";
+
+describe("workspaceRequestLoggingEnabled", () => {
+  it("defaults to false", () => {
+    expect(createDefaultChatPreferences().workspaceRequestLoggingEnabled).toBe(false);
+    expect(normalizeChatPreferences(undefined).workspaceRequestLoggingEnabled).toBe(false);
+  });
+
+  it("normalizes truthy values", () => {
+    expect(normalizeChatPreferences({ workspaceRequestLoggingEnabled: true }).workspaceRequestLoggingEnabled).toBe(true);
+    expect(normalizeChatPreferences({ workspaceRequestLoggingEnabled: false }).workspaceRequestLoggingEnabled).toBe(false);
+  });
+});
 
 describe("聊天偏好工具运行态过滤", () => {
   it("只保留当前运行态真实可用的已启用工具", () => {

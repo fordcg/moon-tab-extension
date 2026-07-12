@@ -108,6 +108,7 @@ export interface ChatPreferenceValues {
   historyDrawerDefaultOpen: boolean;
   injectPageContextByDefault: boolean;
   extractHtmlByDefault: boolean;
+  workspaceRequestLoggingEnabled: boolean;
 }
 
 export interface ChatSessionPreferenceOverrides {
@@ -418,6 +419,36 @@ export interface ChatPromptInvocation {
 }
 
 export type ChatTokenUsageSource = "chat" | "tool_decision" | "tool_final" | "title";
+
+export type ChatSendDebugSource = "side_panel_chat" | "title_generation";
+
+export interface ChatSendDebugContext {
+  source: ChatSendDebugSource;
+  requestId: string;
+  requestCreatedAt: number;
+  requestCreatedAtIso: string;
+  requestTimeZone?: string;
+  tokenUsageSource?: ChatTokenUsageSource;
+  sessionId?: string;
+  sessionTitle?: string;
+  sessionCreatedAt?: number;
+  sessionCreatedAtIso?: string;
+  sessionUpdatedAtBeforeRequest?: number;
+  sessionUpdatedAtBeforeRequestIso?: string;
+  sessionUpdatedAtAtRequest?: number;
+  sessionUpdatedAtAtRequestIso?: string;
+  userMessageId?: string;
+  userMessageCreatedAt?: number;
+  userMessageCreatedAtIso?: string;
+  messageCountBeforeRequest?: number;
+  messageCountInSessionAtRequest?: number;
+  requestMessageCount?: number;
+  selectedTabId?: number;
+  privateMode?: boolean;
+  stream?: boolean;
+  enabledToolIds?: string[];
+  currentTimeToolEnabled?: boolean;
+}
 
 export interface ChatTokenUsage {
   inputTokens: number;

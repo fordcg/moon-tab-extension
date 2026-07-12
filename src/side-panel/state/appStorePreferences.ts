@@ -27,6 +27,7 @@ export function createDefaultChatPreferences(): ChatPreferenceValues {
     historyDrawerDefaultOpen: false,
     injectPageContextByDefault: true,
     extractHtmlByDefault: false,
+    workspaceRequestLoggingEnabled: false,
   };
 }
 
@@ -75,6 +76,10 @@ export function normalizeChatPreferences(value?: Partial<ChatPreferenceValues>):
     historyDrawerDefaultOpen: normalizeBoolean(value?.historyDrawerDefaultOpen, defaults.historyDrawerDefaultOpen),
     injectPageContextByDefault: normalizeBoolean(value?.injectPageContextByDefault, defaults.injectPageContextByDefault),
     extractHtmlByDefault: normalizeBoolean(value?.extractHtmlByDefault, defaults.extractHtmlByDefault),
+    workspaceRequestLoggingEnabled: normalizeBoolean(
+      value?.workspaceRequestLoggingEnabled,
+      defaults.workspaceRequestLoggingEnabled,
+    ),
   };
 }
 
