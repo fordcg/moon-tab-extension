@@ -9,6 +9,7 @@ import {
 } from "../../shared/automationPlaybooks";
 import type { RemoteModelInfo } from "../../shared/models/modelCatalog";
 import {
+  CURRENT_TIME_TOOL_ID,
   getRegisteredModelTools,
   resolveEnabledModelTools,
 } from "../../shared/models/toolRegistry";
@@ -49,6 +50,7 @@ import type { SyncRemoteBackupMeta } from "../../shared/sync/types";
 import type { TavilySearchOptions } from "../../shared/webSearch/tavily";
 import type {
   AutomationPlaybookSettings,
+  ChatSendDebugContext,
   ChatFolder,
   ChatImageAttachment,
   ChatMessage,
@@ -1418,6 +1420,30 @@ export type AppChatSendMessage = {
   automationPlaybookSettings?: AutomationPlaybookSettings;
   extractionRules?: ExtractionRule[];
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
+  debugContext?: ChatSendDebugContext;
+  workspaceRequestLoggingEnabled?: boolean;
+  requestLogging?: {
+    sidebarState: {
+      mode: AppState["browserAutomationMode"];
+      privateMode?: boolean;
+      toolCallingEnabled: boolean;
+      enabledToolIds: string[];
+      toolCallDisplayMode: ChatPreferenceValues["toolCallDisplayMode"];
+      showToolCallProcessInAssistantMode: boolean;
+      browserAutomationMaxToolIterations: number;
+      followUpBehavior: ChatPreferenceValues["followUpBehavior"];
+      systemPrompt: string;
+      pageContext: {
+        inject: boolean;
+        extractMode?: PageContextExtractMode;
+      };
+      mcp: {
+        servers: Array<{ id: string; enabled: boolean; toolCount?: number }>;
+      };
+      browserControlEnabled?: boolean;
+      streamMode?: boolean;
+    };
+  };
 };
 
 function resolveSelectedContextTabId(contextTabs: ContextTabCandidate[]): number | undefined {
@@ -1425,6 +1451,58 @@ function resolveSelectedContextTabId(contextTabs: ContextTabCandidate[]): number
   const tabId = selectedTab?.tabId;
 
   return typeof tabId === "number" && Number.isInteger(tabId) ? tabId : undefined;
+}
+
+function formatDebugTimestamp(timestamp: number): string {
+  return new Date(timestamp).toISOString();
+}
+
+function getDebugTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
+function createChatSendDebugContext(input: {
+  requestCreatedAt: number;
+  session: ChatSession;
+  nextSession: ChatSession;
+  userMessage: ChatMessage;
+  existingMessageCount: number;
+  requestMessageCount: number;
+  stream: boolean;
+  privateMode?: boolean;
+  selectedContextTabId?: number;
+  enabledToolIds: string[];
+}): ChatSendDebugContext {
+  return {
+    source: "side_panel_chat",
+    requestId: `chat-${input.requestCreatedAt}-${Math.random().toString(36).slice(2, 8)}`,
+    requestCreatedAt: input.requestCreatedAt,
+    requestCreatedAtIso: formatDebugTimestamp(input.requestCreatedAt),
+    requestTimeZone: getDebugTimeZone(),
+    sessionId: input.nextSession.id,
+    sessionTitle: input.nextSession.title,
+    sessionCreatedAt: input.nextSession.createdAt,
+    sessionCreatedAtIso: formatDebugTimestamp(input.nextSession.createdAt),
+    sessionUpdatedAtBeforeRequest: input.session.updatedAt,
+    sessionUpdatedAtBeforeRequestIso: formatDebugTimestamp(input.session.updatedAt),
+    sessionUpdatedAtAtRequest: input.nextSession.updatedAt,
+    sessionUpdatedAtAtRequestIso: formatDebugTimestamp(input.nextSession.updatedAt),
+    userMessageId: input.userMessage.id,
+    userMessageCreatedAt: input.userMessage.createdAt,
+    userMessageCreatedAtIso: formatDebugTimestamp(input.userMessage.createdAt),
+    messageCountBeforeRequest: input.existingMessageCount,
+    messageCountInSessionAtRequest: input.nextSession.messages.length,
+    requestMessageCount: input.requestMessageCount,
+    privateMode: Boolean(input.privateMode),
+    stream: input.stream,
+    enabledToolIds: input.enabledToolIds,
+    currentTimeToolEnabled: input.enabledToolIds.includes(CURRENT_TIME_TOOL_ID),
+    ...(input.selectedContextTabId !== undefined ? { selectedTabId: input.selectedContextTabId } : {}),
+  };
 }
 
 interface SendChatMessageWithStateInput {
@@ -1805,18 +1883,20 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
     const enabledToolIds = enabledTools.map((tool) => tool.id);
     const requestStreamMode = input.state.streamMode;
     const selectedContextTabId = resolveSelectedContextTabId(input.state.contextTabs);
+    const requestMessages = buildChatRequestMessages({
+      model: modelConfig,
+      pageContext: input.pageContextPrompt,
+      existingMessages: input.existingMessages,
+      userMessage: input.userMessage,
+      systemPrompt: effectiveChatPreferences.systemPrompt,
+      appendPageContextToSystemPrompt: input.state.appendPageContextToSystemPrompt,
+    });
+    const loggingEnabled = Boolean(input.state.chatPreferences.workspaceRequestLoggingEnabled);
     const request: AppChatSendMessage = {
       type: "chat.send",
       ...(selectedContextTabId !== undefined ? { tabId: selectedContextTabId } : {}),
       model: modelConfig,
-      messages: buildChatRequestMessages({
-        model: modelConfig,
-        pageContext: input.pageContextPrompt,
-        existingMessages: input.existingMessages,
-        userMessage: input.userMessage,
-        systemPrompt: effectiveChatPreferences.systemPrompt,
-        appendPageContextToSystemPrompt: input.state.appendPageContextToSystemPrompt,
-      }),
+      messages: requestMessages,
       stream: requestStreamMode,
       retryCount: effectiveChatPreferences.aiRequestRetryCount,
       browserAutomationMaxToolIterations: effectiveChatPreferences.browserAutomationMaxToolIterations,
@@ -1837,6 +1917,49 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
             toolChoice: "auto",
           }
         : {}),
+      workspaceRequestLoggingEnabled: loggingEnabled,
+      ...(loggingEnabled
+        ? {
+            requestLogging: {
+              sidebarState: {
+                mode: input.state.browserAutomationMode ?? input.state.chatPreferences.defaultBrowserAutomationMode ?? "normal_restricted",
+                privateMode: Boolean(input.privateMode),
+                toolCallingEnabled: effectiveChatPreferences.toolCallingEnabled,
+                enabledToolIds,
+                toolCallDisplayMode: input.state.chatPreferences.toolCallDisplayMode,
+                showToolCallProcessInAssistantMode: input.state.chatPreferences.showToolCallProcessInAssistantMode,
+                browserAutomationMaxToolIterations: effectiveChatPreferences.browserAutomationMaxToolIterations,
+                followUpBehavior: input.state.chatPreferences.followUpBehavior,
+                systemPrompt: effectiveChatPreferences.systemPrompt,
+                pageContext: {
+                  inject: Boolean(input.state.appendPageContextToSystemPrompt),
+                  extractMode: input.state.contextMode,
+                },
+                mcp: {
+                  servers: (input.state.mcpSettings?.servers ?? []).map((server) => ({
+                    id: server.id,
+                    enabled: Boolean(server.enabled),
+                    toolCount: Array.isArray(server.tools) ? server.tools.length : undefined,
+                  })),
+                },
+                browserControlEnabled: input.state.browserControlEnabled,
+                streamMode: requestStreamMode,
+              },
+            },
+          }
+        : {}),
+      debugContext: createChatSendDebugContext({
+        requestCreatedAt: now,
+        session: input.session,
+        nextSession,
+        userMessage: input.userMessage,
+        existingMessageCount: input.existingMessages.length,
+        requestMessageCount: requestMessages.length,
+        stream: requestStreamMode,
+        privateMode: input.privateMode,
+        selectedContextTabId,
+        enabledToolIds,
+      }),
     };
 
     {

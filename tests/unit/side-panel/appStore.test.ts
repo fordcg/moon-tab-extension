@@ -280,6 +280,196 @@ describe("appStore 网络搜索", () => {
     expect(chatRequest?.messages?.some((message) => message.content.includes("rule-main"))).toBe(false);
   });
 
+  it("聊天请求会携带可反查会话和用户消息日期的调试上下文", async () => {
+    const timestamp = Date.parse("2026-07-13T02:03:04.005Z");
+    vi.spyOn(Date, "now").mockReturnValue(timestamp);
+    const provider = createProvider();
+    const model = createModel();
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      callback({ ok: true, content: "AI 回复" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    disableDefaultToolCalling();
+    useAppStore.getState().setStreamMode(false);
+
+    await useAppStore.getState().sendChatMessage("日期为什么不一致");
+
+    const chatRequest = sendMessage.mock.calls
+      .map(([message]) => message as { type: string; debugContext?: Record<string, unknown> })
+      .find((message) => message.type === "chat.send");
+    expect(chatRequest?.debugContext).toMatchObject({
+      source: "side_panel_chat",
+      requestId: expect.stringMatching(/^chat-/),
+      requestCreatedAt: timestamp,
+      requestCreatedAtIso: "2026-07-13T02:03:04.005Z",
+      sessionId: expect.stringMatching(/^session-/),
+      sessionTitle: "日期为什么不一致",
+      sessionCreatedAt: timestamp,
+      sessionCreatedAtIso: "2026-07-13T02:03:04.005Z",
+      sessionUpdatedAtBeforeRequest: timestamp,
+      sessionUpdatedAtBeforeRequestIso: "2026-07-13T02:03:04.005Z",
+      sessionUpdatedAtAtRequest: timestamp,
+      sessionUpdatedAtAtRequestIso: "2026-07-13T02:03:04.005Z",
+      userMessageId: `message-${timestamp}-user`,
+      userMessageCreatedAt: timestamp,
+      userMessageCreatedAtIso: "2026-07-13T02:03:04.005Z",
+      messageCountBeforeRequest: 0,
+      messageCountInSessionAtRequest: 1,
+      requestMessageCount: 2,
+      privateMode: false,
+      stream: false,
+      currentTimeToolEnabled: false,
+    });
+    expect(JSON.stringify(chatRequest?.debugContext)).not.toContain("AI 回复");
+  });
+
+  it("开启工作区请求日志时 chat.send 会携带 logging flag 与 sidebarState 快照", async () => {
+    const provider = createProvider();
+    const model = createModel();
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      callback({ ok: true, content: "AI 回复" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    useAppStore.getState().setStreamMode(false);
+    useAppStore.setState((state) => ({
+      browserControlEnabled: true,
+      browserAutomationMode: "normal_restricted",
+      appendPageContextToSystemPrompt: true,
+      contextMode: "text",
+      mcpSettings: {
+        servers: [
+          {
+            id: "mcp-demo",
+            name: "Demo MCP",
+            endpointUrl: "https://mcp.example.com",
+            enabled: true,
+            tools: [
+              {
+                name: "lookup",
+                description: "demo",
+                inputSchema: { type: "object" },
+              },
+            ],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      },
+      chatPreferences: {
+        ...state.chatPreferences,
+        workspaceRequestLoggingEnabled: true,
+        toolCallingEnabled: true,
+        enabledToolIds: ["web_search.tavily"],
+        toolCallDisplayMode: "compact",
+        showToolCallProcessInAssistantMode: true,
+        browserAutomationMaxToolIterations: 12,
+        followUpBehavior: "guide",
+        systemPrompt: "工作区日志系统提示",
+      },
+    }));
+
+    await useAppStore.getState().sendChatMessage("记录这次请求");
+
+    const chatRequest = sendMessage.mock.calls
+      .map(
+        ([message]) =>
+          message as {
+            type: string;
+            workspaceRequestLoggingEnabled?: boolean;
+            requestLogging?: {
+              sidebarState?: {
+                mode?: string;
+                enabledToolIds?: string[];
+                systemPrompt?: string;
+                toolCallingEnabled?: boolean;
+                pageContext?: { inject?: boolean; extractMode?: string };
+                mcp?: { servers?: Array<{ id: string; enabled: boolean; toolCount?: number }> };
+                streamMode?: boolean;
+                browserControlEnabled?: boolean;
+              };
+            };
+          },
+      )
+      .find((message) => message.type === "chat.send");
+
+    expect(chatRequest).toMatchObject({
+      workspaceRequestLoggingEnabled: true,
+      requestLogging: {
+        sidebarState: {
+          mode: "normal_restricted",
+          privateMode: false,
+          toolCallingEnabled: true,
+          enabledToolIds: ["web_search.tavily"],
+          toolCallDisplayMode: "compact",
+          showToolCallProcessInAssistantMode: true,
+          browserAutomationMaxToolIterations: 12,
+          followUpBehavior: "guide",
+          systemPrompt: "工作区日志系统提示",
+          pageContext: {
+            inject: true,
+            extractMode: "text",
+          },
+          mcp: {
+            servers: [{ id: "mcp-demo", enabled: true, toolCount: 1 }],
+          },
+          browserControlEnabled: true,
+          streamMode: false,
+        },
+      },
+    });
+  });
+
+  it("关闭工作区请求日志时 chat.send 不附带 requestLogging 载荷", async () => {
+    const provider = createProvider();
+    const model = createModel();
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      callback({ ok: true, content: "AI 回复" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    disableDefaultToolCalling();
+    useAppStore.getState().setStreamMode(false);
+    useAppStore.setState((state) => ({
+      chatPreferences: {
+        ...state.chatPreferences,
+        workspaceRequestLoggingEnabled: false,
+      },
+    }));
+
+    await useAppStore.getState().sendChatMessage("不记录这次请求");
+
+    const chatRequest = sendMessage.mock.calls
+      .map(
+        ([message]) =>
+          message as {
+            type: string;
+            workspaceRequestLoggingEnabled?: boolean;
+            requestLogging?: unknown;
+          },
+      )
+      .find((message) => message.type === "chat.send");
+
+    expect(chatRequest?.workspaceRequestLoggingEnabled).toBe(false);
+    expect(chatRequest?.requestLogging).toBeUndefined();
+  });
+
   it("普通模式默认暴露受限 runtime 工具，受控增强模式额外暴露边界确认和重放沙箱", async () => {
     const provider = createProvider();
     const model = createModel();
@@ -2079,11 +2269,19 @@ describe("appStore", () => {
     await useAppStore.getState().sendChatMessage("第一问");
 
     const titleRequest = sendMessage.mock.calls
-      .map(([message]) => message as { type: string; model?: ProviderModel; messages?: ChatMessage[] })
+      .map(([message]) => message as { type: string; model?: ProviderModel; messages?: ChatMessage[]; debugContext?: Record<string, unknown> })
       .filter((message) => message.type === "chat.send")
       .find((message) => message.model?.id === "model-title");
     expect(titleRequest?.messages?.[1].content).toContain("网页上下文：无");
     expect(titleRequest?.messages?.[1].content).not.toContain("页面内容");
+    expect(titleRequest?.debugContext).toMatchObject({
+      source: "title_generation",
+      requestId: expect.stringMatching(/^title-/),
+      sessionId: expect.stringMatching(/^session-/),
+      sessionTitle: "第一问",
+      stream: false,
+      tokenUsageSource: "title",
+    });
   });
 
   it("标题模型返回非 JSON 时保留默认标题并清除等待态", async () => {
