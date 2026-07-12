@@ -12,6 +12,7 @@ import type { ModelToolRegistryEntry } from "../shared/models/types";
 import { resolveModelToolAvailability } from "../shared/models/toolAvailability";
 import type { BrowserControlDiagnostics } from "../shared/browserControl";
 import type { McpServerConfig, McpSettings } from "../shared/types";
+import { getAppSetting, saveAppSetting } from "../shared/storage/repositories";
 
 export const AGENT_TOOLS_SETTINGS_KEY = "aiSidebar.agentTools.v1";
 export const AGENT_TOOLS_AUDIT_KEY = "aiSidebar.agentTools.audit.v1";
@@ -220,6 +221,37 @@ async function refreshMcpTools(targetServerId: string, fetcher: Fetcher): Promis
   }
 
   await saveMcpSettings({ servers });
+  await enableDiscoveredMcpToolsInChatPreferences(servers);
+}
+
+async function enableDiscoveredMcpToolsInChatPreferences(servers: McpSettings["servers"]): Promise<void> {
+  const toolIds = createMcpToolRegistryEntries(servers).map((tool) => tool.id);
+  if (toolIds.length === 0) {
+    return;
+  }
+
+  try {
+    const currentPreferences = await getAppSetting<Record<string, unknown>>("chatPreferences");
+    const currentEnabledToolIds = Array.isArray(currentPreferences?.enabledToolIds)
+      ? currentPreferences.enabledToolIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+    const nextEnabledToolIds = Array.from(new Set([...currentEnabledToolIds, ...toolIds]));
+    if (nextEnabledToolIds.length === currentEnabledToolIds.length) {
+      return;
+    }
+
+    await saveAppSetting({
+      key: "chatPreferences",
+      value: {
+        ...(currentPreferences && typeof currentPreferences === "object" ? currentPreferences : {}),
+        enabledToolIds: nextEnabledToolIds,
+        toolCallingEnabled: true,
+      },
+      updatedAt: Date.now(),
+    });
+  } catch {
+    // Preferences storage may be unavailable in some test/runtime contexts.
+  }
 }
 
 async function callRegisteredMcpTool(message: AgentToolsRuntimeMessage, fetcher: Fetcher): Promise<Record<string, unknown>> {
@@ -309,7 +341,8 @@ async function pushGrokBridgeConfig(mcpConfig: Record<string, unknown>, fetcher:
   const shouldPush = typeof mcpConfig.grokBaseUrl === "string" ||
     typeof mcpConfig.grokModel === "string" ||
     typeof mcpConfig.grokApiKey === "string" ||
-    mcpConfig.clearGrokApiKey === true;
+    mcpConfig.clearGrokApiKey === true ||
+    typeof mcpConfig.grokApiStyle === "string";
   if (!shouldPush) {
     return;
   }
@@ -320,9 +353,13 @@ async function pushGrokBridgeConfig(mcpConfig: Record<string, unknown>, fetcher:
     return;
   }
   const bridgeConfigUrl = new URL("config", bridgeBase);
+  const grokBaseUrl = normalizeText(mcpConfig.grokBaseUrl) || DEFAULT_GROK_API_BASE_URL;
+  const explicitApiStyle = normalizeText(mcpConfig.grokApiStyle).toLowerCase();
+  const apiStyle = explicitApiStyle || (isLocalOpenAiCompatibleBaseUrl(grokBaseUrl) ? "chat" : "");
   const payload = {
-    baseUrl: normalizeText(mcpConfig.grokBaseUrl) || DEFAULT_GROK_API_BASE_URL,
+    baseUrl: grokBaseUrl,
     model: normalizeText(mcpConfig.grokModel) || DEFAULT_GROK_MODEL,
+    ...(apiStyle ? { apiStyle } : {}),
     ...(typeof mcpConfig.grokApiKey === "string" || mcpConfig.clearGrokApiKey === true
       ? { apiKey: normalizeText(mcpConfig.grokApiKey) }
       : {}),
@@ -334,6 +371,16 @@ async function pushGrokBridgeConfig(mcpConfig: Record<string, unknown>, fetcher:
   });
   if (!response.ok && response.status !== 404) {
     throw new Error(`Grok MCP 配置写入失败：${response.status}`);
+  }
+}
+
+function isLocalOpenAiCompatibleBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
+  } catch {
+    return false;
   }
 }
 

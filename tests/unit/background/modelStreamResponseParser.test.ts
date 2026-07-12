@@ -211,6 +211,53 @@ describe("模型流式响应解析", () => {
     expect(visibleThinking).not.toContain("select_page");
   });
 
+  it("OpenAI-compatible SSE 以 finish_reason 收尾且无 [DONE] 时仍视为正常完成", async () => {
+    const onContentChunk = vi.fn();
+    const result = await readModelStreamResponse(
+      new Response(
+        createStream([
+          'data: {"choices":[{"delta":{"content":"工具后的"}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"最终回答"},"finish_reason":"stop"}]}\n\n',
+        ]),
+      ),
+      createModel(),
+      { onContentChunk },
+    );
+
+    expect(result).toEqual({ ok: true, content: "工具后的最终回答", thinking: undefined });
+    expect(onContentChunk).toHaveBeenNthCalledWith(1, "工具后的");
+    expect(onContentChunk).toHaveBeenNthCalledWith(2, "最终回答");
+  });
+
+  it("OpenAI-compatible SSE 单独 usage/finish_reason 收尾 chunk 且无 [DONE] 时仍视为正常完成", async () => {
+    const result = await readModelStreamResponse(
+      new Response(
+        createStream([
+          'data: {"choices":[{"delta":{"content":"回答"}}]}\n\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4}}\n\n',
+        ]),
+      ),
+      createModel(),
+      {},
+      "tool_final",
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      content: "回答",
+      thinking: undefined,
+      tokenUsageEntries: [
+        expect.objectContaining({
+          source: "tool_final",
+          modelId: "model-1",
+          endpointType: "openai_chat",
+          inputTokens: 10,
+          outputTokens: 4,
+        }),
+      ],
+    });
+  });
+
   it("Anthropic SSE 只拼接 text_delta 并忽略畸形 JSON 片段", async () => {
     const onContentChunk = vi.fn();
     const result = await readModelStreamResponse(

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AgentToolsDialog } from "./components/AgentToolsDialog";
 import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
-import { SettingsPanel, type SettingsTab } from "./components/SettingsPanel";
+import type { SettingsTab } from "./components/SettingsPanel";
 import { SessionList } from "./components/SessionList";
 import { useAppStore } from "./state/appStore";
 import { sendRuntimeMessage } from "./state/runtimeMessage";
@@ -21,17 +21,16 @@ interface SidePanelActionResponse {
   message?: string;
 }
 
-const SETTINGS_HISTORY_SLIDE_MS = 180;
-type SettingsHistoryTransitionClass = "is-slide-out-left" | "is-slide-out-right" | "is-slide-in-from-left" | "is-slide-in-from-right" | "";
+type SidePanelDrawerPage = "history" | "settings";
+type SidePanelDrawerOrigin = "header" | "history";
 
 export function App() {
-  const [showSettings, setShowSettings] = useState(false);
   const [agentToolsOpen, setAgentToolsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("channels");
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const [historyTransitionClass, setHistoryTransitionClass] = useState<SettingsHistoryTransitionClass>("");
-  const [settingsTransitionClass, setSettingsTransitionClass] = useState<SettingsHistoryTransitionClass>("");
-  const transitionTimerRef = useRef<number | undefined>(undefined);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerPage, setDrawerPage] = useState<SidePanelDrawerPage>("history");
+  const [drawerOrigin, setDrawerOrigin] = useState<SidePanelDrawerOrigin>("header");
+  const drawerRestoreFocusRef = useRef<HTMLElement | null>(null);
   const searchParams = new URLSearchParams(window.location.search);
   const floatingMode = searchParams.get("floating") === "1";
   const floatingTabId = resolveFloatingTabId(searchParams.get("tabId"));
@@ -84,81 +83,50 @@ export function App() {
     setHistoryPanelOpen((value) => !value);
   };
 
-  const clearTransitionTimers = () => {
-    if (transitionTimerRef.current) {
-      window.clearTimeout(transitionTimerRef.current);
-      transitionTimerRef.current = undefined;
+  const rememberDrawerTrigger = () => {
+    if (!drawerOpen && document.activeElement instanceof HTMLElement) {
+      drawerRestoreFocusRef.current = document.activeElement;
     }
   };
 
-  const openSettings = (tab: SettingsTab = "channels") => {
+  const openHistoryDrawer = () => {
+    rememberDrawerTrigger();
+    setDrawerOrigin("history");
+    setDrawerPage("history");
+    setDrawerOpen(true);
+  };
+
+  const openSettings = (tab: SettingsTab = "channels", origin: SidePanelDrawerOrigin = drawerOpen ? "history" : "header") => {
+    rememberDrawerTrigger();
     setAgentToolsOpen(false);
     setSettingsInitialTab(tab);
-    if (historyDialogOpen) {
-      clearTransitionTimers();
-      setHistoryTransitionClass("is-slide-out-left");
-      transitionTimerRef.current = window.setTimeout(() => {
-        setHistoryDialogOpen(false);
-        setHistoryTransitionClass("");
-        setSettingsTransitionClass("is-slide-in-from-right");
-        setShowSettings(true);
-        transitionTimerRef.current = undefined;
-      }, SETTINGS_HISTORY_SLIDE_MS);
-      return;
-    }
-
-    setHistoryDialogOpen(false);
-    setHistoryTransitionClass("");
-    setSettingsTransitionClass("");
-    setShowSettings(true);
+    setDrawerOrigin(origin);
+    setDrawerPage("settings");
+    setDrawerOpen(true);
   };
 
-  const closeSettings = () => {
-    if (!showSettings) {
-      return;
-    }
-
-    clearTransitionTimers();
-    setSettingsTransitionClass("is-slide-out-right");
-    transitionTimerRef.current = window.setTimeout(() => {
-      setShowSettings(false);
-      setSettingsTransitionClass("");
-      transitionTimerRef.current = undefined;
-    }, SETTINGS_HISTORY_SLIDE_MS);
-  };
+  const closeDrawer = () => setDrawerOpen(false);
 
   const openAgentTools = () => {
-    clearTransitionTimers();
-    setShowSettings(false);
-    setSettingsTransitionClass("");
-    setHistoryTransitionClass("");
-    setHistoryDialogOpen(false);
+    setDrawerOpen(false);
+    setDrawerPage("history");
     setAgentToolsOpen(true);
   };
 
   const returnSettingsToHistory = () => {
-    if (!showSettings) {
-      setHistoryDialogOpen(true);
-      setHistoryTransitionClass("is-slide-in-from-left");
+    setDrawerOrigin("history");
+    setDrawerPage("history");
+  };
+
+  const handleDrawerOpenChange = (open: boolean) => setDrawerOpen(open);
+
+  const restoreDrawerFocus = () => {
+    const target = drawerRestoreFocusRef.current;
+    if (!target?.isConnected) {
       return;
     }
 
-    clearTransitionTimers();
-    setSettingsTransitionClass("is-slide-out-right");
-    transitionTimerRef.current = window.setTimeout(() => {
-      setShowSettings(false);
-      setSettingsTransitionClass("");
-      setHistoryTransitionClass("is-slide-in-from-left");
-      setHistoryDialogOpen(true);
-      transitionTimerRef.current = undefined;
-    }, SETTINGS_HISTORY_SLIDE_MS);
-  };
-
-  const handleHistoryDialogOpenChange = (open: boolean) => {
-    if (!open) {
-      setHistoryTransitionClass("");
-    }
-    setHistoryDialogOpen(open);
+    window.requestAnimationFrame(() => target.focus());
   };
 
   useEffect(() => {
@@ -170,8 +138,6 @@ export function App() {
       setHistoryPanelOpen(false);
     }
   }, [historyPanelDefaultOpen]);
-
-  useEffect(() => () => clearTransitionTimers(), []);
 
   useEffect(() => {
     const runtime = globalThis.chrome?.runtime;
@@ -204,7 +170,6 @@ export function App() {
   const chatMainLayoutClassName = [
     "chat-main-layout",
     historyPanelOpen ? "" : "chat-main-layout-history-collapsed",
-    showSettings ? "chat-main-layout-settings-background" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -236,15 +201,15 @@ export function App() {
             <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
               {floatingMode ? (
                 <>
-                  <path d="M5 5h14v14H5Z" />
-                  <path d="M9 9l6 6M15 9l-6 6" />
+                  <rect x="4.5" y="4.5" width="15" height="15" rx="2.2" />
+                  <path d="M9 9l6 6" />
+                  <path d="M15 9l-6 6" />
                 </>
               ) : (
                 <>
-                  <path d="M5 5h9v9H5Z" />
-                  <path d="M12 5h7v7" />
-                  <path d="M12 12 19 5" />
-                  <path d="M5 17h14v2H5Z" />
+                  <path d="M14 4h6v6" />
+                  <path d="M20 4 12 12" />
+                  <rect x="4" y="8" width="10" height="12" rx="1.8" />
                 </>
               )}
             </svg>
@@ -271,7 +236,7 @@ export function App() {
             type="button"
             aria-label="设置"
             title="设置"
-            onClick={() => (showSettings ? closeSettings() : openSettings("channels"))}
+            onClick={() => (drawerOpen && drawerPage === "settings" ? closeDrawer() : openSettings("channels"))}
           >
             <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
@@ -280,27 +245,27 @@ export function App() {
           </button>
         </div>
       </section>
-      <section className={chatMainLayoutClassName} aria-hidden={showSettings ? true : undefined}>
+      <section className={chatMainLayoutClassName}>
         {historyPanelOpen ? <SessionList /> : <div aria-hidden="true" className="session-list-placeholder" />}
         <ChatPanel
-          historyDialogOpen={historyDialogOpen}
-          historyTransitionClassName={historyTransitionClass}
+          drawerOpen={drawerOpen}
+          drawerPage={drawerPage}
+          drawerOrigin={drawerOrigin}
+          settingsInitialTab={settingsInitialTab}
           historyPanelOpen={historyPanelOpen}
           browserControlEnabled={browserControlEnabled}
-          onHistoryDialogOpenChange={handleHistoryDialogOpenChange}
+          onDrawerOpenChange={handleDrawerOpenChange}
+          onRestoreDrawerFocus={restoreDrawerFocus}
+          onOpenHistoryDrawer={openHistoryDrawer}
           onOpenSettings={openSettings}
+          onReturnSettingsToHistory={returnSettingsToHistory}
           onOpenAgentTools={openAgentTools}
           onToggleBrowserControl={() => void setBrowserControlEnabled(!browserControlEnabled)}
           onToggleHistoryPanel={handleToggleHistoryPanel}
         />
       </section>
-      {showSettings ? (
-        <section className="settings-main-layout settings-dialog-layer">
-          <SettingsPanel initialTab={settingsInitialTab} transitionClassName={settingsTransitionClass} onBackToHistory={returnSettingsToHistory} onClose={closeSettings} />
-        </section>
-      ) : null}
       <AgentToolsDialog open={agentToolsOpen} onOpenChange={setAgentToolsOpen} />
-      <NotificationHost />
+      {!drawerOpen ? <NotificationHost /> : null}
     </main>
   );
 }

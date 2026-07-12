@@ -217,6 +217,58 @@ Prompt2 的内容
     expect(createChatMessageMarkdown(message)).toBe("用户真正输入的内容");
   });
 
+  it("复制和全部导出路径会再次脱敏完全访问会话中的敏感值", () => {
+    const session = createSession({
+      title: "token=title-secret",
+      messages: [
+        createMessage({
+          id: "message-sensitive-export",
+          role: "assistant",
+          content: "Authorization: Bearer assistant-secret\nhttps://api.example.com?token=query-secret",
+          thinking: "password=thinking-secret",
+          toolAttachments: [
+            {
+              id: "tool-sensitive-export",
+              kind: "web-search",
+              title: "token=attachment-secret",
+              summary: "apiKey=attachment-secret",
+              provider: "tavily",
+              query: "Bearer attachment-secret",
+              answer: "{\"session\":\"attachment-secret\"}",
+              results: [],
+              createdAt: 1700000000000,
+              redacted: false,
+              truncated: false,
+            },
+          ],
+          createdAt: 1700000000000,
+        }),
+        createMessage({
+          id: "message-sensitive-prompt",
+          role: "user",
+          content: "cookie=user-secret",
+          promptInvocations: [
+            {
+              promptId: "prompt-sensitive",
+              title: "authorization: title-secret",
+              contentSnapshot: "{\"token\":\"prompt-secret\"}",
+            },
+          ],
+          createdAt: 1700000100000,
+        }),
+      ],
+    });
+
+    const markdown = createChatSessionMarkdown(session, 1700000200000);
+    const printHtml = createChatSessionPrintHtml(session, 1700000200000);
+    const copied = createChatMessageMarkdown(session.messages[0]);
+
+    for (const exportedText of [markdown, printHtml, copied]) {
+      expect(exportedText).toContain("[已脱敏]");
+      expect(exportedText).not.toMatch(/assistant-secret|query-secret|thinking-secret|attachment-secret|user-secret|prompt-secret|title-secret/);
+    }
+  });
+
   it("复制助手消息时包含思考过程、正文、Network 附件和网络搜索附件", () => {
     const message = createMessage({
       id: "message-copy-assistant",

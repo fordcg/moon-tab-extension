@@ -9,24 +9,34 @@ import { downloadChatSessionMarkdown, downloadChatSessionPdf, downloadChatSessio
 
 interface ChatPanelProps {
   browserControlEnabled: boolean;
-  historyDialogOpen: boolean;
-  historyTransitionClassName?: string;
+  drawerOpen: boolean;
+  drawerOrigin: "header" | "history";
+  drawerPage: "history" | "settings";
   historyPanelOpen: boolean;
-  onHistoryDialogOpenChange: (open: boolean) => void;
+  settingsInitialTab: SettingsTab;
+  onDrawerOpenChange: (open: boolean) => void;
+  onRestoreDrawerFocus: () => void;
   onOpenAgentTools: () => void;
+  onOpenHistoryDrawer: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
+  onReturnSettingsToHistory: () => void;
   onToggleBrowserControl: () => void;
   onToggleHistoryPanel: () => void;
 }
 
 export function ChatPanel({
   browserControlEnabled,
-  historyDialogOpen,
-  historyTransitionClassName,
+  drawerOpen,
+  drawerOrigin,
+  drawerPage,
   historyPanelOpen,
-  onHistoryDialogOpenChange,
+  settingsInitialTab,
+  onDrawerOpenChange,
+  onRestoreDrawerFocus,
   onOpenAgentTools,
+  onOpenHistoryDrawer,
   onOpenSettings,
+  onReturnSettingsToHistory,
   onToggleBrowserControl,
   onToggleHistoryPanel,
 }: ChatPanelProps) {
@@ -120,8 +130,12 @@ export function ChatPanel({
           onClick={onToggleHistoryPanel}
         />
         <div className="chat-header-actions">
-          <button className="ui-button-secondary chat-history-trigger" type="button" onClick={() => onHistoryDialogOpenChange(true)}>
-            历史
+          <button className="ui-button-secondary chat-history-trigger" type="button" aria-label="历史" title="历史" onClick={onOpenHistoryDrawer}>
+            <svg className="chat-history-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="4.5" r="1.85" />
+              <circle cx="12" cy="12" r="1.85" />
+              <circle cx="12" cy="19.5" r="1.85" />
+            </svg>
           </button>
           <button className="ui-button-secondary chat-drawer-trigger" type="button" aria-label="打开当前聊天设置" onClick={() => setChatPreferencesOpen(true)}>
             ⚙
@@ -176,12 +190,16 @@ export function ChatPanel({
       {providers.length === 0 || models.length === 0 ? <p className="chat-warning">请先配置 API Key 后再开始对话</p> : null}
       <ChatComposer canSend={canSend} matchedRuleLabel={matchedRuleLabel} />
       <SessionHistoryDialog
-        open={historyDialogOpen}
-        transitionClassName={historyTransitionClassName}
+        open={drawerOpen}
+        page={drawerPage}
+        origin={drawerOrigin}
+        settingsInitialTab={settingsInitialTab}
         browserControlEnabled={browserControlEnabled}
-        onOpenChange={onHistoryDialogOpenChange}
+        onOpenChange={onDrawerOpenChange}
+        onRestoreFocus={onRestoreDrawerFocus}
         onOpenAgentTools={onOpenAgentTools}
         onOpenSettings={onOpenSettings}
+        onReturnToHistory={onReturnSettingsToHistory}
         onToggleBrowserControl={onToggleBrowserControl}
       />
       <ChatPreferenceDrawer open={chatPreferencesOpen} onOpenChange={setChatPreferencesOpen} />

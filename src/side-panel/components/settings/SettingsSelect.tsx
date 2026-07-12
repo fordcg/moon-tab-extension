@@ -58,17 +58,20 @@ export function SettingsSelect<T extends string>({
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         setOpen(false);
         triggerRef.current?.focus({ preventScroll: true });
       }
     };
     document.addEventListener("pointerdown", closeOnPointerDown);
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", closeOnEscape, true);
     window.addEventListener("resize", updateMenuPosition);
     window.addEventListener("scroll", updateMenuPosition, true);
     return () => {
       document.removeEventListener("pointerdown", closeOnPointerDown);
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", closeOnEscape, true);
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };

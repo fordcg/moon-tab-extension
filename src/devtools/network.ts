@@ -58,7 +58,21 @@ function connectRuntimePort(): void {
     reconnectTimer = undefined;
   }
 
-  const nextPort = chrome.runtime.connect({ name: "network.devtools" });
+  if (!isExtensionContextAlive()) {
+    return;
+  }
+
+  let nextPort: chrome.runtime.Port;
+  try {
+    nextPort = chrome.runtime.connect({ name: "network.devtools" });
+  } catch (error) {
+    if (isExtensionContextInvalidatedError(error)) {
+      return;
+    }
+    scheduleReconnect();
+    return;
+  }
+
   port = nextPort;
 
   nextPort.onMessage.addListener((message: NetworkDevtoolsInboundMessage) => {
@@ -84,7 +98,9 @@ function connectRuntimePort(): void {
   nextPort.onDisconnect.addListener(() => {
     if (port === nextPort) {
       port = undefined;
-      scheduleReconnect();
+      if (isExtensionContextAlive()) {
+        scheduleReconnect();
+      }
     }
   });
 
@@ -92,9 +108,23 @@ function connectRuntimePort(): void {
 }
 
 function scheduleReconnect(): void {
-  if (!reconnectTimer) {
-    reconnectTimer = setTimeout(connectRuntimePort, RECONNECT_DELAY_MS);
+  if (reconnectTimer || !isExtensionContextAlive()) {
+    return;
   }
+  reconnectTimer = setTimeout(connectRuntimePort, RECONNECT_DELAY_MS);
+}
+
+function isExtensionContextAlive(): boolean {
+  try {
+    return Boolean(chrome.runtime?.id);
+  } catch {
+    return false;
+  }
+}
+
+function isExtensionContextInvalidatedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /extension context invalidated/i.test(message);
 }
 
 chrome.devtools.network.onRequestFinished.addListener((request) => {

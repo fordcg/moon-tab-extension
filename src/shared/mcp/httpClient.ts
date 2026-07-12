@@ -23,34 +23,49 @@ interface JsonRpcResponse {
   error?: { code?: number; message?: string };
 }
 
-const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 30000;
+const DEFAULT_MCP_LIST_TIMEOUT_MS = 30000;
+const DEFAULT_MCP_CALL_TIMEOUT_MS = 310000;
 
 let nextRequestId = 1;
 
 export async function listMcpTools(input: ListMcpToolsInput): Promise<McpDiscoveredTool[]> {
-  return withMcpRequestTimeout(input, async (signal) => {
+  return withMcpRequestTimeout(input, DEFAULT_MCP_LIST_TIMEOUT_MS, async (signal) => {
     const requestInput = { ...input, signal };
-    const session = await initializeMcpSession(requestInput);
-    const response = await sendMcpRequest(requestInput, "tools/list", createToolsListParams(session.protocolVersion), session.sessionId);
-    const tools = response.result && typeof response.result === "object" && Array.isArray((response.result as { tools?: unknown }).tools)
-      ? (response.result as { tools: unknown[] }).tools
-      : [];
+    try {
+      const session = await initializeMcpSession(requestInput);
+      const response = await sendMcpRequest(requestInput, "tools/list", createToolsListParams(session.protocolVersion), session.sessionId);
+      const tools = response.result && typeof response.result === "object" && Array.isArray((response.result as { tools?: unknown }).tools)
+        ? (response.result as { tools: unknown[] }).tools
+        : [];
 
-    return tools.map(normalizeMcpToolFromResponse).filter((tool): tool is McpDiscoveredTool => Boolean(tool));
+      return tools.map(normalizeMcpToolFromResponse).filter((tool): tool is McpDiscoveredTool => Boolean(tool));
+    } catch (error) {
+      if (!isBridgeFallbackEligibleError(error)) {
+        throw error;
+      }
+      return listBridgeTools(requestInput);
+    }
   });
 }
 
 export async function callMcpTool(input: CallMcpToolInput): Promise<string> {
-  return withMcpRequestTimeout(input, async (signal) => {
+  return withMcpRequestTimeout(input, DEFAULT_MCP_CALL_TIMEOUT_MS, async (signal) => {
     const requestInput = { ...input, signal };
-    const session = await initializeMcpSession(requestInput);
-    const response = await sendMcpRequest(
-      requestInput,
-      "tools/call",
-      { name: input.toolName, arguments: input.arguments },
-      session.sessionId,
-    );
-    return formatMcpToolResult(response.result);
+    try {
+      const session = await initializeMcpSession(requestInput);
+      const response = await sendMcpRequest(
+        requestInput,
+        "tools/call",
+        { name: input.toolName, arguments: input.arguments },
+        session.sessionId,
+      );
+      return formatMcpToolResult(response.result);
+    } catch (error) {
+      if (!isBridgeFallbackEligibleError(error)) {
+        throw error;
+      }
+      return callBridgeTool(requestInput);
+    }
   });
 }
 
@@ -123,7 +138,7 @@ async function sendMcpNotification(
   }
 }
 
-async function withMcpRequestTimeout<T>(input: McpClientInput, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function withMcpRequestTimeout<T>(input: McpClientInput, timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   if (input.signal?.aborted) {
     throw new Error("MCP 请求已取消");
   }
@@ -133,7 +148,7 @@ async function withMcpRequestTimeout<T>(input: McpClientInput, run: (signal: Abo
   const timeoutId = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, DEFAULT_MCP_REQUEST_TIMEOUT_MS);
+  }, timeoutMs);
   const abortByCaller = () => controller.abort();
   input.signal?.addEventListener("abort", abortByCaller, { once: true });
 
@@ -195,22 +210,93 @@ function parseSseJsonRpcResponse(text: string): JsonRpcResponse {
   throw new Error("MCP 响应格式无效");
 }
 
+async function listBridgeTools(input: McpClientInput): Promise<McpDiscoveredTool[]> {
+  const fetcher = input.fetcher ?? fetch;
+  const response = await fetcher(createBridgeUrl(input.server.endpointUrl, "tools/list"), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      ...(input.bearerToken ? { Authorization: `Bearer ${input.bearerToken}` } : {}),
+    },
+    signal: input.signal,
+  });
+  if (!response.ok) {
+    throw new Error(`MCP Bridge 工具列表读取失败：${response.status} ${response.statusText}`.trim());
+  }
+
+  const payload = await response.json() as { tools?: unknown };
+  const tools = Array.isArray(payload.tools) ? payload.tools : [];
+  return tools.map(normalizeMcpToolFromResponse).filter((tool): tool is McpDiscoveredTool => Boolean(tool));
+}
+
+async function callBridgeTool(input: CallMcpToolInput): Promise<string> {
+  const fetcher = input.fetcher ?? fetch;
+  const response = await fetcher(createBridgeUrl(input.server.endpointUrl, "tools/call"), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(input.bearerToken ? { Authorization: `Bearer ${input.bearerToken}` } : {}),
+    },
+    body: JSON.stringify({
+      toolId: input.toolName,
+      input: input.arguments,
+    }),
+    signal: input.signal,
+  });
+  if (!response.ok) {
+    throw new Error(`MCP Bridge 工具调用失败：${response.status} ${response.statusText}`.trim());
+  }
+
+  const payload = await response.json() as { ok?: unknown; content?: unknown; message?: unknown };
+  if (payload.ok === false) {
+    throw new Error(typeof payload.message === "string" && payload.message.trim()
+      ? payload.message.trim()
+      : `MCP Bridge 工具调用失败：${input.toolName}`);
+  }
+  if (typeof payload.content === "string") {
+    return truncateText(payload.content, 12000).text;
+  }
+  return truncateText(JSON.stringify(payload.content ?? payload), 12000).text;
+}
+
+function createBridgeUrl(endpointUrl: string, path: "tools/list" | "tools/call"): string {
+  const url = new URL(endpointUrl);
+  return `${url.protocol}//${url.host}/${path}`;
+}
+
+function isBridgeFallbackEligibleError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /MCP 请求失败：\s*(404|405|501)\b/i.test(message)
+    || /未找到 MCP Bridge 路由/i.test(message)
+    || /Failed to fetch|NetworkError|ECONNREFUSED|ENOTFOUND/i.test(message);
+}
+
 function normalizeMcpToolFromResponse(value: unknown): McpDiscoveredTool | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
-  const source = value as { name?: unknown; description?: unknown; inputSchema?: unknown };
-  if (typeof source.name !== "string" || !source.name.trim()) {
+  const source = value as { name?: unknown; id?: unknown; description?: unknown; inputSchema?: unknown; input_schema?: unknown };
+  const name = typeof source.name === "string" && source.name.trim()
+    ? source.name.trim()
+    : typeof source.id === "string" && source.id.trim()
+      ? source.id.trim()
+      : "";
+  if (!name) {
     return undefined;
   }
 
+  const inputSchema = source.inputSchema && typeof source.inputSchema === "object" && !Array.isArray(source.inputSchema)
+    ? source.inputSchema as Record<string, unknown>
+    : source.input_schema && typeof source.input_schema === "object" && !Array.isArray(source.input_schema)
+      ? source.input_schema as Record<string, unknown>
+      : {};
+
   return {
-    name: source.name.trim(),
+    name,
     description: typeof source.description === "string" && source.description.trim() ? source.description.trim() : undefined,
-    inputSchema: source.inputSchema && typeof source.inputSchema === "object" && !Array.isArray(source.inputSchema)
-      ? source.inputSchema as Record<string, unknown>
-      : {},
+    inputSchema,
   };
 }
 

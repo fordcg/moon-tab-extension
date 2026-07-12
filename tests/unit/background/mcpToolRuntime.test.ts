@@ -53,6 +53,68 @@ describe("background MCP 工具执行", () => {
     });
   });
 
+  it("MCP 工具执行会把中止信号传给 callMcpTool", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          reject(new Error("missing signal"));
+          return;
+        }
+        if (signal.aborted) {
+          reject(new DOMException("Aborted", "AbortError"));
+          return;
+        }
+        signal.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      });
+    });
+    const executor = createBackgroundToolExecutor({
+      model: createModel(),
+      mcp: {
+        servers: [
+          {
+            id: "mysql",
+            name: "MySQL",
+            endpointUrl: "https://mcp.example.com/mcp",
+            enabled: true,
+            tools: [
+              {
+                name: "query",
+                description: "查询",
+                inputSchema: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] },
+              },
+            ],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        bearerTokens: { mysql: "secret" },
+      },
+    }, fetcher);
+    const tool: ModelToolRegistryEntry = {
+      id: createMcpToolId("mysql", "query"),
+      name: createMcpToolName("mysql", "query"),
+      displayName: "MySQL / query",
+      parameters: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] },
+      toolClassification: { runtime: "mcp_remote", capabilities: ["call_remote_tool"], risk: "medium" },
+    };
+
+    const pending = executor({ id: "call-1", name: tool.name, arguments: { sql: "select 1" } }, tool, { signal: controller.signal });
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalled();
+    });
+    controller.abort();
+    await expect(pending).resolves.toMatchObject({
+      toolCallId: "call-1",
+      name: tool.name,
+      isError: true,
+      content: expect.stringMatching(/MCP 工具执行失败：MCP 请求已取消/),
+    });
+  });
+
   it("MCP 工具不在发现缓存中时拒绝执行", async () => {
     const executor = createBackgroundToolExecutor({
       model: createModel(),

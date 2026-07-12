@@ -1,5 +1,6 @@
 import type { ChatMessage, ChatSession } from "../../shared/types";
 import { collectMessageToolAttachments, formatToolAttachmentForExport } from "../../shared/toolArtifacts";
+import { redactSensitiveText } from "../../shared/security/redaction";
 import { downloadBlob } from "./downloadBlob";
 
 const roleLabels: Record<ChatMessage["role"], string> = {
@@ -16,7 +17,7 @@ type ExportBlock =
 
 export function createChatSessionMarkdown(session: ChatSession, exportedAt: number = Date.now()): string {
   const lines = [
-    `# ${sanitizeMarkdownHeading(session.title)}`,
+    `# ${sanitizeSessionTitle(session.title)}`,
     "",
     `- 导出时间：${formatDateTime(exportedAt)}`,
     `- 会话创建时间：${formatDateTime(session.createdAt)}`,
@@ -40,7 +41,7 @@ export function createChatSessionMarkdown(session: ChatSession, exportedAt: numb
 
 export function createChatMessageMarkdown(message: ChatMessage): string {
   if (message.role === "user") {
-    return message.content.trim();
+    return redactSensitiveText(message.content).trim();
   }
 
   const sections: string[] = [];
@@ -92,7 +93,7 @@ export function createChatSessionPrintHtml(session: ChatSession, exportedAt: num
 <html>
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(session.title)}</title>
+<title>${escapeHtml(sanitizeSessionTitle(session.title))}</title>
 <style>
 ${createPrintCss()}
 </style>
@@ -115,7 +116,7 @@ pre { margin: 0 0 8pt; padding: 8pt; background: #181715; color: #faf9f5; border
 }
 
 function createChatSessionExportFilename(session: ChatSession, extension: "md" | "docx" | "pdf", exportedAt: number = Date.now()): string {
-  const title = sanitizeFilenamePart(session.title).slice(0, 80) || "聊天记录";
+  const title = sanitizeFilenamePart(redactSensitiveText(session.title)).slice(0, 80) || "聊天记录";
   return `${title}-${formatDate(exportedAt)}.${extension}`;
 }
 
@@ -125,7 +126,7 @@ function createPrintBodyHtml(session: ChatSession, exportedAt: number): string {
 
 function createExportBlocks(session: ChatSession, exportedAt: number): ExportBlock[] {
   const blocks: ExportBlock[] = [
-    { type: "heading", level: 1, text: sanitizeMarkdownHeading(session.title) },
+    { type: "heading", level: 1, text: sanitizeSessionTitle(session.title) },
     { type: "paragraph", text: `导出时间：${formatDateTime(exportedAt)}` },
     { type: "paragraph", text: `会话创建时间：${formatDateTime(session.createdAt)}` },
     { type: "paragraph", text: `会话更新时间：${formatDateTime(session.updatedAt)}` },
@@ -135,7 +136,7 @@ function createExportBlocks(session: ChatSession, exportedAt: number): ExportBlo
   for (const message of session.messages) {
     blocks.push({ type: "heading", level: 2, text: `${roleLabels[message.role]} · ${formatDateTime(message.createdAt)}` });
     if (message.thinking?.trim()) {
-      blocks.push({ type: "thinking", text: `思考过程：${message.thinking.trim()}` });
+      blocks.push({ type: "thinking", text: `思考过程：${redactSensitiveText(message.thinking).trim()}` });
     }
     blocks.push({ type: "code", text: formatMessageExportContent(message).trimEnd() });
   }
@@ -145,20 +146,28 @@ function createExportBlocks(session: ChatSession, exportedAt: number): ExportBlo
 
 function formatMessageExportContent(message: ChatMessage): string {
   const promptInvocations = message.role === "user" ? (message.promptInvocations ?? []) : [];
-  const contentSections = [message.content, ...collectMessageToolAttachments(message).map(formatToolAttachmentForExport)];
+  const contentSections = [
+    message.content,
+    ...collectMessageToolAttachments(message).map(formatToolAttachmentForExport),
+  ].map(redactSensitiveText);
 
   if (promptInvocations.length === 0) {
     return contentSections.join("\n\n").trim();
   }
 
-  const promptSections = promptInvocations.map((prompt) => [`## ${prompt.title}`, "```", prompt.contentSnapshot, "```"].join("\n"));
+  const promptSections = promptInvocations.map((prompt) => [
+    `## ${redactSensitiveText(prompt.title)}`,
+    "```",
+    redactSensitiveText(prompt.contentSnapshot),
+    "```",
+  ].join("\n"));
 
   return ["# 调用的Prompt", "", promptSections.join("\n\n"), "", "# 用户输入", "", ...contentSections].join("\n");
 }
 
 function formatThinkingMarkdown(thinking: string): string {
   // 思考过程不是正式回复正文，用引用块保留上下文，同时避免干扰正文 Markdown 结构。
-  return `> 思考过程：${thinking.trim().replace(/\r?\n/g, "\n> ")}`;
+  return `> 思考过程：${redactSensitiveText(thinking).trim().replace(/\r?\n/g, "\n> ")}`;
 }
 
 function blockToHtml(block: ExportBlock): string {
@@ -255,6 +264,10 @@ function sanitizeMarkdownHeading(value: string): string {
     .trim();
 
   return sanitized || "未命名聊天";
+}
+
+function sanitizeSessionTitle(value: string): string {
+  return sanitizeMarkdownHeading(redactSensitiveText(value));
 }
 
 function escapeHtml(value: string): string {

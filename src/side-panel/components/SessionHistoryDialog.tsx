@@ -1,16 +1,23 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { NotificationHost } from "./NotificationHost";
 import { SessionList } from "./SessionList";
-import type { SettingsTab } from "./SettingsPanel";
+import { SettingsPanel, type SettingsTab } from "./SettingsPanel";
 import { useAppStore } from "../state/appStore";
+
+export type SidePanelDrawerPage = "history" | "settings";
 
 interface SessionHistoryDialogProps {
   browserControlEnabled: boolean;
   open: boolean;
-  transitionClassName?: string;
+  page: SidePanelDrawerPage;
+  origin: "header" | "history";
+  settingsInitialTab: SettingsTab;
   onOpenChange: (open: boolean) => void;
   onOpenAgentTools: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
+  onReturnToHistory: () => void;
+  onRestoreFocus: () => void;
   onToggleBrowserControl: () => void;
 }
 
@@ -28,73 +35,373 @@ const SETTINGS_ICON_PATHS = [
 ];
 const RECENT_HISTORY_COMPACT_LIMIT = 5;
 type HistoryDrawerMode = "compact" | "expanded";
+type DrawerPageTransition = "history-to-settings" | "settings-to-history" | "";
+type HistoryPageTransition = "is-history-page-in-left" | "is-history-page-in-right" | "is-history-page-out-left" | "is-history-page-out-right" | "";
 
-export function SessionHistoryDialog({ browserControlEnabled, open, transitionClassName = "", onOpenAgentTools, onOpenChange, onOpenSettings, onToggleBrowserControl }: SessionHistoryDialogProps) {
+function usePrefersReducedMotion() {
+  const getValue = () => typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [reducedMotion, setReducedMotion] = useState(getValue);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return reducedMotion;
+}
+
+export function SessionHistoryDialog({
+  browserControlEnabled,
+  open,
+  page,
+  origin,
+  settingsInitialTab,
+  onOpenAgentTools,
+  onOpenChange,
+  onOpenSettings,
+  onReturnToHistory,
+  onRestoreFocus,
+  onToggleBrowserControl,
+}: SessionHistoryDialogProps) {
   const [historyMode, setHistoryMode] = useState<HistoryDrawerMode>("compact");
+  const [historyPageTransitionClassName, setHistoryPageTransitionClassName] = useState<HistoryPageTransition>("");
+  const [visiblePage, setVisiblePage] = useState<SidePanelDrawerPage>(page);
+  const [drawerTransition, setDrawerTransition] = useState<DrawerPageTransition>("");
+  const [drawerTransitionHeight, setDrawerTransitionHeight] = useState<number | null>(null);
+  const wasOpenRef = useRef(false);
+  const drawerTransitionTargetRef = useRef<SidePanelDrawerPage | null>(null);
+  const historyTransitionTargetRef = useRef<HistoryDrawerMode | null>(null);
+  const pendingDrawerFocusPageRef = useRef<SidePanelDrawerPage | null>(null);
+  const pendingHistoryFocusModeRef = useRef<HistoryDrawerMode | null>(null);
+  const drawerContentRef = useRef<HTMLDivElement>(null);
+  const drawerPagesRef = useRef<HTMLDivElement>(null);
+  const historyDrawerPageRef = useRef<HTMLDivElement>(null);
+  const settingsDrawerPageRef = useRef<HTMLDivElement>(null);
+  const historyContentRef = useRef<HTMLDivElement>(null);
+  const settingsActionRef = useRef<HTMLButtonElement>(null);
+  const settingsBackButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const historyBackButtonRef = useRef<HTMLButtonElement>(null);
+  const historyMoreButtonRef = useRef<HTMLButtonElement>(null);
   const activeHistoryCount = useAppStore((state) => state.chatSessions.filter((session) => !session.archived).length);
+  const reducedMotion = usePrefersReducedMotion();
   const expanded = historyMode === "expanded";
   const showMoreAction = activeHistoryCount > RECENT_HISTORY_COMPACT_LIMIT;
-  const openSettings = (tab?: SettingsTab) => {
-    onOpenSettings(tab);
+  const displayedPage = open && !wasOpenRef.current ? page : visiblePage;
+  const drawerTransitionTarget = drawerTransitionTargetRef.current;
+  const showHistoryPage = displayedPage === "history" || drawerTransitionTarget === "history";
+  const showSettingsPage = displayedPage === "settings" || drawerTransitionTarget === "settings";
+  const activePage = drawerTransitionTarget ?? displayedPage;
+  const shellPage = visiblePage;
+
+  const queueDrawerPageFocus = (nextPage: SidePanelDrawerPage) => {
+    pendingDrawerFocusPageRef.current = nextPage;
+  };
+
+  const queueHistoryModeFocus = (nextMode: HistoryDrawerMode) => {
+    pendingHistoryFocusModeRef.current = nextMode;
   };
 
   useEffect(() => {
-    if (!open) {
-      setHistoryMode("compact");
+    const nextPage = pendingDrawerFocusPageRef.current;
+    if (!open || drawerTransition || page !== visiblePage || nextPage !== visiblePage) {
+      return;
     }
-  }, [open]);
+
+    const target = nextPage === "settings"
+      ? origin === "history"
+        ? settingsBackButtonRef.current ?? settingsCloseButtonRef.current
+        : settingsCloseButtonRef.current ?? settingsBackButtonRef.current
+      : historyMode === "expanded"
+        ? historyBackButtonRef.current
+        : settingsActionRef.current;
+    if (!target?.isConnected) {
+      return;
+    }
+
+    pendingDrawerFocusPageRef.current = null;
+    target.focus({ preventScroll: true });
+  }, [drawerTransition, historyMode, open, origin, page, visiblePage]);
+
+  useEffect(() => {
+    const nextMode = pendingHistoryFocusModeRef.current;
+    if (!open || drawerTransition || page !== "history" || visiblePage !== "history" || historyPageTransitionClassName || nextMode !== historyMode) {
+      return;
+    }
+
+    const target = nextMode === "expanded"
+      ? historyBackButtonRef.current
+      : historyMoreButtonRef.current ?? settingsActionRef.current;
+    if (!target?.isConnected) {
+      return;
+    }
+
+    pendingHistoryFocusModeRef.current = null;
+    target.focus({ preventScroll: true });
+  }, [drawerTransition, historyMode, historyPageTransitionClassName, open, page, visiblePage]);
+
+  useEffect(() => {
+    if (!open) {
+      wasOpenRef.current = false;
+      drawerTransitionTargetRef.current = null;
+      historyTransitionTargetRef.current = null;
+      pendingDrawerFocusPageRef.current = null;
+      pendingHistoryFocusModeRef.current = null;
+      setVisiblePage(page);
+      setDrawerTransition("");
+      setDrawerTransitionHeight(null);
+      setHistoryPageTransitionClassName("");
+      setHistoryMode("compact");
+      return;
+    }
+
+    if (!wasOpenRef.current) {
+      wasOpenRef.current = true;
+      setVisiblePage(page);
+      setDrawerTransition("");
+      setDrawerTransitionHeight(null);
+      return;
+    }
+
+    if (drawerTransition) {
+      if (reducedMotion || drawerTransitionTargetRef.current !== page) {
+        drawerTransitionTargetRef.current = null;
+        setVisiblePage(page);
+        setDrawerTransition("");
+        setDrawerTransitionHeight(null);
+        queueDrawerPageFocus(page);
+      }
+      return;
+    }
+
+    if (page === visiblePage) {
+      return;
+    }
+
+    if (reducedMotion) {
+      setVisiblePage(page);
+      setDrawerTransitionHeight(null);
+      queueDrawerPageFocus(page);
+      return;
+    }
+
+    const currentHeight = drawerContentRef.current?.getBoundingClientRect().height;
+    if (currentHeight) {
+      setDrawerTransitionHeight(currentHeight);
+    }
+    drawerTransitionTargetRef.current = page;
+    setDrawerTransition(visiblePage === "history" ? "history-to-settings" : "settings-to-history");
+  }, [drawerTransition, open, page, reducedMotion, visiblePage]);
+
+  const transitionHistoryMode = (nextMode: HistoryDrawerMode) => {
+    if (nextMode === historyMode || historyPageTransitionClassName || drawerTransition) {
+      return;
+    }
+
+    if (reducedMotion) {
+      setHistoryMode(nextMode);
+      queueHistoryModeFocus(nextMode);
+      return;
+    }
+
+    historyTransitionTargetRef.current = nextMode;
+    setHistoryPageTransitionClassName(nextMode === "expanded" ? "is-history-page-out-left" : "is-history-page-out-right");
+  };
+
+  const completeDrawerPageTransition = (completedPage: SidePanelDrawerPage) => {
+    if (!drawerTransition) {
+      return;
+    }
+
+    const target = drawerTransitionTargetRef.current;
+    if (!target || target !== completedPage || page !== target) {
+      return;
+    }
+
+    drawerTransitionTargetRef.current = null;
+    setVisiblePage(target);
+    setDrawerTransition("");
+    setDrawerTransitionHeight(null);
+    queueDrawerPageFocus(target);
+  };
+
+  const handleDrawerTrackAnimationEnd = (event: AnimationEvent) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    const target = drawerTransitionTargetRef.current;
+    if (target) {
+      completeDrawerPageTransition(target);
+    }
+  };
+
+  const handleHistoryPageTransitionEnd = (event: AnimationEvent) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    if (!historyPageTransitionClassName) {
+      return;
+    }
+
+    const target = historyTransitionTargetRef.current;
+    if (!target) {
+      return;
+    }
+
+    if (historyPageTransitionClassName === "is-history-page-out-left" || historyPageTransitionClassName === "is-history-page-out-right") {
+      setHistoryMode(target);
+      setHistoryPageTransitionClassName(target === "expanded" ? "is-history-page-in-right" : "is-history-page-in-left");
+      return;
+    }
+
+    historyTransitionTargetRef.current = null;
+    setHistoryPageTransitionClassName("");
+    queueHistoryModeFocus(target);
+  };
+
+  useEffect(() => {
+    const pages = drawerPagesRef.current;
+    if (!pages || !drawerTransition) {
+      return;
+    }
+
+    pages.addEventListener("animationend", handleDrawerTrackAnimationEnd);
+    return () => pages.removeEventListener("animationend", handleDrawerTrackAnimationEnd);
+  }, [drawerTransition, page]);
+
+  useEffect(() => {
+    const historyContent = historyContentRef.current;
+    if (!historyContent || !historyPageTransitionClassName) {
+      return;
+    }
+
+    historyContent.addEventListener("animationend", handleHistoryPageTransitionEnd);
+    return () => historyContent.removeEventListener("animationend", handleHistoryPageTransitionEnd);
+  }, [historyMode, historyPageTransitionClassName]);
+
+  const drawerClassName = [
+    "drawer-panel",
+    "history-dialog",
+    "history-drawer",
+    "sidepanel-drawer-dialog",
+    expanded ? "is-history-expanded" : "",
+    shellPage === "settings" ? "settings-dialog" : "",
+    drawerTransition ? "is-page-transitioning" : "",
+    drawerTransition ? "is-" + drawerTransition : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const historyPageIsInert = drawerTransitionTarget === "settings";
+  const settingsPageIsInert = drawerTransitionTarget === "history";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Overlay className="dialog-overlay sidepanel-drawer-overlay" />
         <Dialog.Content
-          className={[
-            expanded ? "drawer-panel history-dialog history-drawer is-history-expanded" : "drawer-panel history-dialog history-drawer",
-            transitionClassName,
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          ref={drawerContentRef}
+          className={drawerClassName}
+          data-sidepanel-drawer-page={activePage}
+          data-sidepanel-drawer-transition={drawerTransition || undefined}
           data-sidepanel-history-mode={historyMode}
+          style={drawerTransitionHeight !== null ? { height: `${drawerTransitionHeight}px` } : undefined}
+          onOpenAutoFocus={(event) => {
+            // Keep the recent-menu list visually flat: no forced focus ring on first row.
+            event.preventDefault();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            onRestoreFocus();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (document.querySelector(".sidepanel-settings-select.is-model-menu-open")) {
+              event.preventDefault();
+            }
+          }}
         >
-          <div className="drawer-header">
-            <Dialog.Title className="history-dialog-title">历史记录</Dialog.Title>
-            <Dialog.Description className="sr-only">浏览和管理历史对话</Dialog.Description>
-          </div>
-          <div className="sidepanel-history-more-header">
-            <button className="sidepanel-history-back" type="button" aria-label="返回近期对话菜单" onClick={() => setHistoryMode("compact")}>
-              返回
-            </button>
-          </div>
-          <div className="history-dialog-body">
-            <div className="history-dialog-scroll">
-              <SessionList compact compactExpanded={expanded} compactVisibleLimit={RECENT_HISTORY_COMPACT_LIMIT} />
-            </div>
-            {showMoreAction && !expanded ? (
-              <button className="sidepanel-history-more-action" type="button" aria-label="查看更多近期对话" onClick={() => setHistoryMode("expanded")}>
-                更多
-              </button>
+          <Dialog.Title className="sr-only">{activePage === "settings" ? "设置" : "历史记录"}</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            {activePage === "settings" ? "管理助手设置" : "浏览和管理历史对话"}
+          </Dialog.Description>
+          <div ref={drawerPagesRef} className="sidepanel-drawer-pages">
+            {showHistoryPage ? (
+              <div
+                ref={historyDrawerPageRef}
+                className="sidepanel-drawer-page sidepanel-drawer-page-history"
+                data-drawer-page="history"
+                aria-hidden={historyPageIsInert || undefined}
+                inert={historyPageIsInert || undefined}
+              >
+                <div ref={historyContentRef} className={["sidepanel-history-content", historyPageTransitionClassName].filter(Boolean).join(" ")}>
+                  <div className="sidepanel-history-more-header">
+                    <button ref={historyBackButtonRef} className="sidepanel-history-back" type="button" aria-label="返回近期对话菜单" onClick={() => transitionHistoryMode("compact")}>
+                      返回
+                    </button>
+                  </div>
+                  <div className="history-dialog-body">
+                    <div className="history-dialog-scroll">
+                      <SessionList compact compactExpanded={expanded} compactVisibleLimit={RECENT_HISTORY_COMPACT_LIMIT} />
+                    </div>
+                    {showMoreAction && !expanded ? (
+                      <button ref={historyMoreButtonRef} className="sidepanel-history-more-action" type="button" aria-label="查看更多近期对话" onClick={() => transitionHistoryMode("expanded")}>
+                        更多
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="sidepanel-drawer-footer" data-variant="recent-menu">
+                    <DrawerAction
+                      active={browserControlEnabled}
+                      ariaPressed={browserControlEnabled}
+                      className="sidepanel-browser-control-action"
+                      iconPaths={BROWSER_CONTROL_ICON_PATHS}
+                      label="浏览器控制"
+                      status={browserControlEnabled ? "已开启" : "已关闭"}
+                      title={browserControlEnabled ? "浏览器控制已开启。点击后关闭。" : "浏览器控制已关闭。点击后开启。"}
+                      onClick={onToggleBrowserControl}
+                    />
+                    <DrawerAction iconPaths={TOOLS_ICON_PATHS} label="工具和 MCP" onClick={onOpenAgentTools} />
+                    <DrawerAction buttonRef={settingsActionRef} chevron iconPaths={SETTINGS_ICON_PATHS} label="设置" onClick={() => onOpenSettings("channels")} />
+                  </div>
+                  {expanded ? (
+                    <div className="sidepanel-history-scrollbar" aria-hidden="true">
+                      <div className="sidepanel-history-scrollbar-thumb" />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            {showSettingsPage ? (
+              <div
+                ref={settingsDrawerPageRef}
+                className="sidepanel-drawer-page sidepanel-drawer-page-settings"
+                data-drawer-page="settings"
+                aria-hidden={settingsPageIsInert || undefined}
+                inert={settingsPageIsInert || undefined}
+              >
+                <SettingsPanel
+                  embedded
+                  initialTab={settingsInitialTab}
+                  showBackButton={origin === "history"}
+                  backButtonRef={settingsBackButtonRef}
+                  closeButtonRef={settingsCloseButtonRef}
+                  onBackToHistory={onReturnToHistory}
+                  onClose={() => onOpenChange(false)}
+                />
+              </div>
             ) : null}
           </div>
-          <div className="sidepanel-drawer-footer" data-variant="recent-menu">
-            <DrawerAction
-              active={browserControlEnabled}
-              ariaPressed={browserControlEnabled}
-              className="sidepanel-browser-control-action"
-              iconPaths={BROWSER_CONTROL_ICON_PATHS}
-              label="浏览器控制"
-              status={browserControlEnabled ? "已开启" : "已关闭"}
-              title={browserControlEnabled ? "浏览器控制已开启。点击后关闭。" : "浏览器控制已关闭。点击后开启。"}
-              onClick={onToggleBrowserControl}
-            />
-            <DrawerAction iconPaths={TOOLS_ICON_PATHS} label="工具和 MCP" onClick={onOpenAgentTools} />
-            <DrawerAction chevron iconPaths={SETTINGS_ICON_PATHS} label="设置和帮助" onClick={() => openSettings("channels")} />
-          </div>
-          {expanded ? (
-            <div className="sidepanel-history-scrollbar" aria-hidden="true">
-              <div className="sidepanel-history-scrollbar-thumb" />
-            </div>
-          ) : null}
+          <NotificationHost />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -104,6 +411,7 @@ export function SessionHistoryDialog({ browserControlEnabled, open, transitionCl
 interface DrawerActionProps {
   active?: boolean;
   ariaPressed?: boolean;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
   chevron?: boolean;
   className?: string;
   iconPaths: string[];
@@ -113,9 +421,10 @@ interface DrawerActionProps {
   onClick: () => void;
 }
 
-function DrawerAction({ active = false, ariaPressed, chevron = false, className = "", iconPaths, label, status, title, onClick }: DrawerActionProps) {
+function DrawerAction({ active = false, ariaPressed, buttonRef, chevron = false, className = "", iconPaths, label, status, title, onClick }: DrawerActionProps) {
   return (
     <button
+      ref={buttonRef}
       className={[
         "sidepanel-drawer-action",
         chevron ? "sidepanel-drawer-action-chevron" : "",

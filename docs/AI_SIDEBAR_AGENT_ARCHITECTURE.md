@@ -9,6 +9,17 @@
 3. **工具与 MCP 可扩展**：所有内置工具、后续本地工具、MCP Bridge 工具都通过统一 Tool Registry 暴露给模型。
 4. **高可用**：主聊天永远可用；页面上下文、Network、浏览器控制、MCP 都是增强能力，失败时只降级对应能力。
 
+## 当前发布边界
+
+- `browser.*`、`network.*`、`js.*`、`sourcemap.*` 和受限 `runtime.*` 在用户显式开启浏览器控制后才会进入模型工具列表。
+- `replay.*` 仅在受控增强模式下可用，并且发送前必须消费绑定 tab、origin、目标工具和参数的一次性用户授权。
+- `full_access.*` 仅在当前会话显式切换到完全访问模式后可用；撤销、导航、切换 tab、关闭控制或 debugger detach 会清理授权上下文。
+- 工具审计、消息复制、Markdown、Word 和 PDF 导出都会重新脱敏凭据形态值。完全访问结果可在已授权会话内查看，但不会默认作为原文导出。
+
+### MCP 职责边界
+
+`src/shared/mcp/*` 是 MCP Server 配置、Bearer Token 存储、工具发现、模型工具定义和聊天执行的唯一生产路径。`src/shared/*mcp*.mjs` 与 `agent-tool-registry.mjs` 只保留给旧 Bridge/兼容测试，不得新增生产调用；新增 MCP 行为必须写入 `src/shared/mcp/*` 并由 `agentTools.*` 路由复用。
+
 ## 分层架构
 
 ```text
@@ -77,7 +88,7 @@ Capability Services
 
 `browser.extract_content` 进入统一工具审计链路。审计记录只保存脱敏参数和结果摘要，优先使用工具返回的 `summary`，不保存页面正文、HTML 原文、Cookie、Storage 或跨域 iframe 内容。
 
-Phase 2 不迁入 Console、Performance、Debugger Network recorder、`network.*`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*`、上游 React/TypeScript/Vite 设置页或高风险表单交互 Playbook。这些能力需要单独设计、权限确认和验证。
+Phase 2 当时不迁入 Console、Performance、Debugger Network recorder、`network.*`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*`。这些能力现已按“当前发布边界”中的运行模式、授权和测试要求提供。
 
 ## Network / 接口分析原则
 

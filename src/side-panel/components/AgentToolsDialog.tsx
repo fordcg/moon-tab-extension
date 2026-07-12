@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAppStore } from "../state/appStore";
 import { sendRuntimeMessage } from "../state/runtimeMessage";
 
 interface AgentToolsDialogProps {
@@ -43,6 +44,7 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
   const [grokEnabled, setGrokEnabled] = useState(false);
   const [grokBusy, setGrokBusy] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const loadChannelConfig = useAppStore((state) => state.loadChannelConfig);
   const servers = useMemo(() => normalizeArray(status.settings?.mcp?.servers), [status.settings?.mcp?.servers]);
   const tools = useMemo(() => normalizeArray(status.tools), [status.tools]);
   const auditLog = useMemo(() => normalizeArray(status.auditLog), [status.auditLog]);
@@ -52,6 +54,14 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
     setStatus({ loading: true });
     const response = await sendRuntimeMessage<AgentToolsStatus>({ type: "agentTools.getStatus" });
     setStatus(response ?? { ok: false, message: "工具状态读取失败" });
+  };
+
+  const reloadChatRuntimeConfig = async () => {
+    try {
+      await loadChannelConfig();
+    } catch {
+      // Keep dialog usable even if chat preferences/MCP store refresh fails.
+    }
   };
 
   useEffect(() => {
@@ -116,6 +126,8 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
       baseUrl: bridgeBaseUrl,
       grokBaseUrl: grokBaseUrlInput.trim(),
       grokModel: grokModelInput.trim(),
+      // Local OpenAI-compatible reverse proxies usually only support chat/completions.
+      grokApiStyle: /127\.0\.0\.1|localhost/i.test(grokBaseUrlInput.trim()) ? "chat" : "",
     };
     if (clearGrokApiKey) {
       mcpConfig.clearGrokApiKey = true;
@@ -127,12 +139,14 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
       mcp: mcpConfig,
     });
     setStatus(next ?? { ok: false, message: "工具设置保存失败" });
+    await reloadChatRuntimeConfig();
     setGrokBusy(false);
   };
   const refreshGrokTools = async () => {
     setGrokBusy(true);
     const next = await sendRuntimeMessage<AgentToolsStatus>({ type: "agentTools.refreshMcp" });
     setStatus(next ?? { ok: false, message: "工具状态刷新失败" });
+    await reloadChatRuntimeConfig();
     setGrokBusy(false);
   };
 
@@ -180,18 +194,34 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
                   <button
                     className="ui-button-secondary"
                     type="button"
-                    onClick={() => void configureGrokPreset(servers).then(loadStatus)}
+                    disabled={Boolean(grokServer) || grokBusy}
+                    title={grokServer ? "Grok 搜索预设已添加" : "一键添加本地 Grok Search MCP Bridge（http://127.0.0.1:17333/）"}
+                    onClick={() => {
+                      if (grokServer) {
+                        return;
+                      }
+                      void configureGrokPreset(servers).then(async () => {
+                        await loadStatus();
+                        await reloadChatRuntimeConfig();
+                      });
+                    }}
                   >
-                    添加 Grok 搜索预设
+                    {grokServer ? "Grok 搜索预设已添加" : "添加 Grok 搜索预设"}
                   </button>
                   <button
                     className="sidepanel-agent-tools-link-button"
                     type="button"
+                    disabled={grokBusy}
                     onClick={() => void refreshGrokTools()}
                   >
                     刷新工具列表
                   </button>
                 </div>
+                {!grokServer ? (
+                  <p className="sidepanel-agent-tools-muted">
+                    首次接入时点“添加 Grok 搜索预设”。本地 Bridge 需先启动（默认 http://127.0.0.1:17333/），再填 API Key 并保存。
+                  </p>
+                ) : null}
               </section>
               <section className="sidepanel-agent-tools-section">
                 <h3 className="sidepanel-agent-tools-section-title">已发现工具</h3>

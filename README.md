@@ -92,7 +92,18 @@ Bridge 默认桥接 `D:\novel\2\.claude-grok-search-mcp\server.mjs`，并在 `ht
 
 Grok 预设仍默认使用 `http://127.0.0.1:17333/`。保存 Grok API Key 时，Key 只保存在本机扩展存储，并同步写入本地 Bridge 的 `/config`；留空不会清除旧 Key，只有显式清除才删除。
 
-## AI 侧边栏迁移进度
+## AI 侧边栏当前能力与迁移历史
+
+以下 Phase 章节用于保留迁移决策背景，不代表当前发布能力。当前工具注册表已提供完整的浏览器 Agent 能力，但会按运行模式收紧暴露范围：
+
+| 运行模式 | 默认可用能力 | 需要的用户动作 |
+| --- | --- | --- |
+| 常规聊天 | 模型对话、页面/多标签页上下文、Tavily、MCP、图片生成 | 配置相应服务或 API Key |
+| 浏览器控制（普通） | `browser.*`、默认脱敏的 `network.*`、`js.*`、`sourcemap.*`、只读 `runtime.*` | 在侧边栏显式开启浏览器控制 |
+| 受控增强 | `boundary.*`、`replay.*` 及一次性边界授权 | 为当前 tab、origin、工具和参数逐次确认 |
+| 完全访问 | `full_access.*` | 当前会话内显式切换，可随时撤销 |
+
+导出、复制和工具审计会再次脱敏 `token`、`secret`、`password`、`authorization`、`cookie` 等凭据形态值；完全访问模式只改变会话内工具结果的可见性，不会默认把原文带出会话。
 
 ### Phase 2：任务策略和页面内容提取
 
@@ -103,7 +114,7 @@ AI 侧边栏已迁入上游的低风险浏览器任务策略地基和只读页�
 
 `browser.extract_content` 是只读工具，不执行模型提供的脚本，不读取 Cookie、Storage 或跨域 iframe。工具结果会按长度限制截断，审计日志只记录摘要。
 
-Phase 2 仍不迁入 Console、Performance、Debugger Network recorder、`network.*`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*`、上游 React/TypeScript/Vite 设置页或高风险表单交互 Playbook。
+该阶段当时尚未迁入 Console、Performance、Debugger Network recorder、`network.*`、`js.*`、`sourcemap.*`、`runtime.*`、`replay.*`、`full_access.*`；这些能力现已按上表的运行模式和授权边界提供。
 
 ### Phase 3：DevTools Network 只读工具（历史阶段）
 

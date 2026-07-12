@@ -211,6 +211,10 @@ function createChromeMock() {
       runtime: {
         lastError: undefined as { message: string } | undefined,
         getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        getPlatformInfo: vi.fn((callback?: () => void) => {
+          callback?.();
+          return Promise.resolve({ os: "win", arch: "x86-64", nacl_arch: "x86-64" });
+        }),
         onInstalled: {
           addListener: vi.fn((listener: Listener<() => void>) => installedListeners.push(listener)),
         },
@@ -251,6 +255,9 @@ function createChromeMock() {
       },
       contextMenus: {
         create: vi.fn(),
+        removeAll: vi.fn((callback?: () => void) => {
+          callback?.();
+        }),
         onClicked: {
           addListener: vi.fn((listener: Listener<(info: chrome.contextMenus.OnClickData, tab?: chrome.tabs.Tab) => void>) =>
             contextListeners.push(listener),
@@ -335,11 +342,27 @@ describe("background 入口", () => {
     await import("../../../src/background/index");
     mock.installedListeners[0]();
 
+    expect(mock.chrome.contextMenus.removeAll).toHaveBeenCalled();
     expect(mock.chrome.contextMenus.create).toHaveBeenCalledWith({
       id: "open-side-panel",
       title: "打开 AI 助手",
       contexts: ["page"],
-    });
+    }, expect.any(Function));
+  });
+
+  it("启动时重新确保右键菜单存在且不因重复 id 抛错", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+
+    await import("../../../src/background/index");
+    mock.startupListeners[0]();
+
+    expect(mock.chrome.contextMenus.removeAll).toHaveBeenCalled();
+    expect(mock.chrome.contextMenus.create).toHaveBeenCalledWith({
+      id: "open-side-panel",
+      title: "打开 AI 助手",
+      contexts: ["page"],
+    }, expect.any(Function));
   });
 
   it("支持插件图标、快捷键和右键菜单打开侧边栏", async () => {
@@ -2167,6 +2190,35 @@ describe("background 入口", () => {
 
     expect((requestInit.signal as AbortSignal).aborted).toBe(true);
     expect(port.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("流式聊天长连接会启动 service worker 保活并在断开后清理", async () => {
+    vi.useFakeTimers();
+    const mock = createChromeMock();
+    const getPlatformInfo = vi.fn((callback?: () => void) => {
+      callback?.();
+      return Promise.resolve({ os: "win", arch: "x86-64", nacl_arch: "x86-64" });
+    });
+    mock.chrome.runtime.getPlatformInfo = getPlatformInfo;
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream");
+
+    mock.connectListeners[0](port);
+    expect(getPlatformInfo).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(getPlatformInfo).toHaveBeenCalled();
+
+    const callsAfterKeepAlive = getPlatformInfo.mock.calls.length;
+    port.emitDisconnect();
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(getPlatformInfo.mock.calls.length).toBe(callsAfterKeepAlive);
+    vi.useRealTimers();
   });
 
   it("聊天长连接端口会透传 AI 请求重试进度", async () => {

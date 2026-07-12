@@ -19,6 +19,7 @@ export interface PageContextTabInfo {
   title: string;
   url: string;
   active: boolean;
+  favIconUrl?: string;
 }
 
 export type PageContextListTabsResponse =
@@ -93,6 +94,7 @@ export async function handlePageContextListTabsMessage(chromeApi: typeof chrome 
           title: tab.title?.trim() || tab.url,
           url: tab.url,
           active: Boolean(tab.active),
+          ...(tab.favIconUrl ? { favIconUrl: tab.favIconUrl } : {}),
         })),
     };
   } catch (error) {

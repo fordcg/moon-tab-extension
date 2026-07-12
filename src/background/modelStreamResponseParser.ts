@@ -310,7 +310,8 @@ function parseSseEventBlock(
       }
       tokenUsage = maxTokenUsage(tokenUsage, normalizeModelTokenUsage(data));
 
-      done = done || isAnthropicStreamStop(data);
+      // 部分 OpenAI 兼容网关（含本地代理）在 finish_reason 后直接关流，不补 data: [DONE]。
+      done = done || isAnthropicStreamStop(data) || hasOpenAIStreamFinishReason(data);
     } catch {
       // 第三方 SSE 偶发心跳或非 JSON 片段时忽略，避免单个畸形片段中断整次回复。
     }
@@ -360,4 +361,18 @@ function extractAnthropicStreamText(data: unknown): { content: string; thinking:
 
 function isAnthropicStreamStop(data: unknown): boolean {
   return Boolean(data && typeof data === "object" && "type" in data && data.type === "message_stop");
+}
+
+function hasOpenAIStreamFinishReason(data: unknown): boolean {
+  if (!data || typeof data !== "object" || !("choices" in data) || !Array.isArray(data.choices)) {
+    return false;
+  }
+
+  return data.choices.some((choice) => {
+    if (!choice || typeof choice !== "object" || !("finish_reason" in choice)) {
+      return false;
+    }
+    const finishReason = choice.finish_reason;
+    return typeof finishReason === "string" && finishReason.trim().length > 0 && finishReason !== "null";
+  });
 }

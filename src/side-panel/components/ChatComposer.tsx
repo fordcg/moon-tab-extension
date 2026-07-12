@@ -111,6 +111,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [sharedBannerOpen, setSharedBannerOpen] = useState(false);
   const [dismissedPageContextKey, setDismissedPageContextKey] = useState<string | undefined>();
+  const [stopStatusText, setStopStatusText] = useState("");
   const [toolShelfOpen, setToolShelfOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
@@ -233,6 +234,26 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [contextDialogOpen]);
 
   useEffect(() => {
+    if (sending) {
+      return undefined;
+    }
+
+    document.body.classList.remove("sidepanel-stop-requested");
+    if (!stopStatusText) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setStopStatusText(""), 1200);
+    return () => window.clearTimeout(timeoutId);
+  }, [sending, stopStatusText]);
+
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove("sidepanel-stop-requested");
+    };
+  }, []);
+
+  useEffect(() => {
     if (!toolMenuOpen) {
       return undefined;
     }
@@ -269,17 +290,26 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     }
 
     const closeOnPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(".composer-actions")) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setToolShelfOpen(false);
+        setToolMenuOpen(false);
+        setModeMenuOpen(false);
+        return;
+      }
+      if (target instanceof Element && target.closest(".composer-switches, .sidepanel-tools-toggle, .composer-tool-menu, .composer-mode-menu")) {
         return;
       }
 
       setToolShelfOpen(false);
       setToolMenuOpen(false);
+      setModeMenuOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setToolShelfOpen(false);
         setToolMenuOpen(false);
+        setModeMenuOpen(false);
       }
     };
 
@@ -561,6 +591,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const toggleToolShelf = () => {
     setModeMenuOpen(false);
     setToolMenuOpen(false);
+    setContextDialogOpen(false);
     setToolShelfOpen((open) => !open);
   };
 
@@ -584,6 +615,9 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const filteredPromptTemplates = filterPromptTemplates(promptTemplates, slashQuery);
   const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
   const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
+  const contextDialogClassName = contextTabsLoading || contextTabs.some((tab) => tab.loading)
+    ? "context-dialog is-syncing-selection"
+    : "context-dialog";
   const canSubmit = canSend && hasDraft;
   const sessionTokenUsage = sumSessionTokenUsage(activeSession);
   const submitButtonLabel = sending && !hasDraft ? "终止" : "发送";
@@ -600,6 +634,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     if (tab.pageContextKey) {
       setDismissedPageContextKey(tab.pageContextKey);
     }
+  };
+  const stopGeneration = () => {
+    document.body.classList.add("sidepanel-stop-requested");
+    setStopStatusText("正在停止生成");
+    void abortActiveChatTask();
   };
 
   return (
@@ -990,6 +1029,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           </button>
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
           <ModelSelector />
+          {stopStatusText ? (
+            <span className="sr-only" role="status" aria-live="polite">
+              {stopStatusText}
+            </span>
+          ) : null}
           <button
             className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
             type="button"
@@ -998,7 +1042,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             disabled={sending ? false : !canSubmit}
             onClick={() => {
               if (sending && !hasDraft) {
-                abortActiveChatTask();
+                stopGeneration();
                 return;
               }
               void (sending ? submitFollowUp() : submit());
@@ -1020,7 +1064,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       {contextDialogOpen ? (
         <>
           <div className="dialog-overlay" aria-hidden="true" onClick={() => setContextDialogOpen(false)} />
-          <section ref={contextDialogRef} className="context-dialog" role="dialog" aria-modal="true" aria-labelledby="context-dialog-title">
+          <section ref={contextDialogRef} className={contextDialogClassName} role="dialog" aria-modal="true" aria-labelledby="context-dialog-title">
             <div className="context-dialog-header">
               <h2 className="context-dialog-title" id="context-dialog-title">
                 选择注入标签页
@@ -1029,6 +1073,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                 关闭
               </button>
             </div>
+            <p className="sidepanel-preview-notice">选择要分享给 AI 的标签页</p>
             <div className="context-tab-list" aria-label="可注入标签页">
               {contextTabsLoading ? <p className="context-tab-empty">正在读取标签页...</p> : null}
               {contextTabsError ? <p className="context-tab-error">{contextTabsError}</p> : null}
@@ -1048,6 +1093,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   aria-label={`注入 ${tab.title}`}
                   onClick={() => toggleContextTabSelection(tab.tabId)}
                 >
+                  <BannerFavicon src={tab.favIconUrl} className="sidepanel-tab-favicon" />
                   <span className="context-tab-title-row">
                     <span className="context-tab-title">{tab.title}</span>
                     {tab.active ? <span className="context-tab-active-badge">当前</span> : null}
@@ -1057,6 +1103,9 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   {tab.error ? <span className="context-tab-error">{tab.error}</span> : null}
                 </button>
               ))}
+            </div>
+            <div className="context-tab-list-scrollbar" aria-hidden="true">
+              <div className="context-tab-list-scrollbar-thumb" />
             </div>
             <p className="context-preview">{pageContext.text || "暂无上下文"}</p>
           </section>
@@ -1159,6 +1208,7 @@ function buildSharedContextTabs(
     .filter((tab) => tab.selected)
     .map((tab) => ({
       active: tab.active,
+      favIconUrl: tab.favIconUrl,
       selected: tab.selected,
       tabId: tab.tabId,
       title: tab.title || formatPageContextTitle(tab.url),

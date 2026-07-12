@@ -208,6 +208,7 @@ export interface ContextTabCandidate {
   url: string;
   active: boolean;
   selected: boolean;
+  favIconUrl?: string;
   loading?: boolean;
   error?: string;
 }
@@ -393,6 +394,12 @@ const exampleModel: ProviderModel = {
   updatedAt: 1,
 };
 
+let modelCatalogRevision = 0;
+
+function markModelCatalogChanged() {
+  modelCatalogRevision += 1;
+}
+
 export const useAppStore = create<AppState>()((set, get) => ({
   providers: [],
   models: [],
@@ -478,6 +485,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   addExampleModel: () =>
     set(() => {
+      markModelCatalogChanged();
       void saveModelProvider(exampleProvider);
       void saveProviderModel(exampleModel);
 
@@ -488,6 +496,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       };
     }),
   addProvider: () => {
+    markModelCatalogChanged();
     const now = Date.now();
     const index = get().providers.length + 1;
     const provider: ModelProvider = {
@@ -505,7 +514,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
     void saveModelProvider(provider);
     return provider;
   },
-  updateProvider: (providerId, updates) =>
+  updateProvider: (providerId, updates) => {
+    markModelCatalogChanged();
     set((state) => {
       const providers = state.providers.map((provider) =>
         provider.id === providerId
@@ -524,14 +534,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
       }
 
       return { providers };
-    }),
+    });
+  },
   addModel: (providerId, overrides) => createAndStoreModel(providerId, get, set, overrides),
   addRemoteModel: (providerId, remoteModel) =>
     createAndStoreModel(providerId, get, set, {
       displayName: remoteModel.displayName,
       modelId: remoteModel.id,
     }),
-  updateModel: (modelId, updates) =>
+  updateModel: (modelId, updates) => {
+    markModelCatalogChanged();
     set((state) => {
       const models = state.models.map((model) =>
         model.id === modelId
@@ -549,8 +561,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
       }
 
       return { models };
-    }),
-  setTitleModel: (modelId) =>
+    });
+  },
+  setTitleModel: (modelId) => {
+    markModelCatalogChanged();
     set((state) => {
       const now = Date.now();
       const models = state.models.map((model) => {
@@ -570,7 +584,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       void Promise.all(models.filter((model, index) => model !== state.models[index]).map(saveProviderModel));
 
       return { models };
-    }),
+    });
+  },
   setDefaultChatModel: async (modelId) => {
     const normalizedModelId = modelId.trim();
 
@@ -784,6 +799,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set((state) => state.pendingBoundaryChoice?.requestId === requestId ? { pendingBoundaryChoice: undefined } : {});
   },
   deleteProvider: (providerId) => {
+    markModelCatalogChanged();
     let sessionToPersist: ChatSession | undefined;
     set((state) => {
       const removedModelIds = new Set(state.models.filter((model) => model.providerId === providerId).map((model) => model.id));
@@ -829,6 +845,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
   deleteModel: (modelId) => {
+    markModelCatalogChanged();
     let sessionToPersist: ChatSession | undefined;
     set((state) => {
       const models = state.models.filter((model) => model.id !== modelId);
@@ -866,6 +883,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
   loadChannelConfig: async () => {
+    const revisionAtStart = modelCatalogRevision;
     const [providers, models, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, webSearchSettings, mcpSettings] = await Promise.all([
       getModelProviders(),
       getProviderModels(),
@@ -876,21 +894,26 @@ export const useAppStore = create<AppState>()((set, get) => ({
       getMcpSettings(),
     ]);
     const mcpBearerTokens = await readMcpBearerTokens(mcpSettings);
-    const defaultChatModelId = resolveConfiguredModelId(savedDefaultChatModelId ?? "", models, providers);
-    const currentSelectedModelId = get().selectedModelId;
+    const currentState = get();
+    const catalogChangedDuringLoad = modelCatalogRevision !== revisionAtStart;
+    const resolvedProviders = catalogChangedDuringLoad ? currentState.providers : providers;
+    const resolvedModels = catalogChangedDuringLoad ? currentState.models : models;
+    const defaultChatModelId = resolveConfiguredModelId(savedDefaultChatModelId ?? "", resolvedModels, resolvedProviders);
+    const currentSelectedModelId = currentState.selectedModelId;
     const selectedModelStillExists = Boolean(
-      currentSelectedModelId && resolveAvailableModelId(currentSelectedModelId, models, providers) === currentSelectedModelId,
+      currentSelectedModelId &&
+      resolveAvailableModelId(currentSelectedModelId, resolvedModels, resolvedProviders) === currentSelectedModelId,
     );
-    const activeSession = get().chatSessions.find((session) => session.id === get().activeSessionId);
+    const activeSession = currentState.chatSessions.find((session) => session.id === currentState.activeSessionId);
     const activeSessionModelId = activeSession?.selectedModelId
-      ? resolveAvailableModelId(activeSession.selectedModelId, models, providers)
+      ? resolveAvailableModelId(activeSession.selectedModelId, resolvedModels, resolvedProviders)
       : "";
     const chatPreferences = normalizeChatPreferences(savedChatPreferences);
     const automationPlaybookSettings = normalizeAutomationPlaybookSettings(savedAutomationPlaybookSettings);
 
     set({
-      providers,
-      models,
+      providers: resolvedProviders,
+      models: resolvedModels,
       defaultChatModelId,
       chatPreferences,
       automationPlaybookSettings,
@@ -904,7 +927,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
         extractMode: resolveDefaultContextMode(chatPreferences),
       },
       selectedModelId:
-        activeSessionModelId || (selectedModelStillExists ? currentSelectedModelId : (defaultChatModelId || resolveAvailableModelId("", models, providers))),
+        activeSessionModelId ||
+        (selectedModelStillExists
+          ? currentSelectedModelId
+          : (defaultChatModelId || resolveAvailableModelId("", resolvedModels, resolvedProviders))),
     });
   },
   loadChatData: async () => {
@@ -1222,7 +1248,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   updateMcpServer: (serverId, draft) => updateMcpServerAction({ serverId, draft, get, set }),
   setMcpServerEnabled: (serverId, enabled) => setMcpServerEnabledAction({ serverId, enabled, get, set }),
   deleteMcpServer: (serverId) => deleteMcpServerAction({ serverId, get, set }),
-  refreshMcpServerTools: (serverId) => refreshMcpServerToolsAction({ serverId, get, set }),
+  refreshMcpServerTools: (serverId) => refreshMcpServerToolsAction({ serverId, get, set, enableDiscoveredTools: true }),
   backupNow: () => backupNowAction({ set }),
   loadRemoteBackups: () => loadRemoteBackupsAction({ set }),
   restoreNow: (backupId) => restoreNowAction({ backupId, get, set }),
@@ -1290,6 +1316,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
   reset: () => {
+    markModelCatalogChanged();
     clearAllModelConnectivityResetTimers();
     clearChatTaskAbortHandles();
     resetPageContextRefreshSequence();
@@ -2393,6 +2420,7 @@ function createAndStoreModel(
   set: StoreSetter,
   overrides: Partial<Pick<ProviderModel, "displayName" | "modelId">> = {},
 ): ProviderModel {
+  markModelCatalogChanged();
   const now = Date.now();
   const index = get().models.filter((model) => model.providerId === providerId).length + 1;
   const model: ProviderModel = {

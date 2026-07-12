@@ -10,23 +10,50 @@ export function ModelSelector() {
   const models = useAppStore((state) => state.models);
   const selectedModelId = useAppStore((state) => state.selectedModelId);
   const selectModel = useAppStore((state) => state.selectModel);
-  const selectableModels = useMemo(() => {
+  const selectableModelGroups = useMemo(() => {
     const providerById = new Map(providers.map((provider, index) => [provider.id, { provider, index }]));
-    return models
-      .flatMap((model, modelIndex) => {
-        const providerItem = providerById.get(model.providerId);
-        return providerItem?.provider.enabled && model.enabled
-          ? {
-              id: model.id,
-              label: formatModelLabelWithVision(`${providerItem.provider.name} / ${model.displayName}`, model.supportsVision),
-              modelIndex,
-              providerIndex: providerItem.index,
-            }
-          : [];
-      })
+    const grouped = new Map<
+      string,
+      {
+        providerId: string;
+        providerName: string;
+        providerIndex: number;
+        models: Array<{ id: string; label: string; name: string; modelIndex: number }>;
+      }
+    >();
+
+    for (const [modelIndex, model] of models.entries()) {
+      const providerItem = providerById.get(model.providerId);
+      if (!providerItem?.provider.enabled || !model.enabled) {
+        continue;
+      }
+
+      if (!grouped.has(providerItem.provider.id)) {
+        grouped.set(providerItem.provider.id, {
+          providerId: providerItem.provider.id,
+          providerName: providerItem.provider.name,
+          providerIndex: providerItem.index,
+          models: [],
+        });
+      }
+
+      grouped.get(providerItem.provider.id)?.models.push({
+        id: model.id,
+        label: formatModelLabelWithVision(`${providerItem.provider.name} / ${model.displayName}`, model.supportsVision),
+        name: formatModelLabelWithVision(model.displayName, model.supportsVision),
+        modelIndex,
+      });
+    }
+
+    return Array.from(grouped.values())
       // 按渠道配置顺序分组，同一渠道内保留模型原有顺序，避免不同渠道模型在下拉框中穿插显示。
-      .sort((left, right) => left.providerIndex - right.providerIndex || left.modelIndex - right.modelIndex);
+      .sort((left, right) => left.providerIndex - right.providerIndex)
+      .map((group) => ({
+        ...group,
+        models: [...group.models].sort((left, right) => left.modelIndex - right.modelIndex),
+      }));
   }, [models, providers]);
+  const selectableModels = selectableModelGroups.flatMap((group) => group.models);
   const selectedModelLabel = selectableModels.find((model) => model.id === selectedModelId)?.label ?? "未选择模型";
 
   useEffect(() => {
@@ -74,7 +101,7 @@ export function ModelSelector() {
             value={selectedModelId}
             onChange={(event) => handleSelectModel(event.target.value)}
           >
-            <option value="">未选择模型</option>
+            {selectableModels.length === 0 ? <option value="">未选择模型</option> : null}
             {selectableModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.label}
@@ -95,29 +122,32 @@ export function ModelSelector() {
         </button>
         {menuOpen ? (
           <div className="model-select-menu" role="listbox" aria-label="当前模型">
-            <button
-              className={selectedModelId ? "model-select-option" : "model-select-option model-select-option-active"}
-              type="button"
-              role="option"
-              aria-selected={!selectedModelId}
-              onClick={() => handleSelectModel("")}
-            >
-              <span className="model-select-option-label">未选择模型</span>
-              {!selectedModelId ? <span className="model-select-option-check" aria-hidden="true">✓</span> : null}
-            </button>
-            {selectableModels.map((model) => (
-              <button
-                key={model.id}
-                className={model.id === selectedModelId ? "model-select-option model-select-option-active" : "model-select-option"}
-                type="button"
-                role="option"
-                aria-selected={model.id === selectedModelId}
-                onClick={() => handleSelectModel(model.id)}
-              >
-                <span className="model-select-option-label">{model.label}</span>
-                {model.id === selectedModelId ? <span className="model-select-option-check" aria-hidden="true">✓</span> : null}
-              </button>
-            ))}
+            <div className="model-select-option-list">
+              {selectableModelGroups.length > 0 ? (
+                selectableModelGroups.map((group) => (
+                  <div className="model-select-group" key={group.providerId}>
+                    <div className="model-select-group-title">{group.providerName}</div>
+                    {group.models.map((model) => (
+                      <button
+                        key={model.id}
+                        className={model.id === selectedModelId ? "model-select-option model-select-option-active is-selected" : "model-select-option"}
+                        type="button"
+                        role="option"
+                        aria-selected={model.id === selectedModelId}
+                        onClick={() => handleSelectModel(model.id)}
+                      >
+                        <span className="model-select-option-copy">
+                          <span className="model-select-option-name">{model.name}</span>
+                        </span>
+                        {model.id === selectedModelId ? <span className="model-select-option-check" aria-hidden="true">✓</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                ))
+              ) : (
+                <p className="model-select-menu-empty">暂无可用模型</p>
+              )}
+            </div>
           </div>
         ) : null}
       </div>

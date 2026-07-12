@@ -100,7 +100,7 @@ export function createModelToolDefinition(tool: ModelToolRegistryEntry): ModelTo
 }
 
 export function createBackgroundToolExecutor(message: BackgroundToolExecutorMessage, fetcher: Fetcher, options: BackgroundToolExecutorOptions = {}): ModelToolExecutor {
-  return async (toolCall, tool) => {
+  return async (toolCall, tool, context) => {
     if (tool.id === BROWSER_TAKE_SNAPSHOT_TOOL_ID && tool.name === BROWSER_TAKE_SNAPSHOT_TOOL_NAME) {
       return browserControlManager.takeSnapshot(toolCall);
     }
@@ -170,7 +170,7 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
     }
 
     if (parseMcpToolId(tool.id)) {
-      return executeMcpRemoteTool(toolCall, tool, message.mcp, fetcher);
+      return executeMcpRemoteTool(toolCall, tool, message.mcp, fetcher, context?.signal);
     }
 
     return createUnavailableToolResult(toolCall);
@@ -391,6 +391,7 @@ async function executeMcpRemoteTool(
   tool: ModelToolRegistryEntry,
   mcp: BackgroundToolExecutorMessage["mcp"],
   fetcher: Fetcher,
+  signal?: AbortSignal,
 ): Promise<Awaited<ReturnType<ModelToolExecutor>>> {
   const metadata = parseMcpToolId(tool.id);
   if (!metadata) {
@@ -413,10 +414,14 @@ async function executeMcpRemoteTool(
         arguments: toolCall.arguments,
         bearerToken: mcp?.bearerTokens?.[server.id],
         fetcher,
+        signal,
       }),
     };
-  } catch {
-    return createMcpToolError(toolCall, "MCP 工具执行失败，请检查服务连接、鉴权或工具参数。");
+  } catch (error) {
+    const detail = error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : "请检查服务连接、鉴权或工具参数。";
+    return createMcpToolError(toolCall, `MCP 工具执行失败：${detail}`);
   }
 }
 

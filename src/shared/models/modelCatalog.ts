@@ -131,7 +131,11 @@ export function createEndpointUrl(
     ["v1", "models"],
     ["models"],
   ];
-  const baseSegments = removeKnownEndpointSuffix(currentSegments, knownSuffixes);
+  let baseSegments = removeKnownEndpointSuffix(currentSegments, knownSuffixes);
+  // 常见 OpenAI 兼容服务把基址写成 .../v1；若再拼 v1/... 会变成 /v1/v1/... 导致 404。
+  if (baseSegments.at(-1) === "v1" && targetSuffix[0] === "v1") {
+    baseSegments = baseSegments.slice(0, -1);
+  }
 
   url.pathname = `/${[...baseSegments, ...targetSuffix].join("/")}`;
   return url.toString();

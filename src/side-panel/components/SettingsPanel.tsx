@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import { ChannelManagement } from "./settings/ChannelManagement";
 import { ChatPreferenceSettings } from "./settings/ChatPreferenceSettings";
 import { ExtractionRules } from "./settings/ExtractionRules";
@@ -21,13 +21,24 @@ const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
 ];
 
 interface SettingsPanelProps {
+  embedded?: boolean;
   initialTab?: SettingsTab;
-  transitionClassName?: string;
+  showBackButton?: boolean;
+  backButtonRef?: RefObject<HTMLButtonElement | null>;
+  closeButtonRef?: RefObject<HTMLButtonElement | null>;
   onBackToHistory?: () => void;
   onClose?: () => void;
 }
 
-export function SettingsPanel({ initialTab = "channels", transitionClassName = "", onBackToHistory, onClose }: SettingsPanelProps) {
+export function SettingsPanel({
+  embedded = false,
+  initialTab = "channels",
+  onBackToHistory,
+  onClose,
+  showBackButton = Boolean(onBackToHistory),
+  backButtonRef,
+  closeButtonRef,
+}: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
 
   useEffect(() => {
@@ -35,13 +46,20 @@ export function SettingsPanel({ initialTab = "channels", transitionClassName = "
   }, [initialTab]);
 
   return (
-    <section className={["ui-panel shadow-sm settings-dialog", transitionClassName].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+    <section
+      className={embedded ? "settings-drawer-page" : "ui-panel shadow-sm settings-dialog"}
+      {...(!embedded ? { role: "dialog", "aria-modal": true, "aria-labelledby": "settings-dialog-title" } : {})}
+    >
       <div className="settings-dialog-header">
-        <button className="settings-dialog-nav ui-button-secondary" type="button" aria-label="返回近期对话" title="返回近期对话" onClick={onBackToHistory} />
+        {showBackButton ? (
+          <button ref={backButtonRef} className="settings-dialog-nav ui-button-secondary" type="button" aria-label="返回近期对话" title="返回近期对话" onClick={onBackToHistory} />
+        ) : (
+          <span className="settings-dialog-nav-spacer" aria-hidden="true" />
+        )}
         <span className="settings-dialog-title" id="settings-dialog-title">
           设置
         </span>
-        <button className="settings-dialog-back ui-button-secondary" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose} />
+        <button ref={closeButtonRef} className="settings-dialog-back ui-button-secondary" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose} />
       </div>
       <div className="settings-dialog-content mx-auto grid w-[80%] gap-4">
         <div className="min-w-0 space-y-3">

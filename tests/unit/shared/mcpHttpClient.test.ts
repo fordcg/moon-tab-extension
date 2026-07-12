@@ -113,6 +113,74 @@ describe("MCP HTTP client", () => {
 
     await expect(listMcpTools({ server, bearerToken: "secret", fetcher })).rejects.toThrow("MCP 请求失败：401 Unauthorized");
   });
+
+  it("标准 JSON-RPC 404 时回退到本地 Bridge GET /tools/list", async () => {
+    const bridgeServer: McpServerConfig = {
+      ...server,
+      endpointUrl: "http://127.0.0.1:17333/",
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, message: "未找到 MCP Bridge 路由" }), {
+        status: 404,
+        statusText: "Not Found",
+        headers: { "content-type": "application/json" },
+      }))
+      .mockResolvedValueOnce(createJsonResponse({
+        tools: [
+          {
+            id: "grok_search",
+            name: "grok_search",
+            description: "Grok live search",
+            inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+          },
+        ],
+      }));
+
+    const result = await listMcpTools({ server: bridgeServer, fetcher });
+
+    expect(result).toEqual([
+      {
+        name: "grok_search",
+        description: "Grok live search",
+        inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+      },
+    ]);
+    expect(fetcher).toHaveBeenNthCalledWith(1, "http://127.0.0.1:17333/", expect.objectContaining({ method: "POST" }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, "http://127.0.0.1:17333/tools/list", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("标准 JSON-RPC 404 时回退到本地 Bridge POST /tools/call", async () => {
+    const bridgeServer: McpServerConfig = {
+      ...server,
+      endpointUrl: "http://127.0.0.1:17333/",
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, message: "未找到 MCP Bridge 路由" }), {
+        status: 404,
+        statusText: "Not Found",
+        headers: { "content-type": "application/json" },
+      }))
+      .mockResolvedValueOnce(createJsonResponse({
+        ok: true,
+        content: "搜索结果",
+      }));
+
+    const result = await callMcpTool({
+      server: bridgeServer,
+      toolName: "grok_search",
+      arguments: { query: "hello" },
+      fetcher,
+    });
+
+    expect(result).toBe("搜索结果");
+    expect(fetcher).toHaveBeenNthCalledWith(2, "http://127.0.0.1:17333/tools/call", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ toolId: "grok_search", input: { query: "hello" } }),
+    }));
+  });
+
   it("MCP 请求默认会在超时后取消并返回中文错误", async () => {
     vi.useFakeTimers();
     const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, init) => {

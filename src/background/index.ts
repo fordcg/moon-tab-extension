@@ -34,6 +34,7 @@ import { BrowserNetworkToolExecutor } from "./browserControl/networkToolExecutor
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
 const networkDevtoolsBridge = createNetworkDevtoolsBridge();
+const CHAT_STREAM_KEEPALIVE_INTERVAL_MS = 20_000;
 const DEVTOOLS_LEGACY_NETWORK_TOOL_IDS = new Set([
   "network.list_requests",
   "network.get_request_details",
@@ -45,19 +46,52 @@ const DEVTOOLS_LEGACY_NETWORK_TOOL_IDS = new Set([
 const NETWORK_DEVTOOLS_NOT_CONNECTED_RESPONSE = { ok: false, message: "未检测到当前标签页 DevTools Network 连接。" } as const;
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "open-side-panel",
-    title: "打开 AI 助手",
-    contexts: ["page"],
-  });
+  ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
 });
 
 initializeSidePanelController();
+
+function ensureOpenSidePanelContextMenu(): void {
+  const contextMenus = chrome.contextMenus;
+  if (!contextMenus?.create) {
+    return;
+  }
+
+  const createMenu = () => {
+    try {
+      contextMenus.create({
+        id: "open-side-panel",
+        title: "打开 AI 助手",
+        contexts: ["page"],
+      }, () => {
+        // Ignore duplicate-id races during rapid service-worker restarts.
+        void chrome.runtime.lastError;
+      });
+    } catch {
+      // contextMenus may be unavailable in restricted runtimes.
+    }
+  };
+
+  if (typeof contextMenus.removeAll === "function") {
+    try {
+      contextMenus.removeAll(() => {
+        void chrome.runtime.lastError;
+        createMenu();
+      });
+      return;
+    } catch {
+      // Fall through to create-only path.
+    }
+  }
+
+  createMenu();
+}
 
 function runRestoreSyncAlarmFromSettings(): void {
   void restoreSyncAlarmFromSettings().catch((error) => {
@@ -264,6 +298,15 @@ chrome.runtime.onConnect.addListener((port) => {
     userMessageId?: string;
   }> = [];
   let disconnected = false;
+  // Grok MCP 等远程工具可能连续 60–180s 无 fetch 事件；MV3 service worker 空闲约 30s 会被挂起，
+  // 导致 chat.stream 端口被动断开，侧栏误报“流式响应异常中断”。长连接期间做轻量保活。
+  const keepAliveTimer = setInterval(() => {
+    try {
+      void chrome.runtime.getPlatformInfo(() => undefined);
+    } catch {
+      // ignore keep-alive failures; next tick retries while the port remains open.
+    }
+  }, CHAT_STREAM_KEEPALIVE_INTERVAL_MS);
   const postToPort = (message: unknown) => {
     if (!disconnected) {
       port.postMessage(message);
@@ -332,6 +375,7 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener(handlePortMessage);
   port.onDisconnect.addListener(() => {
     disconnected = true;
+    clearInterval(keepAliveTimer);
     controller.abort();
   });
 });

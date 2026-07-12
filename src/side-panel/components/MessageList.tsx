@@ -24,6 +24,7 @@ import { MarkdownTableBlock } from "./MarkdownTableBlock";
 import { CopyMessageIcon, ExportImageIcon } from "./MessageActionIcons";
 import { PromptInlineEditor, PromptTokenContent } from "./PromptInlineEditor";
 import type { ChatRetryProgress } from "../state/appStore";
+import { ConversationContinuityPrompt } from "./ConversationContinuityPrompt";
 
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 8;
 const MESSAGE_POPOVER_VIEWPORT_PADDING = 12;
@@ -129,11 +130,13 @@ export function MessageList({
   const [expandedLongMessageIds, setExpandedLongMessageIds] = useState<Set<string>>(() => new Set());
   const [messageActionFeedback, setMessageActionFeedback] = useState<{ messageId: string; text: string; tone: "success" | "error" } | undefined>();
   const [activeToolCallId, setActiveToolCallId] = useState<string | undefined>();
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
   const messageListRef = useRef<HTMLElement>(null);
   // 初次进入会话时默认贴底；一旦用户主动上滚，滚动事件会把它改为 false，避免后续更新抢回底部。
   const shouldStickToBottomRef = useRef(true);
   const regeneratePopoverRef = useRef<HTMLDivElement>(null);
   const toolCallPopoverRef = useRef<HTMLDivElement>(null);
+  const regenerateTimerRef = useRef<number | undefined>(undefined);
   const displayAttachmentGroups = useMemo(
     () => createDisplayAttachmentGroups(messages, toolCallDisplayMode),
     [messages, toolCallDisplayMode],
@@ -145,7 +148,9 @@ export function MessageList({
       return;
     }
 
-    shouldStickToBottomRef.current = isMessageListAtBottom(messageList);
+    const atBottom = isMessageListAtBottom(messageList);
+    shouldStickToBottomRef.current = atBottom;
+    setShowJumpLatest(!atBottom && messages.length > 0);
   };
 
   useLayoutEffect(() => {
@@ -155,32 +160,17 @@ export function MessageList({
     }
 
     messageList.scrollTop = messageList.scrollHeight;
+    setShowJumpLatest(false);
   }, [displayAttachmentGroups, messages, retryProgressByMessageId, showToolCallProcessInAssistantMode, toolCallDisplayMode]);
 
   useEffect(() => {
-    if (!pendingRegenerateMessageId) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !regeneratePopoverRef.current?.contains(target)) {
-        setPendingRegenerateMessageId(undefined);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPendingRegenerateMessageId(undefined);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
+      if (regenerateTimerRef.current !== undefined) {
+        window.clearTimeout(regenerateTimerRef.current);
+      }
+      document.body.classList.remove("sidepanel-regenerate-direct-pending");
     };
-  }, [pendingRegenerateMessageId]);
+  }, []);
 
   useEffect(() => {
     if (!activeToolCallId) {
@@ -272,288 +262,321 @@ export function MessageList({
     });
   };
 
+  const handleRegenerateMessageClick = (messageId: string) => {
+    if (regenerateTimerRef.current !== undefined) {
+      window.clearTimeout(regenerateTimerRef.current);
+    }
+
+    setPendingRegenerateMessageId(messageId);
+    document.body.classList.add("sidepanel-regenerate-direct-pending");
+    regenerateTimerRef.current = window.setTimeout(() => {
+      regenerateTimerRef.current = undefined;
+      setPendingRegenerateMessageId(undefined);
+      document.body.classList.remove("sidepanel-regenerate-direct-pending");
+      onRegenerateMessage(messageId);
+    }, 0);
+  };
+
+  const jumpToLatestMessage = () => {
+    const messageList = messageListRef.current;
+    if (!messageList) {
+      return;
+    }
+
+    shouldStickToBottomRef.current = true;
+    setShowJumpLatest(false);
+    const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const top = Math.max(0, messageList.scrollHeight - messageList.clientHeight);
+    if (typeof messageList.scrollTo === "function") {
+      messageList.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
+    } else {
+      messageList.scrollTop = top;
+    }
+    // Keep the jump control in sync even when smooth scrolling is still in progress.
+    window.requestAnimationFrame(() => {
+      const current = messageListRef.current;
+      if (!current) {
+        return;
+      }
+      setShowJumpLatest(!isMessageListAtBottom(current) && messages.length > 0);
+    });
+  };
+
   if (messages.length === 0) {
     return (
-      <section aria-label="消息列表" className="message-list" ref={messageListRef} onScroll={handleMessageListScroll}>
-        <div className="sidepanel-empty-state" aria-label="快捷提问">
-          <div className="sidepanel-empty-copy">
-            <p className="sidepanel-empty-hello">你好</p>
-            <p className="sidepanel-empty-title">今天需要我做些什么？</p>
+      <div className="message-list-shell">
+        <section aria-label="消息列表" className="message-list" ref={messageListRef} onScroll={handleMessageListScroll}>
+          <div className="sidepanel-empty-state" aria-label="快捷提问">
+            <ConversationContinuityPrompt />
+            <div className="sidepanel-empty-copy">
+              <p className="sidepanel-empty-hello">你好</p>
+              <p className="sidepanel-empty-title">今天需要我做些什么？</p>
+            </div>
+            <div className="sidepanel-empty-suggestions" aria-label="建议问题">
+              <button className="sidepanel-suggestion" type="button">
+                你能做些什么？
+              </button>
+              <button className="sidepanel-suggestion" type="button">
+                我可以问哪些类型的问题？
+              </button>
+              <button className="sidepanel-suggestion" type="button">
+                帮我理清思路，解决问题
+              </button>
+            </div>
           </div>
-          <div className="sidepanel-empty-suggestions" aria-label="建议问题">
-            <button className="sidepanel-suggestion" type="button">
-              你能做些什么？
-            </button>
-            <button className="sidepanel-suggestion" type="button">
-              我可以问哪些类型的问题？
-            </button>
-            <button className="sidepanel-suggestion" type="button">
-              帮我理清思路，解决问题
-            </button>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
     );
   }
 
   return (
-    <section aria-label="消息列表" className={regenerating ? "message-list message-list-thinking" : "message-list"} ref={messageListRef} onScroll={handleMessageListScroll}>
-      {messages.map((message) => {
-        const isToolCallTurn = message.role === "assistant" && message.assistantMessageKind === "tool_call_turn";
-        const toolCallRecords = message.toolCallRecords ?? [];
-        const shouldShowToolCallTimeline = shouldShowToolCallTimelineForMessage(message, toolCallDisplayMode, showToolCallProcessInAssistantMode);
-        const hideToolTurnContent = shouldHideToolTurnContent(message, toolCallDisplayMode);
-        const hasVisibleThinking = message.role === "assistant" && !isToolCallTurn && Boolean(message.thinking) && !hideToolTurnContent;
-        const hasVisibleContent = Boolean(message.content.trim()) && !hideToolTurnContent;
-        const hasPromptTokens = message.role === "user" && Boolean(message.promptInvocations?.length);
-        const shouldRenderMessageBubble = hasVisibleContent || hasPromptTokens;
-        const isLongUserMessage = message.role === "user" && shouldRenderMessageBubble && isLongUserMessageContent(message.content);
-        const isLongUserMessageExpanded = expandedLongMessageIds.has(message.id);
-        const displayAttachments = displayAttachmentGroups.get(message.id) ?? [];
-        const retryProgress = message.role === "assistant" ? retryProgressByMessageId[message.id] : undefined;
-        const hasVisibleArticle =
-          message.role !== "assistant" ||
-          !isToolCallTurn ||
-          hasVisibleThinking ||
-          hasVisibleContent ||
-          Boolean(retryProgress) ||
-          Boolean(message.attachments?.length) ||
-          Boolean(displayAttachments.length);
-        const shouldShowPreArticleToolTimeline =
-          message.role === "assistant" && toolCallRecords.length > 0 && message.assistantMessageKind !== "tool_call_turn";
+    <div className="message-list-shell">
+      <section aria-label="消息列表" className={regenerating ? "message-list message-list-thinking" : "message-list"} ref={messageListRef} onScroll={handleMessageListScroll}>
+        {messages.map((message) => {
+          const isToolCallTurn = message.role === "assistant" && message.assistantMessageKind === "tool_call_turn";
+          const toolCallRecords = message.toolCallRecords ?? [];
+          const shouldShowToolCallTimeline = shouldShowToolCallTimelineForMessage(message, toolCallDisplayMode, showToolCallProcessInAssistantMode);
+          const hideToolTurnContent = shouldHideToolTurnContent(message, toolCallDisplayMode);
+          const hasVisibleThinking = message.role === "assistant" && !isToolCallTurn && Boolean(message.thinking) && !hideToolTurnContent;
+          const hasVisibleContent = Boolean(message.content.trim()) && !hideToolTurnContent;
+          const hasPromptTokens = message.role === "user" && Boolean(message.promptInvocations?.length);
+          const shouldRenderMessageBubble = hasVisibleContent || hasPromptTokens;
+          const isLongUserMessage = message.role === "user" && shouldRenderMessageBubble && isLongUserMessageContent(message.content);
+          const isLongUserMessageExpanded = expandedLongMessageIds.has(message.id);
+          const displayAttachments = displayAttachmentGroups.get(message.id) ?? [];
+          const retryProgress = message.role === "assistant" ? retryProgressByMessageId[message.id] : undefined;
+          const hasVisibleArticle =
+            message.role !== "assistant" ||
+            !isToolCallTurn ||
+            hasVisibleThinking ||
+            hasVisibleContent ||
+            Boolean(retryProgress) ||
+            Boolean(message.attachments?.length) ||
+            Boolean(displayAttachments.length);
+          const shouldShowPreArticleToolTimeline =
+            message.role === "assistant" && toolCallRecords.length > 0 && message.assistantMessageKind !== "tool_call_turn";
 
-        if (!shouldShowPreArticleToolTimeline && !hasVisibleArticle && !shouldShowToolCallTimeline) {
-          return null;
-        }
+          if (!shouldShowPreArticleToolTimeline && !hasVisibleArticle && !shouldShowToolCallTimeline) {
+            return null;
+          }
 
-        return (
-        <div key={message.id} className="message-entry">
-          {shouldShowPreArticleToolTimeline ? (
-            <ToolCallTimeline
-              records={toolCallRecords}
-              attachments={collectRawMessageToolAttachments(message)}
-              activeToolCallId={activeToolCallId}
-              popoverRef={toolCallPopoverRef}
+          return (
+          <div key={message.id} className="message-entry">
+            {shouldShowPreArticleToolTimeline ? (
+              <ToolCallTimeline
+                records={toolCallRecords}
+                attachments={collectRawMessageToolAttachments(message)}
+                activeToolCallId={activeToolCallId}
+                popoverRef={toolCallPopoverRef}
+                panelCentered
+                onToggle={(recordId) => setActiveToolCallId((current) => (current === recordId ? undefined : recordId))}
+              />
+            ) : null}
+          {hasVisibleArticle ? (
+          <article className={message.role === "user" ? "message-row message-row-user" : "message-row"}>
+            <div className="message-avatar" aria-hidden="true">
+              {message.role === "user" ? "我" : "AI"}
+            </div>
+            <div
+              className={[
+                "message-bubble-wrap",
+                isLongUserMessage ? "message-bubble-wrap-long" : "",
+                isLongUserMessage && isLongUserMessageExpanded ? "message-bubble-wrap-expanded" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-long-expanded={isLongUserMessage ? String(isLongUserMessageExpanded) : undefined}
+            >
+              {hasVisibleThinking ? (
+                <details className="message-thinking" open={shouldOpenThinking(message) || undefined}>
+                  <summary>{message.streaming ? "思考中" : "思考过程"}</summary>
+                  <p>{message.thinking}</p>
+                </details>
+              ) : null}
+              {message.attachments?.length ? (
+                <div className="message-image-preview-strip" aria-label="已发送图片">
+                  {message.attachments.map((attachment) => (
+                    <button
+                      className="image-preview-thumb"
+                      type="button"
+                      key={attachment.id}
+                      aria-label={`查看已发送图片 ${attachment.name}`}
+                      onClick={() => setPreviewAttachment(attachment)}
+                    >
+                      <img src={attachment.dataUrl} alt="" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {retryProgress ? <MessageRetryProgress progress={retryProgress} /> : null}
+              {editingMessageId === message.id ? (
+                <div className="message-edit-panel">
+                  <PromptInlineEditor
+                    className="ui-input message-edit-input"
+                    ariaLabel="编辑用户消息"
+                    value={editingContent}
+                    promptInvocations={editingPromptInvocations}
+                    promptAriaLabelPrefix="编辑消息提示词"
+                    onChange={setEditingContent}
+                    onRemovePrompt={(index) => setEditingPromptInvocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  />
+                  <div className="message-edit-actions">
+                    <button
+                      className="message-icon-button message-edit-cancel-button"
+                      type="button"
+                      aria-label="取消编辑"
+                      title="取消编辑"
+                      onClick={() => {
+                        setEditingMessageId(undefined);
+                        setEditingContent("");
+                        setEditingPromptInvocations([]);
+                      }}
+                    >
+                      <CancelEditIcon />
+                    </button>
+                    <button
+                      className="message-icon-button message-edit-send-button"
+                      type="button"
+                      aria-label="发送编辑后的消息"
+                      title="发送编辑后的消息"
+                      disabled={regenerating || (!editingContent.trim() && editingPromptInvocations.length === 0)}
+                      onClick={() => {
+                        const trimmedContent = editingContent.trim();
+                        if (!trimmedContent && editingPromptInvocations.length === 0) {
+                          return;
+                        }
+
+                        setEditingMessageId(undefined);
+                        setEditingContent("");
+                        const nextPromptInvocations = editingPromptInvocations;
+                        setEditingPromptInvocations([]);
+                        onEditAndRegenerateUserMessage(message.id, trimmedContent, nextPromptInvocations);
+                      }}
+                    >
+                      <SendEditedMessageIcon />
+                    </button>
+                  </div>
+                </div>
+              ) : shouldRenderMessageBubble ? (
+                <div className={`message-bubble${message.role === "user" && message.promptInvocations?.length ? " message-bubble-with-prompts" : ""}`}>
+                  {message.role === "user" && message.promptInvocations?.length ? (
+                    <PromptTokenLinks prompts={message.promptInvocations} ariaLabelPrefix="用户消息提示词" />
+                  ) : null}
+                  {hasVisibleContent ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: MarkdownCodeBlock, pre: MarkdownCodePre, table: MarkdownTableBlock }}>
+                      {message.content}
+                    </ReactMarkdown>
+                  ) : null}
+                </div>
+              ) : null}
+              {isLongUserMessage && editingMessageId !== message.id ? (
+                <button
+                  className="message-long-toggle"
+                  type="button"
+                  aria-label={isLongUserMessageExpanded ? "收起消息" : "展开完整消息"}
+                  onClick={() => toggleLongMessageExpanded(message.id)}
+                >
+                  {isLongUserMessageExpanded ? "收起" : "展开"}
+                </button>
+              ) : null}
+              {message.role === "assistant" ? <ToolAttachmentList attachments={displayAttachments} onPreviewImage={setPreviewAttachment} /> : null}
+              {!isToolCallTurn ? (
+                <div className={`message-regenerate-action message-regenerate-action-${message.role}`}>
+                {message.role === "user" ? (
+                  <button
+                    className="message-icon-button message-edit-button"
+                    type="button"
+                    aria-label="编辑消息"
+                    title="编辑消息"
+                    disabled={regenerating || message.streaming}
+                    onClick={() => {
+                      setPendingRegenerateMessageId(undefined);
+                      setEditingMessageId(message.id);
+                      setEditingContent(message.content);
+                      setEditingPromptInvocations(message.promptInvocations ?? []);
+                    }}
+                  >
+                    <EditMessageIcon />
+                  </button>
+                ) : null}
+                <button
+                  className="message-icon-button message-regenerate-button"
+                  type="button"
+                  aria-label="重新生成"
+                  title="重新生成"
+                  disabled={regenerating || message.streaming}
+                  onClick={() => handleRegenerateMessageClick(message.id)}
+                >
+                  <RegenerateIcon />
+                </button>
+                <button
+                  className="message-icon-button message-copy-button"
+                  type="button"
+                  aria-label={message.role === "user" ? "复制用户消息" : "复制 AI 消息"}
+                  title={message.role === "user" ? "复制用户消息" : "复制 AI 消息"}
+                  onClick={() => void handleCopyMessage(message)}
+                >
+                  <CopyMessageIcon />
+                </button>
+                {message.role === "assistant" ? (
+                  <button
+                    className="message-icon-button message-export-image-button"
+                    type="button"
+                    aria-label="导出 AI 消息图片"
+                    title="导出 AI 消息图片"
+                    onClick={() => void handleExportMessageImage(message)}
+                  >
+                    <ExportImageIcon />
+                  </button>
+                ) : null}
+                {pendingRegenerateMessageId === message.id ? (
+                  <div className="message-regenerate-popover" role="dialog" aria-label="正在重新生成" ref={regeneratePopoverRef}>
+                    <p>正在重新生成...</p>
+                  </div>
+                ) : null}
+                {messageActionFeedback?.messageId === message.id ? (
+                  <span className={`message-action-feedback message-action-feedback-${messageActionFeedback.tone}`} role="status">
+                    {messageActionFeedback.text}
+                  </span>
+                ) : null}
+                </div>
+              ) : null}
+            </div>
+          </article>
+          ) : null}
+          {shouldShowToolCallTimeline ? (
+              <ToolCallTimeline
+                records={toolCallRecords}
+                attachments={collectRawMessageToolAttachments(message)}
+                activeToolCallId={activeToolCallId}
+                popoverRef={toolCallPopoverRef}
               panelCentered
               onToggle={(recordId) => setActiveToolCallId((current) => (current === recordId ? undefined : recordId))}
             />
           ) : null}
-        {hasVisibleArticle ? (
-        <article className={message.role === "user" ? "message-row message-row-user" : "message-row"}>
-          <div className="message-avatar" aria-hidden="true">
-            {message.role === "user" ? "我" : "AI"}
           </div>
-          <div
-            className={[
-              "message-bubble-wrap",
-              isLongUserMessage ? "message-bubble-wrap-long" : "",
-              isLongUserMessage && isLongUserMessageExpanded ? "message-bubble-wrap-expanded" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            data-long-expanded={isLongUserMessage ? String(isLongUserMessageExpanded) : undefined}
-          >
-            {hasVisibleThinking ? (
-              <details className="message-thinking" open={shouldOpenThinking(message) || undefined}>
-                <summary>{message.streaming ? "思考中" : "思考过程"}</summary>
-                <p>{message.thinking}</p>
-              </details>
-            ) : null}
-            {message.attachments?.length ? (
-              <div className="message-image-preview-strip" aria-label="已发送图片">
-                {message.attachments.map((attachment) => (
-                  <button
-                    className="image-preview-thumb"
-                    type="button"
-                    key={attachment.id}
-                    aria-label={`查看已发送图片 ${attachment.name}`}
-                    onClick={() => setPreviewAttachment(attachment)}
-                  >
-                    <img src={attachment.dataUrl} alt="" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {retryProgress ? <MessageRetryProgress progress={retryProgress} /> : null}
-            {editingMessageId === message.id ? (
-              <div className="message-edit-panel">
-                <PromptInlineEditor
-                  className="ui-input message-edit-input"
-                  ariaLabel="编辑用户消息"
-                  value={editingContent}
-                  promptInvocations={editingPromptInvocations}
-                  promptAriaLabelPrefix="编辑消息提示词"
-                  onChange={setEditingContent}
-                  onRemovePrompt={(index) => setEditingPromptInvocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                />
-                <div className="message-edit-actions">
-                  <button
-                    className="message-icon-button message-edit-cancel-button"
-                    type="button"
-                    aria-label="取消编辑"
-                    title="取消编辑"
-                    onClick={() => {
-                      setEditingMessageId(undefined);
-                      setEditingContent("");
-                      setEditingPromptInvocations([]);
-                    }}
-                  >
-                    <CancelEditIcon />
-                  </button>
-                  <button
-                    className="message-icon-button message-edit-send-button"
-                    type="button"
-                    aria-label="发送编辑后的消息"
-                    title="发送编辑后的消息"
-                    disabled={regenerating || (!editingContent.trim() && editingPromptInvocations.length === 0)}
-                    onClick={() => {
-                      const trimmedContent = editingContent.trim();
-                      if (!trimmedContent && editingPromptInvocations.length === 0) {
-                        return;
-                      }
-
-                      setEditingMessageId(undefined);
-                      setEditingContent("");
-                      const nextPromptInvocations = editingPromptInvocations;
-                      setEditingPromptInvocations([]);
-                      onEditAndRegenerateUserMessage(message.id, trimmedContent, nextPromptInvocations);
-                    }}
-                  >
-                    <SendEditedMessageIcon />
-                  </button>
-                </div>
-              </div>
-            ) : shouldRenderMessageBubble ? (
-              <div className={`message-bubble${message.role === "user" && message.promptInvocations?.length ? " message-bubble-with-prompts" : ""}`}>
-                {message.role === "user" && message.promptInvocations?.length ? (
-                  <PromptTokenLinks prompts={message.promptInvocations} ariaLabelPrefix="用户消息提示词" />
-                ) : null}
-                {hasVisibleContent ? (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: MarkdownCodeBlock, pre: MarkdownCodePre, table: MarkdownTableBlock }}>
-                    {message.content}
-                  </ReactMarkdown>
-                ) : null}
-              </div>
-            ) : null}
-            {isLongUserMessage && editingMessageId !== message.id ? (
-              <button
-                className="message-long-toggle"
-                type="button"
-                aria-label={isLongUserMessageExpanded ? "收起消息" : "展开完整消息"}
-                onClick={() => toggleLongMessageExpanded(message.id)}
-              >
-                {isLongUserMessageExpanded ? "收起" : "展开"}
-              </button>
-            ) : null}
-            {message.role === "assistant" ? <ToolAttachmentList attachments={displayAttachments} onPreviewImage={setPreviewAttachment} /> : null}
-            {!isToolCallTurn ? (
-              <div className={`message-regenerate-action message-regenerate-action-${message.role}`}>
-              {message.role === "user" ? (
-                <button
-                  className="message-icon-button message-edit-button"
-                  type="button"
-                  aria-label="编辑消息"
-                  title="编辑消息"
-                  disabled={regenerating || message.streaming}
-                  onClick={() => {
-                    setPendingRegenerateMessageId(undefined);
-                    setEditingMessageId(message.id);
-                    setEditingContent(message.content);
-                    setEditingPromptInvocations(message.promptInvocations ?? []);
-                  }}
-                >
-                  <EditMessageIcon />
-                </button>
-              ) : null}
-              <button
-                className="message-icon-button message-regenerate-button"
-                type="button"
-                aria-label="重新生成"
-                title="重新生成"
-                disabled={regenerating || message.streaming}
-                onClick={() => setPendingRegenerateMessageId(message.id)}
-              >
-                <RegenerateIcon />
-              </button>
-              <button
-                className="message-icon-button message-copy-button"
-                type="button"
-                aria-label={message.role === "user" ? "复制用户消息" : "复制 AI 消息"}
-                title={message.role === "user" ? "复制用户消息" : "复制 AI 消息"}
-                onClick={() => void handleCopyMessage(message)}
-              >
-                <CopyMessageIcon />
-              </button>
-              {message.role === "assistant" ? (
-                <button
-                  className="message-icon-button message-export-image-button"
-                  type="button"
-                  aria-label="导出 AI 消息图片"
-                  title="导出 AI 消息图片"
-                  onClick={() => void handleExportMessageImage(message)}
-                >
-                  <ExportImageIcon />
-                </button>
-              ) : null}
-              {pendingRegenerateMessageId === message.id ? (
-                <div className="message-regenerate-popover" role="dialog" aria-label="确认重新生成" ref={regeneratePopoverRef}>
-                  <p>重新生成会丢弃这条消息后面的聊天记录。</p>
-                  <div className="message-regenerate-popover-actions">
-                    <button className="ui-button-secondary message-regenerate-cancel" type="button" onClick={() => setPendingRegenerateMessageId(undefined)}>
-                      取消
-                    </button>
-                    <button
-                      className="ui-button-primary message-regenerate-confirm"
-                      type="button"
-                      onClick={() => {
-                        setPendingRegenerateMessageId(undefined);
-                        onRegenerateMessage(message.id);
-                      }}
-                    >
-                      确认重新生成
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {messageActionFeedback?.messageId === message.id ? (
-                <span className={`message-action-feedback message-action-feedback-${messageActionFeedback.tone}`} role="status">
-                  {messageActionFeedback.text}
-                </span>
-              ) : null}
-              </div>
-            ) : null}
+        );
+        })}
+        {regenerating ? (
+          <div className="sidepanel-thinking" role="status" aria-live="polite" aria-atomic="true" aria-label="正在思考">
+            <span className="sidepanel-thinking-dots" aria-hidden="true" />
+            <span className="sidepanel-thinking-text">正在思考</span>
           </div>
-        </article>
         ) : null}
-        {shouldShowToolCallTimeline ? (
-            <ToolCallTimeline
-              records={toolCallRecords}
-              attachments={collectRawMessageToolAttachments(message)}
-              activeToolCallId={activeToolCallId}
-              popoverRef={toolCallPopoverRef}
-            panelCentered
-            onToggle={(recordId) => setActiveToolCallId((current) => (current === recordId ? undefined : recordId))}
-          />
+        {previewAttachment ? (
+          <>
+            <div className="dialog-overlay" aria-hidden="true" />
+            <section className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
+              <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
+              <img src={previewAttachment.dataUrl} alt={previewAttachment.name} />
+            </section>
+          </>
         ) : null}
-        </div>
-      );
-      })}
-      {regenerating ? (
-        <div className="sidepanel-thinking" role="status" aria-live="polite" aria-atomic="true" aria-label="正在思考">
-          <span className="sidepanel-thinking-dots" aria-hidden="true" />
-          <span className="sidepanel-thinking-text">正在思考</span>
-        </div>
-      ) : null}
-      {previewAttachment ? (
-        <>
-          <div className="dialog-overlay" aria-hidden="true" />
-          <section className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-            <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
-            <img src={previewAttachment.dataUrl} alt={previewAttachment.name} />
-          </section>
-        </>
-      ) : null}
-    </section>
+      </section>
+      <button className="sidepanel-jump-latest" type="button" hidden={!showJumpLatest} onClick={jumpToLatestMessage}>
+        跳到最新
+      </button>
+    </div>
   );
 }
 

@@ -82,6 +82,7 @@ async function importCollector(input: { port?: PortMock; harEntries?: DevtoolsRe
 
   vi.stubGlobal("chrome", {
     runtime: {
+      id: "test-extension-id",
       connect: vi.fn(() => port),
     },
     devtools: {
@@ -127,6 +128,45 @@ describe("DevTools Network collector", () => {
     const message = latestMessage(port);
     const request = (message.requests as Array<{ url: string; requestHeaders: Array<{ value: string }> }>)[0];
     expect(request.url).toHaveLength(12000);
+  });
+
+  it("扩展上下文失效时不再重连抛错", async () => {
+    const port = createPortMock();
+    let disconnectListener: (() => void) | undefined;
+    port.onDisconnect.addListener = vi.fn((listener: () => void) => {
+      disconnectListener = listener;
+    });
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        id: "test-extension-id",
+        connect: vi.fn(() => {
+          if (chrome.runtime.id === undefined) {
+            throw new Error("Extension context invalidated.");
+          }
+          return port;
+        }),
+      },
+      devtools: {
+        inspectedWindow: { tabId: 7 },
+        network: {
+          onRequestFinished: { addListener: vi.fn() },
+          onNavigated: { addListener: vi.fn() },
+          getHAR: vi.fn((callback: (har: { entries: DevtoolsRequest[] }) => void) => callback({ entries: [] })),
+        },
+      },
+    });
+
+    await import("../../../src/devtools/network");
+    expect(chrome.runtime.connect).toHaveBeenCalledTimes(1);
+
+    // Simulate extension reload invalidating this DevTools page context.
+    (chrome.runtime as { id?: string }).id = undefined;
+    disconnectListener?.();
+
+    await vi.waitFor(() => {
+      expect(chrome.runtime.connect).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("connected snapshot 会脱敏非敏感 header 值中的 Bearer 和 Basic token", async () => {

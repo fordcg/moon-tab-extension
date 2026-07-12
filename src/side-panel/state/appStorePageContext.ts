@@ -26,7 +26,7 @@ export async function loadContextTabsAction(input: { set: StoreSetter }): Promis
   const response = await sendRuntimeMessage<
     | {
         ok: true;
-        tabs: Array<{ tabId: number; title: string; url: string; active: boolean }>;
+        tabs: Array<{ tabId: number; title: string; url: string; active: boolean; favIconUrl?: string }>;
       }
     | { ok: false; message?: string }
   >({ type: "pageContext.listTabs" });
