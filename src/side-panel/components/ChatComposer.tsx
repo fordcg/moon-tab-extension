@@ -14,6 +14,8 @@ import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "..
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
 import { PromptInlineEditor } from "./PromptInlineEditor";
+import { WorkflowTemplateMenu } from "./WorkflowTemplateMenu";
+import { useModalDialogFocus } from "./useModalDialogFocus";
 
 const MAX_IMAGE_ATTACHMENTS = 5;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -119,8 +121,12 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [toolMenuPosition, setToolMenuPosition] = useState<{ left: number; top: number } | undefined>();
   const [modeMenuPosition, setModeMenuPosition] = useState<{ left: number; top: number } | undefined>();
   const [composing, setComposing] = useState(false);
+  const [workflowMenuOpen, setWorkflowMenuOpen] = useState(false);
   const imageInputId = useId();
   const contextDialogRef = useRef<HTMLElement | null>(null);
+  const contextCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const imagePreviewDialogRef = useRef<HTMLElement>(null);
+  const imagePreviewCloseRef = useRef<HTMLButtonElement>(null);
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const toolMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const modeMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -168,6 +174,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const loadContextTabs = useAppStore((state) => state.loadContextTabs);
   const toggleContextTabSelection = useAppStore((state) => state.toggleContextTabSelection);
   const sendChatMessage = useAppStore((state) => state.sendChatMessage);
+  const createWorkflowTask = useAppStore((state) => state.createWorkflowTask);
+  const sendWorkflowTaskMessage = useAppStore((state) => state.sendWorkflowTaskMessage);
   const submitChatFollowUp = useAppStore((state) => state.submitChatFollowUp);
   const removeChatFollowUp = useAppStore((state) => state.removeChatFollowUp);
   const guideChatFollowUp = useAppStore((state) => state.guideChatFollowUp);
@@ -187,6 +195,19 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     () => buildSharedContextTabs(contextTabs, pageContext, pageContextKey, dismissedPageContextKey),
     [contextTabs, dismissedPageContextKey, pageContext, pageContextKey],
   );
+
+  useModalDialogFocus({
+    dialogRef: imagePreviewDialogRef,
+    initialFocusRef: imagePreviewCloseRef,
+    onEscape: () => setPreviewAttachment(undefined),
+    open: Boolean(previewAttachment),
+  });
+  useModalDialogFocus({
+    dialogRef: contextDialogRef,
+    initialFocusRef: contextCloseButtonRef,
+    onEscape: () => setContextDialogOpen(false),
+    open: contextDialogOpen,
+  });
 
   useEffect(() => {
     if (sharedContextTabs.length < 2 && sharedBannerOpen) {
@@ -372,6 +393,15 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setAttachments([]);
     setAttachmentError("");
     await sendChatMessage(content, sendingAttachments, sendingPromptInvocations);
+  };
+  const createWorkflow = async (template: import("../../shared/types").WorkflowTaskTemplate) => {
+    const content = input.trim();
+    if (!content) return;
+    setWorkflowMenuOpen(false);
+    const task = await createWorkflowTask(template, content);
+    setInput("");
+    setPromptInvocations([]);
+    await sendWorkflowTaskMessage(task.id, content);
   };
 
   const submitFollowUp = async (behavior = followUpBehavior) => {
@@ -1072,6 +1102,10 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             </svg>
           </button>
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
+          <div className="workflow-create-wrap">
+            <button className="composer-switch" type="button" aria-label="新建任务" aria-haspopup="menu" aria-expanded={workflowMenuOpen} disabled={!input.trim()} onClick={() => setWorkflowMenuOpen((value) => !value)}>任务</button>
+            {workflowMenuOpen ? <WorkflowTemplateMenu onSelect={(template) => void createWorkflow(template)} /> : null}
+          </div>
           <ModelSelector />
           {stopStatusText ? (
             <span className="sr-only" role="status" aria-live="polite">
@@ -1099,8 +1133,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       {previewAttachment ? (
         <>
           <div className="dialog-overlay" aria-hidden="true" />
-          <section className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-            <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
+          <section ref={imagePreviewDialogRef} className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览" tabIndex={-1}>
+            <button ref={imagePreviewCloseRef} className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
             <img src={previewAttachment.dataUrl} alt={previewAttachment.name} />
           </section>
         </>
@@ -1120,7 +1154,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               <h2 className="context-dialog-title" id="context-dialog-title">
                 选择注入标签页
               </h2>
-              <button className="ui-button-secondary context-dialog-close" type="button" aria-label="关闭标签页选择" onClick={() => setContextDialogOpen(false)}>
+              <button ref={contextCloseButtonRef} className="ui-button-secondary context-dialog-close" type="button" aria-label="关闭标签页选择" onClick={() => setContextDialogOpen(false)}>
                 关闭
               </button>
             </div>

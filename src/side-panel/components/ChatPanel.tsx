@@ -6,6 +6,8 @@ import { SessionHistoryDialog } from "./SessionHistoryDialog";
 import type { SettingsTab } from "./SettingsPanel";
 import { useAppStore } from "../state/appStore";
 import { downloadChatSessionMarkdown, downloadChatSessionPdf, downloadChatSessionWord } from "../utils/chatMarkdownExport";
+import { WorkflowTaskCard } from "./WorkflowTaskCard";
+import { WorkflowSkillDialog } from "./WorkflowSkillDialog";
 
 interface ChatPanelProps {
   browserControlEnabled: boolean;
@@ -42,6 +44,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [chatPreferencesOpen, setChatPreferencesOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [skillDialogTaskId, setSkillDialogTaskId] = useState<string>();
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const providers = useAppStore((state) => state.providers);
   const models = useAppStore((state) => state.models);
@@ -61,6 +64,10 @@ export function ChatPanel({
   const privateChatSession = useAppStore((state) => state.privateChatSession);
   const enterPrivateMode = useAppStore((state) => state.enterPrivateMode);
   const savePrivateChatSession = useAppStore((state) => state.savePrivateChatSession);
+  const updateWorkflowTaskStatus = useAppStore((state) => state.updateWorkflowTaskStatus);
+  const sendWorkflowTaskMessage = useAppStore((state) => state.sendWorkflowTaskMessage);
+  const saveWorkflowSkill = useAppStore((state) => state.saveWorkflowSkill);
+  const workflowSkills = useAppStore((state) => state.workflowSkills);
   const activeSession = privateModeActive ? privateChatSession : storedActiveSession;
   const selectedModel = models.find((model) => model.id === selectedModelId);
   const selectedProvider = providers.find((provider) => provider.id === selectedModel?.providerId);
@@ -187,8 +194,11 @@ export function ChatPanel({
         onEditAndRegenerateUserMessage={(messageId, content) => void editAndRegenerateUserMessage(messageId, content)}
         regenerating={sending}
       />
+      {(activeSession?.workflowTasks ?? []).map((task) => <WorkflowTaskCard key={task.id} task={task} onContinue={(id) => void sendWorkflowTaskMessage(id, task.objective)} onCancel={(id) => void updateWorkflowTaskStatus(id, "canceled")} onSaveSkill={(item) => void saveWorkflowSkill(item.id, { title: item.title, variables: [] }).then((skill) => setSkillDialogTaskId(skill.id))} />)}
+      {workflowSkills.length ? <section className="workflow-skill-library" aria-label="本地技能"><h2>本地技能</h2>{workflowSkills.map((skill) => <button key={skill.id} type="button" onClick={() => setSkillDialogTaskId(skill.id)}>{skill.title}</button>)}</section> : null}
       {providers.length === 0 || models.length === 0 ? <p className="chat-warning">请先配置 API Key 后再开始对话</p> : null}
       <ChatComposer canSend={canSend} matchedRuleLabel={matchedRuleLabel} />
+      <WorkflowSkillDialog open={Boolean(skillDialogTaskId)} skill={workflowSkills.find((skill) => skill.id === skillDialogTaskId)} onOpenChange={(open) => !open && setSkillDialogTaskId(undefined)} />
       <SessionHistoryDialog
         open={drawerOpen}
         page={drawerPage}

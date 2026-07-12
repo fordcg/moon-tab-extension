@@ -3,7 +3,7 @@ import { createTokenUsageEntry } from "../shared/chat/tokenUsage";
 import { createModelRequestPayload } from "../shared/models/modelRequestPayload";
 import { shouldPassDeepSeekReasoningContent } from "../shared/models/openaiChatAdapter";
 import { normalizeModelRequestRetryCount, shouldRetryModelResponse, withModelRequestRetry, type ModelRequestRetryProgress } from "../shared/models/modelRequestRetry";
-import { CURRENT_TIME_TOOL_ID, getRegisteredModelTools, isBrowserAutomationToolId, resolveEnabledModelTools, TAVILY_SEARCH_TOOL_ID } from "../shared/models/toolRegistry";
+import { CURRENT_TIME_TOOL_ID, getRegisteredModelTools, isBrowserAutomationToolId, resolveEnabledModelTools } from "../shared/models/toolRegistry";
 import type { ModelRequestMessage, ModelToolCall, ModelToolChoice, ModelToolDefinition, ModelToolExecutor, ModelToolRegistryEntry, OpenAIStructuredOutputFormat } from "../shared/models/types";
 import type {
   AutomationPlaybookSettings,
@@ -20,8 +20,6 @@ import type {
   McpSettings,
   ModelConfig,
 } from "../shared/types";
-import { parseTavilyApiKeys } from "../shared/webSearch/tavily";
-import { getWebSearchSettings } from "../shared/webSearch/settings";
 import type { TavilySearchOptions } from "../shared/webSearch/tavily";
 import { getEnabledAutomationPlaybooks, normalizeAutomationPlaybookSettings, shouldRunAutomationPlaybookSelection } from "../shared/automationPlaybooks";
 import { parseMcpToolId } from "../shared/mcp/toolAdapter";
@@ -137,12 +135,10 @@ export async function handleChatSendMessage(
 
   const enabledTools = resolveEnabledModelTools(getRegisteredModelTools(message.mcp), message.enabledToolIds ?? []);
   const exposeTool = options.shouldExposeTool ?? shouldExposeTool;
-  const tavilyConfigured = await hasConfiguredTavilyApiKey();
   const exposedTools = message.structuredOutput
     ? []
     : enabledTools
-      .filter(exposeTool)
-      .filter((tool) => tool.id !== TAVILY_SEARCH_TOOL_ID || tavilyConfigured);
+      .filter(exposeTool);
   const toolExecutor = executeTool ?? createBackgroundToolExecutor(message, fetcher);
   const automationPlaybookSelection = await maybeSelectAutomationPlaybook(message, exposedTools, fetcher);
   const initialMessages = appendBrowserControlPromptIfNeeded(message.messages, exposedTools, automationPlaybookSelection);
@@ -265,15 +261,6 @@ function getPageContextSummary(messages: ModelRequestMessage[]): string | undefi
   const url = systemText.match(/当前 URL[:：]\s*(.+)/)?.[1]?.trim() ?? systemText.match(/URL[:：]\s*(https?:\/\/\S+)/)?.[1]?.trim();
   const parts = [title ? `标题：${title.slice(0, 120)}` : "", url ? `URL：${url.slice(0, 200)}` : ""].filter(Boolean);
   return parts.length ? parts.join("\n") : undefined;
-}
-
-async function hasConfiguredTavilyApiKey(): Promise<boolean> {
-  try {
-    const settings = await getWebSearchSettings();
-    return parseTavilyApiKeys(settings.tavily.apiKeysText).length > 0;
-  } catch {
-    return false;
-  }
 }
 
 function logPreparedModelRequest(

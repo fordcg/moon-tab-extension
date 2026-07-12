@@ -3480,6 +3480,32 @@ body {
 }
 
 /* Native side-panel footer parity completion: React owns the old enhancer DOM. */
+.sidebar-shell :focus-visible {
+  outline: 0.125rem solid var(--sidepanel-focus-ring) !important;
+  outline-offset: 0.125rem !important;
+}
+
+/* 任务工作流沿用侧栏的中性表面，避免在窄轨中制造嵌套卡片。 */
+.workflow-template-menu { position: absolute; right: 0; bottom: calc(100% + .375rem); z-index: 20; display: grid; min-width: 13rem; padding: .25rem; border: 1px solid var(--color-border, #d7dce2); border-radius: .5rem; background: var(--color-surface, #fff); box-shadow: 0 4px 8px rgb(0 0 0 / .12); }
+.workflow-template-menu button { display: grid; gap: .125rem; padding: .5rem .625rem; border: 0; border-radius: .375rem; background: transparent; color: inherit; text-align: left; }
+.workflow-template-menu button:hover, .workflow-template-menu button:focus-visible { background: var(--color-surface-hover, #eef2f6); }
+.workflow-template-menu small { color: var(--color-text-secondary, #52606d); }
+.workflow-create-wrap { position: relative; }
+.workflow-task-card, .workflow-skill-library { margin: .5rem .75rem; padding: .625rem; border: 1px solid var(--color-border, #d7dce2); border-radius: .5rem; background: var(--color-surface, #fff); }
+.workflow-task-card header { display: flex; gap: .5rem; align-items: baseline; }
+.workflow-task-card ol, .workflow-context { margin: .5rem 0; padding-inline-start: 1.25rem; }
+.workflow-task-card button, .workflow-skill-library button, .workflow-artifacts button { min-height: 2.25rem; margin: .125rem; }
+.workflow-context div { display: flex; gap: .375rem; align-items: center; padding-block: .25rem; }
+.workflow-artifacts pre { max-height: 10rem; overflow: auto; white-space: pre-wrap; }
+@media (prefers-reduced-motion: reduce) { .workflow-template-menu, .workflow-task-card, .workflow-context { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
+
+.sidebar-shell .app-header-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+}
+
 .sidebar-shell .composer-actions {
   align-items: center;
   flex-wrap: nowrap;
@@ -4806,7 +4832,7 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  color: #7c8795;
+  color: #5f6b7a;
   display: flex;
   font-size: 0.875rem;
   font-weight: 400;

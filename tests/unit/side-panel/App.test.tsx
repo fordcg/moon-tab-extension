@@ -573,6 +573,8 @@ describe("App", () => {
     expect(styles).toMatch(/\.boundary-choice-dialog\s*{(?=[^}]*width:\s*var\(--sidepanel-popover-width\) !important;)(?=[^}]*background:\s*var\(--sidepanel-canvas\) !important;)[^}]*}/s);
     expect(styles).toMatch(/\.notification\s*{(?=[^}]*background:\s*var\(--sidepanel-canvas\) !important;)(?=[^}]*border-radius:\s*0\.875rem !important;)[^}]*}/s);
     expect(styles).toMatch(/\.notification-icon\s*{(?=[^}]*height:\s*1\.25rem !important;)(?=[^}]*width:\s*1\.25rem !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell :focus-visible\s*{(?=[^}]*outline:\s*0\.125rem solid var\(--sidepanel-focus-ring\) !important;)(?=[^}]*outline-offset:\s*0\.125rem !important;)[^}]*}/s);
+    expect(styles).toMatch(/\.history-drawer \.session-empty\s*{[^}]*color:\s*#5f6b7a;/s);
   });
 
   it("边界确认提交后会立即禁用按钮避免重复提交", async () => {
@@ -627,6 +629,38 @@ describe("App", () => {
     const boundaryRespondCalls = sendMessage.mock.calls.filter(([message]) =>
       (message as { type?: string }).type === "browserControl.boundaryChoiceRespond");
     expect(boundaryRespondCalls).toHaveLength(1);
+  });
+
+  it("边界确认弹窗不会被 Escape 绕过，并将焦点限制在确认内容中", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({
+      pendingBoundaryChoice: {
+        type: "browserControl.boundaryChoiceRequest",
+        requestId: "boundary-focus",
+        question: "是否继续？",
+        reason: "需要明确确认。",
+        choices: [{ id: "continue", title: "继续", description: "继续本次操作。", risk: "medium", grants: [] }],
+        allowMultiple: false,
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+
+    render(<App />);
+
+    const dialog = screen.getByRole("dialog", { name: "AI 边界确认" });
+    const cancelButton = within(dialog).getByRole("button", { name: "取消" });
+    const continueButton = within(dialog).getByRole("button", { name: /继续/ });
+    await waitFor(() => expect(document.activeElement).toBe(continueButton));
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "AI 边界确认" })).toBeInTheDocument();
+
+    await user.tab();
+    expect(document.activeElement).toBe(within(dialog).getByPlaceholderText("补充要求，不会直接授权。"));
+    await user.tab();
+    expect(document.activeElement).toBe(cancelButton);
+    await user.tab();
+    expect(document.activeElement).toBe(continueButton);
   });
 
   it("发送后切换到新会话时原会话会显示运行中并在完成后显示完成态", async () => {
@@ -1604,6 +1638,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -1636,6 +1671,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -1669,6 +1705,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -1701,6 +1738,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -2065,6 +2103,7 @@ describe("App", () => {
         ...useAppStore.getState().chatPreferences,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -2097,6 +2136,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -2133,6 +2173,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -2165,6 +2206,7 @@ describe("App", () => {
         extractHtmlByDefault: false,
         toolCallDisplayMode: "assistant_grouped",
         showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
       updateChatPreferences,
     });
@@ -4217,6 +4259,15 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: "提示词" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "界面偏好" })).not.toBeInTheDocument();
     const settingsTablist = screen.getByRole("tablist", { name: "设置分类" });
+    const channelsTab = screen.getByRole("tab", { name: "渠道管理" });
+    const rulesTab = screen.getByRole("tab", { name: "提取规则" });
+    expect(channelsTab).toHaveAttribute("aria-controls", "settings-tabpanel-channels");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("id", "settings-tabpanel-channels");
+    channelsTab.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(rulesTab);
+    expect(rulesTab).toHaveAttribute("aria-selected", "true");
+    await user.click(channelsTab);
     expect(settingsTablist.closest(".settings-drawer-page")?.className).not.toContain("lg:grid-cols");
     expect(settingsTablist.closest(".settings-dialog-content")).toHaveClass("w-[80%]");
     expect(settingsTablist).toHaveClass("settings-tabs-scroll", "overflow-x-auto");
