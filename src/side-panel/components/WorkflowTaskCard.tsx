@@ -3,6 +3,7 @@ import type { WorkflowStepStatus, WorkflowTask, WorkflowTaskStatus } from "../..
 import { useAppStore } from "../state/appStore";
 import { TaskArtifactsPanel } from "./TaskArtifactsPanel";
 import { TaskContextPanel } from "./TaskContextPanel";
+import { WorkflowSkillDialog } from "./WorkflowSkillDialog";
 
 interface WorkflowTaskCardProps {
   task: WorkflowTask;
@@ -11,6 +12,7 @@ interface WorkflowTaskCardProps {
 export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
   const [reply, setReply] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [skillDialogOpen, setSkillDialogOpen] = useState(false);
   const sending = useAppStore((state) => state.sending);
   const addNotification = useAppStore((state) => state.addNotification);
   const sendWorkflowTaskMessage = useAppStore((state) => state.sendWorkflowTaskMessage);
@@ -18,6 +20,7 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
   const abortChatTask = useAppStore((state) => state.abortChatTask);
   const canContinue = task.status === "waiting";
   const canCancel = task.status === "preparing" || task.status === "running" || task.status === "waiting";
+  const canSaveSkill = task.status === "completed";
 
   const continueTask = async () => {
     const content = reply.trim();
@@ -83,13 +86,21 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
           </button>
         </div>
       ) : null}
-      {canCancel ? (
+      {canCancel || canSaveSkill ? (
         <div className="workflow-task-footer">
-          <button className="ui-button-secondary workflow-task-cancel" type="button" onClick={() => void cancelTask()}>
-            取消任务
-          </button>
+          {canSaveSkill ? (
+            <button className="ui-button-secondary workflow-task-save-skill" type="button" onClick={() => setSkillDialogOpen(true)}>
+              保存为技能
+            </button>
+          ) : null}
+          {canCancel ? (
+            <button className="ui-button-secondary workflow-task-cancel" type="button" onClick={() => void cancelTask()}>
+              取消任务
+            </button>
+          ) : null}
         </div>
       ) : null}
+      <WorkflowSkillDialog mode="save" open={skillDialogOpen} task={task} onOpenChange={setSkillDialogOpen} />
     </article>
   );
 }

@@ -151,6 +151,8 @@ describe("appStore 工作流任务", () => {
       contextItemIds: ["context-safe"],
       createdAt: 1,
     });
+    await useAppStore.getState().updateWorkflowTaskStatus(task.id, "running");
+    await useAppStore.getState().updateWorkflowTaskStatus(task.id, "completed");
 
     const skill = await useAppStore.getState().saveWorkflowSkill(task.id, {
       title: " 页面研究 ",
@@ -170,7 +172,9 @@ describe("appStore 工作流任务", () => {
     const session = createSession();
     await saveChatSession(session);
     useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
-    const sourceTask = await useAppStore.getState().createWorkflowTask("automation", "处理 {{subject}}");
+    const sourceTask = await useAppStore.getState().createWorkflowTask("automation", "处理 {{ subject }}");
+    await useAppStore.getState().updateWorkflowTaskStatus(sourceTask.id, "running");
+    await useAppStore.getState().updateWorkflowTaskStatus(sourceTask.id, "completed");
     const skill = await useAppStore.getState().saveWorkflowSkill(sourceTask.id, {
       title: "处理任务",
       variables: [{ id: "subject", label: "对象", required: true }],
@@ -191,6 +195,46 @@ describe("appStore 工作流任务", () => {
       status: "waiting",
     });
     expect(task.statusReason).toContain("不可用");
+  });
+
+  it("启动技能会用替换后的目标创建任务并发送首条消息", async () => {
+    const session = createSession();
+    await saveChatSession(session);
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    const sourceTask = await useAppStore.getState().createWorkflowTask("research", "研究 {{ subject }}");
+    await useAppStore.getState().updateWorkflowTaskStatus(sourceTask.id, "running");
+    await useAppStore.getState().updateWorkflowTaskStatus(sourceTask.id, "completed");
+    const skill = await useAppStore.getState().saveWorkflowSkill(sourceTask.id, {
+      title: "研究任务",
+      variables: [{ id: "subject", label: "对象", required: true }],
+    });
+    const originalSendWorkflowTaskMessage = useAppStore.getState().sendWorkflowTaskMessage;
+    const sendWorkflowTaskMessage = vi.fn(async () => undefined);
+    useAppStore.setState({ sendWorkflowTaskMessage });
+
+    try {
+      const task = await useAppStore.getState().startWorkflowSkill(skill.id, { subject: " 当前页面 " });
+
+      expect(task).toMatchObject({
+        template: "research",
+        objective: "研究 当前页面",
+      });
+      expect(sendWorkflowTaskMessage).toHaveBeenCalledWith(task.id, "研究 当前页面");
+    } finally {
+      useAppStore.setState({ sendWorkflowTaskMessage: originalSendWorkflowTaskMessage });
+    }
+  });
+
+  it("未完成任务不能保存为技能", async () => {
+    const session = createSession();
+    await saveChatSession(session);
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    const task = await useAppStore.getState().createWorkflowTask("research", "研究当前页面");
+
+    await expect(useAppStore.getState().saveWorkflowSkill(task.id, {
+      title: "页面研究",
+      variables: [],
+    })).rejects.toThrow("任务完成后才能保存技能");
   });
 
   it("流式工具事件会更新任务步骤并仅保存脱敏附件摘要到任务所属会话", async () => {

@@ -3,6 +3,7 @@ import { ChatPreferenceDrawer } from "./ChatPreferenceDrawer";
 import { ChatComposer } from "./ChatComposer";
 import { MessageList } from "./MessageList";
 import { SessionHistoryDialog } from "./SessionHistoryDialog";
+import { WorkflowSkillDialog } from "./WorkflowSkillDialog";
 import { WorkflowTaskCard } from "./WorkflowTaskCard";
 import type { SettingsTab } from "./SettingsPanel";
 import { useAppStore } from "../state/appStore";
@@ -43,6 +44,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [chatPreferencesOpen, setChatPreferencesOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [selectedWorkflowSkillId, setSelectedWorkflowSkillId] = useState<string | null>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const providers = useAppStore((state) => state.providers);
   const models = useAppStore((state) => state.models);
@@ -62,7 +64,10 @@ export function ChatPanel({
   const privateChatSession = useAppStore((state) => state.privateChatSession);
   const enterPrivateMode = useAppStore((state) => state.enterPrivateMode);
   const savePrivateChatSession = useAppStore((state) => state.savePrivateChatSession);
+  const workflowSkills = useAppStore((state) => state.workflowSkills);
+  const loadWorkflowSkills = useAppStore((state) => state.loadWorkflowSkills);
   const activeSession = privateModeActive ? privateChatSession : storedActiveSession;
+  const selectedWorkflowSkill = workflowSkills.find((skill) => skill.id === selectedWorkflowSkillId);
   const selectedModel = models.find((model) => model.id === selectedModelId);
   const selectedProvider = providers.find((provider) => provider.id === selectedModel?.providerId);
   const matchedRule = extractionRules.find((rule) => rule.id === pageContext.matchedRuleId);
@@ -92,6 +97,10 @@ export function ChatPanel({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [exportMenuOpen]);
+
+  useEffect(() => {
+    void loadWorkflowSkills();
+  }, [loadWorkflowSkills]);
 
   const handleExport = async (format: "markdown" | "word" | "pdf") => {
     if (!activeSession || activeSession.messages.length === 0) {
@@ -188,9 +197,30 @@ export function ChatPanel({
         onEditAndRegenerateUserMessage={(messageId, content) => void editAndRegenerateUserMessage(messageId, content)}
         regenerating={sending}
       />
-      {activeSession?.workflowTasks?.length ? (
+      {activeSession && ((activeSession.workflowTasks?.length ?? 0) > 0 || workflowSkills.length > 0) ? (
         <section className="workflow-task-strip" aria-label="任务工作区">
-          {activeSession.workflowTasks.map((task) => (
+          {workflowSkills.length ? (
+            <section className="workflow-skill-shelf" aria-label="本地任务技能">
+              <div className="workflow-skill-shelf-header">
+                <h2 className="workflow-skill-shelf-title">技能</h2>
+              </div>
+              <div className="workflow-skill-list">
+                {workflowSkills.map((skill) => (
+                  <button
+                    className="workflow-skill-chip"
+                    type="button"
+                    key={skill.id}
+                    aria-label={`启动技能：${skill.title}`}
+                    onClick={() => setSelectedWorkflowSkillId(skill.id)}
+                  >
+                    <span className="workflow-skill-chip-title">{skill.title}</span>
+                    <span className="workflow-skill-chip-meta">{formatWorkflowTemplateLabel(skill.template)}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {(activeSession.workflowTasks ?? []).map((task) => (
             <WorkflowTaskCard key={task.id} task={task} />
           ))}
         </section>
@@ -211,6 +241,30 @@ export function ChatPanel({
         onToggleBrowserControl={onToggleBrowserControl}
       />
       <ChatPreferenceDrawer open={chatPreferencesOpen} onOpenChange={setChatPreferencesOpen} />
+      {selectedWorkflowSkill ? (
+        <WorkflowSkillDialog
+          mode="start"
+          open={Boolean(selectedWorkflowSkill)}
+          skill={selectedWorkflowSkill}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedWorkflowSkillId(null);
+            }
+          }}
+        />
+      ) : null}
     </section>
   );
+}
+
+function formatWorkflowTemplateLabel(template: "debug" | "research" | "automation"): string {
+  switch (template) {
+    case "debug":
+      return "开发调试";
+    case "automation":
+      return "网页自动化";
+    case "research":
+    default:
+      return "网页研究";
+  }
 }

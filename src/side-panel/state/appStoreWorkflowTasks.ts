@@ -269,6 +269,9 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
       if (!task) {
         throw new Error("未找到工作流任务");
       }
+      if (task.status !== "completed") {
+        throw new Error("任务完成后才能保存技能");
+      }
 
       const title = cleanText(draft.title);
       if (!title) {
@@ -312,7 +315,8 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
         await get().updateWorkflowTaskStatus(task.id, "waiting", `推荐工具不可用：${unavailableToolIds.join("、")}`);
         return findActiveTask(get(), task.id) ?? task;
       }
-      return task;
+      await get().sendWorkflowTaskMessage(task.id, objective);
+      return findActiveTask(get(), task.id) ?? task;
     },
   };
 }
@@ -355,9 +359,17 @@ function resolveSkillObjective(skill: WorkflowSkill, values: Record<string, stri
   }
 
   return skill.variables.reduce(
-    (objective, variable) => objective.split(`{{${variable.id}}}`).join(cleanText(values[variable.id])),
+    (objective, variable) => objective.replace(createSkillVariablePattern(variable.id), cleanText(values[variable.id])),
     skill.objectiveTemplate,
   );
+}
+
+function createSkillVariablePattern(variableId: string): RegExp {
+  return new RegExp(`{{\\s*${escapeRegExp(variableId)}\\s*}}`, "g");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizeWorkflowSkills(value: unknown): WorkflowSkill[] {

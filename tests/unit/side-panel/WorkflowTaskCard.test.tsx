@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowTaskCard } from "../../../src/side-panel/components/WorkflowTaskCard";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
-import type { WorkflowTask } from "../../../src/shared/types";
+import type { WorkflowSkill, WorkflowTask } from "../../../src/shared/types";
 
 const originalActions = {
   sendWorkflowTaskMessage: useAppStore.getState().sendWorkflowTaskMessage,
@@ -14,6 +14,7 @@ const originalActions = {
   updateWorkflowContextItem: useAppStore.getState().updateWorkflowContextItem,
   toggleWorkflowContextPinned: useAppStore.getState().toggleWorkflowContextPinned,
   removeWorkflowContextItem: useAppStore.getState().removeWorkflowContextItem,
+  saveWorkflowSkill: useAppStore.getState().saveWorkflowSkill,
 };
 
 function createTask(overrides: Partial<WorkflowTask> = {}): WorkflowTask {
@@ -128,5 +129,32 @@ describe("WorkflowTaskCard", () => {
       );
     });
     expect(removeWorkflowContextItem).toHaveBeenCalledWith("workflow-task-1", "context-1");
+  });
+
+  it("完成状态可保存为技能并提取变量", async () => {
+    const user = userEvent.setup();
+    const saveWorkflowSkill = vi.fn(async (_taskId: string, draft: Pick<WorkflowSkill, "title" | "variables">): Promise<WorkflowSkill> => ({
+      id: "workflow-skill-1",
+      title: draft.title,
+      template: "research",
+      objectiveTemplate: "研究 {{subject}}",
+      variables: draft.variables,
+      requiredContextKinds: [],
+      recommendedToolIds: [],
+      artifactKinds: [],
+      createdAt: 1,
+      updatedAt: 1,
+    }));
+    useAppStore.setState({ saveWorkflowSkill, addNotification: vi.fn() });
+
+    render(<WorkflowTaskCard task={createTask({ status: "completed", title: "研究技能", objective: "研究 {{subject}}" })} />);
+
+    await user.click(screen.getByRole("button", { name: "保存为技能" }));
+    await user.click(screen.getByRole("button", { name: "保存技能" }));
+
+    await waitFor(() => expect(saveWorkflowSkill).toHaveBeenCalledWith("workflow-task-1", {
+      title: "研究技能",
+      variables: [{ id: "subject", label: "subject", required: true }],
+    }));
   });
 });

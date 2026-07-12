@@ -574,10 +574,13 @@ git commit -m "功能：沉淀任务产物并支持导出"
 - Modify: `src/side-panel/components/WorkflowTaskCard.tsx`
 - Modify: `src/side-panel/state/appStoreWorkflowTasks.ts`
 - Modify: `src/side-panel/components/ChatPanel.tsx`
+- Modify: `src/side-panel/styles.css`
 - Test: `tests/unit/side-panel/WorkflowSkillDialog.test.tsx`
+- Test: `tests/unit/side-panel/ChatPanel.test.tsx`
+- Test: `tests/unit/side-panel/WorkflowTaskCard.test.tsx`
 - Test: `tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
 
-- [ ] **Step 1: 写出技能变量与运行时降级的失败用例**
+- [x] **Step 1: 写出技能变量与运行时降级的失败用例**
 
 ```tsx
 it("缺少必填变量时不启动技能", async () => {
@@ -599,35 +602,35 @@ it("所需工具不可用时，创建等待任务而不是调用工具", async (
 });
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run: `npx vitest run tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
 
 Expected: FAIL，提示技能对话框或运行时校验尚未实现。
 
-- [ ] **Step 3: 实现技能对话框**
+- [x] **Step 3: 实现技能对话框**
 
-`WorkflowSkillDialog` 使用现有 Radix Dialog 模式，显示技能标题、模板、变量输入和运行时状态。启动时：
+`WorkflowSkillDialog` 使用现有弹窗覆盖层模式，显示技能标题、模板和变量输入。启动时：
 
 1. 对 `required === true` 的变量做 `trim()` 非空校验。
 2. 将 `{{variableId}}` 替换为经过 `redactSensitiveText` 的用户值。
 3. 调用 `startWorkflowSkill`。
-4. 对 `waiting` 任务显示状态原因并保留“转为普通聊天”的按钮。
+4. 对推荐工具不可用的技能创建 `waiting` 任务，由任务卡展示状态原因并保留继续入口。
 
 不显示、编辑或保存任一任务上下文摘要、页面元素 UID、Cookie、Token 或工具参数。
 
-- [ ] **Step 4: 为任务卡片接入显式保存技能**
+- [x] **Step 4: 为任务卡片接入显式保存技能**
 
 仅 `completed` 任务显示“保存为技能”。草稿包含标题和从任务目标中明确标记的 `{{变量}}`；没有变量时保存空变量数组。保存时仅写入模板、目标模板、所需上下文 `kind`、推荐 tool ID 和产物 `kind`，不复制产物正文。
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
-Run: `npx vitest run tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
+Run: `npm test -- tests/unit/side-panel/ChatPanel.test.tsx tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/WorkflowTaskCard.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
 
 Expected: PASS。
 
 ```powershell
-git add src/side-panel/components/WorkflowSkillDialog.tsx src/side-panel/components/WorkflowTaskCard.tsx src/side-panel/components/ChatPanel.tsx src/side-panel/state/appStoreWorkflowTasks.ts tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts
+git add src/side-panel/components/WorkflowSkillDialog.tsx src/side-panel/components/WorkflowTaskCard.tsx src/side-panel/components/ChatPanel.tsx src/side-panel/state/appStoreWorkflowTasks.ts src/side-panel/styles.css tests/unit/side-panel/ChatPanel.test.tsx tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/WorkflowTaskCard.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts
 git commit -m "功能：保存并启动侧栏本地技能"
 ```
 
