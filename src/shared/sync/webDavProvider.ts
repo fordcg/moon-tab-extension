@@ -97,14 +97,25 @@ function normalizeWebDavProviderConfig(config: WebDavProviderConfig): WebDavProv
   if (!endpointUrl || !username || !password || !remotePath) {
     throw new Error("请完整填写 WebDAV 地址、用户名、密码和远程路径");
   }
-  if (!/^https?:\/\//i.test(endpointUrl)) {
-    throw new Error("WebDAV 地址必须以 http:// 或 https:// 开头");
+  let endpoint: URL;
+  try {
+    endpoint = new URL(endpointUrl);
+  } catch {
+    throw new Error("WebDAV 地址必须是合法 URL");
+  }
+  if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && isLoopbackHost(endpoint.hostname))) {
+    throw new Error("WebDAV 地址必须使用 HTTPS；仅允许本机 loopback 使用 HTTP");
   }
   if (remotePath.split(/[\\/]+/).some((part) => part === "..")) {
     throw new Error("WebDAV 远程路径不能包含路径穿越片段");
   }
 
   return { endpointUrl, username, password, remotePath };
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function createWebDavCollectionUrl(config: WebDavProviderConfig): string {

@@ -148,6 +148,17 @@ describe("Chrome Sync provider", () => {
 });
 
 describe("S3 provider", () => {
+  it("拒绝会发送 SigV4 凭据的远程 HTTP Endpoint", () => {
+    expect(() => createS3Provider(fetch, {
+      endpointUrl: "http://s3.example.com",
+      accessKeyId: "AKIA_TEST",
+      secretAccessKey: "SECRET_TEST",
+      bucket: "browser-ai",
+      region: "auto",
+      objectKeyPrefix: "backups",
+    })).toThrow("S3 Endpoint 必须使用 HTTPS");
+  });
+
   it("S3 使用 path-style URL 写入、列出、读取和删除多份备份对象", async () => {
     const backup = {
       version: 1,
@@ -384,6 +395,15 @@ describe("S3 provider", () => {
 });
 
 describe("WebDAV provider", () => {
+  it("拒绝会发送 Basic 凭据的远程 HTTP 地址", () => {
+    expect(() => createWebDavProvider(fetch, {
+      endpointUrl: "http://dav.example.com",
+      username: "user",
+      password: "secret",
+      remotePath: "browser-ai",
+    })).toThrow("WebDAV 地址必须使用 HTTPS");
+  });
+
   it("WebDAV 使用 PUT 写入、列出、读取和删除多份备份文件", async () => {
     const backup = {
       version: 1,

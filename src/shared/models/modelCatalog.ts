@@ -113,6 +113,7 @@ export function createEndpointUrl(
   endpointKind: "openai_chat" | "anthropic_messages" | "openai_models" | "anthropic_models",
 ): string {
   const url = new URL(endpointUrl.trim());
+  assertSecureCredentialEndpoint(url, "模型 Endpoint");
   const suffixByKind = {
     openai_chat: ["v1", "chat", "completions"],
     anthropic_messages: ["v1", "messages"],
@@ -139,6 +140,21 @@ export function createEndpointUrl(
 
   url.pathname = `/${[...baseSegments, ...targetSuffix].join("/")}`;
   return url.toString();
+}
+
+function assertSecureCredentialEndpoint(url: URL, label: string): void {
+  if (url.protocol === "https:") {
+    return;
+  }
+  if (url.protocol === "http:" && isLoopbackHost(url.hostname)) {
+    return;
+  }
+  throw new Error(`${label} 必须使用 HTTPS；仅允许本机 loopback 使用 HTTP。`);
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function removeKnownEndpointSuffix(segments: string[], knownSuffixes: string[][]): string[] {

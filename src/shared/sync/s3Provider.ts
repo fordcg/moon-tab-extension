@@ -142,13 +142,22 @@ function normalizeS3ProviderConfig(config: S3ProviderConfig): S3ProviderConfig {
   if (!endpointUrl || !accessKeyId || !secretAccessKey || !bucket) {
     throw new Error("请完整填写 S3 Endpoint、Access Key、Secret Key 和 Bucket");
   }
+  let endpoint: URL;
   try {
-    new URL(endpointUrl);
+    endpoint = new URL(endpointUrl);
   } catch {
     throw new Error("S3 Endpoint 必须是合法 URL");
   }
+  if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && isLoopbackHost(endpoint.hostname))) {
+    throw new Error("S3 Endpoint 必须使用 HTTPS；仅允许本机 loopback 使用 HTTP");
+  }
 
   return { endpointUrl, accessKeyId, secretAccessKey, bucket, region, objectKeyPrefix };
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function createS3ListUrl(config: S3ProviderConfig, continuationToken?: string): URL {

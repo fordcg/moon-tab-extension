@@ -36,4 +36,8 @@ describe("createEndpointUrl", () => {
     const payload = createOpenAIChatPayload(createModel("http://127.0.0.1:18000/v1"), [{ role: "user", content: "hi" }], true);
     expect(payload.url).toBe("http://127.0.0.1:18000/v1/chat/completions");
   });
+
+  it("拒绝会携带 API Key 的远程 HTTP 模型端点", () => {
+    expect(() => createEndpointUrl("http://api.example.com/v1", "openai_chat")).toThrow("模型 Endpoint 必须使用 HTTPS");
+  });
 });
