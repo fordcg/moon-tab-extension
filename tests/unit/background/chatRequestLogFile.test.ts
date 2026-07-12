@@ -54,4 +54,20 @@ describe("chatRequestLog client", () => {
     expect(redacted.nested.authorization).toBe("[已脱敏]");
     expect(redacted.nested.ok).toBe(true);
   });
+
+  it("脱敏聊天正文中的内联凭据，并使用每个日志客户端独有的会话令牌", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true });
+    const first = createChatRequestLogClient({ enabled: true, requestId: "r1", fetcher: fetcher as typeof fetch });
+    const second = createChatRequestLogClient({ enabled: true, requestId: "r2", fetcher: fetcher as typeof fetch });
+    first.emit("model_request", { messages: [{ content: "Authorization: Bearer top-secret; api_key=sk-secret" }] });
+    second.emit("session_start");
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    const [firstInit] = fetcher.mock.calls[0].slice(1);
+    const [secondInit] = fetcher.mock.calls[1].slice(1);
+    const firstBody = String((firstInit as RequestInit).body);
+    expect(firstBody).not.toContain("top-secret");
+    expect(firstBody).not.toContain("sk-secret");
+    expect((firstInit as RequestInit).headers).toMatchObject({ "X-Chat-Log-Session": expect.any(String) });
+    expect((firstInit as RequestInit).headers).not.toEqual((secondInit as RequestInit).headers);
+  });
 });

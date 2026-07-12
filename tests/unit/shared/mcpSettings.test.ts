@@ -66,6 +66,17 @@ describe("MCP 配置", () => {
     ]);
   });
 
+  it("拒绝非本机 HTTP MCP endpoint，避免 Bearer Token 经明文网络传输", () => {
+    const settings = normalizeMcpSettings({
+      servers: [
+        { id: "remote", name: "远程", endpointUrl: "http://mcp.example.com/mcp", enabled: true, tools: [] },
+        { id: "local", name: "本机", endpointUrl: "http://127.0.0.1:3000/mcp", enabled: true, tools: [] },
+      ],
+    });
+
+    expect(settings.servers.map((server) => server.id)).toEqual(["local"]);
+  });
+
   it("保存 Bearer Token 时单独写入敏感配置并允许清空", async () => {
     await saveMcpSettings({
       servers: [

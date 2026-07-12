@@ -6,6 +6,10 @@ const MAX_STRING_LENGTH = 8_000;
 const MAX_DEPTH = 12;
 const BASE64_IMAGE_PATTERN = /^data:image\/[a-z0-9.+-]+;base64,/i;
 const LONG_BASE64_PATTERN = /^[A-Za-z0-9+/=\s]{200,}$/;
+const INLINE_SECRET_PATTERNS = [
+  /\b(Bearer|Basic)\s+[^\s,;&}"']+/gi,
+  /\b(token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)\b(\s*[=:]\s*)(?:Bearer\s+)?("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;&}]+)/gi,
+];
 
 export type ChatRequestLogEventType =
   | "session_start"
@@ -44,6 +48,7 @@ export function createChatRequestLogClient(input: {
 }): ChatRequestLogClient {
   const fetcher = input.fetcher ?? globalThis.fetch?.bind(globalThis);
   const endpoint = input.endpoint ?? CHAT_REQUEST_LOG_ENDPOINT;
+  const sessionToken = createLogSessionToken();
 
   return {
     enabled: Boolean(input.enabled),
@@ -75,7 +80,7 @@ export function createChatRequestLogClient(input: {
         .then(() =>
           fetcher(endpoint, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "X-Chat-Log-Session": sessionToken },
             body: JSON.stringify(event),
           }),
         )
@@ -136,7 +141,19 @@ function redactString(value: string): string {
   if (value.length > MAX_STRING_LENGTH) {
     return `${value.slice(0, MAX_STRING_LENGTH)}…[truncated ${value.length - MAX_STRING_LENGTH} chars]`;
   }
-  return value;
+  return INLINE_SECRET_PATTERNS.reduce((redacted, pattern) => redacted.replace(pattern, (match, prefix: string, separator?: string) => {
+    if (separator !== undefined) {
+      return `${prefix}${separator}${REDACTED}`;
+    }
+    return `${prefix} ${REDACTED}`;
+  }), value);
+}
+
+function createLogSessionToken(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function isImageLikeKey(key: string): boolean {

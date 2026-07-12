@@ -108,10 +108,18 @@ function normalizeHttpUrl(value: unknown): string | undefined {
 
   try {
     const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString().replace(/\/$/, "") : undefined;
+    if (url.protocol === "https:") {
+      return url.toString().replace(/\/$/, "");
+    }
+    return url.protocol === "http:" && isLoopbackHost(url.hostname) ? url.toString().replace(/\/$/, "") : undefined;
   } catch {
     return undefined;
   }
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function normalizeTimestamp(value: unknown): number {

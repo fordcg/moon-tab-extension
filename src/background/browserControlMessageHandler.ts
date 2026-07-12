@@ -65,6 +65,8 @@ import { FullAccessToolExecutor } from "./browserControl/fullAccessToolExecutor"
 import { BrowserConsoleRecorder } from "./browserControl/consoleRecorder";
 import { handlePageContextMessage, type PageContextExtractResponse } from "./pageContextMessageHandler";
 
+const FULL_ACCESS_GRANT_TTL_MS = 5 * 60 * 1000;
+
 type Debuggee = chrome.debugger.Debuggee;
 type ChromeApi = typeof chrome;
 type DebuggerDetachReason = `${chrome.debugger.DetachReason}`;
@@ -1889,6 +1891,7 @@ export class BrowserControlManager {
       tabId: this.connection.attachedTabId,
       origin: this.getCurrentOrigin(),
       createdAt: Date.now(),
+      expiresAt: Date.now() + FULL_ACCESS_GRANT_TTL_MS,
       reason,
     };
   }
@@ -1930,7 +1933,7 @@ export class BrowserControlManager {
       tabId: this.connection.attachedTabId,
       origin: this.getCurrentOrigin(),
       fullAccess: this.browserAutomationMode === "full_access" &&
-        isFullAccessAuthorized(this.toolAuthorizationContext, this.connection.attachedTabId),
+        isFullAccessAuthorized(this.toolAuthorizationContext, this.connection.attachedTabId, this.getCurrentOrigin()),
     };
   }
 
@@ -1966,7 +1969,7 @@ export class BrowserControlManager {
       ],
       selectedChoiceIds: ["full-access"],
       createdAt: Date.now(),
-      expiresAt: Number.MAX_SAFE_INTEGER,
+      expiresAt: Date.now() + FULL_ACCESS_GRANT_TTL_MS,
     };
   }
 

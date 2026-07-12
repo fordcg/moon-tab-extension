@@ -61,7 +61,7 @@ export function isRuntimeReadonlyAuthorized(context: ToolAuthorizationContext, t
   return context.tabId === tabId;
 }
 
-export function isFullAccessAuthorized(context: ToolAuthorizationContext, tabId: number | undefined, now = Date.now()): boolean {
+export function isFullAccessAuthorized(context: ToolAuthorizationContext, tabId: number | undefined, origin?: string, now = Date.now()): boolean {
   if (typeof tabId !== "number") {
     return false;
   }
@@ -74,7 +74,7 @@ export function isFullAccessAuthorized(context: ToolAuthorizationContext, tabId:
     return false;
   }
 
-  return context.tabId === tabId;
+  return context.tabId === tabId && Boolean(context.origin) && context.origin === origin;
 }
 
 export function isControlledEnhancedAuthorized(context: ToolAuthorizationContext, tabId: number | undefined, now = Date.now()): boolean {
