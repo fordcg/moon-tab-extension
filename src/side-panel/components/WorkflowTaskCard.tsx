@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { WorkflowStepStatus, WorkflowTask, WorkflowTaskStatus } from "../../shared/types";
 import { useAppStore } from "../state/appStore";
+import { TaskArtifactsPanel } from "./TaskArtifactsPanel";
 import { TaskContextPanel } from "./TaskContextPanel";
 
 interface WorkflowTaskCardProps {
@@ -62,6 +63,7 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
         </ol>
       ) : null}
       <TaskContextPanel task={task} />
+      <TaskArtifactsPanel task={task} />
       {canContinue ? (
         <div className="workflow-task-reply">
           <textarea

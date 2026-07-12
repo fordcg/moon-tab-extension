@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
 import {
+  createWorkflowArtifactFromAssistantMessage,
+  createWorkflowArtifactsFromAssistantMessage,
+} from "../../../src/side-panel/state/appStoreWorkflowTasks";
+import {
   clearDatabase,
   getAppSetting,
   getChatSession,
@@ -8,7 +12,7 @@ import {
   saveModelProvider,
   saveProviderModel,
 } from "../../../src/shared/storage/repositories";
-import type { ChatSession, ModelProvider, ProviderModel, WorkflowSkill } from "../../../src/shared/types";
+import type { ChatMessage, ChatSession, ModelProvider, ProviderModel, WorkflowSkill, WorkflowTask } from "../../../src/shared/types";
 
 function createSession(id = "session-1"): ChatSession {
   return {
@@ -48,6 +52,38 @@ function createModel(): ProviderModel {
     enabled: true,
     createdAt: 1,
     updatedAt: 1,
+  };
+}
+
+function createWorkflowTaskFixture(overrides: Partial<WorkflowTask> = {}): WorkflowTask {
+  return {
+    id: "workflow-task-fixture",
+    sessionId: "session-1",
+    template: "research",
+    title: "测试任务",
+    objective: "测试任务",
+    status: "running",
+    createdAt: 1,
+    updatedAt: 2,
+    contextItems: [],
+    steps: [],
+    artifacts: [],
+    ...overrides,
+  };
+}
+
+function createAssistantMessage(content: string): ChatMessage {
+  return {
+    id: "message-assistant",
+    role: "assistant",
+    content,
+    createdAt: 1,
+    modelId: "model-1",
+    endpointType: "openai_chat",
+    streamMode: true,
+    systemPrompt: "",
+    contextPrompt: "",
+    contextMode: "text",
   };
 }
 
@@ -241,6 +277,11 @@ describe("appStore 工作流任务", () => {
     expect(updatedTask).toMatchObject({
       status: "completed",
       steps: [{ toolCallId: "call-1", status: "completed" }],
+      artifacts: [{
+        kind: "conclusion",
+        title: "任务结论",
+        content: "检索完成",
+      }],
       contextItems: [{
         id: "workflow-context-tool-attachment-2",
         kind: "network",
@@ -256,6 +297,70 @@ describe("appStore 工作流任务", () => {
     expect(JSON.stringify(updatedTask)).not.toContain("data:image/png");
     expect(JSON.stringify(updatedTask)).not.toContain("不应保存的工具参数");
     expect(JSON.stringify(updatedTask)).not.toContain("secret");
+  });
+
+  it("从最终助手消息按模板创建脱敏产物", () => {
+    const debugTask = createWorkflowTaskFixture({
+      template: "debug",
+      contextItems: [{
+        id: "context-safe",
+        kind: "network",
+        title: "Network 摘要",
+        summary: "已脱敏摘要",
+        capturedAt: 1,
+        redacted: true,
+        truncated: false,
+        sensitive: false,
+      }, {
+        id: "context-sensitive",
+        kind: "screenshot",
+        title: "敏感截图",
+        summary: "data:image/png;base64,secret",
+        capturedAt: 1,
+        redacted: false,
+        truncated: false,
+        sensitive: true,
+      }],
+      steps: [{
+        id: "step-network",
+        title: "Network 请求详情",
+        status: "completed",
+        updatedAt: 2,
+      }],
+    });
+
+    const debugArtifact = createWorkflowArtifactFromAssistantMessage(
+      debugTask,
+      createAssistantMessage("Authorization: Bearer debug-secret\n截图 data:image/png;base64,debug-secret"),
+      10,
+    );
+
+    expect(debugArtifact).toMatchObject({
+      kind: "debug-report",
+      title: "调试报告",
+      contextItemIds: ["context-safe"],
+      createdAt: 10,
+    });
+    expect(debugArtifact?.content).toContain("Authorization: [已脱敏]");
+    expect(debugArtifact?.content).toContain("[已移除 data URL]");
+    expect(debugArtifact?.content).not.toContain("debug-secret");
+
+    const researchTask = createWorkflowTaskFixture({ template: "research" });
+    const researchArtifacts = createWorkflowArtifactsFromAssistantMessage(
+      researchTask,
+      createAssistantMessage([
+        "调研结论：",
+        "",
+        "| 指标 | 结果 |",
+        "| --- | --- |",
+        "| 状态 | 正常 |",
+      ].join("\n")),
+      20,
+    );
+
+    expect(researchArtifacts.map((artifact) => artifact.kind)).toEqual(["conclusion", "table"]);
+    expect(researchArtifacts[1]?.title).toBe("表格摘录");
+    expect(researchArtifacts[1]?.content).toContain("| 指标 | 结果 |");
   });
 
   it("工作流消息在取消或流错误后恢复等待状态", async () => {

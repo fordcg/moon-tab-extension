@@ -17,6 +17,7 @@ import {
 } from "../../shared/storage/repositories";
 import { truncateText } from "../../shared/utils/text";
 import type {
+  ChatMessage,
   ChatSession,
   ChatToolAttachment,
   ChatToolCallRecord,
@@ -36,6 +37,16 @@ import { upsertSession } from "./appStoreSessionUtils";
 
 export const WORKFLOW_SKILLS_SETTINGS_KEY = "aiSidebar.workflowSkills.v1";
 const WORKFLOW_CONTEXT_SUMMARY_LIMIT = 1200;
+const WORKFLOW_ARTIFACT_CONTENT_LIMIT = 12000;
+const DATA_URL_PATTERN = /\bdata:[^\s"'`)<>]+/gi;
+const DEBUG_STEP_KEYWORDS = [
+  "network", "js", "javascript", "source map", "sourcemap", "runtime", "console", "performance", "diagnostic",
+  "网络", "请求", "源码", "映射", "运行时", "控制台", "性能", "诊断", "重放", "完全访问",
+];
+const AUTOMATION_OPERATION_KEYWORDS = [
+  "click", "fill", "press", "scroll", "hover", "double_click", "context_click", "drag", "wait", "navigate", "new page", "select page", "close page",
+  "点击", "填写", "按键", "滚动", "悬停", "双击", "右键", "拖拽", "等待", "导航", "新建", "切换", "关闭",
+];
 
 type StoreGet = StoreApi<AppState>["getState"];
 type StoreSet = StoreApi<AppState>["setState"];
@@ -67,6 +78,44 @@ export function createWorkflowContextItemsFromToolAttachments(attachments: ChatT
         sensitive: false,
       };
     });
+}
+
+export function createWorkflowArtifactFromAssistantMessage(
+  task: WorkflowTask,
+  message: ChatMessage,
+  now: number = message.createdAt,
+): WorkflowArtifact | undefined {
+  return createWorkflowArtifactsFromAssistantMessage(task, message, now)[0];
+}
+
+export function createWorkflowArtifactsFromAssistantMessage(
+  task: WorkflowTask,
+  message: ChatMessage,
+  now: number = message.createdAt,
+): WorkflowArtifact[] {
+  if (message.role !== "assistant") {
+    return [];
+  }
+
+  const content = cleanArtifactContent(message.content);
+  if (!content) {
+    return [];
+  }
+
+  const contextItemIds = task.contextItems
+    .filter((item) => item.redacted === true && item.sensitive !== true)
+    .map((item) => item.id);
+  const artifacts = [
+    createWorkflowArtifact(task, resolvePrimaryArtifactKind(task), content, contextItemIds, now, 0),
+  ];
+  if (task.template === "research") {
+    const tableContent = extractMarkdownTables(content);
+    if (tableContent) {
+      artifacts.push(createWorkflowArtifact(task, "table", tableContent, contextItemIds, now, artifacts.length));
+    }
+  }
+
+  return artifacts;
 }
 
 export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: StoreSet }) {
@@ -400,6 +449,99 @@ function workflowContextKindFromAttachment(attachment: ChatToolAttachment): Work
       return "runtime";
     default:
       return "mcp";
+  }
+}
+
+function createWorkflowArtifact(
+  task: WorkflowTask,
+  kind: WorkflowArtifactKind,
+  content: string,
+  contextItemIds: string[],
+  createdAt: number,
+  sequence: number,
+): WorkflowArtifact {
+  return {
+    id: `workflow-artifact-${task.id}-${createdAt}-${sequence}-${kind}`,
+    kind,
+    title: artifactTitle(kind),
+    content,
+    contextItemIds,
+    createdAt,
+  };
+}
+
+function resolvePrimaryArtifactKind(task: WorkflowTask): WorkflowArtifactKind {
+  if (task.template === "debug" && hasCompletedStepMatching(task, DEBUG_STEP_KEYWORDS)) {
+    return "debug-report";
+  }
+  if (task.template === "automation" && hasCompletedStepMatching(task, AUTOMATION_OPERATION_KEYWORDS)) {
+    return "automation-report";
+  }
+
+  return "conclusion";
+}
+
+function hasCompletedStepMatching(task: WorkflowTask, keywords: string[]): boolean {
+  return task.steps.some((step) => step.status === "completed" && includesAnyKeyword(step.title, keywords));
+}
+
+function includesAnyKeyword(value: string, keywords: string[]): boolean {
+  const normalized = value.toLowerCase();
+  return keywords.some((keyword) => {
+    if (keyword === "js") {
+      return /(^|[\s:：/._-])js($|[\s:：/._-])/.test(normalized);
+    }
+
+    return normalized.includes(keyword);
+  });
+}
+
+function cleanArtifactContent(value: string): string {
+  return truncateText(redactSensitiveText(value).replace(DATA_URL_PATTERN, "[已移除 data URL]").trim(), WORKFLOW_ARTIFACT_CONTENT_LIMIT).text;
+}
+
+function extractMarkdownTables(content: string): string {
+  const lines = content.split(/\r?\n/);
+  const tables: string[] = [];
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    if (!isMarkdownTableRow(lines[index]) || !isMarkdownTableDelimiter(lines[index + 1])) {
+      continue;
+    }
+
+    let endIndex = index + 2;
+    while (endIndex < lines.length && isMarkdownTableRow(lines[endIndex])) {
+      endIndex += 1;
+    }
+    tables.push(lines.slice(index, endIndex).join("\n"));
+    index = endIndex - 1;
+  }
+
+  return truncateText(tables.join("\n\n"), WORKFLOW_ARTIFACT_CONTENT_LIMIT).text.trim();
+}
+
+function isMarkdownTableRow(value: string): boolean {
+  return /^\s*\|.+\|\s*$/.test(value);
+}
+
+function isMarkdownTableDelimiter(value: string): boolean {
+  return /^\s*\|?[\s:-]+(?:\|[\s:-]+)+\|?\s*$/.test(value);
+}
+
+function artifactTitle(kind: WorkflowArtifactKind): string {
+  switch (kind) {
+    case "debug-report":
+      return "调试报告";
+    case "automation-report":
+      return "自动化报告";
+    case "table":
+      return "表格摘录";
+    case "code":
+      return "代码产物";
+    case "screenshot":
+      return "截图产物";
+    case "conclusion":
+    default:
+      return "任务结论";
   }
 }
 

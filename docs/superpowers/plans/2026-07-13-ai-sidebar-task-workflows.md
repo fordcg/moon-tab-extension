@@ -502,7 +502,7 @@ git commit -m "功能：提供侧栏任务模板与上下文界面"
 - Test: `tests/unit/side-panel/workflowMarkdownExport.test.ts`
 - Test: `tests/unit/side-panel/TaskArtifactsPanel.test.tsx`
 
-- [ ] **Step 1: 写出导出与产物呈现的失败用例**
+- [x] **Step 1: 写出导出与产物呈现的失败用例**
 
 ```ts
 it("导出任务时只包含产物与已脱敏上下文摘要", () => {
@@ -525,13 +525,13 @@ it("产物面板可复制和导出 Markdown", async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run: `npx vitest run tests/unit/side-panel/workflowMarkdownExport.test.ts tests/unit/side-panel/TaskArtifactsPanel.test.tsx`
 
 Expected: FAIL，提示导出函数和产物组件不存在。
 
-- [ ] **Step 3: 实现任务 Markdown 导出**
+- [x] **Step 3: 实现任务 Markdown 导出**
 
 创建 `workflowMarkdownExport.ts` 并导出：
 
@@ -542,7 +542,7 @@ export function downloadWorkflowTaskMarkdown(task: WorkflowTask, exportedAt?: nu
 
 导出顺序固定为标题、模板/状态/导出时间、上下文摘要、产物。对标题、摘要和产物正文使用现有 `redactSensitiveText`；不导出 `sensitive` 上下文、不导出截图 `dataUrl`、不导出工具参数或附件详情。
 
-- [ ] **Step 4: 实现产物面板与三个模板的产物规则**
+- [x] **Step 4: 实现产物面板与三个模板的产物规则**
 
 `TaskArtifactsPanel` 显示产物类型、标题和内容，提供复制与 Markdown 导出。`appStoreWorkflowTasks.ts` 新增：
 
@@ -556,7 +556,7 @@ export function createWorkflowArtifactFromAssistantMessage(
 
 该函数在任务最终 assistant 消息非空时创建 `conclusion`；当模板为 `debug` 且有成功 Network/JS/Source Map/Runtime 步骤时创建 `debug-report`；当模板为 `automation` 且有浏览器操作步骤时创建 `automation-report`。研究任务保留 `conclusion`，若正文包含 Markdown 表格则额外创建 `table`。所有内容先脱敏且上限为 12,000 字符。
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
 Run: `npx vitest run tests/unit/side-panel/workflowMarkdownExport.test.ts tests/unit/side-panel/TaskArtifactsPanel.test.tsx`
 

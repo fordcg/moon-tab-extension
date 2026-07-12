@@ -140,6 +140,7 @@ import {
 } from "./appStorePreferences";
 import { upsertSession } from "./appStoreSessionUtils";
 import {
+  createWorkflowArtifactsFromAssistantMessage,
   createWorkflowContextItemsFromToolAttachments,
   createWorkflowTaskActions,
   createWorkflowTaskStepFromToolRecord,
@@ -1852,6 +1853,20 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       await input.get().updateWorkflowTaskStatus(input.workflowTaskId, status);
     }
   };
+  const addWorkflowArtifactsFromAssistantMessage = async (message: ChatMessage): Promise<void> => {
+    if (!input.workflowTaskId) {
+      return;
+    }
+
+    const task = findWorkflowTaskInState(input.get(), input.workflowTaskId);
+    if (!task) {
+      return;
+    }
+
+    for (const artifact of createWorkflowArtifactsFromAssistantMessage(task, message, message.createdAt)) {
+      await input.get().addWorkflowArtifact(input.workflowTaskId, artifact);
+    }
+  };
 
   try {
     if (input.privateMode) {
@@ -1965,6 +1980,20 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       }
       if (streamResult.completed) {
         if (!streamResult.canceled && !streamResult.failed) {
+          const workflowAssistantCreatedAt = Date.now();
+          await addWorkflowArtifactsFromAssistantMessage({
+            id: `message-${workflowAssistantCreatedAt}-assistant-workflow-artifact`,
+            role: "assistant",
+            content: streamResult.assistantContent ?? "",
+            createdAt: workflowAssistantCreatedAt,
+            modelId: input.model.id,
+            endpointType: input.provider.endpointType,
+            streamMode: requestStreamMode,
+            systemPrompt: effectiveChatPreferences.systemPrompt,
+            contextPrompt: input.pageContextPrompt,
+            contextMode: input.state.contextMode,
+            matchedRuleId: input.state.pageContext.matchedRuleId,
+          });
           await updateWorkflowTaskStatus("completed");
         }
         return;
@@ -2036,6 +2065,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
           },
         };
       });
+      await addWorkflowArtifactsFromAssistantMessage(assistantMessage);
       await updateWorkflowTaskStatus("completed");
       return;
     }
@@ -2065,6 +2095,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
         }),
       };
     });
+    await addWorkflowArtifactsFromAssistantMessage(assistantMessage);
     await updateWorkflowTaskStatus("completed");
   } catch {
     taskStatus = "failed";
