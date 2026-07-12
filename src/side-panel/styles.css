@@ -3486,7 +3486,8 @@ body {
 }
 
 .sidebar-shell .sidepanel-tools-toggle,
-.sidebar-shell .sidepanel-add-tab-button {
+.sidebar-shell .sidepanel-add-tab-button,
+.sidebar-shell .sidepanel-new-task-button {
   flex: 0 0 auto;
   display: grid;
   width: 1.75rem;
@@ -3498,7 +3499,8 @@ body {
 }
 
 .sidebar-shell .sidepanel-tools-toggle .composer-switch-icon,
-.sidebar-shell .sidepanel-add-tab-button .composer-switch-icon {
+.sidebar-shell .sidepanel-add-tab-button .composer-switch-icon,
+.sidebar-shell .sidepanel-new-task-button .composer-switch-icon {
   width: 1rem;
   height: 1rem;
   stroke: #000000;
@@ -3508,7 +3510,9 @@ body {
 .sidebar-shell .sidepanel-tools-toggle:hover,
 .sidebar-shell .sidepanel-tools-toggle:focus-visible,
 .sidebar-shell .sidepanel-add-tab-button:hover,
-.sidebar-shell .sidepanel-add-tab-button:focus-visible {
+.sidebar-shell .sidepanel-add-tab-button:focus-visible,
+.sidebar-shell .sidepanel-new-task-button:hover,
+.sidebar-shell .sidepanel-new-task-button:focus-visible {
   background: var(--sidepanel-row-hover, var(--color-surface-soft));
   color: #000000;
   outline: 0;
@@ -3520,6 +3524,61 @@ body {
 
 .sidebar-shell .sidepanel-add-tab-button {
   order: 2;
+}
+
+.sidebar-shell .workflow-template-menu-wrap {
+  position: relative;
+  order: 3;
+  flex: 0 0 auto;
+}
+
+.sidebar-shell .sidepanel-new-task-button:disabled {
+  color: var(--sidepanel-muted);
+}
+
+.sidebar-shell .workflow-template-menu {
+  position: absolute;
+  right: -2.25rem;
+  bottom: 2.375rem;
+  z-index: 72;
+  display: grid;
+  width: min(18rem, calc(100vw - 1rem));
+  gap: 0.25rem;
+  padding: 0.375rem;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgb(31 41 55 / 12%);
+}
+
+.sidebar-shell .workflow-template-option {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.625rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--sidepanel-ink);
+  text-align: left;
+}
+
+.sidebar-shell .workflow-template-option:hover,
+.sidebar-shell .workflow-template-option:focus-visible {
+  background: var(--sidepanel-blue-soft);
+  outline: 0;
+}
+
+.sidebar-shell .workflow-template-option-title {
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.sidebar-shell .workflow-template-option-description {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .sidebar-shell .sidepanel-footer-spacer {
@@ -3538,6 +3597,254 @@ body {
 
 .sidebar-shell .composer-actions > .ui-button-primary {
   order: 40;
+}
+
+.sidebar-shell .workflow-task-strip {
+  display: grid;
+  flex: 0 0 auto;
+  max-height: min(38dvh, 18rem);
+  gap: 0.5rem;
+  padding: 0 1rem 0.625rem;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.sidebar-shell .workflow-task-card {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: var(--sidepanel-ink);
+}
+
+.sidebar-shell .workflow-task-card-header,
+.sidebar-shell .workflow-task-step,
+.sidebar-shell .task-context-item-header,
+.sidebar-shell .workflow-task-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sidebar-shell .workflow-task-card-header {
+  justify-content: space-between;
+}
+
+.sidebar-shell .workflow-task-template,
+.sidebar-shell .workflow-task-status,
+.sidebar-shell .task-context-kind {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.sidebar-shell .workflow-task-template {
+  color: var(--sidepanel-muted);
+}
+
+.sidebar-shell .workflow-task-status {
+  padding: 0.1875rem 0.4375rem;
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+}
+
+.sidebar-shell .workflow-task-status[data-status="completed"] {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.sidebar-shell .workflow-task-status[data-status="failed"],
+.sidebar-shell .workflow-task-status[data-status="canceled"] {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.sidebar-shell .workflow-task-title {
+  margin: 0;
+  color: var(--sidepanel-ink);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-task-reason {
+  margin: 0;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-task-steps {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-shell .workflow-task-step {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.sidebar-shell .workflow-task-step-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--sidepanel-line);
+}
+
+.sidebar-shell .workflow-task-step[data-status="running"] .workflow-task-step-dot {
+  background: var(--sidepanel-blue);
+}
+
+.sidebar-shell .workflow-task-step[data-status="completed"] .workflow-task-step-dot {
+  background: #10b981;
+}
+
+.sidebar-shell .workflow-task-step[data-status="failed"] .workflow-task-step-dot {
+  background: #ef4444;
+}
+
+.sidebar-shell .workflow-task-step-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--sidepanel-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .workflow-task-step-status {
+  flex: 0 0 auto;
+}
+
+.sidebar-shell .task-context-panel {
+  border-top: 1px solid var(--sidepanel-line);
+  padding-top: 0.5rem;
+}
+
+.sidebar-shell .task-context-summary {
+  cursor: pointer;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.sidebar-shell .task-context-list {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.sidebar-shell .task-context-item {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.sidebar-shell .task-context-kind {
+  padding: 0.125rem 0.375rem;
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+}
+
+.sidebar-shell .task-context-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--sidepanel-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .task-context-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.125rem;
+}
+
+.sidebar-shell .task-icon-button {
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--sidepanel-muted);
+}
+
+.sidebar-shell .task-icon-button:hover,
+.sidebar-shell .task-icon-button:focus-visible,
+.sidebar-shell .task-icon-button[aria-pressed="true"] {
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+  outline: 0;
+}
+
+.sidebar-shell .task-icon-button svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-shell .task-context-text {
+  margin: 0;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-task-reply {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.sidebar-shell .workflow-task-reply-input {
+  min-height: 3rem;
+  resize: vertical;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.sidebar-shell .workflow-task-continue {
+  min-height: 2rem;
+  border-radius: 0.5rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.sidebar-shell .workflow-task-cancel {
+  min-height: 2rem;
+  padding: 0 0.625rem;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
 }
 
 .sidebar-shell .composer-switches {

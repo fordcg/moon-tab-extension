@@ -347,6 +347,11 @@ export interface AppState {
   updateWorkflowTaskStatus: (taskId: string, status: WorkflowTaskStatus, reason?: string) => Promise<void>;
   upsertWorkflowTaskStep: (taskId: string, step: WorkflowTaskStep) => Promise<void>;
   addWorkflowContextItem: (taskId: string, item: WorkflowContextItem) => Promise<void>;
+  updateWorkflowContextItem: (
+    taskId: string,
+    contextItemId: string,
+    updates: Pick<WorkflowContextItem, "title" | "summary" | "capturedAt" | "truncated">,
+  ) => Promise<void>;
   removeWorkflowContextItem: (taskId: string, contextItemId: string) => Promise<void>;
   toggleWorkflowContextPinned: (taskId: string, contextItemId: string) => Promise<void>;
   addWorkflowArtifact: (taskId: string, artifact: WorkflowArtifact) => Promise<void>;
@@ -1283,15 +1288,18 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   sendWorkflowTaskMessage: async (taskId, content) => {
     const state = get();
-    const session = state.privateModeActive ? state.privateChatSession : state.chatSessions.find((item) => item.id === state.activeSessionId);
-    const task = session?.workflowTasks?.find((item) => item.id === taskId);
+    const task = findWorkflowTaskInState(state, taskId);
     if (!task) {
       throw new Error("未找到工作流任务");
     }
 
-    if (task.status === "preparing" || task.status === "waiting") {
-      await get().updateWorkflowTaskStatus(taskId, "running");
+    if (task.status === "running") {
+      return;
     }
+    if (task.status !== "preparing" && task.status !== "waiting") {
+      throw new Error("任务已结束，不能继续发送");
+    }
+    await get().updateWorkflowTaskStatus(taskId, "running");
     const sent = await sendChatMessageWithState({
       content,
       targetSessionId: task.sessionId,
@@ -1451,6 +1459,22 @@ function createVisibleUserTitleContent(content: string, promptInvocations: ChatP
 
 export type StoreGetter = StoreApi<AppState>["getState"];
 export type StoreSetter = StoreApi<AppState>["setState"];
+
+function findWorkflowTaskInState(state: AppState, taskId: string): WorkflowTask | undefined {
+  const privateTask = state.privateChatSession?.workflowTasks?.find((task) => task.id === taskId);
+  if (privateTask) {
+    return privateTask;
+  }
+
+  for (const session of state.chatSessions) {
+    const task = session.workflowTasks?.find((item) => item.id === taskId);
+    if (task) {
+      return task;
+    }
+  }
+
+  return undefined;
+}
 
 export type AppChatSendMessage = {
   type: "chat.send";

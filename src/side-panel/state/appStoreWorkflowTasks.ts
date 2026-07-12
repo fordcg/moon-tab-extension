@@ -15,6 +15,7 @@ import {
   saveAppSetting,
   updateChatSession,
 } from "../../shared/storage/repositories";
+import { truncateText } from "../../shared/utils/text";
 import type {
   ChatSession,
   ChatToolAttachment,
@@ -34,6 +35,7 @@ import type { AppState } from "./appStore";
 import { upsertSession } from "./appStoreSessionUtils";
 
 export const WORKFLOW_SKILLS_SETTINGS_KEY = "aiSidebar.workflowSkills.v1";
+const WORKFLOW_CONTEXT_SUMMARY_LIMIT = 1200;
 
 type StoreGet = StoreApi<AppState>["getState"];
 type StoreSet = StoreApi<AppState>["setState"];
@@ -50,16 +52,21 @@ export function createWorkflowTaskStepFromToolRecord(record: ChatToolCallRecord)
 }
 
 export function createWorkflowContextItemsFromToolAttachments(attachments: ChatToolAttachment[]): WorkflowContextItem[] {
-  return attachments.map((attachment) => ({
-    id: `workflow-context-tool-${attachment.id}`,
-    kind: workflowContextKindFromAttachment(attachment),
-    title: redactSensitiveText(attachment.title).trim() || "工具结果",
-    summary: redactSensitiveText(attachment.summary).trim(),
-    capturedAt: attachment.createdAt,
-    redacted: true,
-    truncated: attachment.truncated,
-    sensitive: false,
-  }));
+  return attachments
+    .filter((attachment) => attachment.redacted !== false)
+    .map((attachment) => {
+      const summary = truncateText(redactSensitiveText(attachment.summary).trim(), WORKFLOW_CONTEXT_SUMMARY_LIMIT);
+      return {
+        id: `workflow-context-tool-${attachment.id}`,
+        kind: workflowContextKindFromAttachment(attachment),
+        title: redactSensitiveText(attachment.title).trim() || "工具结果",
+        summary: summary.text,
+        capturedAt: attachment.createdAt,
+        redacted: true,
+        truncated: attachment.truncated || summary.truncated,
+        sensitive: false,
+      };
+    });
 }
 
 export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: StoreSet }) {
@@ -67,7 +74,16 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
     update: (session: ChatSession) => ChatSession,
   ): Promise<ChatSession | undefined> {
     const state = get();
-    const privateSession = state.privateModeActive ? state.privateChatSession : undefined;
+    const currentSessionId = state.privateModeActive ? state.privateChatSession?.id : state.activeSessionId;
+    return currentSessionId ? updateSessionById(currentSessionId, update) : undefined;
+  }
+
+  async function updateSessionById(
+    sessionId: string,
+    update: (session: ChatSession) => ChatSession,
+  ): Promise<ChatSession | undefined> {
+    const state = get();
+    const privateSession = state.privateChatSession?.id === sessionId ? state.privateChatSession : undefined;
     if (privateSession) {
       const nextSession = update(privateSession);
       if (nextSession === privateSession) {
@@ -75,7 +91,7 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
       }
 
       set((current) => {
-        if (!current.privateModeActive || current.privateChatSession?.id !== privateSession.id) {
+        if (current.privateChatSession?.id !== privateSession.id) {
           return {};
         }
         return { privateChatSession: nextSession };
@@ -83,7 +99,7 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
       return nextSession;
     }
 
-    const session = state.chatSessions.find((item) => item.id === state.activeSessionId);
+    const session = state.chatSessions.find((item) => item.id === sessionId);
     if (!session) {
       return undefined;
     }
@@ -98,7 +114,12 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
   }
 
   async function updateTask(taskId: string, transform: (task: WorkflowTask, now: number) => WorkflowTask): Promise<void> {
-    await updateCurrentSession((session) => {
+    const owner = findTaskOwner(get(), taskId);
+    if (!owner) {
+      return;
+    }
+
+    await updateSessionById(owner.sessionId, (session) => {
       const now = nextSessionTimestamp(session);
       let updated = false;
       const workflowTasks = (session.workflowTasks ?? []).map((task) => {
@@ -146,6 +167,37 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
     },
     addWorkflowContextItem: async (taskId: string, item: WorkflowContextItem): Promise<void> => {
       await updateTask(taskId, (task, now) => withTaskTimestamp(appendWorkflowContextItem(task, item), now));
+    },
+    updateWorkflowContextItem: async (
+      taskId: string,
+      contextItemId: string,
+      updates: Pick<WorkflowContextItem, "title" | "summary" | "capturedAt" | "truncated">,
+    ): Promise<void> => {
+      await updateTask(taskId, (task, now) => {
+        let found = false;
+        const contextItems = task.contextItems.map((item) => {
+          if (item.id !== contextItemId) {
+            return item;
+          }
+
+          found = true;
+          return {
+            ...item,
+            title: cleanText(updates.title) || item.title,
+            summary: cleanText(updates.summary) || item.summary,
+            capturedAt: isTimestamp(updates.capturedAt) ? updates.capturedAt : now,
+            truncated: updates.truncated,
+            redacted: true,
+            sensitive: false,
+          };
+        });
+        if (!found) {
+          return task;
+        }
+
+        const normalized = normalizeWorkflowTask({ ...task, updatedAt: now, contextItems });
+        return normalized ?? task;
+      });
     },
     removeWorkflowContextItem: async (taskId: string, contextItemId: string): Promise<void> => {
       await updateTask(taskId, (task, now) => withTaskTimestamp(removeContextItem(task, contextItemId), now));
@@ -214,6 +266,22 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
       return task;
     },
   };
+}
+
+function findTaskOwner(state: AppState, taskId: string): { sessionId: string; task: WorkflowTask } | undefined {
+  const privateTask = state.privateChatSession?.workflowTasks?.find((task) => task.id === taskId);
+  if (privateTask) {
+    return { sessionId: privateTask.sessionId, task: privateTask };
+  }
+
+  for (const session of state.chatSessions) {
+    const task = session.workflowTasks?.find((item) => item.id === taskId);
+    if (task) {
+      return { sessionId: task.sessionId, task };
+    }
+  }
+
+  return undefined;
 }
 
 function findActiveTask(state: AppState, taskId: string): WorkflowTask | undefined {

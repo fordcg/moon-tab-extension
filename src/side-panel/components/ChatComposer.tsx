@@ -9,11 +9,12 @@ import {
 } from "../../shared/models/toolRegistry";
 import { hasTokenUsage, sumSessionTokenUsage } from "../../shared/chat/tokenUsage";
 import { isPngDataUrl, isTabCaptureImageAttachment, TAB_CAPTURE_VISIBLE_MESSAGE_TYPE, type TabCaptureVisibleResponse } from "../../shared/tabCapture";
-import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, PromptTemplate, SendShortcut } from "../../shared/types";
+import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, PromptTemplate, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
 import { PromptInlineEditor } from "./PromptInlineEditor";
+import { WorkflowTemplateMenu } from "./WorkflowTemplateMenu";
 
 const MAX_IMAGE_ATTACHMENTS = 5;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -165,11 +166,14 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const loadContextTabs = useAppStore((state) => state.loadContextTabs);
   const toggleContextTabSelection = useAppStore((state) => state.toggleContextTabSelection);
   const sendChatMessage = useAppStore((state) => state.sendChatMessage);
+  const createWorkflowTask = useAppStore((state) => state.createWorkflowTask);
+  const sendWorkflowTaskMessage = useAppStore((state) => state.sendWorkflowTaskMessage);
   const submitChatFollowUp = useAppStore((state) => state.submitChatFollowUp);
   const removeChatFollowUp = useAppStore((state) => state.removeChatFollowUp);
   const guideChatFollowUp = useAppStore((state) => state.guideChatFollowUp);
   const abortActiveChatTask = useAppStore((state) => state.abortActiveChatTask);
   const respondBoundaryChoice = useAppStore((state) => state.respondBoundaryChoice);
+  const addNotification = useAppStore((state) => state.addNotification);
   const registeredTools = useMemo(() => getRegisteredModelTools(mcpSettings), [mcpSettings]);
   const registeredToolGroups = useMemo(() => getModelToolGroups(registeredTools), [registeredTools]);
   const effectiveBrowserAutomationMode: BrowserAutomationMode = browserControlEnabled ? browserAutomationMode : "normal_restricted";
@@ -377,6 +381,25 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setAttachments([]);
     setAttachmentError("");
     await submitChatFollowUp(content, sendingAttachments, sendingPromptInvocations, { behavior });
+  };
+
+  const startWorkflowTask = async (template: WorkflowTaskTemplate) => {
+    const objective = input.trim();
+    if (!objective || sending || !canSend) {
+      return;
+    }
+
+    setInput("");
+    setSlashMenuOpen(false);
+    setSlashQuery("");
+    setSlashStartIndex(undefined);
+    try {
+      const task = await createWorkflowTask(template, objective);
+      await sendWorkflowTaskMessage(task.id, objective);
+    } catch (error: unknown) {
+      setInput(objective);
+      addNotification({ type: "error", title: "任务创建失败", message: error instanceof Error ? error.message : "任务创建失败" });
+    }
   };
 
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -1027,6 +1050,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               <path d="M12 5v14M5 12h14" />
             </svg>
           </button>
+          <WorkflowTemplateMenu disabled={!canSend || sending || input.trim().length === 0} onSelect={(template) => void startWorkflowTask(template)} />
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
           <ModelSelector />
           {stopStatusText ? (

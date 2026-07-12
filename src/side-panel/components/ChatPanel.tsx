@@ -3,6 +3,7 @@ import { ChatPreferenceDrawer } from "./ChatPreferenceDrawer";
 import { ChatComposer } from "./ChatComposer";
 import { MessageList } from "./MessageList";
 import { SessionHistoryDialog } from "./SessionHistoryDialog";
+import { WorkflowTaskCard } from "./WorkflowTaskCard";
 import type { SettingsTab } from "./SettingsPanel";
 import { useAppStore } from "../state/appStore";
 import { downloadChatSessionMarkdown, downloadChatSessionPdf, downloadChatSessionWord } from "../utils/chatMarkdownExport";
@@ -187,6 +188,13 @@ export function ChatPanel({
         onEditAndRegenerateUserMessage={(messageId, content) => void editAndRegenerateUserMessage(messageId, content)}
         regenerating={sending}
       />
+      {activeSession?.workflowTasks?.length ? (
+        <section className="workflow-task-strip" aria-label="任务工作区">
+          {activeSession.workflowTasks.map((task) => (
+            <WorkflowTaskCard key={task.id} task={task} />
+          ))}
+        </section>
+      ) : null}
       {providers.length === 0 || models.length === 0 ? <p className="chat-warning">请先配置 API Key 后再开始对话</p> : null}
       <ChatComposer canSend={canSend} matchedRuleLabel={matchedRuleLabel} />
       <SessionHistoryDialog

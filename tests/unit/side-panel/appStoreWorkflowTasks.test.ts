@@ -157,8 +157,9 @@ describe("appStore 工作流任务", () => {
     expect(task.statusReason).toContain("不可用");
   });
 
-  it("流式工具事件会更新任务步骤并仅保存脱敏附件摘要", async () => {
+  it("流式工具事件会更新任务步骤并仅保存脱敏附件摘要到任务所属会话", async () => {
     const session = createSession();
+    const otherSession = createSession("session-2");
     const provider = createProvider();
     const model = createModel();
     let messageListener: ((message: unknown) => void) | undefined;
@@ -174,14 +175,16 @@ describe("appStore 工作流任务", () => {
       },
     });
     await saveChatSession(session);
+    await saveChatSession(otherSession);
     await saveModelProvider(provider);
     await saveProviderModel(model);
-    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session, otherSession] });
     await useAppStore.getState().loadChannelConfig();
     const task = await useAppStore.getState().createWorkflowTask("research", "检索资料");
 
     const sending = useAppStore.getState().sendWorkflowTaskMessage(task.id, "开始检索");
     await vi.waitFor(() => expect(messageListener).toBeTypeOf("function"));
+    useAppStore.setState({ activeSessionId: otherSession.id });
     messageListener?.({
       type: "tool:start",
       record: {
@@ -219,23 +222,37 @@ describe("appStore 工作流任务", () => {
         createdAt: 2,
         redacted: false,
         truncated: false,
+      }, {
+        id: "attachment-2",
+        kind: "network",
+        title: "网络摘要",
+        summary: "安全摘要".repeat(600),
+        requests: [],
+        createdAt: 2,
+        redacted: true,
+        truncated: false,
       }],
     });
     messageListener?.({ type: "complete", content: "检索完成" });
     await sending;
 
     const updatedTask = useAppStore.getState().chatSessions[0]?.workflowTasks?.[0];
+    const otherTask = useAppStore.getState().chatSessions[1]?.workflowTasks?.[0];
     expect(updatedTask).toMatchObject({
       status: "completed",
       steps: [{ toolCallId: "call-1", status: "completed" }],
       contextItems: [{
-        id: "workflow-context-tool-attachment-1",
-        kind: "screenshot",
-        title: "截图",
+        id: "workflow-context-tool-attachment-2",
+        kind: "network",
+        title: "网络摘要",
         redacted: true,
+        truncated: true,
         sensitive: false,
       }],
     });
+    expect(updatedTask?.contextItems).toHaveLength(1);
+    expect(updatedTask?.contextItems[0]?.summary.length).toBeLessThanOrEqual(1200);
+    expect(otherTask).toBeUndefined();
     expect(JSON.stringify(updatedTask)).not.toContain("data:image/png");
     expect(JSON.stringify(updatedTask)).not.toContain("不应保存的工具参数");
     expect(JSON.stringify(updatedTask)).not.toContain("secret");
@@ -277,5 +294,17 @@ describe("appStore 工作流任务", () => {
     (disconnectListener as (() => void) | undefined)?.();
     await cancelSending;
     expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("canceled");
+  });
+
+  it("运行中的工作流任务重复发送不会恢复等待状态", async () => {
+    const session = createSession();
+    await saveChatSession(session);
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    const task = await useAppStore.getState().createWorkflowTask("debug", "检查重复发送");
+    await useAppStore.getState().updateWorkflowTaskStatus(task.id, "running");
+
+    await useAppStore.getState().sendWorkflowTaskMessage(task.id, "重复发送");
+
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("running");
   });
 });
