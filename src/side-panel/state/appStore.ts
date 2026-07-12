@@ -71,6 +71,13 @@ import type {
   ProviderModel,
   SendShortcut,
   WebSearchSettings,
+  WorkflowArtifact,
+  WorkflowContextItem,
+  WorkflowSkill,
+  WorkflowTask,
+  WorkflowTaskStatus,
+  WorkflowTaskStep,
+  WorkflowTaskTemplate,
 } from "../../shared/types";
 import {
   BROWSER_CONTROL_BOUNDARY_CHOICE_RESPOND_MESSAGE_TYPE,
@@ -132,6 +139,7 @@ import {
   resolveRuntimeEnabledToolIds,
 } from "./appStorePreferences";
 import { upsertSession } from "./appStoreSessionUtils";
+import { createWorkflowTaskActions } from "./appStoreWorkflowTasks";
 import {
   abortChatTaskHandle,
   clearChatTask,
@@ -240,6 +248,7 @@ export interface AppState {
   models: ProviderModel[];
   extractionRules: ExtractionRule[];
   promptTemplates: PromptTemplate[];
+  workflowSkills: WorkflowSkill[];
   chatSessions: ChatSession[];
   chatFolders: ChatFolder[];
   pageContext: PageContextState;
@@ -330,6 +339,16 @@ export interface AppState {
   savePromptTemplateDraft: (promptId: string | undefined, draft: Pick<PromptTemplate, "title" | "content">) => Promise<{ ok: true; prompt: PromptTemplate } | { ok: false; message: string }>;
   deletePrompt: (promptId: string) => Promise<void>;
   reorderPromptTemplates: (orderedIds: string[]) => Promise<void>;
+  createWorkflowTask: (template: WorkflowTaskTemplate, objective: string) => Promise<WorkflowTask>;
+  updateWorkflowTaskStatus: (taskId: string, status: WorkflowTaskStatus, reason?: string) => Promise<void>;
+  upsertWorkflowTaskStep: (taskId: string, step: WorkflowTaskStep) => Promise<void>;
+  addWorkflowContextItem: (taskId: string, item: WorkflowContextItem) => Promise<void>;
+  removeWorkflowContextItem: (taskId: string, contextItemId: string) => Promise<void>;
+  toggleWorkflowContextPinned: (taskId: string, contextItemId: string) => Promise<void>;
+  addWorkflowArtifact: (taskId: string, artifact: WorkflowArtifact) => Promise<void>;
+  loadWorkflowSkills: () => Promise<void>;
+  saveWorkflowSkill: (taskId: string, draft: Pick<WorkflowSkill, "title" | "variables">) => Promise<WorkflowSkill>;
+  startWorkflowSkill: (skillId: string, values: Record<string, string>) => Promise<WorkflowTask>;
   refreshPageContext: () => Promise<void>;
   loadContextTabs: () => Promise<void>;
   toggleContextTabSelection: (tabId: number) => void;
@@ -405,6 +424,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   models: [],
   extractionRules: [],
   promptTemplates: [],
+  workflowSkills: [],
   chatSessions: [],
   chatFolders: [],
   pageContext: {
@@ -940,6 +960,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       chatFolders,
       ...resolveActiveChatSessionSelection(state, chatSessions),
     }));
+    await get().loadWorkflowSkills();
   },
   createChatSession: async (options) => {
     const now = Date.now();
@@ -1326,6 +1347,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       models: [],
       extractionRules: [],
       promptTemplates: [],
+      workflowSkills: [],
       chatSessions: [],
       chatFolders: [],
       pageContext: {
@@ -1376,6 +1398,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       notifications: [],
     });
   },
+  ...createWorkflowTaskActions({ get, set }),
 }));
 
 async function persistSessionSelectedModel(session: ChatSession): Promise<void> {
