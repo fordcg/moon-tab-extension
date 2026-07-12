@@ -694,7 +694,7 @@ Expected: PASS。
   - `npm test` PASS，98 个测试文件、1192 个用例通过。
   - `npm run typecheck` PASS。
   - `npm run test:e2e -- tests/e2e/workflow-tasks.spec.ts` PASS，4 个 workflow 任务用例通过。
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_quality.ps1` 退出码 0，最终输出 `AI sidebar quality checks passed.`；脚本内既有 smoke JSON 仍会打印部分 `ok:false` 细项，但当前脚本未将这些 JSON 字段作为失败退出条件。
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_quality.ps1` 退出码 0，最终输出 `AI sidebar quality checks passed.`；质量门会传播 npm/node/python 原生命令的非零退出码，smoke JSON 细项失败时会中止脚本。
 
 - [x] **Step 5: 提交**
 

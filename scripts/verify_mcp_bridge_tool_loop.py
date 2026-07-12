@@ -13,9 +13,17 @@ DIST_DIR = ROOT / "dist"
 EXTENSION_PATH = str(DIST_DIR)
 OUT_DIR = ROOT / ".tmp"
 OUT_DIR.mkdir(exist_ok=True)
+MCP_SERVER_ID = "dev"
+MCP_SERVER_NAME = "Smoke MCP"
 BRIDGE_TOOL_ID = "dev.echo"
-MCP_TOOL_ID = "mcp.legacy.dev.echo"
-MCP_TOOL_NAME = "mcp_legacy_dev_echo"
+MCP_TOOL_ID = "mcp.dev.dev.echo"
+MCP_TOOL_NAME = "mcp_dev_dev_echo"
+MCP_TOOL_SCHEMA = {
+    "type": "object",
+    "required": ["text"],
+    "properties": {"text": {"type": "string"}},
+    "additionalProperties": False,
+}
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -38,14 +46,9 @@ class FakeMcpBridgeHandler(BaseHTTPRequestHandler):
                 "tools": [
                     {
                         "id": BRIDGE_TOOL_ID,
-                        "name": "Dev Echo",
+                        "name": BRIDGE_TOOL_ID,
                         "description": "Echo through local MCP bridge",
-                        "inputSchema": {
-                            "type": "object",
-                            "required": ["text"],
-                            "properties": {"text": {"type": "string"}},
-                            "additionalProperties": False,
-                        },
+                        "inputSchema": MCP_TOOL_SCHEMA,
                     },
                 ],
             },
@@ -211,18 +214,45 @@ def main():
 
                 response = page.evaluate(
                     """async ({ mcpUrl, modelUrl }) => {
+                        const mcpServer = {
+                            id: "dev",
+                            name: "Smoke MCP",
+                            endpointUrl: mcpUrl,
+                            enabled: true,
+                            tools: [],
+                        };
+                        const discoveredTool = {
+                            name: "dev.echo",
+                            description: "Echo through local MCP bridge",
+                            inputSchema: {
+                                type: "object",
+                                required: ["text"],
+                                properties: { text: { type: "string" } },
+                                additionalProperties: false,
+                            },
+                        };
                         const configured = await chrome.runtime.sendMessage({
                             type: "agentTools.configureMcp",
                             mcp: {
-                                enabled: true,
-                                exposeToChat: true,
-                                baseUrl: mcpUrl,
+                                servers: [mcpServer],
                             },
                         });
                         await chrome.runtime.sendMessage({ type: "agentTools.clearAuditLog" });
+                        const refreshed = await chrome.runtime.sendMessage({
+                            type: "agentTools.refreshMcp",
+                            serverId: "dev",
+                        });
                         const listed = await chrome.runtime.sendMessage({
                             type: "agentTools.getStatus",
-                            refresh: true,
+                        });
+                        const directCall = await chrome.runtime.sendMessage({
+                            type: "agentTools.call",
+                            toolId: "mcp.dev.dev.echo",
+                            input: {
+                                text: "hello direct",
+                                apiKey: "sk-direct-should-be-redacted",
+                                password: "pw-direct-should-be-redacted",
+                            },
                         });
                         const now = Date.now();
                         const chat = await chrome.runtime.sendMessage({
@@ -250,14 +280,20 @@ def main():
                                 systemPrompt: "",
                                 contextPrompt: "",
                             }],
-                            enabledToolIds: ["system.current_time"],
+                            enabledToolIds: ["mcp.dev.dev.echo"],
+                            mcp: {
+                                servers: [{
+                                    ...mcpServer,
+                                    tools: [discoveredTool],
+                                }],
+                            },
                             toolChoice: "auto",
                             structuredOutput: false,
                             stream: false,
                             retryCount: 0,
                         });
                         const audit = await chrome.runtime.sendMessage({ type: "agentTools.getAuditLog" });
-                        return { configured, listed, chat, audit };
+                        return { configured, refreshed, listed, directCall, chat, audit };
                     }""",
                     {"mcpUrl": mcp_url, "modelUrl": model_url},
                 )
@@ -271,7 +307,12 @@ def main():
                 records = flatten_tool_records(chat)
                 mcp_record = next((item for item in records if item.get("name") == MCP_TOOL_NAME), {})
                 audit_log = response.get("audit", {}).get("auditLog", [])
-                mcp_audit = next((item for item in audit_log if item.get("name") == MCP_TOOL_NAME), {})
+                mcp_audit = next((
+                    item for item in audit_log
+                    if (item.get("tool") or {}).get("name") == MCP_TOOL_NAME
+                    or (item.get("toolCall") or {}).get("name") == MCP_TOOL_NAME
+                    or item.get("name") == MCP_TOOL_NAME
+                ), {})
 
                 add_check(
                     result,
@@ -279,6 +320,19 @@ def main():
                     any(item.get("id") == MCP_TOOL_ID and item.get("name") == MCP_TOOL_NAME for item in listed_tools),
                     actual=listed_tools,
                     expected=f"{MCP_TOOL_ID} is listed as {MCP_TOOL_NAME}",
+                )
+                add_check(
+                    result,
+                    "direct MCP tool call writes redacted audit log",
+                    bool(
+                        response.get("directCall", {}).get("ok")
+                        and mcp_audit
+                        and mcp_audit.get("status") == "success"
+                        and mcp_audit.get("arguments", {}).get("apiKey") == "[已脱敏]"
+                        and mcp_audit.get("arguments", {}).get("password") == "[已脱敏]"
+                    ),
+                    actual={"directCall": response.get("directCall"), "audit": mcp_audit},
+                    expected=f"agentTools.call succeeds and audit log contains redacted {MCP_TOOL_NAME}",
                 )
                 add_check(
                     result,
@@ -300,22 +354,10 @@ def main():
                 )
                 add_check(
                     result,
-                    "mcp bridge receives exactly one tool call",
-                    len(FakeMcpBridgeHandler.calls) == 1,
+                    "mcp bridge receives direct and chat tool calls",
+                    len(FakeMcpBridgeHandler.calls) == 2,
                     actual=FakeMcpBridgeHandler.calls,
-                    expected=f"one POST /tools/call with toolId {BRIDGE_TOOL_ID}",
-                )
-                add_check(
-                    result,
-                    "mcp tool call is written to redacted audit log",
-                    bool(
-                        mcp_audit
-                        and mcp_audit.get("status") == "success"
-                        and mcp_audit.get("arguments", {}).get("apiKey") == "[已脱敏]"
-                        and mcp_audit.get("arguments", {}).get("password") == "[已脱敏]"
-                    ),
-                    actual=mcp_audit,
-                    expected=f"audit log contains successful {MCP_TOOL_NAME} with redacted apiKey/password",
+                    expected=f"two POST /tools/call requests with toolId {BRIDGE_TOOL_ID}",
                 )
             finally:
                 context.close()

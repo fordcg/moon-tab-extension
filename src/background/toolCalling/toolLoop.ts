@@ -2,10 +2,15 @@ import { buildPromptExpandedUserContent } from "../../shared/chat/buildChatReque
 import type { AutomationPlaybookSelection, ChatImageAttachment, ChatMessage, ChatPromptInvocation, ChatTokenUsageEntry, ChatToolAttachment, ChatToolCallRecord } from "../../shared/types";
 import type { ModelRequestMessage, ModelResponseData, ModelToolCall, ModelToolExecutor, ModelToolRegistryEntry, ModelToolResultMessage } from "../../shared/models/types";
 import { isBrowserAutomationToolId } from "../../shared/models/toolRegistry";
+import { redactSensitiveText } from "../../shared/security/redaction";
 import { createAutomationReportToolAttachment } from "../../shared/toolArtifacts";
 import { truncateText } from "../../shared/utils/text";
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+const REDACTED_TOOL_ARGUMENT_VALUE = "[已脱敏]";
+const UNSERIALIZABLE_TOOL_ARGUMENT_VALUE = "[无法序列化的参数]";
+const MAX_TOOL_ARGUMENT_REDACTION_DEPTH = 8;
+const SENSITIVE_TOOL_ARGUMENT_KEY_PATTERN = /(?:access[_-]?token|token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)/i;
 const FINAL_RESPONSE_INSTRUCTION = [
   "工具调用阶段已经结束，当前请求不会再执行任何工具。",
   "请只基于上文用户问题和已经返回的工具结果，直接给出面向用户的最终中文答复。",
@@ -469,19 +474,48 @@ function appendUniqueToolAttachments(target: ChatToolAttachment[], attachments: 
 }
 
 function sanitizeToolArguments(args: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(args).map(([key, value]) => {
-      if (typeof value === "string") {
-        return [key, truncateText(value, 1000).text];
-      }
-      if (typeof value === "number" || typeof value === "boolean" || value === null) {
-        return [key, value];
-      }
-      try {
-        return [key, JSON.parse(JSON.stringify(value ?? null)) as unknown];
-      } catch {
-        return [key, "[无法序列化的参数]"];
-      }
-    }),
-  );
+  return sanitizeToolArgumentValue(args, "", 0, new WeakSet<object>()) as Record<string, unknown>;
+}
+
+function sanitizeToolArgumentValue(value: unknown, key: string, depth: number, seen: WeakSet<object>): unknown {
+  if (key && SENSITIVE_TOOL_ARGUMENT_KEY_PATTERN.test(key)) {
+    return REDACTED_TOOL_ARGUMENT_VALUE;
+  }
+
+  if (typeof value === "string") {
+    return truncateText(redactSensitiveText(value), 1000).text;
+  }
+  if (typeof value === "number" || typeof value === "boolean" || value === null) {
+    return value;
+  }
+  if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol" || typeof value === "bigint") {
+    return UNSERIALIZABLE_TOOL_ARGUMENT_VALUE;
+  }
+  if (depth >= MAX_TOOL_ARGUMENT_REDACTION_DEPTH) {
+    return Array.isArray(value) ? [] : {};
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value !== "object") {
+    return UNSERIALIZABLE_TOOL_ARGUMENT_VALUE;
+  }
+  if (seen.has(value)) {
+    return UNSERIALIZABLE_TOOL_ARGUMENT_VALUE;
+  }
+
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeToolArgumentValue(item, "", depth + 1, seen));
+    }
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [
+        childKey,
+        sanitizeToolArgumentValue(childValue, childKey, depth + 1, seen),
+      ]),
+    );
+  } finally {
+    seen.delete(value);
+  }
 }
