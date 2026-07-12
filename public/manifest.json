@@ -3,7 +3,7 @@
   "name": "月标签",
   "version": "0.3.0",
   "description": "Moon Tab 新标签页、小游戏和 Browser AI Assistant 侧边栏。",
-  "permissions": ["sidePanel", "storage", "contextMenus", "activeTab", "scripting", "alarms", "tabs", "debugger"],
+  "permissions": ["sidePanel", "storage", "contextMenus", "activeTab", "scripting", "alarms", "tabs", "debugger", "downloads"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "打开 AI 助手"

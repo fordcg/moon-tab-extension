@@ -117,11 +117,14 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [followUpQueueOpen, setFollowUpQueueOpen] = useState(false);
   const [toolMenuPosition, setToolMenuPosition] = useState<{ left: number; top: number } | undefined>();
+  const [modeMenuPosition, setModeMenuPosition] = useState<{ left: number; top: number } | undefined>();
   const [composing, setComposing] = useState(false);
   const imageInputId = useId();
   const contextDialogRef = useRef<HTMLElement | null>(null);
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const toolMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeMenuRef = useRef<HTMLDivElement | null>(null);
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
   const sendShortcut = useAppStore((state) => state.chatPreferences.sendShortcut);
   const followUpBehavior = useAppStore((state) => state.chatPreferences.followUpBehavior);
@@ -285,6 +288,40 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [toolMenuOpen]);
 
   useEffect(() => {
+    if (!modeMenuOpen) {
+      return undefined;
+    }
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (
+        modeMenuRef.current?.contains(event.target as Node) ||
+        modeMenuButtonRef.current?.contains(event.target as Node)
+      ) {
+        return;
+      }
+
+      setModeMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setModeMenuOpen(false);
+      }
+    };
+
+    updateModeMenuPosition();
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updateModeMenuPosition);
+    window.addEventListener("scroll", updateModeMenuPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updateModeMenuPosition);
+      window.removeEventListener("scroll", updateModeMenuPosition, true);
+    };
+  }, [modeMenuOpen]);
+
+  useEffect(() => {
     if (!toolShelfOpen) {
       return undefined;
     }
@@ -320,32 +357,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [toolShelfOpen]);
-
-  useEffect(() => {
-    if (!modeMenuOpen) {
-      return undefined;
-    }
-
-    const closeOnPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(".composer-mode-menu-wrap")) {
-        return;
-      }
-
-      setModeMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setModeMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", closeOnPointerDown);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnPointerDown);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [modeMenuOpen]);
 
   const submit = async () => {
     const content = input.trim();
@@ -581,11 +592,36 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     });
   };
 
+  const updateModeMenuPosition = () => {
+    const rect = modeMenuButtonRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    const menuWidth = Math.min(window.innerWidth - 24, 272);
+    const menuHeight = Math.min(window.innerHeight - 24, 256);
+    const preferredLeft = rect.left;
+    const preferredTop = rect.top - 12;
+    setModeMenuPosition({
+      left: Math.max(12, Math.min(preferredLeft, window.innerWidth - menuWidth - 12)),
+      top: Math.max(12, Math.min(preferredTop, window.innerHeight - menuHeight - 12)),
+    });
+  };
+
   const toggleToolMenu = () => {
     if (!toolMenuOpen) {
+      setModeMenuOpen(false);
       updateToolMenuPosition();
     }
     setToolMenuOpen((value) => !value);
+  };
+
+  const toggleModeMenu = () => {
+    if (!modeMenuOpen) {
+      setToolMenuOpen(false);
+      updateModeMenuPosition();
+    }
+    setModeMenuOpen((value) => !value);
   };
 
   const toggleToolShelf = () => {
@@ -847,6 +883,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             </label>
             <div className="composer-mode-menu-wrap">
               <button
+                ref={modeMenuButtonRef}
                 className={`composer-mode-trigger composer-mode-trigger-${effectiveBrowserAutomationMode}`}
                 type="button"
                 aria-label="浏览器自动化模式"
@@ -854,7 +891,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                 aria-expanded={modeMenuOpen}
                 disabled={!browserControlEnabled}
                 title="浏览器自动化模式"
-                onClick={() => setModeMenuOpen((open) => !open)}
+                onClick={toggleModeMenu}
               >
                 <svg className="composer-switch-icon composer-mode-trigger-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path d={browserAutomationModeOption.iconPath} />
@@ -863,7 +900,13 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                 <span className="composer-mode-chevron" aria-hidden="true" />
               </button>
               {modeMenuOpen && browserControlEnabled ? (
-                <div className="composer-mode-menu" role="listbox" aria-label="浏览器自动化模式">
+                <div
+                  ref={modeMenuRef}
+                  className="composer-mode-menu"
+                  role="listbox"
+                  aria-label="浏览器自动化模式"
+                  style={modeMenuPosition ? { left: modeMenuPosition.left, top: modeMenuPosition.top } : undefined}
+                >
                   <div className="composer-mode-menu-header">
                     <span>选择浏览器自动化模式</span>
                     <span>本轮生效</span>

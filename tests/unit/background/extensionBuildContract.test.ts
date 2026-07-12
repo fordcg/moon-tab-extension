@@ -52,6 +52,10 @@ describe("扩展构建产物合约", () => {
     expect(viteConfig).toContain('fileName: () => "index.js"');
   });
 
+  it("manifest 应声明 downloads 权限以自动生成模型请求日志文件", () => {
+    expect(manifest.permissions).toEqual(expect.arrayContaining(["downloads"]));
+  });
+
   it("内容脚本入口不应引入动态 import，保持普通 content script 可直接执行", async () => {
     const contentEntry = await readProjectFile("src/content/index.ts");
 

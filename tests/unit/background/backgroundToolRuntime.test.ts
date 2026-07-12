@@ -201,12 +201,12 @@ describe("background 工具运行时封装", () => {
         properties: {
           prompt: { type: "string" },
           aspect_ratio: { type: "string", enum: ["1:1", "16:9", "9:16", "4:3", "3:4"] },
-          turnstile_token: { type: "string" },
         },
         required: ["prompt"],
         additionalProperties: false,
       },
     });
+    expect(imagefreeTool?.parameters.properties).not.toHaveProperty("turnstile_token");
     expect(shouldExposeTool(imagefreeTool!)).toBe(true);
   });
 
@@ -264,7 +264,7 @@ describe("background 工具运行时封装", () => {
       content: expect.stringContaining("遇到网页 JS 弹窗时会等待用户手动处理"),
     });
     expect(result[0]).toMatchObject({
-      content: expect.stringContaining("仅当用户明确要求读取、分析、操作当前页面"),
+      content: expect.stringContaining("当用户明确要求读取、分析、操作当前页面"),
     });
     expect(result[0]).toMatchObject({
       content: expect.stringContaining("优先使用当前受控页面"),
@@ -363,6 +363,26 @@ describe("background 工具运行时封装", () => {
 
     expect(result[0]).toMatchObject({
       content: expect.stringContaining("Tavily 搜索只作为公开资料或当前页面无法访问时的兜底"),
+    });
+  });
+
+  it("页面上下文中的接口分析优先使用 Network，即使用户未说当前页面", () => {
+    const result = appendBrowserControlPromptIfNeeded(
+      [
+        createMessage("system", "你是网页助手\n\n当前页面上下文：\nCurrent URL: https://example.com/image"),
+        createMessage("user", "分析生成图片的接口"),
+      ],
+      [
+        { id: "network.list_requests", name: "network_list_requests", parameters: {} },
+        { id: "web_search.tavily", name: "tavily_search", parameters: {} },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      content: expect.stringContaining("即使用户没有明确说“当前页面”"),
+    });
+    expect(result[0]).toMatchObject({
+      content: expect.stringContaining("先调用 network_list_requests"),
     });
   });
 
@@ -607,14 +627,11 @@ describe("background 工具运行时封装", () => {
 
   it("Imagefree runtime 保留数组 JSON 响应的 taskId 诊断兼容", async () => {
     const { executeImagefreeGenerateTool } = await import("../../../src/background/imagefreeToolRuntime");
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response("<html></html>", { status: 200 }))
-      .mockResolvedValueOnce(Response.json([{ taskId: "task-1" }]));
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json([{ taskId: "task-1" }]));
 
     await expect(executeImagefreeGenerateTool(
       createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, {
         prompt: "moon",
-        turnstile_token: "turnstile-token",
       }),
       fetcher as unknown as typeof fetch,
     )).resolves.toMatchObject({
@@ -623,61 +640,5 @@ describe("background 工具运行时封装", () => {
       isError: true,
       content: expect.stringContaining("Imagefree 未返回 taskId：[{\"taskId\":\"task-1\"}]"),
     });
-  });
-
-  it("Imagefree Turnstile 注入脚本独立格式化 render 异常", async () => {
-    vi.useFakeTimers();
-    const previousChrome = globalThis.chrome;
-    const { executeImagefreeGenerateTool } = await import("../../../src/background/imagefreeToolRuntime");
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response("<html></html>", { status: 200 }));
-    const listenerApi = { addListener: vi.fn(), removeListener: vi.fn() };
-    const chromeMock = {
-      runtime: {},
-      tabs: {
-        query: vi.fn((_queryInfo, callback) => callback([])),
-        create: vi.fn((_createProperties, callback) => callback({ id: 42, status: "complete" })),
-        get: vi.fn((_tabId, callback) => callback({ id: 42, status: "complete" })),
-        update: vi.fn((_tabId, _updateProperties, callback) => callback({ id: 42 })),
-        onUpdated: listenerApi,
-      },
-      windows: { update: vi.fn((_windowId, _updateInfo, callback) => callback({})) },
-      scripting: {
-        executeScript: vi.fn((injection, callback) => {
-          const serialized = `return (${injection.func.toString()})(...arguments)`;
-          const isolatedFunc = new Function(serialized);
-          const previousTurnstile = (window as typeof window & { turnstile?: unknown }).turnstile;
-          (window as typeof window & { turnstile?: unknown }).turnstile = {
-            render: () => {
-              throw new Error("render exploded");
-            },
-          };
-          const result = isolatedFunc(...injection.args);
-          Promise.resolve(result).then((value) => {
-            (window as typeof window & { turnstile?: unknown }).turnstile = previousTurnstile;
-            callback([{ result: value }]);
-          });
-        }),
-      },
-    };
-    Object.defineProperty(globalThis, "chrome", { value: chromeMock, configurable: true });
-
-    try {
-      const resultPromise = executeImagefreeGenerateTool(
-        createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, { prompt: "moon" }),
-        fetcher as unknown as typeof fetch,
-      );
-      await vi.runOnlyPendingTimersAsync();
-
-      await expect(resultPromise).resolves.toMatchObject({
-        isError: true,
-        content: "Imagefree 真人验证组件加载失败：render exploded",
-      });
-    } finally {
-      vi.useRealTimers();
-      Object.defineProperty(globalThis, "chrome", { value: previousChrome, configurable: true });
-      document.getElementById("moon-tab-imagefree-turnstile")?.remove();
-      delete (window as typeof window & { __moonTabImagefreeTurnstileTokenPromise?: unknown }).__moonTabImagefreeTurnstileTokenPromise;
-    }
   });
 });

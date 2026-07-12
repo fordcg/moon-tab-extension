@@ -241,7 +241,7 @@ const RAW_AVAILABLE_MODEL_TOOLS: Omit<ModelToolRegistryEntry, "toolClassificatio
     groupId: MODEL_TOOL_GROUP_SYSTEM_ID,
     displayName: "Imagefree 图片生成",
     description:
-      "调用 imagefree.net 按 prompt 和 aspect_ratio 生成图片，返回生成后的图片 URL。非官方接口，可能较慢或要求真人验证。",
+      "调用 imagefree.net 按 prompt 和 aspect_ratio 生成图片，返回生成后的图片 URL。非官方接口，可能较慢。",
     parameters: {
       type: "object",
       properties: {
@@ -253,11 +253,6 @@ const RAW_AVAILABLE_MODEL_TOOLS: Omit<ModelToolRegistryEntry, "toolClassificatio
           type: "string",
           enum: ["1:1", "16:9", "9:16", "4:3", "3:4"],
           description: "图片比例，默认 1:1。",
-        },
-        turnstile_token: {
-          type: "string",
-          description:
-            "Cloudflare Turnstile 真人验证 token。模型不要编造；通常由扩展自动打开 Imagefree 页面获取。",
         },
       },
       required: ["prompt"],

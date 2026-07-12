@@ -6340,11 +6340,16 @@ describe("App", () => {
 
     render(<App />);
 
+    await user.click(screen.getByRole("button", { name: "工具" }));
     const modeButton = screen.getByRole("button", { name: "浏览器自动化模式" });
     await user.click(modeButton);
 
-    expect(screen.getByRole("listbox", { name: "浏览器自动化模式" })).toBeInTheDocument();
+    const modeMenu = screen.getByRole("listbox", { name: "浏览器自动化模式" });
+    expect(modeMenu).toBeInTheDocument();
+    expect(modeMenu).toHaveAttribute("style", expect.stringMatching(/left:\s*\d/));
+    expect(modeMenu).toHaveAttribute("style", expect.stringMatching(/top:\s*\d/));
     expect(screen.getByText("选择浏览器自动化模式")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /普通模式/ })).toHaveTextContent("默认受限");
     expect(screen.getByRole("option", { name: /受控增强/ })).toHaveTextContent("允许 AI 请求一次性边界授权");
     expect(screen.getByRole("option", { name: /完全访问/ })).toHaveTextContent("最高风险");
 
@@ -6354,6 +6359,9 @@ describe("App", () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("完全访问"));
     expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveClass("composer-mode-trigger-full_access");
+
+    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
+    expect(styles).toMatch(/\.composer-mode-menu\s*\{(?=[^}]*position:\s*fixed !important;)(?=[^}]*transform:\s*translateY\(-100%\) !important;)[^}]*}/s);
 
     confirmSpy.mockRestore();
   });
