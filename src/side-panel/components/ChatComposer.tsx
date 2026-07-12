@@ -615,9 +615,10 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const filteredPromptTemplates = filterPromptTemplates(promptTemplates, slashQuery);
   const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
   const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
-  const contextDialogClassName = contextTabsLoading || contextTabs.some((tab) => tab.loading)
-    ? "context-dialog is-syncing-selection"
-    : "context-dialog";
+  // Syncing used to toggle `is-syncing-selection`, which hid non-current rows via
+  // visibility:hidden and made dialog text flicker on open/select. Keep the list
+  // stable; only surface empty-state loading when there is nothing to show yet.
+  const contextDialogBusy = contextTabsLoading || contextTabs.some((tab) => tab.loading);
   const canSubmit = canSend && hasDraft;
   const sessionTokenUsage = sumSessionTokenUsage(activeSession);
   const submitButtonLabel = sending && !hasDraft ? "终止" : "发送";
@@ -1064,7 +1065,14 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       {contextDialogOpen ? (
         <>
           <div className="dialog-overlay" aria-hidden="true" onClick={() => setContextDialogOpen(false)} />
-          <section ref={contextDialogRef} className={contextDialogClassName} role="dialog" aria-modal="true" aria-labelledby="context-dialog-title">
+          <section
+            ref={contextDialogRef}
+            className="context-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-busy={contextDialogBusy || undefined}
+            aria-labelledby="context-dialog-title"
+          >
             <div className="context-dialog-header">
               <h2 className="context-dialog-title" id="context-dialog-title">
                 选择注入标签页
@@ -1075,7 +1083,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             </div>
             <p className="sidepanel-preview-notice">选择要分享给 AI 的标签页</p>
             <div className="context-tab-list" aria-label="可注入标签页">
-              {contextTabsLoading ? <p className="context-tab-empty">正在读取标签页...</p> : null}
+              {contextTabsLoading && contextTabs.length === 0 ? <p className="context-tab-empty">正在读取标签页...</p> : null}
               {contextTabsError ? <p className="context-tab-error">{contextTabsError}</p> : null}
               {!contextTabsLoading && contextTabs.length === 0 ? <p className="context-tab-empty">暂无可注入的普通网页标签页</p> : null}
               {contextTabs.map((tab) => (
@@ -1085,11 +1093,13 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                     "context-tab-item",
                     tab.active ? "sidepanel-current-tab-row" : "",
                     tab.selected ? "context-tab-item-active" : "",
+                    tab.loading ? "is-loading" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   type="button"
                   aria-pressed={tab.selected}
+                  aria-busy={tab.loading || undefined}
                   aria-label={`注入 ${tab.title}`}
                   onClick={() => toggleContextTabSelection(tab.tabId)}
                 >

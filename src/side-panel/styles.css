@@ -6713,15 +6713,10 @@ body.sidepanel-stop-requested .composer-abort-button {
   padding: 0.5rem 0.625rem;
 }
 
-.context-dialog.is-syncing-selection .context-tab-list > :not(.sidepanel-current-tab-row) {
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.context-dialog.is-syncing-selection .context-tab-list > .sidepanel-current-tab-row {
-  pointer-events: auto;
-  position: relative;
-  z-index: 6;
+/* Keep tab rows visible while context extract runs. Hiding non-current rows
+   with visibility:hidden made the dialog text flash on open/select. */
+.context-tab-item.is-loading {
+  cursor: progress;
 }
 
 .sidepanel-tab-favicon {

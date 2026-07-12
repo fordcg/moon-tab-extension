@@ -5586,7 +5586,13 @@ describe("App", () => {
         contextTabs: state.contextTabs.map((tab) => (tab.tabId === 9 ? { ...tab, loading: true } : tab)),
       }));
     });
-    expect(dialog).toHaveClass("is-syncing-selection");
+    // Syncing must not hide other rows or flash dialog text.
+    expect(dialog).not.toHaveClass("is-syncing-selection");
+    expect(dialog).toHaveAttribute("aria-busy", "true");
+    const loadingDocsButton = screen.getByRole("button", { name: /注入 资料页/ });
+    expect(loadingDocsButton).toHaveClass("is-loading");
+    expect(loadingDocsButton).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: /注入 文章页/ })).toBeVisible();
     act(() => {
       useAppStore.setState((state) => ({
         contextTabs: state.contextTabs.map((tab) => (tab.tabId === 9 ? { ...tab, loading: false } : tab)),
