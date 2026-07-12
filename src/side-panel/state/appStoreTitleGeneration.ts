@@ -2,7 +2,7 @@ import { createModelConfig } from "../../shared/chat/modelConfig";
 import { mergeTokenUsageEntries } from "../../shared/chat/tokenUsage";
 import { createTitleGenerationMessages, generateSessionTitle } from "../../shared/models/titleGeneration";
 import { updateChatSession } from "../../shared/storage/repositories";
-import type { ChatMessage, ChatSession, ChatTokenUsageEntry } from "../../shared/types";
+import type { ChatMessage, ChatSendDebugContext, ChatSession, ChatTokenUsageEntry } from "../../shared/types";
 import type { AppState, StoreGetter, StoreSetter } from "./appStore";
 import { upsertSession } from "./appStoreSessionUtils";
 import { sendRuntimeMessage } from "./runtimeMessage";
@@ -23,6 +23,34 @@ export function hasAvailableTitleModel(state: AppState): boolean {
   const titleModel = state.models.find((model) => model.isTitleModel && model.enabled);
   const titleProvider = titleModel ? state.providers.find((provider) => provider.id === titleModel.providerId) : undefined;
   return Boolean(titleModel && titleProvider?.enabled);
+}
+
+function createTitleGenerationDebugContext(input: {
+  sessionId: string;
+  sessionTitle: string;
+  requestMessageCount: number;
+}): ChatSendDebugContext {
+  const requestCreatedAt = Date.now();
+  return {
+    source: "title_generation",
+    requestId: `title-${requestCreatedAt}-${Math.random().toString(36).slice(2, 8)}`,
+    requestCreatedAt,
+    requestCreatedAtIso: new Date(requestCreatedAt).toISOString(),
+    requestTimeZone: getDebugTimeZone(),
+    tokenUsageSource: "title",
+    sessionId: input.sessionId,
+    sessionTitle: input.sessionTitle,
+    requestMessageCount: input.requestMessageCount,
+    stream: false,
+  };
+}
+
+function getDebugTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function generateTitleForSession(input: GenerateTitleForSessionInput): Promise<void> {
@@ -61,6 +89,12 @@ export async function generateTitleForSession(input: GenerateTitleForSessionInpu
           stream: false,
           retryCount,
           tokenUsageSource: "title",
+          workspaceRequestLoggingEnabled: false,
+          debugContext: createTitleGenerationDebugContext({
+            sessionId: input.sessionId,
+            sessionTitle: input.fallbackTitle,
+            requestMessageCount: messages.length,
+          }),
         });
         if (!response?.ok) {
           throw new Error(response?.message ?? "标题生成失败");
@@ -110,6 +144,12 @@ export async function generateTitleFromSavedPrivateSession(input: { session: Cha
           stream: false,
           retryCount,
           tokenUsageSource: "title",
+          workspaceRequestLoggingEnabled: false,
+          debugContext: createTitleGenerationDebugContext({
+            sessionId: input.session.id,
+            sessionTitle: input.session.title,
+            requestMessageCount: messages.length,
+          }),
         });
         if (!response?.ok) {
           throw new Error(response?.message ?? "标题生成失败");
