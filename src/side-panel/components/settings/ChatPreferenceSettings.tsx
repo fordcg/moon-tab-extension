@@ -257,6 +257,22 @@ export function ChatPreferenceSettings() {
         </span>
         <span className="chat-preference-switch-label">非紧凑模式显示工具调用过程</span>
       </label>
+      <label className="chat-preference-switch">
+        <input
+          className="chat-preference-switch-input"
+          type="checkbox"
+          checked={chatPreferences.workspaceRequestLoggingEnabled}
+          onChange={(event) => void updateChatPreferences({ workspaceRequestLoggingEnabled: event.target.checked })}
+        />
+        <span className="chat-preference-switch-control" aria-hidden="true">
+          <span className="chat-preference-switch-thumb" />
+        </span>
+        <span className="chat-preference-switch-label">工作区请求日志</span>
+      </label>
+      <p className="ui-muted text-xs">
+        开启后，完整请求过程（侧栏状态、提示词上下文、模型回答、工具/MCP）写入本机日志服务
+        （需先运行 npm run model-diagnostics；输出 .tmp/chat-request-logs/）。默认关闭，不记录 API Key。
+      </p>
       <label className="chat-preference-field">
         发送快捷键
         <SettingsSelect
