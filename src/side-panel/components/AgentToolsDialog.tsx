@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../state/appStore";
 import { sendRuntimeMessage } from "../state/runtimeMessage";
+import { useModalDialogFocus } from "./useModalDialogFocus";
 
 interface AgentToolsDialogProps {
   open: boolean;
@@ -44,6 +45,7 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
   const [grokEnabled, setGrokEnabled] = useState(false);
   const [grokBusy, setGrokBusy] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const loadChannelConfig = useAppStore((state) => state.loadChannelConfig);
   const servers = useMemo(() => normalizeArray(status.settings?.mcp?.servers), [status.settings?.mcp?.servers]);
   const tools = useMemo(() => normalizeArray(status.tools), [status.tools]);
@@ -70,20 +72,9 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
     }
 
     void loadStatus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onOpenChange(false);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onOpenChange]);
 
-  useEffect(() => {
-    if (open && !status.loading) {
-      closeButtonRef.current?.focus({ preventScroll: true });
-    }
-  }, [open, status.loading]);
+  useModalDialogFocus({ dialogRef, initialFocusRef: closeButtonRef, onEscape: () => onOpenChange(false), open });
 
   useEffect(() => {
     if (!open || status.loading) {
@@ -153,7 +144,7 @@ export function AgentToolsDialog({ open, onOpenChange }: AgentToolsDialogProps) 
   return (
     <>
       <div className="sidepanel-agent-tools-overlay" aria-hidden="true" onClick={() => onOpenChange(false)} />
-      <section className="sidepanel-agent-tools-dialog" role="dialog" aria-modal="true" aria-labelledby="sidepanel-agent-tools-title">
+      <section ref={dialogRef} className="sidepanel-agent-tools-dialog" role="dialog" aria-modal="true" aria-labelledby="sidepanel-agent-tools-title" tabIndex={-1}>
         <header className="sidepanel-agent-tools-header">
           <div className="sidepanel-agent-tools-title-wrap">
             <h2 id="sidepanel-agent-tools-title">工具和 MCP</h2>

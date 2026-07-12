@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type KeyboardEvent, type RefObject } from "react";
 import { ChannelManagement } from "./settings/ChannelManagement";
 import { ChatPreferenceSettings } from "./settings/ChatPreferenceSettings";
 import { ExtractionRules } from "./settings/ExtractionRules";
@@ -45,6 +45,26 @@ export function SettingsPanel({
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  const selectTabFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, tab: SettingsTab) => {
+    const currentIndex = settingsTabs.findIndex((candidate) => candidate.id === tab);
+    const nextIndex = event.key === "ArrowRight" || event.key === "ArrowDown"
+      ? (currentIndex + 1) % settingsTabs.length
+      : event.key === "ArrowLeft" || event.key === "ArrowUp"
+        ? (currentIndex - 1 + settingsTabs.length) % settingsTabs.length
+        : event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? settingsTabs.length - 1
+            : -1;
+    if (nextIndex < 0) {
+      return;
+    }
+    event.preventDefault();
+    const nextTab = settingsTabs[nextIndex];
+    setActiveTab(nextTab.id);
+    document.getElementById(`settings-tab-${nextTab.id}`)?.focus({ preventScroll: true });
+  };
+
   return (
     <section
       className={embedded ? "settings-drawer-page" : "ui-panel shadow-sm settings-dialog"}
@@ -75,14 +95,18 @@ export function SettingsPanel({
                 type="button"
                 role="tab"
                 aria-selected={activeTab === tab.id}
+                aria-controls={`settings-tabpanel-${tab.id}`}
+                id={`settings-tab-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(event) => selectTabFromKeyboard(event, tab.id)}
               >
                 {tab.label}
               </button>
             ))}
           </div>
         </div>
-        <div className="grid min-w-0 gap-4">
+        <div className="grid min-w-0 gap-4" role="tabpanel" id={`settings-tabpanel-${activeTab}`} aria-labelledby={`settings-tab-${activeTab}`} tabIndex={0}>
           <AutomationDiagnostics />
           {activeTab === "channels" ? <ChannelManagement /> : null}
           {activeTab === "rules" ? <ExtractionRules /> : null}

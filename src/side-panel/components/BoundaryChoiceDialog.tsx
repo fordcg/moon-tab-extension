@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { BrowserControlBoundaryChoiceRequestMessage } from "../../shared/browserControl";
+import { useModalDialogFocus } from "./useModalDialogFocus";
 
 interface BoundaryChoiceDialogProps {
   request: BrowserControlBoundaryChoiceRequestMessage;
@@ -11,6 +12,9 @@ export function BoundaryChoiceDialog({ request, onSubmit }: BoundaryChoiceDialog
   const [otherText, setOtherText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const expired = Date.now() >= request.expiresAt;
+  const dialogRef = useRef<HTMLElement>(null);
+  const firstChoiceRef = useRef<HTMLButtonElement>(null);
+  useModalDialogFocus({ dialogRef, initialFocusRef: firstChoiceRef, open: true });
   const hasSelection = selectedIds.length > 0 || otherText.trim().length > 0;
   const toggleChoice = (choiceId: string) => {
     if (submitting) {
@@ -42,7 +46,7 @@ export function BoundaryChoiceDialog({ request, onSubmit }: BoundaryChoiceDialog
   return (
     <>
       <div className="dialog-overlay" aria-hidden="true" />
-      <section className="boundary-choice-dialog" role="dialog" aria-modal="true" aria-label="AI 边界确认">
+      <section ref={dialogRef} className="boundary-choice-dialog" role="dialog" aria-modal="true" aria-label="AI 边界确认" tabIndex={-1}>
         <div className="boundary-choice-header">
           <h2 className="boundary-choice-title">{request.question}</h2>
           <p className="boundary-choice-reason">{request.reason}</p>
@@ -51,6 +55,7 @@ export function BoundaryChoiceDialog({ request, onSubmit }: BoundaryChoiceDialog
           {request.choices.map((choice) => (
             <button
               key={choice.id}
+              ref={choice === request.choices[0] ? firstChoiceRef : undefined}
               className={selectedIds.includes(choice.id) ? "boundary-choice-item boundary-choice-item-active" : "boundary-choice-item"}
               type="button"
               aria-pressed={selectedIds.includes(choice.id)}
