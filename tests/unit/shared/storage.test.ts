@@ -288,6 +288,7 @@ describe("存储仓库", () => {
           ],
         },
       ],
+      workflowTasks: [],
     };
 
     await saveChatSession(session);
@@ -454,6 +455,7 @@ describe("存储仓库", () => {
     expect(await getChatSession("session-1")).toEqual({
       ...session,
       folderId: undefined,
+      workflowTasks: [],
     });
   });
 
@@ -508,6 +510,7 @@ describe("存储仓库", () => {
           contextPrompt: "页面内容",
         },
       ],
+      workflowTasks: [],
     };
 
     await db.chatSessions.put(legacySession as ChatSession);
