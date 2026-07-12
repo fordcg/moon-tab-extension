@@ -129,11 +129,6 @@ export function redactForChatRequestLog<T>(value: T, depth = 0): T {
   return output as T;
 }
 
-/** @deprecated Downloads writer removed; prefer createChatRequestLogClient. No-op until Task 4 rewires callers. */
-export function writeChatRequestLogFiles(_snapshot: unknown): void {
-  // intentionally empty
-}
-
 function redactString(value: string): string {
   if (BASE64_IMAGE_PATTERN.test(value) || (value.length > 200 && LONG_BASE64_PATTERN.test(value))) {
     return "[binary/base64 omitted]";
