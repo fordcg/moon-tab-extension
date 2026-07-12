@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
 import {
   clearDatabase,
   getAppSetting,
   getChatSession,
   saveChatSession,
+  saveModelProvider,
+  saveProviderModel,
 } from "../../../src/shared/storage/repositories";
-import type { ChatSession, WorkflowSkill } from "../../../src/shared/types";
+import type { ChatSession, ModelProvider, ProviderModel, WorkflowSkill } from "../../../src/shared/types";
 
 function createSession(id = "session-1"): ChatSession {
   return {
@@ -17,6 +19,35 @@ function createSession(id = "session-1"): ChatSession {
     createdAt: 1,
     updatedAt: 1,
     messages: [],
+  };
+}
+
+function createProvider(): ModelProvider {
+  return {
+    id: "provider-1",
+    name: "默认渠道",
+    endpointType: "openai_chat",
+    endpointUrl: "https://api.example.com/v1/chat/completions",
+    apiKey: "sk-test",
+    enabled: true,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+function createModel(): ProviderModel {
+  return {
+    id: "model-1",
+    providerId: "provider-1",
+    modelId: "gpt-test",
+    displayName: "测试模型",
+    temperature: 0.7,
+    maxTokens: 1024,
+    systemPrompt: "你是网页助手",
+    isTitleModel: false,
+    enabled: true,
+    createdAt: 1,
+    updatedAt: 1,
   };
 }
 
@@ -124,5 +155,127 @@ describe("appStore 工作流任务", () => {
       status: "waiting",
     });
     expect(task.statusReason).toContain("不可用");
+  });
+
+  it("流式工具事件会更新任务步骤并仅保存脱敏附件摘要", async () => {
+    const session = createSession();
+    const provider = createProvider();
+    const model = createModel();
+    let messageListener: ((message: unknown) => void) | undefined;
+    const port = {
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn((listener: (message: unknown) => void) => { messageListener = listener; }) },
+      onDisconnect: { addListener: vi.fn() },
+    };
+    vi.stubGlobal("chrome", {
+      runtime: {
+        connect: vi.fn(() => port),
+      },
+    });
+    await saveChatSession(session);
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    await useAppStore.getState().loadChannelConfig();
+    const task = await useAppStore.getState().createWorkflowTask("research", "检索资料");
+
+    const sending = useAppStore.getState().sendWorkflowTaskMessage(task.id, "开始检索");
+    await vi.waitFor(() => expect(messageListener).toBeTypeOf("function"));
+    messageListener?.({
+      type: "tool:start",
+      record: {
+        id: "call-1",
+        toolId: "web_search.tavily",
+        name: "tavily_search",
+        displayName: "Tavily 搜索",
+        arguments: { query: "不应保存的工具参数" },
+        status: "running",
+        startedAt: 1,
+      },
+    });
+    messageListener?.({
+      type: "tool:complete",
+      record: {
+        id: "call-1",
+        toolId: "web_search.tavily",
+        name: "tavily_search",
+        displayName: "Tavily 搜索",
+        arguments: { query: "不应保存的工具参数" },
+        status: "success",
+        startedAt: 1,
+        completedAt: 2,
+        resultSummary: "检索完成",
+      },
+      attachments: [{
+        id: "attachment-1",
+        kind: "browser-screenshot",
+        title: "截图",
+        summary: "包含 API_KEY=secret 的结果摘要",
+        dataUrl: "data:image/png;base64,secret",
+        mediaType: "image/png",
+        target: "viewport",
+        byteSize: 10,
+        createdAt: 2,
+        redacted: false,
+        truncated: false,
+      }],
+    });
+    messageListener?.({ type: "complete", content: "检索完成" });
+    await sending;
+
+    const updatedTask = useAppStore.getState().chatSessions[0]?.workflowTasks?.[0];
+    expect(updatedTask).toMatchObject({
+      status: "completed",
+      steps: [{ toolCallId: "call-1", status: "completed" }],
+      contextItems: [{
+        id: "workflow-context-tool-attachment-1",
+        kind: "screenshot",
+        title: "截图",
+        redacted: true,
+        sensitive: false,
+      }],
+    });
+    expect(JSON.stringify(updatedTask)).not.toContain("data:image/png");
+    expect(JSON.stringify(updatedTask)).not.toContain("不应保存的工具参数");
+    expect(JSON.stringify(updatedTask)).not.toContain("secret");
+  });
+
+  it("工作流消息在取消或流错误后恢复等待状态", async () => {
+    const session = createSession();
+    const provider = createProvider();
+    const model = createModel();
+    let disconnectListener: (() => void) | undefined;
+    let messageListener: ((message: unknown) => void) | undefined;
+    const port = {
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn((listener: (message: unknown) => void) => { messageListener = listener; }) },
+      onDisconnect: { addListener: vi.fn((listener: () => void) => { disconnectListener = listener; }) },
+    };
+    vi.stubGlobal("chrome", { runtime: { connect: vi.fn(() => port) } });
+    await saveChatSession(session);
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    await useAppStore.getState().loadChannelConfig();
+    const task = await useAppStore.getState().createWorkflowTask("debug", "检查错误");
+
+    const sending = useAppStore.getState().sendWorkflowTaskMessage(task.id, "开始检查");
+    await vi.waitFor(() => expect(messageListener).toBeTypeOf("function"));
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("running");
+    messageListener?.({ type: "error", message: "网络中断" });
+    await sending;
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("waiting");
+
+    messageListener = undefined;
+    disconnectListener = undefined;
+    const cancelSending = useAppStore.getState().sendWorkflowTaskMessage(task.id, "再次检查");
+    await vi.waitFor(() => expect(messageListener).toBeTypeOf("function"));
+    await vi.waitFor(() => expect(disconnectListener).toBeTypeOf("function"));
+    useAppStore.getState().abortChatTask(session.id);
+    (disconnectListener as (() => void) | undefined)?.();
+    await cancelSending;
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("canceled");
   });
 });

@@ -61,6 +61,8 @@ interface StreamingChatInput {
   streamMode: boolean;
   toolAttachments?: ChatToolAttachment[];
   request: AppChatSendMessage;
+  onWorkflowToolStart?: (record: ChatToolCallRecord) => void | Promise<void>;
+  onWorkflowToolComplete?: (record: ChatToolCallRecord, attachments: ChatToolAttachment[]) => void | Promise<void>;
   onAbortHandle?: (handle: () => void) => void;
   onFollowUpHandle?: (handle: (followUp: {
     id: string;
@@ -310,6 +312,7 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
 
       if (message.type === "tool:start") {
         void enqueueWrite(async () => {
+          await input.onWorkflowToolStart?.(message.record);
           if (currentToolTurnMessageId) {
             await upsertAssistantToolCallRecord(input.sessionId, currentToolTurnMessageId, message.record, [], input.set, input.privateMode);
           }
@@ -319,8 +322,10 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
 
       if (message.type === "tool:complete") {
         void enqueueWrite(async () => {
+          const attachments = message.attachments ?? [];
+          await input.onWorkflowToolComplete?.(message.record, attachments);
           if (currentToolTurnMessageId) {
-            await upsertAssistantToolCallRecord(input.sessionId, currentToolTurnMessageId, message.record, message.attachments ?? [], input.set, input.privateMode);
+            await upsertAssistantToolCallRecord(input.sessionId, currentToolTurnMessageId, message.record, attachments, input.set, input.privateMode);
           }
         });
         return;

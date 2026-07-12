@@ -17,6 +17,8 @@ import {
 } from "../../shared/storage/repositories";
 import type {
   ChatSession,
+  ChatToolAttachment,
+  ChatToolCallRecord,
   WorkflowArtifact,
   WorkflowArtifactKind,
   WorkflowContextItem,
@@ -35,6 +37,30 @@ export const WORKFLOW_SKILLS_SETTINGS_KEY = "aiSidebar.workflowSkills.v1";
 
 type StoreGet = StoreApi<AppState>["getState"];
 type StoreSet = StoreApi<AppState>["setState"];
+
+export function createWorkflowTaskStepFromToolRecord(record: ChatToolCallRecord): WorkflowTaskStep {
+  return {
+    id: `workflow-step-tool-${record.id}`,
+    title: redactSensitiveText(record.displayName || record.name || record.toolId).trim() || "工具调用",
+    status: record.status === "error" ? "failed" : record.status === "success" ? "completed" : "running",
+    toolCallId: record.id,
+    detail: redactSensitiveText(record.errorMessage || record.resultSummary || "").trim() || undefined,
+    updatedAt: record.completedAt ?? record.startedAt,
+  };
+}
+
+export function createWorkflowContextItemsFromToolAttachments(attachments: ChatToolAttachment[]): WorkflowContextItem[] {
+  return attachments.map((attachment) => ({
+    id: `workflow-context-tool-${attachment.id}`,
+    kind: workflowContextKindFromAttachment(attachment),
+    title: redactSensitiveText(attachment.title).trim() || "工具结果",
+    summary: redactSensitiveText(attachment.summary).trim(),
+    capturedAt: attachment.createdAt,
+    redacted: true,
+    truncated: attachment.truncated,
+    sensitive: false,
+  }));
+}
 
 export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: StoreSet }) {
   async function updateCurrentSession(
@@ -288,6 +314,25 @@ function isTimestamp(value: unknown): value is number {
 
 function cleanText(value: unknown): string {
   return typeof value === "string" ? redactSensitiveText(value).trim() : "";
+}
+
+function workflowContextKindFromAttachment(attachment: ChatToolAttachment): WorkflowContextKind {
+  switch (attachment.kind) {
+    case "web-search":
+      return "web-search";
+    case "network":
+      return "network";
+    case "js-source":
+      return "js-source";
+    case "source-map":
+      return "source-map";
+    case "browser-screenshot":
+      return "screenshot";
+    case "automation-report":
+      return "runtime";
+    default:
+      return "mcp";
+  }
 }
 
 function unique<T>(items: T[]): T[] {
