@@ -4,9 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  chatRequestLogPaths,
   createDiagnosticsServer,
   diagnosticsPaths,
+  handleChatRequestLogEvent,
   handleDiagnosticRecord,
+  renderChatSessionMarkdown,
   renderDiagnosticsMarkdown,
   resetDiagnostics,
   upsertDiagnosticsRecord,
@@ -115,6 +118,114 @@ try {
   }
 } finally {
   await rm(serverTempDir, { recursive: true, force: true });
+}
+
+const chatDir = await mkdtemp(join(tmpdir(), "chat-request-logs-test-"));
+try {
+  const paths = chatRequestLogPaths(chatDir);
+  await handleChatRequestLogEvent({
+    schemaVersion: 1,
+    requestId: "chat-1",
+    type: "session_start",
+    at: 1,
+    atIso: "2026-07-13T00:00:00.001Z",
+    mode: "full_access",
+    enabledToolIds: ["system.current_time"],
+    systemPrompt: "你是网页助手",
+  }, { paths });
+  await handleChatRequestLogEvent({
+    schemaVersion: 1,
+    requestId: "chat-1",
+    type: "model_request",
+    at: 2,
+    atIso: "2026-07-13T00:00:00.002Z",
+    messages: [{ role: "user", content: "现在几点" }],
+  }, { paths });
+  await handleChatRequestLogEvent({
+    schemaVersion: 1,
+    requestId: "chat-1",
+    type: "session_end",
+    at: 3,
+    atIso: "2026-07-13T00:00:00.003Z",
+    status: "success",
+  }, { paths });
+
+  const latest = JSON.parse(await readFile(paths.latestJson, "utf8"));
+  assert.equal(latest.requestId, "chat-1");
+  assert.equal(latest.events.length, 3);
+  assert.equal(latest.mode, "full_access");
+  assert.equal(latest.status, "success");
+  const md = await readFile(paths.latestMd, "utf8");
+  assert.match(md, /full_access|完全访问|mode/i);
+  assert.match(md, /现在几点/);
+  assert.equal((await readFile(paths.eventsNdjson, "utf8")).trim().split("\n").length, 3);
+  const rendered = renderChatSessionMarkdown(latest);
+  assert.match(rendered, /chat-1/);
+  assert.match(rendered, /system\.current_time/);
+} finally {
+  await rm(chatDir, { recursive: true, force: true });
+}
+
+const chatHttpDir = await mkdtemp(join(tmpdir(), "chat-request-logs-http-test-"));
+try {
+  const modelPaths = diagnosticsPaths(join(chatHttpDir, "model"));
+  const chatPaths = chatRequestLogPaths(join(chatHttpDir, "chat"));
+  const { server } = createDiagnosticsServer({
+    host: "127.0.0.1",
+    port: 0,
+    paths: modelPaths,
+    chatPaths,
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const postResponse = await fetch(`${baseUrl}/chat-request-logs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        requestId: "http-chat-1",
+        type: "session_start",
+        at: 11,
+        atIso: "2026-07-13T00:00:00.011Z",
+        mode: "normal_restricted",
+        enabledToolIds: ["pageContext.extract"],
+        systemPrompt: "http prompt",
+      }),
+    });
+    assert.equal(postResponse.status, 200);
+    const postBody = await postResponse.json();
+    assert.equal(postBody.ok, true);
+    assert.equal(postBody.requestId, "http-chat-1");
+
+    const latestResponse = await fetch(`${baseUrl}/chat-request-logs/latest`);
+    assert.equal(latestResponse.status, 200);
+    const latest = await latestResponse.json();
+    assert.equal(latest.requestId, "http-chat-1");
+    assert.equal(latest.events.length, 1);
+    assert.equal(latest.mode, "normal_restricted");
+
+    // Existing model-diagnostics routes must still work.
+    const modelPost = await fetch(`${baseUrl}/model-diagnostics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pending),
+    });
+    assert.equal(modelPost.status, 200);
+    const modelGet = await fetch(`${baseUrl}/model-diagnostics`);
+    assert.equal(modelGet.status, 200);
+    const modelRecords = await modelGet.json();
+    assert.equal(modelRecords.length, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+} finally {
+  await rm(chatHttpDir, { recursive: true, force: true });
 }
 
 console.log("model diagnostics sink tests passed");

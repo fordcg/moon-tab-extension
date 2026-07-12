@@ -20,6 +20,16 @@ export function diagnosticsPaths(outputDir = DEFAULT_OUTPUT_DIR) {
   };
 }
 
+export function chatRequestLogPaths(outputDir = resolve(PROJECT_ROOT, ".tmp/chat-request-logs")) {
+  return {
+    outputDir,
+    latestJson: resolve(outputDir, "latest.json"),
+    latestMd: resolve(outputDir, "latest.md"),
+    eventsNdjson: resolve(outputDir, "events.ndjson"),
+    historyDir: resolve(outputDir, "history"),
+  };
+}
+
 export async function resetDiagnostics(paths = diagnosticsPaths()) {
   await mkdir(paths.outputDir, { recursive: true });
   await Promise.all([
@@ -76,10 +86,96 @@ export function renderDiagnosticsMarkdown(records) {
   return lines.join("\n");
 }
 
+export async function handleChatRequestLogEvent(event, options = {}) {
+  const paths = options.paths || chatRequestLogPaths(options.outputDir);
+  await mkdir(paths.outputDir, { recursive: true });
+  await mkdir(paths.historyDir, { recursive: true });
+  const normalized = normalizeChatEvent(event, options.now ?? Date.now());
+  await appendFile(paths.eventsNdjson, `${JSON.stringify(normalized)}\n`, "utf8");
+
+  const sessionPath = resolve(paths.historyDir, `${sanitizeRequestId(normalized.requestId)}.json`);
+  const session = await readJsonObject(sessionPath, { requestId: normalized.requestId, events: [] });
+  const nextSession = {
+    ...session,
+    requestId: session.requestId || normalized.requestId,
+    events: [...(session.events || []), normalized],
+    updatedAt: normalized.at,
+  };
+
+  if (normalized.type === "session_start") {
+    nextSession.sidebarState = normalized.sidebarState ?? nextSession.sidebarState;
+    nextSession.mode = normalized.mode ?? normalized.sidebarState?.mode ?? nextSession.mode;
+    nextSession.systemPrompt = normalized.systemPrompt ?? normalized.sidebarState?.systemPrompt ?? nextSession.systemPrompt;
+    if (normalized.exposedToolIds !== undefined) nextSession.exposedToolIds = normalized.exposedToolIds;
+    if (normalized.enabledToolIds !== undefined) nextSession.enabledToolIds = normalized.enabledToolIds;
+    if (normalized.mcpServers !== undefined) nextSession.mcpServers = normalized.mcpServers;
+    if (normalized.sessionId !== undefined) nextSession.sessionId = normalized.sessionId;
+    if (normalized.source !== undefined) nextSession.source = normalized.source;
+  }
+  if (normalized.type === "session_end") {
+    if (normalized.status !== undefined) nextSession.status = normalized.status;
+  }
+
+  const markdown = renderChatSessionMarkdown(nextSession);
+  await writeFile(sessionPath, `${JSON.stringify(nextSession, null, 2)}\n`, "utf8");
+  await writeFile(resolve(paths.historyDir, `${sanitizeRequestId(normalized.requestId)}.md`), markdown, "utf8");
+  await writeFile(paths.latestJson, `${JSON.stringify(nextSession, null, 2)}\n`, "utf8");
+  await writeFile(paths.latestMd, markdown, "utf8");
+  return { requestId: nextSession.requestId, eventCount: nextSession.events.length };
+}
+
+export function renderChatSessionMarkdown(session) {
+  const value = session && typeof session === "object" ? session : {};
+  const events = Array.isArray(value.events) ? value.events : [];
+  const mode = value.mode ?? value.sidebarState?.mode;
+  const systemPrompt = value.systemPrompt ?? value.sidebarState?.systemPrompt;
+  const enabledToolIds = value.enabledToolIds ?? value.sidebarState?.enabledToolIds ?? [];
+  const exposedToolIds = value.exposedToolIds ?? value.sidebarState?.exposedToolIds ?? [];
+  const mcpServers = value.mcpServers ?? value.sidebarState?.mcpServers;
+
+  const lines = [
+    "# Chat Request Log",
+    "",
+    `- requestId: \`${value.requestId || "-"}\``,
+    `- status: ${value.status || "in_progress"}`,
+    `- updatedAt: ${formatDate(value.updatedAt)}`,
+    value.sessionId ? `- sessionId: \`${value.sessionId}\`` : null,
+    value.source ? `- source: ${value.source}` : null,
+    "",
+    "## 侧栏状态",
+    "",
+    `- mode: ${mode || "-"}`,
+    `- enabledToolIds: ${formatList(enabledToolIds)}`,
+    `- exposedToolIds: ${formatList(exposedToolIds)}`,
+    `- mcpServers: ${formatJsonInline(mcpServers)}`,
+    "",
+    "### systemPrompt",
+    "",
+    "```text",
+    truncate(String(systemPrompt ?? ""), 20000) || "(empty)",
+    "```",
+    "",
+    "## 时间线",
+    "",
+  ].filter((line) => line !== null);
+
+  if (events.length === 0) {
+    lines.push("暂无事件。", "");
+    return lines.join("\n");
+  }
+
+  events.forEach((event, index) => {
+    lines.push(...renderChatEventMarkdown(event, index + 1), "");
+  });
+
+  return lines.join("\n");
+}
+
 export function createDiagnosticsServer(options = {}) {
   const host = options.host || DEFAULT_HOST;
   const port = Number.isFinite(options.port) ? options.port : DEFAULT_PORT;
   const paths = options.paths || diagnosticsPaths(options.outputDir || DEFAULT_OUTPUT_DIR);
+  const chatPaths = options.chatPaths || chatRequestLogPaths(options.chatOutputDir);
   const maxBytes = options.maxBytes || MAX_REQUEST_BYTES;
   const maxRecords = options.maxRecords || MAX_RECORDS;
 
@@ -96,7 +192,7 @@ export function createDiagnosticsServer(options = {}) {
       const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
 
       if (req.method === "GET" && url.pathname === "/health") {
-        writeJson(res, 200, { ok: true, service: "model-diagnostics", paths });
+        writeJson(res, 200, { ok: true, service: "model-diagnostics", paths, chatPaths });
         return;
       }
 
@@ -126,13 +222,26 @@ export function createDiagnosticsServer(options = {}) {
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/chat-request-logs/latest") {
+        writeJson(res, 200, await readJsonObject(chatPaths.latestJson, { events: [] }));
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/chat-request-logs") {
+        const text = await readRequestBody(req, maxBytes);
+        const payload = JSON.parse(text || "{}");
+        const result = await handleChatRequestLogEvent(payload, { paths: chatPaths });
+        writeJson(res, 200, { ok: true, requestId: result.requestId, eventCount: result.eventCount });
+        return;
+      }
+
       writeJson(res, 404, { ok: false, message: "not found" });
     } catch (error) {
       writeJson(res, 500, { ok: false, message: formatError(error) });
     }
   });
 
-  return { server, host, port, paths };
+  return { server, host, port, paths, chatPaths };
 }
 
 async function readJsonArray(path) {
@@ -145,11 +254,119 @@ async function readJsonArray(path) {
   }
 }
 
+async function readJsonObject(path, fallback = {}) {
+  try {
+    const text = await readFile(path, "utf8");
+    const value = JSON.parse(text);
+    return value && typeof value === "object" && !Array.isArray(value) ? value : { ...fallback };
+  } catch {
+    return { ...fallback };
+  }
+}
+
 async function readText(path, fallback) {
   try {
     return await readFile(path, "utf8");
   } catch {
     return fallback;
+  }
+}
+
+function normalizeChatEvent(event, receivedAt) {
+  const value = event && typeof event === "object" ? event : {};
+  const at = typeof value.at === "number" && Number.isFinite(value.at) ? value.at : receivedAt;
+  const requestId =
+    typeof value.requestId === "string" && value.requestId.trim()
+      ? value.requestId.trim()
+      : `chat-${at}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    ...value,
+    schemaVersion: value.schemaVersion === 1 ? 1 : 1,
+    requestId,
+    type: typeof value.type === "string" && value.type ? value.type : "unknown",
+    at,
+    atIso: typeof value.atIso === "string" && value.atIso ? value.atIso : new Date(at).toISOString(),
+    receivedAt,
+  };
+}
+
+function sanitizeRequestId(requestId) {
+  const value = String(requestId || "unknown").trim() || "unknown";
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 180);
+}
+
+function renderChatEventMarkdown(event, index) {
+  const type = event?.type || "unknown";
+  const lines = [
+    `### ${index}. ${type}`,
+    "",
+    `- at: ${event?.atIso || formatDate(event?.at)}`,
+  ];
+
+  if (type === "session_start") {
+    lines.push(`- mode: ${event?.mode ?? event?.sidebarState?.mode ?? "-"}`);
+    lines.push(`- enabledToolIds: ${formatList(event?.enabledToolIds)}`);
+    lines.push(`- exposedToolIds: ${formatList(event?.exposedToolIds)}`);
+    if (event?.systemPrompt) {
+      lines.push("", "```text", truncate(String(event.systemPrompt), 12000), "```");
+    }
+  } else if (type === "model_request") {
+    const messages = Array.isArray(event?.messages) ? event.messages : [];
+    lines.push(`- messages: ${messages.length}`);
+    if (messages.length) {
+      lines.push("", "```text", renderPromptMessages(messages.map((item) => ({
+        role: item?.role || "message",
+        content: messageContentToText(item?.content ?? item),
+      }))), "```");
+    }
+    if (event?.tools !== undefined) {
+      lines.push("", "<details><summary>tools</summary>", "", "```json", stringifyForMarkdown(event.tools), "```", "", "</details>");
+    }
+  } else if (type === "model_response") {
+    lines.push(`- status: ${event?.status ?? "-"}`);
+    if (event?.content !== undefined || event?.response !== undefined || event?.text !== undefined) {
+      lines.push("", "```text", truncate(messageContentToText(event?.content ?? event?.text ?? event?.response), 12000), "```");
+    } else if (event?.body !== undefined) {
+      lines.push("", "```json", stringifyForMarkdown(event.body), "```");
+    }
+  } else if (type === "tool_call_start" || type === "tool_call_complete") {
+    lines.push(`- tool: ${event?.toolName || event?.name || event?.toolId || "-"}`);
+    if (event?.arguments !== undefined || event?.input !== undefined) {
+      lines.push("", "```json", stringifyForMarkdown(event.arguments ?? event.input), "```");
+    }
+    if (event?.result !== undefined || event?.output !== undefined) {
+      lines.push("", "```json", stringifyForMarkdown(event.result ?? event.output), "```");
+    }
+  } else if (type === "mcp_call" || type === "mcp_result") {
+    lines.push(`- server: ${event?.serverName || event?.serverId || "-"}`);
+    lines.push(`- tool: ${event?.toolName || event?.name || "-"}`);
+    if (event?.arguments !== undefined || event?.input !== undefined) {
+      lines.push("", "```json", stringifyForMarkdown(event.arguments ?? event.input), "```");
+    }
+    if (event?.result !== undefined || event?.output !== undefined) {
+      lines.push("", "```json", stringifyForMarkdown(event.result ?? event.output), "```");
+    }
+  } else if (type === "session_end") {
+    lines.push(`- status: ${event?.status ?? "-"}`);
+    if (event?.errorMessage) lines.push(`- error: ${event.errorMessage}`);
+  } else {
+    lines.push("", "```json", stringifyForMarkdown(event), "```");
+  }
+
+  return lines;
+}
+
+function formatList(value) {
+  if (!Array.isArray(value) || value.length === 0) return "-";
+  return value.map((item) => String(item)).join(", ");
+}
+
+function formatJsonInline(value) {
+  if (value === undefined) return "-";
+  try {
+    return truncate(JSON.stringify(value), 500);
+  } catch {
+    return String(value);
   }
 }
 
@@ -416,13 +633,17 @@ function formatError(error) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { server, host, port, paths } = createDiagnosticsServer();
+  const { server, host, port, paths, chatPaths } = createDiagnosticsServer();
   await mkdir(paths.outputDir, { recursive: true });
+  await mkdir(chatPaths.outputDir, { recursive: true });
+  await mkdir(chatPaths.historyDir, { recursive: true });
   server.listen(port, host, () => {
     console.log(`模型调用诊断服务已启动：http://${host}:${port}`);
     console.log(`JSON: ${paths.json}`);
     console.log(`NDJSON: ${paths.ndjson}`);
     console.log(`Readable: ${paths.readable}`);
+    console.log(`Chat logs: ${chatPaths.outputDir}`);
+    console.log(`Chat latest: ${chatPaths.latestMd}`);
     console.log("按 Ctrl+C 停止。扩展未连接时服务会保持空闲等待。");
   });
   server.on("error", (error) => {
