@@ -73,6 +73,13 @@ import type {
   ProviderModel,
   SendShortcut,
   WebSearchSettings,
+  WorkflowArtifact,
+  WorkflowContextItem,
+  WorkflowSkill,
+  WorkflowTask,
+  WorkflowTaskStatus,
+  WorkflowTaskStep,
+  WorkflowTaskTemplate,
 } from "../../shared/types";
 import {
   BROWSER_CONTROL_BOUNDARY_CHOICE_RESPOND_MESSAGE_TYPE,
@@ -150,6 +157,7 @@ import {
   upsertChatTask,
 } from "./appStoreChatTasks";
 import { sendStreamingChatMessage } from "./appStoreStreaming";
+import { createWorkflowTaskActions } from "./appStoreWorkflowTasks";
 import {
   backupNowAction,
   loadRemoteBackupsAction,
@@ -282,6 +290,7 @@ export interface AppState {
   syncOperation: SyncOperationState;
   failure?: RequestFailure;
   notifications: AppNotification[];
+  workflowSkills: WorkflowSkill[];
   addNotification: (notification: AppNotificationDraft) => string;
   dismissNotification: (notificationId: string) => void;
   clearFailure: () => void;
@@ -355,6 +364,17 @@ export interface AppState {
   backupNow: () => Promise<void>;
   restoreNow: (backupId: string) => Promise<void>;
   sendChatMessage: (content: string, attachments?: ChatImageAttachment[], promptInvocations?: ChatPromptInvocation[]) => Promise<void>;
+  createWorkflowTask: (template: WorkflowTaskTemplate, objective: string) => Promise<WorkflowTask>;
+  updateWorkflowTaskStatus: (taskId: string, status: WorkflowTaskStatus, reason?: string) => Promise<void>;
+  upsertWorkflowTaskStep: (taskId: string, step: WorkflowTaskStep) => Promise<void>;
+  addWorkflowContextItem: (taskId: string, item: WorkflowContextItem) => Promise<void>;
+  removeWorkflowContextItem: (taskId: string, contextItemId: string) => Promise<void>;
+  toggleWorkflowContextPinned: (taskId: string, contextItemId: string) => Promise<void>;
+  addWorkflowArtifact: (taskId: string, artifact: WorkflowArtifact) => Promise<void>;
+  loadWorkflowSkills: () => Promise<void>;
+  saveWorkflowSkill: (taskId: string, draft: Pick<WorkflowSkill, "title" | "variables">) => Promise<WorkflowSkill>;
+  startWorkflowSkill: (skillId: string, values: Record<string, string>) => Promise<WorkflowTask>;
+  sendWorkflowTaskMessage: (taskId: string, content: string) => Promise<void>;
   submitChatFollowUp: (
     content: string,
     attachments?: ChatImageAttachment[],
@@ -454,6 +474,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     loading: false,
   },
   notifications: [],
+  workflowSkills: [],
   addNotification: (notification) => {
     const item = createAppNotification(notification);
     set((state) => ({ notifications: [item, ...state.notifications].slice(0, 5) }));
@@ -942,6 +963,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       chatFolders,
       ...resolveActiveChatSessionSelection(state, chatSessions),
     }));
+    await get().loadWorkflowSkills();
   },
   createChatSession: async (options) => {
     const now = Date.now();
@@ -1256,6 +1278,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
   restoreNow: (backupId) => restoreNowAction({ backupId, get, set }),
   sendChatMessage: async (content, attachments = [], promptInvocations = []) => {
     await sendChatMessageWithState({ content, attachments, promptInvocations, get, set });
+  },
+  ...createWorkflowTaskActions(get, set),
+  sendWorkflowTaskMessage: async (taskId, content) => {
+    await get().updateWorkflowTaskStatus(taskId, "running");
+    const sent = await sendChatMessageWithState({ content, get, set });
+    if (sent) {
+      await get().updateWorkflowTaskStatus(taskId, "completed");
+    } else {
+      await get().updateWorkflowTaskStatus(taskId, "waiting", "消息未发送，请检查模型配置后继续任务");
+    }
   },
   submitChatFollowUp: (content, attachments = [], promptInvocations = [], options = {}) =>
     submitChatFollowUpWithState({ content, attachments, promptInvocations, behavior: options.behavior, get, set }),

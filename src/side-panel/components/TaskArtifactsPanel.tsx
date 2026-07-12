@@ -1,0 +1,3 @@
+import type { WorkflowTask } from "../../shared/types";
+import { downloadWorkflowTaskMarkdown } from "../utils/workflowMarkdownExport";
+export function TaskArtifactsPanel({ task }: { task: WorkflowTask }) { return <section className="workflow-artifacts" aria-label="任务产物"><button type="button" onClick={() => downloadWorkflowTaskMarkdown(task)}>导出任务 Markdown</button>{task.artifacts.map((artifact) => <article key={artifact.id}><strong>{artifact.title}</strong><pre>{artifact.content}</pre><button type="button" onClick={() => void navigator.clipboard?.writeText(artifact.content)}>复制产物</button></article>)}</section>; }

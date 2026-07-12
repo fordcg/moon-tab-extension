@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { createNetworkToolAttachment, mergeCompatibleToolAttachments, normalizeToolAttachment } from "../toolArtifacts";
 import { normalizeTokenUsageEntries } from "../chat/tokenUsage";
+import { normalizeWorkflowTasks } from "../chat/workflowTasks";
 
 export async function saveModelConfig(model: ModelConfig): Promise<void> {
   await db.modelConfigs.put(model);
@@ -291,6 +292,7 @@ function normalizeChatSession(session: ChatSession): ChatSession {
     chatPreferenceOverrides: normalizeChatPreferenceOverrides(session.chatPreferenceOverrides),
     messages: session.messages.map(normalizeChatMessage),
     tokenUsageEntries: normalizeTokenUsageEntries(session.tokenUsageEntries),
+    workflowTasks: normalizeWorkflowTasks(session.workflowTasks),
   };
 }
 

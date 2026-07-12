@@ -1,0 +1,3 @@
+import type { WorkflowTask } from "../../shared/types";
+import { useAppStore } from "../state/appStore";
+export function TaskContextPanel({ task }: { task: WorkflowTask }) { const remove = useAppStore((state) => state.removeWorkflowContextItem); const toggle = useAppStore((state) => state.toggleWorkflowContextPinned); return <details className="workflow-context"><summary>上下文（{task.contextItems.length}）</summary>{task.contextItems.map((item) => <div key={item.id}><span>{item.title}：{item.summary}</span><button type="button" onClick={() => void toggle(task.id, item.id)}>{item.pinned ? "取消固定" : "固定"}</button><button type="button" onClick={() => void remove(task.id, item.id)}>移除</button></div>)}</details>; }
