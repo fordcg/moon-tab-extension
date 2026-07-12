@@ -641,7 +641,7 @@ git commit -m "功能：保存并启动侧栏本地技能"
 - Modify: `scripts/verify_ai_sidebar_quality.ps1`
 - Test: `tests/e2e/workflow-tasks.spec.ts`
 
-- [ ] **Step 1: 写出三个任务模板的 Playwright 闭环**
+- [x] **Step 1: 写出三个任务模板的 Playwright 闭环**
 
 ```ts
 test("网页研究任务从草稿创建、显示上下文并导出结论", async ({ extensionPage }) => {
@@ -655,17 +655,23 @@ test("网页研究任务从草稿创建、显示上下文并导出结论", async
 
 为 `开发调试` 覆盖 Network/工具步骤与调试报告，为 `网页自动化` 覆盖浏览器工具步骤与自动化报告。三个测试均使用本地假 OpenAI 服务和现有扩展 fixture，不能依赖远程模型或真实页面。
 
-- [ ] **Step 2: 运行 E2E 并确认先失败**
+- 实现：`tests/e2e/workflow-tasks.spec.ts` 覆盖 `网页研究`、`开发调试`、`网页自动化` 三类任务模板，使用 web-preview + IndexedDB seed + mock runtime port，不依赖远程模型或真实扩展后台。
+
+- [x] **Step 2: 运行 E2E 并确认先失败**
 
 Run: `npx playwright test tests/e2e/workflow-tasks.spec.ts`
 
 Expected: 在功能接入前 FAIL，缺少任务入口或任务卡片。
 
-- [ ] **Step 3: 补足稳定选择器和失败恢复断言**
+- 验证：首次执行 `npm run test:e2e -- tests/e2e/workflow-tasks.spec.ts` 先失败，暴露 IndexedDB 版本、任务卡 label 严格匹配和 web-preview `window.chrome` mock 问题；随后修正 seed、role selector 与 runtime mock。
+
+- [x] **Step 3: 补足稳定选择器和失败恢复断言**
 
 为任务入口、三种模板、任务卡片、上下文折叠、继续、取消和产物导出添加稳定 `aria-label`。在自动化测试中模拟 debugger 断开，断言任务进入 `waiting`、主聊天仍可发送普通消息、继续操作可见。
 
-- [ ] **Step 4: 纳入质量门并运行完整验证**
+- 实现：`WorkflowTaskCard` 增加任务卡 `aria-label`；测试使用 role 精确定位任务卡、验证上下文/步骤/产物/导出/保存技能入口，并模拟流式端口断开后任务保持 `waiting` 且普通聊天可继续发送。
+
+- [x] **Step 4: 纳入质量门并运行完整验证**
 
 在 `scripts/verify_ai_sidebar_quality.ps1` 的 Playwright 步骤后增加：
 
@@ -684,10 +690,16 @@ Run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_side
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- 验证：
+  - `npm test` PASS，98 个测试文件、1192 个用例通过。
+  - `npm run typecheck` PASS。
+  - `npm run test:e2e -- tests/e2e/workflow-tasks.spec.ts` PASS，4 个 workflow 任务用例通过。
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_quality.ps1` 退出码 0，最终输出 `AI sidebar quality checks passed.`；脚本内既有 smoke JSON 仍会打印部分 `ok:false` 细项，但当前脚本未将这些 JSON 字段作为失败退出条件。
+
+- [x] **Step 5: 提交**
 
 ```powershell
-git add tests/e2e/workflow-tasks.spec.ts scripts/verify_ai_sidebar_quality.ps1
+git add docs/superpowers/plans/2026-07-13-ai-sidebar-task-workflows.md playwright.config.ts scripts/verify_ai_sidebar_quality.ps1 src/side-panel/components/WorkflowTaskCard.tsx tests/e2e/workflow-tasks.spec.ts tests/unit/background/currentTimeTool.test.ts tests/unit/background/tavilyTool.test.ts tests/unit/shared/syncSnapshot.test.ts tests/unit/side-panel/App.test.tsx
 git commit -m "测试：覆盖侧栏任务工作流闭环"
 ```
 

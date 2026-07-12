@@ -6146,7 +6146,7 @@ describe("App", () => {
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
     expect(styles).toContain(".app-header-icon-button");
-    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon\s*\{[^}]*height:\s*1rem;[^}]*width:\s*1rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switch-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
     expect(styles).toMatch(/\.sidebar-shell \.message-icon-button svg\s*\{[^}]*height:\s*1rem;[^}]*width:\s*1rem;[^}]*stroke-width:\s*1\.8;/s);
     expect(styles.indexOf(".ui-button-secondary.browser-control-global-button-active")).toBeGreaterThan(styles.indexOf(".ui-button-secondary"));

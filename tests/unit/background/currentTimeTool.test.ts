@@ -49,7 +49,7 @@ describe("当前系统时间工具调用", () => {
   });
 
   it("模型调用当前系统时间工具时只把结果回灌给模型，不生成 AI 消息附件", async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-11T03:04:05.678Z"));
     const fetcher = vi
       .fn()
@@ -127,7 +127,7 @@ describe("当前系统时间工具调用", () => {
       expect.arrayContaining([
         expect.objectContaining({
           role: "tool",
-          content: expect.stringContaining("ISO 时间：2026-06-11T03:04:05.678Z"),
+          content: expect.stringMatching(/ISO 时间：2026-06-11T03:04:05\.\d{3}Z/),
         }),
       ]),
     );

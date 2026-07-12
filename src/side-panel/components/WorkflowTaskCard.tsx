@@ -45,7 +45,7 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
   };
 
   return (
-    <article className="workflow-task-card" data-status={task.status}>
+    <article className="workflow-task-card" data-status={task.status} aria-label={`任务：${task.title}`}>
       <div className="workflow-task-card-header">
         <span className="workflow-task-template">{formatTemplateLabel(task.template)}</span>
         <span className="workflow-task-status" data-status={task.status}>
