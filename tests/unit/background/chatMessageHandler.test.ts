@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleChatSendMessage } from "../../../src/background/modelRequestHandler";
 import type { ModelToolRegistryEntry } from "../../../src/shared/models/types";
 import type { ChatMessage, ModelConfig } from "../../../src/shared/types";
@@ -76,6 +76,10 @@ describe("聊天模型请求处理", () => {
     browserControlManagerMock.canExposeBrowserTool.mockReturnValue(true);
     browserControlManagerMock.takeSnapshot.mockReset();
     browserControlManagerMock.executeBrowserTool.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("OpenAI-compatible 成功时返回解析后的正文和思考过程", async () => {
@@ -2121,5 +2125,140 @@ describe("聊天模型请求处理", () => {
       ok: false,
       message: "模型请求失败，请稍后重试",
     });
+  });
+
+  it("模型请求 debug 日志包含会话定位上下文但不打印消息正文", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        choices: [{ message: { content: "AI 回复" } }],
+      }),
+    });
+    const sensitiveUserContent = "不要把这段正文打到日志里";
+
+    const result = await handleChatSendMessage(
+      {
+        type: "chat.send",
+        model: createModel(),
+        messages: [createMessage("user", sensitiveUserContent)],
+        stream: false,
+        enabledToolIds: ["system.current_time"],
+        debugContext: {
+          source: "side_panel_chat",
+          requestId: "chat-debug-1",
+          requestCreatedAt: 1783908184005,
+          requestCreatedAtIso: "2026-07-13T02:03:04.005Z",
+          sessionId: "session-debug",
+          sessionTitle: "日期为什么不一致",
+          sessionCreatedAt: 1783908000000,
+          sessionCreatedAtIso: "2026-07-13T02:00:00.000Z",
+          sessionUpdatedAtBeforeRequest: 1783908120000,
+          sessionUpdatedAtBeforeRequestIso: "2026-07-13T02:02:00.000Z",
+          sessionUpdatedAtAtRequest: 1783908184005,
+          sessionUpdatedAtAtRequestIso: "2026-07-13T02:03:04.005Z",
+          userMessageId: "message-debug-user",
+          userMessageCreatedAt: 1783908184005,
+          userMessageCreatedAtIso: "2026-07-13T02:03:04.005Z",
+          messageCountBeforeRequest: 2,
+          messageCountInSessionAtRequest: 3,
+          requestMessageCount: 4,
+          privateMode: false,
+          stream: false,
+          currentTimeToolEnabled: true,
+        },
+      } as Parameters<typeof handleChatSendMessage>[0],
+      fetcher,
+    );
+
+    expect(result).toMatchObject({ ok: true, content: "AI 回复" });
+    expect(debugSpy).toHaveBeenCalledWith(
+      "[chat-send] 准备发送模型请求",
+      expect.objectContaining({
+        debugContext: expect.objectContaining({
+          source: "side_panel_chat",
+          requestId: "chat-debug-1",
+          sessionId: "session-debug",
+          userMessageId: "message-debug-user",
+          currentTimeToolEnabled: true,
+        }),
+        model: expect.objectContaining({
+          id: "model-1",
+          modelId: "gpt-test",
+        }),
+        request: expect.objectContaining({
+          stream: false,
+          messageCount: 1,
+          enabledToolIds: ["system.current_time"],
+        }),
+      }),
+    );
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(sensitiveUserContent);
+  });
+
+  it("开关开启时会向本机日志服务发送 model_request 且不含密钥与正文敏感 key", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ choices: [{ message: { content: "AI 回复" } }] }),
+      })
+      .mockResolvedValue({ ok: true });
+
+    const result = await handleChatSendMessage(
+      {
+        type: "chat.send",
+        model: createModel({ apiKey: "sk-sensitive" }),
+        messages: [createMessage("user", "不要泄露")],
+        stream: false,
+        workspaceRequestLoggingEnabled: true,
+        debugContext: {
+          source: "side_panel_chat",
+          requestId: "chat-debug-file-1",
+          requestCreatedAt: 1783908184005,
+          requestCreatedAtIso: "2026-07-13T02:03:04.005Z",
+          sessionId: "session-debug-file",
+        },
+        requestLogging: {
+          sidebarState: {
+            mode: "full_access",
+            enabledToolIds: ["system.current_time"],
+            systemPrompt: "你是网页助手",
+          },
+        },
+      } as any,
+      fetchMock as any,
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    await vi.waitFor(() => {
+      const logCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/chat-request-logs"));
+      expect(logCalls.length).toBeGreaterThan(0);
+    });
+    const bodies = fetchMock.mock.calls
+      .filter(([url]) => String(url).includes("/chat-request-logs"))
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+    expect(bodies.some((b) => b.type === "session_start")).toBe(true);
+    expect(bodies.some((b) => b.type === "model_request")).toBe(true);
+    expect(bodies.some((b) => b.type === "model_response" || b.type === "session_end")).toBe(true);
+    expect(JSON.stringify(bodies)).not.toContain("sk-sensitive");
+  });
+
+  it("开关关闭时不发送工作区请求日志", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ choices: [{ message: { content: "AI 回复" } }] }),
+    });
+    await handleChatSendMessage(
+      {
+        type: "chat.send",
+        model: createModel(),
+        messages: [createMessage("user", "hi")],
+        stream: false,
+        workspaceRequestLoggingEnabled: false,
+        debugContext: { source: "side_panel_chat", requestId: "off-1", requestCreatedAt: 1, requestCreatedAtIso: "x" },
+      } as any,
+      fetchMock as any,
+    );
+    expect(fetchMock.mock.calls.every(([url]) => !String(url).includes("/chat-request-logs"))).toBe(true);
   });
 });
