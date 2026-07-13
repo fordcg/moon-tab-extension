@@ -17,7 +17,6 @@ interface ChatPanelProps {
   settingsInitialTab: SettingsTab;
   onDrawerOpenChange: (open: boolean) => void;
   onRestoreDrawerFocus: () => void;
-  onOpenAgentTools: () => void;
   onOpenHistoryDrawer: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onReturnSettingsToHistory: () => void;
@@ -32,7 +31,6 @@ export function ChatPanel({
   settingsInitialTab,
   onDrawerOpenChange,
   onRestoreDrawerFocus,
-  onOpenAgentTools,
   onOpenHistoryDrawer,
   onOpenSettings,
   onReturnSettingsToHistory,
@@ -230,7 +228,6 @@ export function ChatPanel({
         settingsInitialTab={settingsInitialTab}
         onOpenChange={onDrawerOpenChange}
         onRestoreFocus={onRestoreDrawerFocus}
-        onOpenAgentTools={onOpenAgentTools}
         onOpenSettings={onOpenSettings}
         onReturnToHistory={onReturnSettingsToHistory}
       />

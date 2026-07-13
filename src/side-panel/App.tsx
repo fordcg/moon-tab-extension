@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { AgentToolsDialog } from "./components/AgentToolsDialog";
 import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
 import type { SettingsTab } from "./components/SettingsPanel";
@@ -25,7 +24,6 @@ type SidePanelDrawerPage = "history" | "settings";
 type SidePanelDrawerOrigin = "header" | "history";
 
 export function App() {
-  const [agentToolsOpen, setAgentToolsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("channels");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerPage, setDrawerPage] = useState<SidePanelDrawerPage>("history");
@@ -96,7 +94,6 @@ export function App() {
 
   const openSettings = (tab: SettingsTab = "channels", origin: SidePanelDrawerOrigin = drawerOpen ? "history" : "header") => {
     rememberDrawerTrigger();
-    setAgentToolsOpen(false);
     setSettingsInitialTab(tab);
     setDrawerOrigin(origin);
     setDrawerPage("settings");
@@ -104,12 +101,6 @@ export function App() {
   };
 
   const closeDrawer = () => setDrawerOpen(false);
-
-  const openAgentTools = () => {
-    setDrawerOpen(false);
-    setDrawerPage("history");
-    setAgentToolsOpen(true);
-  };
 
   const returnSettingsToHistory = () => {
     setDrawerOrigin("history");
@@ -239,11 +230,9 @@ export function App() {
           onOpenHistoryDrawer={openHistoryDrawer}
           onOpenSettings={openSettings}
           onReturnSettingsToHistory={returnSettingsToHistory}
-          onOpenAgentTools={openAgentTools}
           onToggleHistoryPanel={handleToggleHistoryPanel}
         />
       </section>
-      <AgentToolsDialog open={agentToolsOpen} onOpenChange={setAgentToolsOpen} />
       {!drawerOpen ? <NotificationHost /> : null}
     </main>
   );

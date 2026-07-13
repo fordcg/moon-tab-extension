@@ -1089,7 +1089,7 @@ describe("App", () => {
     expect(historyDialog).toHaveClass("history-drawer");
     expect(within(historyDialog).queryByRole("button", { name: "关闭历史记录" })).not.toBeInTheDocument();
     expect(within(historyDialog).queryByRole("button", { name: "浏览器控制" })).not.toBeInTheDocument();
-    expect(within(historyDialog).getByRole("button", { name: "工具和 MCP" })).toHaveClass("sidepanel-drawer-action");
+    expect(within(historyDialog).queryByRole("button", { name: "工具和 MCP" })).not.toBeInTheDocument();
     expect(within(historyDialog).getByRole("button", { name: "设置" })).toHaveClass("sidepanel-drawer-action", "sidepanel-drawer-action-chevron");
     expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*right:\s*var\(--sidepanel-popover-right\);/s);
     expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*top:\s*3\.875rem;/s);
@@ -1835,8 +1835,8 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "MCP 工具" }));
-    expect(screen.getByRole("heading", { name: "MCP 工具" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
+    expect(screen.getByRole("heading", { name: "工具和 MCP" })).toBeInTheDocument();
     expect(screen.getByText("MySQL")).toBeInTheDocument();
     expect(screen.queryByText("query")).not.toBeInTheDocument();
 
@@ -1932,7 +1932,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "MCP 工具" }));
+    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
 
     expect(await screen.findByText("内置工具健康")).toBeInTheDocument();
     expect(screen.getByText("Network 请求列表")).toBeInTheDocument();
@@ -1989,16 +1989,18 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "MCP 工具" }));
+    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
 
     expect(screen.getByRole("checkbox", { name: "禁用 MCP Server MySQL" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "刷新工具" })).toBeEnabled();
+    const serverCard = screen.getByText("MySQL").closest(".mcp-server-card");
+    expect(serverCard).not.toBeNull();
+    expect(within(serverCard as HTMLElement).getByRole("button", { name: "刷新工具" })).toBeEnabled();
 
     await user.click(screen.getByRole("checkbox", { name: "禁用 MCP Server MySQL" }));
 
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "启用 MCP Server MySQL" })).not.toBeChecked());
     expect(screen.getByText("状态：已禁用 · 已发现工具：1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "刷新工具" })).toBeDisabled();
+    expect(within(serverCard as HTMLElement).getByRole("button", { name: "刷新工具" })).toBeDisabled();
     await expect(getAppSetting("chatPreferences")).resolves.toMatchObject({ enabledToolIds: [] });
 
     registeredModelToolsMock.tools = [];
@@ -2033,7 +2035,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "MCP 工具" }));
+    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
 
     await user.click(screen.getByRole("button", { name: "删除" }));
     expect(confirmSpy).toHaveBeenCalledTimes(1);
@@ -5851,7 +5853,7 @@ describe("App", () => {
     expect(toolsToggle).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("历史抽屉里的工具和 MCP 打开旧版独立工具弹窗而不是设置页", async () => {
+  it("设置页提供工具和 MCP 标签，不再弹出独立工具窗口", async () => {
     const user = userEvent.setup();
     const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
       if (message.type === "agentTools.getStatus" || message.type === "agentTools.refreshMcp") {
@@ -5890,32 +5892,25 @@ describe("App", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "历史" }));
-    await user.click(screen.getByRole("button", { name: "工具和 MCP" }));
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "工具和 MCP" });
-    expect(dialog).toHaveClass("sidepanel-agent-tools-dialog");
-    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toMatch(/\.sidepanel-agent-tools-dialog\s*\{[^}]*max-height:\s*min\(36rem, calc\(100dvh - 4\.5rem\)\);/s);
-    expect(styles).toMatch(/\.sidepanel-agent-tools-body\s*\{[^}]*flex:\s*1 1 auto;[^}]*overflow-y:\s*auto;/s);
-    expect(document.querySelector(".settings-dialog")).not.toBeInTheDocument();
-    expect(dialog).toHaveTextContent("MCP 已连接");
-    expect(dialog).toHaveTextContent("Grok 搜索");
-    expect(dialog).toHaveTextContent("take_snapshot");
-    expect(dialog).toHaveTextContent("Grok 搜索预设配置");
-    expect(screen.getByLabelText("Grok API Key")).toHaveAttribute("placeholder", "xai-... / gsk-...");
-    expect(screen.getByDisplayValue("https://api.x.ai/v1")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("grok-4.20-multi-agent-xhigh")).toBeInTheDocument();
-    expect(dialog.querySelector(".sidepanel-agent-tools-switch-control")).toBeInTheDocument();
+    const settingsDialog = await screen.findByRole("dialog", { name: "设置" });
+    expect(settingsDialog).toHaveClass("settings-dialog");
+    expect(screen.queryByRole("dialog", { name: "工具和 MCP" })).not.toBeInTheDocument();
+    expect(document.querySelector(".sidepanel-agent-tools-dialog")).not.toBeInTheDocument();
+    expect(within(settingsDialog).getByRole("tab", { name: "工具和 MCP" })).toHaveAttribute("aria-selected", "true");
+    expect(within(settingsDialog).getByRole("heading", { name: "工具和 MCP" })).toBeInTheDocument();
+    expect(within(settingsDialog).getByText("MCP 已连接")).toBeInTheDocument();
+    expect(within(settingsDialog).getByText("Grok 搜索预设配置")).toBeInTheDocument();
+    expect(within(settingsDialog).getByLabelText("Grok API Key")).toHaveAttribute("placeholder", "xai-... / gsk-...");
+    expect(within(settingsDialog).getByDisplayValue("https://api.x.ai/v1")).toBeInTheDocument();
+    expect(within(settingsDialog).getByDisplayValue("grok-4.20-multi-agent-xhigh")).toBeInTheDocument();
     expect(sendMessage).toHaveBeenCalledWith({ type: "agentTools.getStatus" }, expect.any(Function));
 
-    await user.click(screen.getByRole("button", { name: "刷新工具" }));
+    await user.click(within(settingsDialog).getAllByRole("button", { name: "刷新工具" })[0]);
     expect(sendMessage).toHaveBeenCalledWith({ type: "agentTools.refreshMcp" }, expect.any(Function));
     expect(sendMessage).not.toHaveBeenCalledWith({ type: "agentTools.refreshMcpTools" }, expect.any(Function));
-
-    await user.keyboard("{Escape}");
-
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "工具和 MCP" })).not.toBeInTheDocument());
   });
 
   it("非流式聊天请求携带当前选中标签页 ID", async () => {
