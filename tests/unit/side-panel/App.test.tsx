@@ -6133,7 +6133,7 @@ describe("App", () => {
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch\[aria-checked="true"\]::before,\s*\.sidebar-shell \.composer-switches \.composer-switch\[aria-pressed="true"\]::before\s*\{(?=[^}]*height:\s*0\.75rem;)(?=[^}]*width:\s*0\.75rem;)(?=[^}]*order:\s*3;)(?=[^}]*margin-left:\s*auto;)[^}]*}/s);
   });
 
-  it("工具弹窗内提供浏览器控制开关并更新运行态", async () => {
+  it("工具架提供浏览器控制开关并更新运行态", async () => {
     const user = userEvent.setup();
     const setBrowserControlEnabled = vi.fn(async (enabled: boolean) => {
       useAppStore.setState({ browserControlEnabled: enabled });
@@ -6146,38 +6146,25 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(screen.queryByRole("button", { name: "浏览器控制" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "设置" })).toHaveClass("ui-button-secondary", "app-header-icon-button");
     expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: /浏览器控制/ })).toHaveAttribute("aria-checked", "false");
 
     await user.click(screen.getByRole("button", { name: "工具" }));
-    const toolCallingButton = screen.getByRole("button", { name: /工具调用：/ });
-    await user.click(toolCallingButton);
 
-    const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
-    const browserControlButton = within(toolDialog).getByRole("button", { name: "浏览器控制" });
-    expect(browserControlButton).toHaveClass("composer-tool-menu-browser-switch");
-    expect(browserControlButton).toHaveAttribute("aria-pressed", "false");
-    expect(browserControlButton).toHaveAttribute("title", expect.stringContaining("Chrome 调试协议"));
-    expect(within(toolDialog).queryByRole("group", { name: "浏览器自动化模式" })).not.toBeInTheDocument();
-    expect(within(toolDialog).queryByText("开启后才能使用浏览器自动化工具，并选择普通/受控增强/完全访问模式。")).not.toBeInTheDocument();
-    expect(within(toolDialog).getByRole("button", { name: "启用" })).toBeInTheDocument();
-    expect(within(toolDialog).getByRole("button", { name: "启用全部" })).toBeInTheDocument();
-    expect(within(toolDialog).getByRole("button", { name: "关闭" })).toBeInTheDocument();
+    const browserControlSwitch = screen.getByRole("switch", { name: /浏览器控制/ });
+    expect(browserControlSwitch).toHaveClass("composer-switch");
+    expect(browserControlSwitch).toHaveAttribute("aria-checked", "false");
+    expect(browserControlSwitch).toHaveAttribute("data-label", "浏览器控制");
+    expect(browserControlSwitch).toHaveAttribute("title", expect.stringContaining("Chrome 调试协议"));
+    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toBeDisabled();
+    expect(screen.queryByRole("dialog", { name: "工具调用设置" })).not.toBeInTheDocument();
 
-    await user.click(browserControlButton);
+    await user.click(browserControlSwitch);
 
     expect(setBrowserControlEnabled).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(within(toolDialog).getByRole("button", { name: "浏览器控制" })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(screen.getByRole("switch", { name: /浏览器控制/ })).toHaveAttribute("aria-checked", "true"));
     expect(screen.getByRole("button", { name: "浏览器自动化模式" })).not.toBeDisabled();
-    expect(within(toolDialog).queryByRole("group", { name: "浏览器自动化模式" })).not.toBeInTheDocument();
-
-    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toContain(".composer-tool-menu-browser-switch");
-    expect(styles).not.toContain(".composer-tool-menu-browser-control");
-    expect(styles).not.toContain(".composer-tool-menu-mode-chip");
-    expect(styles).toContain(".composer-mode-trigger");
-    expect(styles).toContain(".composer-mode-menu-header");
   });
 
   it("普通侧边栏顶部操作区提供打开悬浮助手按钮并发送 runtime 消息", async () => {

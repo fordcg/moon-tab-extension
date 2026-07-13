@@ -27,6 +27,7 @@ const SWITCH_ICON_PATHS = {
   appendContext: "M7 7h10M12 7v10M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z",
   stream: "M13 2 5 14h6l-1 8 8-12h-6l1-8Z",
   toolCalling: "M14.7 6.3a4 4 0 0 0-5 5L4 17v3h3l5.7-5.7a4 4 0 0 0 5-5l-2.6 2.6-3-3 2.6-2.6Z",
+  browserControl: "M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2ZM3 9h18M12 12v4M10 14h4",
   extractText: "M6 4h12M6 8h12M6 12h8M6 16h12M6 20h8",
   extractAll: "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8M8 13h8M8 17h5",
 } as const;
@@ -90,7 +91,7 @@ function ComposerSwitch({ ariaLabel, checked, disabled, icon, label, onToggle }:
       aria-checked={checked}
       data-label={label}
       disabled={disabled}
-      title={label}
+      title={ariaLabel}
       onClick={onToggle}
     >
       <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -677,7 +678,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
 
   const contextModeLabel = contextMode === "all" ? "提取所有" : "提取文本";
   const toolCallingLabel = `工具调用：${toolCallingEnabled ? "已启用" : "已关闭"}`;
-  const browserControlLabel = browserControlEnabled ? "浏览器控制已开启" : "浏览器控制已关闭";
   const browserControlTitle = browserControlEnabled
     ? "浏览器控制已开启。关闭会立即断开调试会话。"
     : "浏览器控制已关闭。开启后扩展会通过 Chrome 调试协议连接当前普通网页，浏览器会显示正在调试提示。";
@@ -916,6 +916,13 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             >
               <span aria-hidden="true">▣</span>
             </label>
+            <ComposerSwitch
+              ariaLabel={browserControlTitle}
+              checked={browserControlEnabled}
+              icon="browserControl"
+              label="浏览器控制"
+              onToggle={() => void setBrowserControlEnabled(!browserControlEnabled)}
+            />
             <div className="composer-mode-menu-wrap">
               <button
                 ref={modeMenuButtonRef}
@@ -998,18 +1005,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   aria-label="工具调用设置"
                   style={toolMenuPosition ? { left: toolMenuPosition.left, top: toolMenuPosition.top } : undefined}
                 >
-                  <button
-                    className={browserControlEnabled ? "composer-tool-menu-browser-switch is-active" : "composer-tool-menu-browser-switch"}
-                    type="button"
-                    aria-label="浏览器控制"
-                    aria-pressed={browserControlEnabled}
-                    title={browserControlTitle}
-                    onClick={() => void setBrowserControlEnabled(!browserControlEnabled)}
-                  >
-                    <span className="composer-tool-menu-browser-switch-label">浏览器控制</span>
-                    <span className="composer-tool-menu-browser-switch-status">{browserControlLabel}</span>
-                    <span className="composer-tool-menu-browser-switch-toggle" aria-hidden="true" />
-                  </button>
                   <div className="composer-tool-menu-actions">
                     <button
                       className="composer-tool-menu-action"
@@ -1121,7 +1116,25 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           </button>
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
           <div className="workflow-create-wrap">
-            <button className="composer-switch" type="button" aria-label="新建任务" aria-haspopup="menu" aria-expanded={workflowMenuOpen} disabled={!input.trim()} onClick={() => setWorkflowMenuOpen((value) => !value)}>任务</button>
+            <button
+              className="composer-switch workflow-create-button"
+              type="button"
+              aria-label="新建任务"
+              aria-haspopup="menu"
+              aria-expanded={workflowMenuOpen}
+              data-label="任务"
+              title="新建任务"
+              disabled={!input.trim()}
+              onClick={() => setWorkflowMenuOpen((value) => !value)}
+            >
+              <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6h11M9 12h11M9 18h11" />
+                <path d="m4 6 1.2 1.2L7.5 5" />
+                <path d="m4 12 1.2 1.2L7.5 11" />
+                <path d="m4 18 1.2 1.2L7.5 17" />
+              </svg>
+              <span className="workflow-create-button-label">任务</span>
+            </button>
             {workflowMenuOpen ? <WorkflowTemplateMenu onSelect={(template) => void createWorkflow(template)} /> : null}
           </div>
           <ModelSelector />
