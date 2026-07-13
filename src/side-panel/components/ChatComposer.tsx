@@ -116,8 +116,10 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [stopStatusText, setStopStatusText] = useState("");
   const [toolShelfOpen, setToolShelfOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [followUpQueueOpen, setFollowUpQueueOpen] = useState(false);
   const [toolMenuPosition, setToolMenuPosition] = useState<{ left: number; top: number } | undefined>();
+  const [modeMenuPosition, setModeMenuPosition] = useState<{ left: number; top: number } | undefined>();
   const [composing, setComposing] = useState(false);
   const [workflowMenuOpen, setWorkflowMenuOpen] = useState(false);
   const imageInputId = useId();
@@ -127,6 +129,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const imagePreviewCloseRef = useRef<HTMLButtonElement>(null);
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const toolMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeMenuRef = useRef<HTMLDivElement | null>(null);
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
   const sendShortcut = useAppStore((state) => state.chatPreferences.sendShortcut);
   const followUpBehavior = useAppStore((state) => state.chatPreferences.followUpBehavior);
@@ -306,6 +310,40 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [toolMenuOpen]);
 
   useEffect(() => {
+    if (!modeMenuOpen) {
+      return undefined;
+    }
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (
+        modeMenuRef.current?.contains(event.target as Node) ||
+        modeMenuButtonRef.current?.contains(event.target as Node)
+      ) {
+        return;
+      }
+
+      setModeMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setModeMenuOpen(false);
+      }
+    };
+
+    updateModeMenuPosition();
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updateModeMenuPosition);
+    window.addEventListener("scroll", updateModeMenuPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updateModeMenuPosition);
+      window.removeEventListener("scroll", updateModeMenuPosition, true);
+    };
+  }, [modeMenuOpen]);
+
+  useEffect(() => {
     if (!toolShelfOpen) {
       return undefined;
     }
@@ -315,19 +353,22 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       if (!(target instanceof Node)) {
         setToolShelfOpen(false);
         setToolMenuOpen(false);
+        setModeMenuOpen(false);
         return;
       }
-      if (target instanceof Element && target.closest(".composer-switches, .sidepanel-tools-toggle, .composer-tool-menu")) {
+      if (target instanceof Element && target.closest(".composer-switches, .sidepanel-tools-toggle, .composer-tool-menu, .composer-mode-menu")) {
         return;
       }
 
       setToolShelfOpen(false);
       setToolMenuOpen(false);
+      setModeMenuOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setToolShelfOpen(false);
         setToolMenuOpen(false);
+        setModeMenuOpen(false);
       }
     };
 
@@ -582,14 +623,40 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     });
   };
 
+  const updateModeMenuPosition = () => {
+    const rect = modeMenuButtonRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    const menuWidth = Math.min(window.innerWidth - 24, 272);
+    const menuHeight = Math.min(window.innerHeight - 24, 256);
+    const preferredLeft = rect.left;
+    const preferredTop = rect.top - 12;
+    setModeMenuPosition({
+      left: Math.max(12, Math.min(preferredLeft, window.innerWidth - menuWidth - 12)),
+      top: Math.max(12, Math.min(preferredTop, window.innerHeight - menuHeight - 12)),
+    });
+  };
+
   const toggleToolMenu = () => {
     if (!toolMenuOpen) {
+      setModeMenuOpen(false);
       updateToolMenuPosition();
     }
     setToolMenuOpen((value) => !value);
   };
 
+  const toggleModeMenu = () => {
+    if (!modeMenuOpen) {
+      setToolMenuOpen(false);
+      updateModeMenuPosition();
+    }
+    setModeMenuOpen((value) => !value);
+  };
+
   const toggleToolShelf = () => {
+    setModeMenuOpen(false);
     setToolMenuOpen(false);
     setContextDialogOpen(false);
     setToolShelfOpen((open) => !open);
@@ -598,6 +665,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const toggleContextDialog = () => {
     setToolShelfOpen(false);
     setToolMenuOpen(false);
+    setModeMenuOpen(false);
     if (contextDialogOpen) {
       setContextDialogOpen(false);
       return;
@@ -613,6 +681,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const browserControlTitle = browserControlEnabled
     ? "浏览器控制已开启。关闭会立即断开调试会话。"
     : "浏览器控制已关闭。开启后扩展会通过 Chrome 调试协议连接当前普通网页，浏览器会显示正在调试提示。";
+  const browserAutomationModeOption = BROWSER_AUTOMATION_MODE_OPTIONS.find((option) => option.mode === effectiveBrowserAutomationMode) ?? BROWSER_AUTOMATION_MODE_OPTIONS[0];
+  const browserAutomationModeLabel = browserAutomationModeOption.label;
   const filteredPromptTemplates = filterPromptTemplates(promptTemplates, slashQuery);
   const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
   const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
@@ -846,6 +916,63 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             >
               <span aria-hidden="true">▣</span>
             </label>
+            <div className="composer-mode-menu-wrap">
+              <button
+                ref={modeMenuButtonRef}
+                className={`composer-mode-trigger composer-mode-trigger-${effectiveBrowserAutomationMode}`}
+                type="button"
+                aria-label="浏览器自动化模式"
+                aria-haspopup="listbox"
+                aria-expanded={modeMenuOpen}
+                disabled={!browserControlEnabled}
+                title="浏览器自动化模式"
+                onClick={toggleModeMenu}
+              >
+                <svg className="composer-switch-icon composer-mode-trigger-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d={browserAutomationModeOption.iconPath} />
+                </svg>
+                <span className="composer-mode-trigger-label">{browserAutomationModeLabel}</span>
+                <span className="composer-mode-chevron" aria-hidden="true" />
+              </button>
+              {modeMenuOpen && browserControlEnabled ? (
+                <div
+                  ref={modeMenuRef}
+                  className="composer-mode-menu"
+                  role="listbox"
+                  aria-label="浏览器自动化模式"
+                  style={modeMenuPosition ? { left: modeMenuPosition.left, top: modeMenuPosition.top } : undefined}
+                >
+                  <div className="composer-mode-menu-header">
+                    <span>选择浏览器自动化模式</span>
+                    <span>本轮生效</span>
+                  </div>
+                  {BROWSER_AUTOMATION_MODE_OPTIONS.map((option) => (
+                    <button
+                      key={option.mode}
+                      className={`composer-mode-option composer-mode-option-${option.mode}`}
+                      type="button"
+                      role="option"
+                      aria-selected={option.mode === effectiveBrowserAutomationMode}
+                      onClick={() => {
+                        setModeMenuOpen(false);
+                        void setBrowserAutomationMode(option.mode);
+                      }}
+                    >
+                      <svg className="composer-mode-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d={option.iconPath} />
+                      </svg>
+                      <span className="composer-mode-option-copy">
+                        <span className="composer-mode-option-title">{option.label}</span>
+                        <span className="composer-mode-option-description">{option.description}</span>
+                      </span>
+                      <span className="composer-mode-option-check" aria-hidden="true">
+                        {option.mode === effectiveBrowserAutomationMode ? "✓" : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <ComposerSwitch ariaLabel="流式响应" checked={streamMode} icon="stream" label="流式响应" onToggle={() => setStreamMode(!streamMode)} />
             <div className="composer-tool-menu-wrap" ref={toolMenuRef}>
               <button
@@ -871,51 +998,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   aria-label="工具调用设置"
                   style={toolMenuPosition ? { left: toolMenuPosition.left, top: toolMenuPosition.top } : undefined}
                 >
-                  <div className="composer-tool-menu-browser-control">
-                    <button
-                      className={
-                        browserControlEnabled
-                          ? "composer-tool-menu-browser-control-toggle is-active"
-                          : "composer-tool-menu-browser-control-toggle"
-                      }
-                      type="button"
-                      aria-label="浏览器控制"
-                      aria-pressed={browserControlEnabled}
-                      title={browserControlTitle}
-                      onClick={() => void setBrowserControlEnabled(!browserControlEnabled)}
-                    >
-                      <svg className="composer-tool-menu-browser-control-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
-                        <path d="M3 9h18M12 12v4M10 14h4" />
-                      </svg>
-                      <span className="composer-tool-menu-browser-control-copy">
-                        <span className="composer-tool-menu-browser-control-title">浏览器控制</span>
-                        <span className="composer-tool-menu-browser-control-status">{browserControlLabel}</span>
-                      </span>
-                    </button>
-                    {browserControlEnabled ? (
-                      <div className="composer-tool-menu-mode-row" role="group" aria-label="浏览器自动化模式">
-                        {BROWSER_AUTOMATION_MODE_OPTIONS.map((option) => (
-                          <button
-                            key={option.mode}
-                            className={
-                              option.mode === effectiveBrowserAutomationMode
-                                ? `composer-tool-menu-mode-chip composer-tool-menu-mode-chip-${option.mode} is-active`
-                                : `composer-tool-menu-mode-chip composer-tool-menu-mode-chip-${option.mode}`
-                            }
-                            type="button"
-                            aria-pressed={option.mode === effectiveBrowserAutomationMode}
-                            title={option.description}
-                            onClick={() => void setBrowserAutomationMode(option.mode)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="composer-tool-menu-group-hint">开启后才能使用浏览器自动化工具，并选择普通/受控增强/完全访问模式。</p>
-                    )}
-                  </div>
+                  <button
+                    className={browserControlEnabled ? "composer-tool-menu-browser-switch is-active" : "composer-tool-menu-browser-switch"}
+                    type="button"
+                    aria-label="浏览器控制"
+                    aria-pressed={browserControlEnabled}
+                    title={browserControlTitle}
+                    onClick={() => void setBrowserControlEnabled(!browserControlEnabled)}
+                  >
+                    <span className="composer-tool-menu-browser-switch-label">浏览器控制</span>
+                    <span className="composer-tool-menu-browser-switch-status">{browserControlLabel}</span>
+                    <span className="composer-tool-menu-browser-switch-toggle" aria-hidden="true" />
+                  </button>
                   <div className="composer-tool-menu-actions">
                     <button
                       className="composer-tool-menu-action"
@@ -958,9 +1052,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                             const debuggerRuntime = tool.toolClassification ? isDebuggerRuntimeRequirement(tool.toolClassification.runtime) : false;
                             const active = runtimeAvailable && enabledToolIds.includes(tool.id);
                             const disabled = !runtimeAvailable;
-                            const toolDescription = !runtimeAvailable
-                              ? "需开启浏览器控制后才能使用此工具。"
-                              : (tool.description?.trim() || "暂无工具介绍。");
                             return (
                               <button
                                 key={tool.id}
@@ -975,13 +1066,15 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                                 }
                                 type="button"
                                 aria-pressed={active}
-                                aria-label={toolDisplayName}
-                                title={toolDescription}
+                                aria-label={`${toolDisplayName} ${tool.description ?? ""}`.trim()}
+                                title={tool.description?.trim() || (!runtimeAvailable ? "需开启浏览器控制后才能使用此工具。" : undefined)}
                                 disabled={disabled}
                                 onClick={() => handleToolToggle(tool.id, !active)}
                               >
                                 <span className="composer-tool-menu-item-copy">
                                   <span className="composer-tool-menu-item-name">{toolDisplayName}</span>
+                                  {!runtimeAvailable ? <span className="composer-tool-menu-item-description">需开启浏览器控制</span> : null}
+                                  {tool.description ? <span className="composer-tool-menu-item-description">{tool.description}</span> : null}
                                 </span>
                                 {active ? (
                                   <span className="composer-tool-menu-item-check" aria-hidden="true">

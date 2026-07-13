@@ -1143,8 +1143,8 @@ describe("App", () => {
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(document.querySelector(".sidepanel-drawer-overlay")).toBe(overlay);
 
-    const drawerPages = drawer.querySelector<HTMLElement>(".sidepanel-drawer-pages");
-    fireEvent.animationEnd(drawerPages as HTMLElement, { animationName: "sidepanel-drawer-track-history-to-settings" });
+    const enteringSettings = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-settings");
+    fireEvent.animationEnd(enteringSettings as HTMLElement, { animationName: "sidepanel-slide-in-from-right" });
 
     await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-page", "settings"));
     await waitFor(() => expect(drawer).not.toHaveAttribute("data-sidepanel-drawer-transition"));
@@ -1154,7 +1154,8 @@ describe("App", () => {
 
     await user.click(backButton);
     await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history"));
-    fireEvent.animationEnd(drawerPages as HTMLElement, { animationName: "sidepanel-drawer-track-settings-to-history" });
+    const enteringHistory = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-history");
+    fireEvent.animationEnd(enteringHistory as HTMLElement, { animationName: "sidepanel-slide-in-from-left" });
 
     await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-page", "history"));
     await waitFor(() => expect(drawer).not.toHaveAttribute("data-sidepanel-drawer-transition"));
@@ -1162,8 +1163,12 @@ describe("App", () => {
     expect(styles).toContain(".sidepanel-drawer-overlay");
     expect(styles).toContain(".sidepanel-drawer-dialog.is-history-to-settings");
     expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history");
-    expect(styles).toContain("@keyframes sidepanel-drawer-track-history-to-settings");
-    expect(styles).toContain("@keyframes sidepanel-drawer-track-settings-to-history");
+    expect(styles).toContain("sidepanel-slide-in-from-right");
+    expect(styles).toContain("sidepanel-slide-out-left");
+    expect(styles).toContain("sidepanel-slide-in-from-left");
+    expect(styles).toContain("sidepanel-slide-out-right");
+    expect(styles).not.toContain("@keyframes sidepanel-drawer-track-history-to-settings");
+    expect(styles).not.toContain("@keyframes sidepanel-drawer-track-settings-to-history");
     expect(styles).not.toContain(".history-drawer.is-settings-transition");
     expect(styles).not.toContain(".settings-dialog.is-slide-in-from-right");
     expect(styles).not.toContain(".settings-main-layout.settings-dialog-layer");
@@ -1177,8 +1182,8 @@ describe("App", () => {
     await user.click(trigger);
     const drawer = screen.getByRole("dialog", { name: "历史记录" });
     await user.click(within(drawer).getByRole("button", { name: "设置" }));
-    const drawerPages = drawer.querySelector<HTMLElement>(".sidepanel-drawer-pages");
-    fireEvent.animationEnd(drawerPages as HTMLElement, { animationName: "sidepanel-drawer-track-history-to-settings" });
+    const enteringSettings = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-settings");
+    fireEvent.animationEnd(enteringSettings as HTMLElement, { animationName: "sidepanel-slide-in-from-right" });
     await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-page", "settings"));
 
     await user.keyboard("{Escape}");
@@ -6122,7 +6127,7 @@ describe("App", () => {
     expect(styles).toMatch(/\.sidebar-shell \.chat-composer\.is-tools-open \.composer-switches\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\);)(?=[^}]*transform:\s*none;)[^}]*}/s);
     expect(styles).toMatch(/\.composer-tool-menu\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\) !important;)(?=[^}]*overflow-y:\s*auto !important;)[^}]*}/s);
     expect(styles).toMatch(/\.composer-tool-menu-item-check\s*\{(?=[^}]*height:\s*0\.75rem !important;)(?=[^}]*width:\s*0\.75rem !important;)[^}]*}/s);
-    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch,\s*\.sidebar-shell \.composer-switches \.image-upload-button\s*\{(?=[^}]*display:\s*flex !important;)(?=[^}]*height:\s*2\.25rem;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch,\s*\.sidebar-shell \.composer-switches \.composer-mode-trigger,\s*\.sidebar-shell \.composer-switches \.image-upload-button\s*\{(?=[^}]*display:\s*flex !important;)(?=[^}]*height:\s*2\.25rem;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch::after\s*\{(?=[^}]*content:\s*attr\(data-label\);)(?=[^}]*flex:\s*1 1 auto;)(?=[^}]*order:\s*2;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch-icon,\s*\.sidebar-shell \.composer-switches \.image-upload-button::before\s*\{(?=[^}]*order:\s*1;)(?=[^}]*width:\s*1\.25rem;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch\[aria-checked="true"\]::before,\s*\.sidebar-shell \.composer-switches \.composer-switch\[aria-pressed="true"\]::before\s*\{(?=[^}]*height:\s*0\.75rem;)(?=[^}]*width:\s*0\.75rem;)(?=[^}]*order:\s*3;)(?=[^}]*margin-left:\s*auto;)[^}]*}/s);
@@ -6143,8 +6148,7 @@ describe("App", () => {
 
     expect(screen.queryByRole("button", { name: "浏览器控制" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "设置" })).toHaveClass("ui-button-secondary", "app-header-icon-button");
-    expect(screen.queryByRole("checkbox", { name: "启用浏览器自动化控制" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "运行时只读分析" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "工具" }));
     const toolCallingButton = screen.getByRole("button", { name: /工具调用：/ });
@@ -6152,25 +6156,28 @@ describe("App", () => {
 
     const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
     const browserControlButton = within(toolDialog).getByRole("button", { name: "浏览器控制" });
+    expect(browserControlButton).toHaveClass("composer-tool-menu-browser-switch");
     expect(browserControlButton).toHaveAttribute("aria-pressed", "false");
     expect(browserControlButton).toHaveAttribute("title", expect.stringContaining("Chrome 调试协议"));
-    expect(within(toolDialog).getByText("开启后才能使用浏览器自动化工具，并选择普通/受控增强/完全访问模式。")).toBeInTheDocument();
     expect(within(toolDialog).queryByRole("group", { name: "浏览器自动化模式" })).not.toBeInTheDocument();
+    expect(within(toolDialog).queryByText("开启后才能使用浏览器自动化工具，并选择普通/受控增强/完全访问模式。")).not.toBeInTheDocument();
+    expect(within(toolDialog).getByRole("button", { name: "启用" })).toBeInTheDocument();
+    expect(within(toolDialog).getByRole("button", { name: "启用全部" })).toBeInTheDocument();
+    expect(within(toolDialog).getByRole("button", { name: "关闭" })).toBeInTheDocument();
 
     await user.click(browserControlButton);
 
     expect(setBrowserControlEnabled).toHaveBeenCalledWith(true);
     await waitFor(() => expect(within(toolDialog).getByRole("button", { name: "浏览器控制" })).toHaveAttribute("aria-pressed", "true"));
-    expect(within(toolDialog).getByRole("group", { name: "浏览器自动化模式" })).toBeInTheDocument();
-    expect(within(toolDialog).getByRole("button", { name: "普通模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).not.toBeDisabled();
+    expect(within(toolDialog).queryByRole("group", { name: "浏览器自动化模式" })).not.toBeInTheDocument();
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toContain(".app-header-icon-button");
-    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
-    expect(styles).toMatch(/\.sidebar-shell \.composer-switch-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
-    expect(styles).toMatch(/\.sidebar-shell \.message-icon-button svg\s*\{[^}]*height:\s*1rem;[^}]*width:\s*1rem;[^}]*stroke-width:\s*1\.8;/s);
-    expect(styles).toContain(".composer-tool-menu-browser-control");
-    expect(styles).toContain(".composer-tool-menu-mode-chip");
+    expect(styles).toContain(".composer-tool-menu-browser-switch");
+    expect(styles).not.toContain(".composer-tool-menu-browser-control");
+    expect(styles).not.toContain(".composer-tool-menu-mode-chip");
+    expect(styles).toContain(".composer-mode-trigger");
+    expect(styles).toContain(".composer-mode-menu-header");
   });
 
   it("普通侧边栏顶部操作区提供打开悬浮助手按钮并发送 runtime 消息", async () => {
@@ -6305,7 +6312,8 @@ describe("App", () => {
       });
     });
 
-    await waitFor(() => expect(useAppStore.getState().browserAutomationMode).toBe("controlled_enhanced"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("受控增强"));
+    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveClass("composer-mode-trigger-controlled_enhanced");
 
     act(() => {
       runtimeListener?.({
@@ -6316,7 +6324,7 @@ describe("App", () => {
       });
     });
 
-    await waitFor(() => expect(useAppStore.getState().browserAutomationMode).toBe("controlled_enhanced"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("受控增强"));
 
     act(() => {
       runtimeListener?.({
@@ -6326,14 +6334,15 @@ describe("App", () => {
       });
     });
 
-    await waitFor(() => expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("普通模式"));
+    expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted");
 
     unmount();
 
     expect(removeListener).toHaveBeenCalledWith(runtimeListener);
   });
 
-  it("工具弹窗内的浏览器自动化模式可直接切换", async () => {
+  it("浏览器自动化模式菜单使用说明型弹窗并按风险着色", async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, "confirm");
     const setBrowserAutomationMode = vi.fn(async (mode) => {
@@ -6348,23 +6357,26 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "工具" }));
-    await user.click(screen.getByRole("button", { name: /工具调用：/ }));
+    const modeButton = screen.getByRole("button", { name: "浏览器自动化模式" });
+    await user.click(modeButton);
 
-    const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
-    const modeGroup = within(toolDialog).getByRole("group", { name: "浏览器自动化模式" });
-    expect(within(modeGroup).getByRole("button", { name: "普通模式" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(modeGroup).getByRole("button", { name: "受控增强" })).toHaveAttribute("title", expect.stringContaining("一次性边界授权"));
-    expect(within(modeGroup).getByRole("button", { name: "完全访问" })).toHaveAttribute("title", expect.stringContaining("最高风险"));
+    const modeMenu = screen.getByRole("listbox", { name: "浏览器自动化模式" });
+    expect(modeMenu).toBeInTheDocument();
+    expect(screen.getByText("选择浏览器自动化模式")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /普通模式/ })).toHaveTextContent("默认受限");
+    expect(screen.getByRole("option", { name: /受控增强/ })).toHaveTextContent("允许 AI 请求一次性边界授权");
+    expect(screen.getByRole("option", { name: /完全访问/ })).toHaveTextContent("最高风险");
 
-    await user.click(within(modeGroup).getByRole("button", { name: "完全访问" }));
+    await user.click(screen.getByRole("option", { name: /完全访问/ }));
 
     expect(setBrowserAutomationMode).toHaveBeenCalledWith("full_access");
     expect(confirmSpy).not.toHaveBeenCalled();
-    await waitFor(() => expect(within(modeGroup).getByRole("button", { name: "完全访问" })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("完全访问"));
+    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveClass("composer-mode-trigger-full_access");
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toContain(".composer-tool-menu-mode-chip");
-    expect(styles).toContain(".composer-tool-menu-browser-control");
+    expect(styles).toContain(".composer-mode-menu");
+    expect(styles).toContain(".composer-mode-option");
 
     confirmSpy.mockRestore();
   });
@@ -6445,6 +6457,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /click/ })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /take_snapshot/ })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: /click/ })).not.toBeDisabled();
+    expect(screen.getByText("读取当前页面结构快照")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /take_snapshot/ })).toHaveAttribute("title", expect.stringContaining("快照"));
 
     await user.click(screen.getByRole("button", { name: "启用全部" }));

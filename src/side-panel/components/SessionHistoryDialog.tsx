@@ -232,9 +232,22 @@ export function SessionHistoryDialog({
     }
 
     const target = drawerTransitionTargetRef.current;
-    if (target) {
-      completeDrawerPageTransition(target);
+    if (!target) {
+      return;
     }
+
+    // Only the entering page should finish the transition (same out/in pair as "更多").
+    const currentPage = (event.currentTarget as HTMLElement).dataset.drawerPage;
+    if (currentPage !== target) {
+      return;
+    }
+
+    const animationName = typeof event.animationName === "string" ? event.animationName : "";
+    if (animationName && !animationName.includes("sidepanel-slide-in")) {
+      return;
+    }
+
+    completeDrawerPageTransition(target);
   };
 
   const handleHistoryPageTransitionEnd = (event: AnimationEvent) => {
@@ -263,13 +276,25 @@ export function SessionHistoryDialog({
   };
 
   useEffect(() => {
-    const pages = drawerPagesRef.current;
-    if (!pages || !drawerTransition) {
+    if (!drawerTransition) {
       return;
     }
 
-    pages.addEventListener("animationend", handleDrawerTrackAnimationEnd);
-    return () => pages.removeEventListener("animationend", handleDrawerTrackAnimationEnd);
+    const pages = [historyDrawerPageRef.current, settingsDrawerPageRef.current].filter(
+      (node): node is HTMLDivElement => Boolean(node),
+    );
+    if (pages.length === 0) {
+      return;
+    }
+
+    for (const pageNode of pages) {
+      pageNode.addEventListener("animationend", handleDrawerTrackAnimationEnd);
+    }
+    return () => {
+      for (const pageNode of pages) {
+        pageNode.removeEventListener("animationend", handleDrawerTrackAnimationEnd);
+      }
+    };
   }, [drawerTransition, page]);
 
   useEffect(() => {

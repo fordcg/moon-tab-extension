@@ -1926,80 +1926,6 @@ body {
     transform: translateY(-100%);
   }
 
-  .composer-tool-menu-browser-control {
-    @apply grid gap-1.5 rounded-md p-2;
-    background: var(--color-canvas);
-    border: 1px solid var(--color-hairline);
-  }
-
-  .composer-tool-menu-browser-control-toggle {
-    @apply grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-left transition;
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--color-body);
-  }
-
-  .composer-tool-menu-browser-control-toggle:hover,
-  .composer-tool-menu-browser-control-toggle:focus-visible {
-    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-canvas));
-    border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-hairline));
-    outline: 0;
-  }
-
-  .composer-tool-menu-browser-control-toggle.is-active {
-    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-canvas));
-    border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-hairline));
-    color: var(--color-body-strong);
-  }
-
-  .composer-tool-menu-browser-control-icon {
-    @apply h-4 w-4;
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.75;
-  }
-
-  .composer-tool-menu-browser-control-copy {
-    @apply grid min-w-0 gap-0.5;
-  }
-
-  .composer-tool-menu-browser-control-title {
-    @apply text-sm font-medium;
-    color: var(--color-body-strong);
-  }
-
-  .composer-tool-menu-browser-control-status {
-    @apply text-xs;
-    color: var(--color-muted);
-  }
-
-  .composer-tool-menu-mode-row {
-    @apply grid grid-cols-3 gap-1;
-  }
-
-  .composer-tool-menu-mode-chip {
-    @apply min-h-8 rounded-md px-1 text-xs transition;
-    background: var(--color-surface-soft);
-    border: 1px solid var(--color-hairline);
-    color: var(--color-body);
-  }
-
-  .composer-tool-menu-mode-chip:hover,
-  .composer-tool-menu-mode-chip:focus-visible {
-    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-hairline));
-    color: var(--color-primary);
-    outline: 0;
-  }
-
-  .composer-tool-menu-mode-chip.is-active {
-    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-canvas));
-    border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-hairline));
-    color: var(--color-body-strong);
-    font-weight: 600;
-  }
-
   .composer-tool-menu-actions {
     @apply grid grid-cols-3 gap-1.5;
   }
@@ -3514,7 +3440,7 @@ body {
   gap: 0.25rem;
 }
 
-.sidebar-shell .composer-switches > :not(.composer-tool-menu-wrap):not(.sidepanel-add-tab-button) {
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.composer-tool-menu-wrap):not(.sidepanel-add-tab-button) {
   display: none !important;
 }
 
@@ -3524,6 +3450,16 @@ body {
 
 .sidebar-shell .sidepanel-add-tab-button {
   order: 2;
+}
+
+.sidebar-shell .composer-mode-menu-wrap {
+  order: 30;
+  margin-left: auto;
+}
+
+.sidebar-shell .composer-mode-trigger {
+  border-radius: 999px;
+  background: transparent;
 }
 
 @media (max-width: 520px) {
@@ -3669,10 +3605,12 @@ body {
   transform: none;
 }
 
-.sidebar-shell .composer-switches > * {
+.sidebar-shell .composer-switches > *,
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.composer-tool-menu-wrap):not(.sidepanel-add-tab-button) {
   display: flex !important;
 }
 
+.sidebar-shell .composer-switches > .composer-mode-menu-wrap,
 .sidebar-shell .composer-switches > .composer-tool-menu-wrap {
   display: block !important;
   width: 100%;
@@ -3681,6 +3619,7 @@ body {
 }
 
 .sidebar-shell .composer-switches .composer-switch,
+.sidebar-shell .composer-switches .composer-mode-trigger,
 .sidebar-shell .composer-switches .image-upload-button {
   box-sizing: border-box;
   display: flex !important;
@@ -3702,6 +3641,8 @@ body {
 
 .sidebar-shell .composer-switches .composer-switch:hover,
 .sidebar-shell .composer-switches .composer-switch:focus-visible,
+.sidebar-shell .composer-switches .composer-mode-trigger:hover:not(:disabled),
+.sidebar-shell .composer-switches .composer-mode-trigger:focus-visible,
 .sidebar-shell .composer-switches .image-upload-button:hover,
 .sidebar-shell .composer-switches .image-upload-button:focus-visible {
   background: var(--sidepanel-row-hover);
@@ -3760,6 +3701,25 @@ body {
   order: 1;
   width: 1.25rem;
   height: 1.25rem;
+}
+
+.sidebar-shell .composer-switches .composer-mode-trigger {
+  border-radius: 0.5rem;
+}
+
+.sidebar-shell .composer-switches .composer-mode-trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .composer-switches .composer-mode-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  order: 3;
 }
 
 .sidebar-shell .composer-switches .image-upload-button {
@@ -4760,45 +4720,42 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 }
 
 .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages {
-  will-change: transform;
+  display: grid;
+  overflow: hidden;
 }
 
 .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-page {
+  grid-area: 1 / 1;
+  min-height: 100%;
   overflow: hidden;
   pointer-events: none;
-  position: relative;
+  width: 100%;
+  will-change: transform, opacity;
 }
 
 .sidepanel-drawer-page[aria-hidden="true"] {
   pointer-events: none;
 }
 
-.sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-pages {
-  animation: sidepanel-drawer-track-history-to-settings 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Match the smoother "更多" page transition: fade + capped horizontal slide. */
+.sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history {
+  animation: sidepanel-slide-out-left 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  z-index: 1;
 }
 
-.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-pages {
-  animation: sidepanel-drawer-track-settings-to-history 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-settings {
+  animation: sidepanel-slide-in-from-right 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 2;
 }
 
-@keyframes sidepanel-drawer-track-history-to-settings {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(-100%);
-  }
+.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings {
+  animation: sidepanel-slide-out-right 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  z-index: 1;
 }
 
-@keyframes sidepanel-drawer-track-settings-to-history {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(0);
-  }
+.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history {
+  animation: sidepanel-slide-in-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 2;
 }
 
 .drawer-panel.history-drawer .drawer-header {
@@ -6325,75 +6282,70 @@ body:has(.context-dialog) .dialog-overlay {
   width: min(20rem, calc(100vw - 1.5rem)) !important;
 }
 
-.composer-tool-menu-browser-control {
-  background: color-mix(in srgb, var(--sidepanel-blue-soft) 70%, #ffffff) !important;
-  border: 1px solid var(--sidepanel-line) !important;
-  border-radius: 0.625rem !important;
-  gap: 0.375rem !important;
-  padding: 0.375rem !important;
-}
 
-.composer-tool-menu-browser-control-toggle {
+.composer-tool-menu-browser-switch {
+  align-items: center;
   background: transparent !important;
-  border: 1px solid transparent !important;
+  border: 1px solid var(--sidepanel-line) !important;
   border-radius: 0.5rem !important;
   color: var(--sidepanel-ink) !important;
+  column-gap: 0.5rem;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   min-height: 2.25rem;
-  padding: 0.375rem 0.5rem !important;
+  padding: 0.375rem 0.625rem !important;
+  text-align: left;
+  width: 100%;
 }
 
-.composer-tool-menu-browser-control-toggle:hover,
-.composer-tool-menu-browser-control-toggle:focus-visible,
-.composer-tool-menu-browser-control-toggle.is-active {
+.composer-tool-menu-browser-switch:hover,
+.composer-tool-menu-browser-switch:focus-visible,
+.composer-tool-menu-browser-switch.is-active {
   background: var(--sidepanel-row-hover) !important;
   border-color: transparent !important;
   color: var(--sidepanel-ink-strong) !important;
   outline: 0;
 }
 
-.composer-tool-menu-browser-control-icon {
-  height: 1rem !important;
-  width: 1rem !important;
-}
-
-.composer-tool-menu-browser-control-title {
+.composer-tool-menu-browser-switch-label {
   color: var(--sidepanel-ink-strong) !important;
   font-size: 0.8125rem !important;
   font-weight: 500 !important;
   line-height: 1.25rem !important;
 }
 
-.composer-tool-menu-browser-control-status,
-.composer-tool-menu-mode-chip {
+.composer-tool-menu-browser-switch-status {
   color: var(--sidepanel-muted) !important;
   font-size: 0.75rem !important;
   line-height: 1.125rem !important;
 }
 
-.composer-tool-menu-mode-row {
-  gap: 0.25rem !important;
+.composer-tool-menu-browser-switch-toggle {
+  background: color-mix(in srgb, var(--sidepanel-muted) 35%, transparent);
+  border-radius: 999px;
+  height: 0.875rem;
+  position: relative;
+  width: 1.5rem;
 }
 
-.composer-tool-menu-mode-chip {
-  background: transparent !important;
-  border: 1px solid var(--sidepanel-line) !important;
-  border-radius: 0.5rem !important;
-  color: var(--sidepanel-ink) !important;
-  min-height: 1.875rem;
-  padding: 0.25rem 0.375rem !important;
+.composer-tool-menu-browser-switch-toggle::after {
+  background: #fff;
+  border-radius: 999px;
+  content: "";
+  height: 0.625rem;
+  left: 0.125rem;
+  position: absolute;
+  top: 0.125rem;
+  transition: transform 120ms ease;
+  width: 0.625rem;
 }
 
-.composer-tool-menu-mode-chip:hover,
-.composer-tool-menu-mode-chip:focus-visible,
-.composer-tool-menu-mode-chip.is-active {
-  background: var(--sidepanel-row-hover) !important;
-  border-color: transparent !important;
-  color: var(--sidepanel-ink-strong) !important;
-  outline: 0;
+.composer-tool-menu-browser-switch.is-active .composer-tool-menu-browser-switch-toggle {
+  background: var(--sidepanel-blue);
 }
 
-.composer-tool-menu-mode-chip.is-active {
-  font-weight: 600 !important;
+.composer-tool-menu-browser-switch.is-active .composer-tool-menu-browser-switch-toggle::after {
+  transform: translateX(0.625rem);
 }
 
 .composer-tool-menu-actions {
@@ -6906,6 +6858,10 @@ body.sidepanel-stop-requested .composer-abort-button {
   }
 
   .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages,
+  .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history,
+  .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-settings,
+  .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history,
+  .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings,
   .sidepanel-history-content.is-history-page-out-left,
   .sidepanel-history-content.is-history-page-in-right,
   .sidepanel-history-content.is-history-page-out-right,
