@@ -2246,10 +2246,10 @@ describe("App", () => {
 
     const footerChildren = Array.from(composerActions?.children ?? []);
     const taskButton = screen.getByRole("button", { name: "新建任务" });
-    expect(footerChildren[0]).toBe(sendButton);
+    expect(footerChildren[0]).toBe(addTabButton);
     expect(footerChildren[1]).toBe(visibleToolsToggle);
     expect(footerChildren[2]).toBe(taskButton.closest(".workflow-create-wrap"));
-    expect(footerChildren.indexOf(addTabButton)).toBeGreaterThan(footerChildren.indexOf(visibleToolsToggle));
+    expect(footerChildren.indexOf(sendButton)).toBeGreaterThan(footerChildren.indexOf(modelSelector as Element));
     expect(footerChildren.indexOf(footerSpacer as Element)).toBeLessThan(footerChildren.indexOf(modelSelector as Element));
     expect(footerChildren.indexOf(modelSelector as Element)).toBeGreaterThan(footerChildren.indexOf(taskButton.closest(".workflow-create-wrap") as Element));
     expect(taskButton).not.toHaveTextContent("任务");

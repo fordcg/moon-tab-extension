@@ -3447,16 +3447,12 @@ body {
   gap: 0.25rem;
 }
 
-.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.composer-tool-menu-wrap):not(.sidepanel-add-tab-button) {
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.composer-tool-menu-wrap) {
   display: none !important;
 }
 
 .sidebar-shell .composer-tool-menu-wrap {
   order: 1;
-}
-
-.sidebar-shell .sidepanel-add-tab-button {
-  order: 2;
 }
 
 .sidebar-shell .composer-mode-menu-wrap {
@@ -3626,7 +3622,7 @@ body {
   outline: 0;
 }
 
-.sidebar-shell .composer-actions > .ui-button-primary {
+.sidebar-shell .sidepanel-add-tab-button {
   order: 0;
 }
 
@@ -3636,10 +3632,6 @@ body {
 
 .sidebar-shell .workflow-create-wrap {
   order: 2;
-}
-
-.sidebar-shell .sidepanel-add-tab-button {
-  order: 3;
 }
 
 .sidebar-shell .composer-switches {
@@ -3658,6 +3650,10 @@ body {
   width: auto;
   max-width: min(15rem, 48%);
   overflow: visible;
+}
+
+.sidebar-shell .composer-actions > .ui-button-primary {
+  order: 40;
 }
 
 .sidebar-shell .composer-switches {

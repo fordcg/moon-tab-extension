@@ -895,20 +895,15 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
         ) : null}
         <div className="composer-actions">
           <button
-            className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
+            className="composer-switch sidepanel-add-tab-button"
             type="button"
-            data-sending={sending && !hasDraft ? "true" : "false"}
-            data-stop-generation={sending && !hasDraft ? "true" : "false"}
-            disabled={sending ? false : !canSubmit}
-            onClick={() => {
-              if (sending && !hasDraft) {
-                stopGeneration();
-                return;
-              }
-              void (sending ? submitFollowUp() : submit());
-            }}
+            aria-label="添加标签页"
+            title="添加标签页"
+            onClick={toggleContextDialog}
           >
-            {submitButtonLabel}
+            <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
           </button>
           <button
             className="composer-switch sidepanel-tools-toggle"
@@ -1139,19 +1134,24 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               onToggle={() => setContextMode(contextMode === "all" ? "text" : "all")}
             />
           </div>
-          <button
-            className="composer-switch sidepanel-add-tab-button"
-            type="button"
-            aria-label="添加标签页"
-            title="添加标签页"
-            onClick={toggleContextDialog}
-          >
-            <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
           <ModelSelector />
+          <button
+            className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
+            type="button"
+            data-sending={sending && !hasDraft ? "true" : "false"}
+            data-stop-generation={sending && !hasDraft ? "true" : "false"}
+            disabled={sending ? false : !canSubmit}
+            onClick={() => {
+              if (sending && !hasDraft) {
+                stopGeneration();
+                return;
+              }
+              void (sending ? submitFollowUp() : submit());
+            }}
+          >
+            {submitButtonLabel}
+          </button>
           {stopStatusText ? (
             <span className="sr-only" role="status" aria-live="polite">
               {stopStatusText}
