@@ -2224,7 +2224,6 @@ describe("App", () => {
     const modelSelector = document.querySelector(".model-selector");
     const footerSpacer = document.querySelector(".sidepanel-footer-spacer");
     const visibleToolsToggle = screen.getByRole("button", { name: "工具" });
-    const toolCallingButton = screen.getByRole("button", { name: /工具调用：/ });
     const addTabButton = screen.getByRole("button", { name: "添加标签页" });
     const imageUploadButton = screen.getByTitle("当前模型不支持视觉理解");
     const sendButton = screen.getByRole("button", { name: "发送" });
@@ -2238,7 +2237,7 @@ describe("App", () => {
     expect(composerActions).toContainElement(addTabButton);
     expect(composerActions).toContainElement(sendButton);
     expect(composerSwitches).toContainElement(imageUploadButton);
-    expect(composerSwitches).toContainElement(toolCallingButton);
+    expect(screen.queryByRole("button", { name: /工具调用：/ })).not.toBeInTheDocument();
     expect(sendButton).toHaveAttribute("data-sending", "false");
     expect(sendButton).toHaveAttribute("data-stop-generation", "false");
     expect(visibleToolsToggle.closest(".composer-switches")).toBeNull();
@@ -5812,6 +5811,46 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "选择注入标签页" })).not.toBeInTheDocument());
   });
 
+  it("任务菜单支持再次点击、外部点击和 Escape 关闭，并与工具弹层互斥", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const input = screen.getByLabelText("对话输入");
+    await user.type(input, "整理当前页");
+
+    const taskButton = screen.getByRole("button", { name: "新建任务" });
+    const toolsToggle = screen.getByRole("button", { name: "工具" });
+    expect(taskButton).not.toBeDisabled();
+
+    await user.click(taskButton);
+    expect(taskButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /开发调试/ })).toBeInTheDocument();
+
+    await user.click(taskButton);
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(taskButton).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(taskButton);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+
+    await user.click(taskButton);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(taskButton).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(taskButton);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.click(toolsToggle);
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(taskButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("聊天输入区")).toHaveClass("is-tools-open");
+    expect(toolsToggle).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("历史抽屉里的工具和 MCP 打开旧版独立工具弹窗而不是设置页", async () => {
     const user = userEvent.setup();
     const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
@@ -6059,7 +6098,6 @@ describe("App", () => {
 
     const appendContextSwitch = screen.getByRole("switch", { name: "拼接上下文" });
     const streamSwitch = screen.getByRole("switch", { name: "流式响应" });
-    const toolCallingButton = screen.getByRole("button", { name: "工具调用：已启用" });
     const contextSwitch = screen.getByRole("switch", { name: "提取模式" });
     const contextStrip = document.querySelector(".context-strip");
 
@@ -6068,8 +6106,7 @@ describe("App", () => {
     expect(contextStrip?.contains(appendContextSwitch)).toBe(false);
     expect(appendContextSwitch.nextElementSibling).toBe(contextSwitch);
     expect(streamSwitch).toHaveAttribute("aria-checked", "true");
-    expect(toolCallingButton).toHaveAttribute("aria-pressed", "true");
-    expect(toolCallingButton).not.toBeDisabled();
+    expect(screen.queryByRole("button", { name: /工具调用：/ })).not.toBeInTheDocument();
     expect(contextSwitch).toHaveAttribute("aria-checked", "false");
     expect(contextSwitch).toHaveAttribute("title", "提取文本");
     expect(streamSwitch).toHaveClass("composer-switch");
@@ -6082,22 +6119,12 @@ describe("App", () => {
 
     expect(screen.getByRole("switch", { name: "拼接上下文" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("switch", { name: "流式响应" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByRole("button", { name: "工具调用：已启用" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("title", "提取所有");
   });
 
   it("工具浮层行项目使用旧版图标标题勾三列结构，视觉标题不混入状态文本", async () => {
     const user = userEvent.setup();
-    registeredModelToolsMock.tools = [
-      {
-        id: "local.debug_tool",
-        name: "debug_tool",
-        description: "调试工具",
-        parameters: { type: "object", properties: {}, additionalProperties: false },
-        toolClassification: { runtime: "local", capabilities: ["system_context"], risk: "low" },
-      },
-    ];
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "工具" }));
@@ -6105,7 +6132,6 @@ describe("App", () => {
     const toolShelf = document.querySelector(".composer-switches");
     const streamSwitch = screen.getByRole("switch", { name: "流式响应" });
     const appendContextSwitch = screen.getByRole("switch", { name: "拼接上下文" });
-    const toolCallingButton = screen.getByRole("button", { name: "工具调用：已启用" });
     const extractModeSwitch = screen.getByRole("switch", { name: "提取模式" });
     const imageUploadButton = screen.getByTitle("当前模型不支持视觉理解");
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
@@ -6114,25 +6140,11 @@ describe("App", () => {
     expect(toolShelf).toContainElement(imageUploadButton);
     expect(streamSwitch).toHaveAttribute("data-label", "流式响应");
     expect(appendContextSwitch).toHaveAttribute("data-label", "拼接上下文");
-    expect(toolCallingButton).toHaveAttribute("data-label", "工具调用");
     expect(extractModeSwitch).toHaveAttribute("data-label", "提取文本");
-    expect(toolCallingButton).toHaveAttribute("title", "工具调用：已启用");
-
-    await user.click(toolCallingButton);
-    const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
-    const availableToolItem = Array.from(toolDialog.querySelectorAll(".composer-tool-menu-item")).find((item) => !item.hasAttribute("disabled"));
-    expect(availableToolItem).toBeInstanceOf(HTMLElement);
-    await user.click(availableToolItem as HTMLElement);
-    await waitFor(() => {
-      const activeToolItem = toolDialog.querySelector(".composer-tool-menu-item-active");
-      const activeToolCheck = activeToolItem?.querySelector(".composer-tool-menu-item-check");
-      expect(activeToolCheck).toBeInTheDocument();
-      expect(activeToolCheck).toHaveTextContent("✓");
-    });
+    expect(screen.queryByRole("button", { name: /工具调用：/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "工具调用设置" })).not.toBeInTheDocument();
 
     expect(styles).toMatch(/\.sidebar-shell \.chat-composer\.is-tools-open \.composer-switches\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\);)(?=[^}]*transform:\s*none;)[^}]*}/s);
-    expect(styles).toMatch(/\.composer-tool-menu\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\) !important;)(?=[^}]*overflow-y:\s*auto !important;)[^}]*}/s);
-    expect(styles).toMatch(/\.composer-tool-menu-item-check\s*\{(?=[^}]*height:\s*0\.75rem !important;)(?=[^}]*width:\s*0\.75rem !important;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch,\s*\.sidebar-shell \.composer-switches \.composer-mode-trigger,\s*\.sidebar-shell \.composer-switches \.image-upload-button\s*\{(?=[^}]*display:\s*flex !important;)(?=[^}]*height:\s*2\.25rem;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch::after\s*\{(?=[^}]*content:\s*attr\(data-label\);)(?=[^}]*flex:\s*1 1 auto;)(?=[^}]*order:\s*2;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch-icon,\s*\.sidebar-shell \.composer-switches \.image-upload-button::before\s*\{(?=[^}]*order:\s*1;)(?=[^}]*width:\s*1\.25rem;)[^}]*}/s);
@@ -6374,29 +6386,15 @@ describe("App", () => {
     confirmSpy.mockRestore();
   });
 
-  it("聊天输入区的工具调用图标按钮打开菜单并控制当前会话工具设置", async () => {
+  it("工具调用开关仅在设置页配置，输入区工具架不再展示", async () => {
     const user = userEvent.setup();
-    const updateActiveSessionChatPreferences = vi.fn(async (updates) => {
-      useAppStore.setState((state) => {
-        const session = state.chatSessions.find((item) => item.id === state.activeSessionId);
-        if (!session) {
-          return {};
-        }
-
-        return {
-          chatSessions: state.chatSessions.map((item) =>
-            item.id === session.id
-              ? {
-                  ...item,
-                  chatPreferenceOverrides: {
-                    ...item.chatPreferenceOverrides,
-                    ...updates,
-                  },
-                }
-              : item,
-          ),
-        };
-      });
+    const updateChatPreferences = vi.fn(async (updates) => {
+      useAppStore.setState((state) => ({
+        chatPreferences: {
+          ...state.chatPreferences,
+          ...updates,
+        },
+      }));
     });
     registeredModelToolsMock.tools = [
       {
@@ -6406,78 +6404,45 @@ describe("App", () => {
         parameters: { type: "object", properties: {}, additionalProperties: false },
         toolClassification: { runtime: "browser_control", capabilities: ["observe_page"], risk: "low" },
       },
-      {
-        id: "browser.click",
-        name: "click",
-        description: "点击页面上的目标元素",
-        parameters: { type: "object", properties: {}, additionalProperties: false },
-        toolClassification: { runtime: "browser_control", capabilities: ["operate_page"], risk: "medium" },
-      },
     ];
-
-    const session = createChatSession({
-      id: "session-tool-calling-composer",
-      title: "工具调用会话",
-      chatPreferenceOverrides: { toolCallingEnabled: false, enabledToolIds: ["browser.take_snapshot"] },
-    });
-    await saveChatSession(session);
     useAppStore.setState({
-      activeSessionId: "session-tool-calling-composer",
-      chatSessions: [session],
       chatPreferences: {
-        ...useAppStore.getState().chatPreferences,
+        systemPrompt: "你是网页助手",
+        aiRequestRetryCount: 5,
+        browserAutomationMaxToolIterations: 32,
         toolCallingEnabled: true,
+        enabledToolIds: ["browser.take_snapshot"],
+        temperature: 0.7,
+        maxTokens: 1024,
+        sendShortcut: "enter",
+        followUpBehavior: "queue",
+        historyDrawerDefaultOpen: true,
+        injectPageContextByDefault: true,
+        extractHtmlByDefault: false,
+        toolCallDisplayMode: "assistant_grouped",
+        showToolCallProcessInAssistantMode: false,
+        workspaceRequestLoggingEnabled: false,
       },
-      browserControlEnabled: true,
-      updateActiveSessionChatPreferences,
+      updateChatPreferences,
     });
 
     render(<App />);
 
-    const toolCallingButton = screen.getByRole("button", { name: "工具调用：已关闭" });
-    expect(toolCallingButton.closest(".composer-switches")).not.toBeNull();
-    expect(toolCallingButton).not.toBeDisabled();
-    expect(toolCallingButton).toHaveAttribute("aria-pressed", "false");
+    await user.click(screen.getByRole("button", { name: "工具" }));
+    expect(screen.queryByRole("button", { name: /工具调用：/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "工具调用设置" })).not.toBeInTheDocument();
+    expect(screen.queryByText("工具调用")).not.toBeInTheDocument();
 
-    await user.click(toolCallingButton);
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
 
-    const menu = screen.getByRole("dialog", { name: "工具调用设置" });
-    expect(menu).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "启用" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "启用全部" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "关闭" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /take_snapshot/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /click/ })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: /take_snapshot/ })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: /click/ })).not.toBeDisabled();
-    expect(screen.getByText("读取当前页面结构快照")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /take_snapshot/ })).toHaveAttribute("title", expect.stringContaining("快照"));
+    const toolCallingSwitch = screen.getByRole("checkbox", { name: "启用工具调用" });
+    expect(toolCallingSwitch).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "启用工具 take_snapshot" })).toBeChecked();
+    expect(screen.getByText("工具调用")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "启用全部" }));
-
-    expect(updateActiveSessionChatPreferences).toHaveBeenCalledWith({
-      toolCallingEnabled: true,
-      enabledToolIds: ["browser.take_snapshot", "browser.click"],
-    });
-    await waitFor(() => expect(screen.getByRole("button", { name: "工具调用：已启用" })).toHaveAttribute("aria-pressed", "true"));
-
-    await user.click(screen.getByRole("button", { name: /click/ }));
-
-    expect(updateActiveSessionChatPreferences).toHaveBeenLastCalledWith({ enabledToolIds: ["browser.take_snapshot"] });
-
-    await user.click(document.body);
-
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "工具调用设置" })).not.toBeInTheDocument());
-
-    await user.click(screen.getByRole("button", { name: "打开当前聊天设置" }));
-
-    expect(screen.queryByRole("combobox", { name: "当前聊天工具调用" })).not.toBeInTheDocument();
-    expect(screen.queryByText("当前聊天启用工具")).not.toBeInTheDocument();
-    expect(screen.queryByText(/当前聊天工具调用请通过输入区工具图标菜单/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "恢复当前聊天工具设置为全局默认" })).not.toBeInTheDocument();
-
-    const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toMatch(/\.composer-tool-menu\s*\{[^}]*@apply\s+fixed/s);
+    await user.click(toolCallingSwitch);
+    expect(updateChatPreferences).toHaveBeenCalledWith({ toolCallingEnabled: false });
   });
 
   it("设置弹窗里的 select 恢复旧版自定义蓝勾菜单", async () => {
@@ -6651,85 +6616,23 @@ describe("App", () => {
       },
     ];
 
-    const session = createChatSession({
-      id: "session-browser-tool-style",
-      title: "浏览器工具样式",
-      chatPreferenceOverrides: { toolCallingEnabled: true, enabledToolIds: ["browser.take_snapshot"] },
-    });
-    await saveChatSession(session);
     useAppStore.setState({
-      activeSessionId: session.id,
-      chatSessions: [session],
+      chatPreferences: {
+        ...useAppStore.getState().chatPreferences,
+        toolCallingEnabled: true,
+        enabledToolIds: ["browser.take_snapshot"],
+      },
       browserControlEnabled: false,
     });
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "工具调用：已启用" }));
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
 
-    const snapshotButton = screen.getByRole("button", { name: /take_snapshot/ });
-    expect(snapshotButton).toHaveAttribute("aria-pressed", "false");
-    expect(snapshotButton).toBeDisabled();
-  });
-
-  it("聊天输入区的工具调用菜单支持空会话、启用关闭和键盘关闭", async () => {
-    const user = userEvent.setup();
-    const updateActiveSessionChatPreferences = vi.fn(async (updates) => {
-      useAppStore.setState((state) => ({
-        chatPreferences: {
-          ...state.chatPreferences,
-          ...updates,
-        },
-      }));
-    });
-    useAppStore.setState({
-      activeSessionId: undefined,
-      chatSessions: [],
-      updateActiveSessionChatPreferences,
-    });
-
-    render(<App />);
-
-    const toolCallingButton = screen.getByRole("button", { name: "工具调用：已启用" });
-    expect(toolCallingButton).not.toBeDisabled();
-
-    await user.click(toolCallingButton);
-
-    expect(screen.getByRole("dialog", { name: "工具调用设置" })).toBeInTheDocument();
-    expect(screen.getByText("暂无可用工具")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "启用" }));
-    expect(updateActiveSessionChatPreferences).toHaveBeenCalledWith({ toolCallingEnabled: true });
-
-    await user.click(screen.getByRole("button", { name: "关闭" }));
-    expect(updateActiveSessionChatPreferences).toHaveBeenLastCalledWith({ toolCallingEnabled: false });
-
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "工具调用设置" })).not.toBeInTheDocument());
-  });
-
-  it("聊天输入区的工具调用菜单默认和工具按钮中心线对齐", async () => {
-    const user = userEvent.setup();
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 500 });
-    render(<App />);
-
-    const toolCallingButton = screen.getByRole("button", { name: "工具调用：已启用" });
-    vi.spyOn(toolCallingButton, "getBoundingClientRect").mockReturnValue({
-      x: 260,
-      y: 400,
-      left: 260,
-      right: 296,
-      top: 400,
-      bottom: 436,
-      width: 36,
-      height: 36,
-      toJSON: () => ({}),
-    });
-
-    await user.click(toolCallingButton);
-
-    const menu = screen.getByRole("dialog", { name: "工具调用设置" });
-    await waitFor(() => expect(menu).toHaveStyle({ left: "118px" }));
+    const snapshotCheckbox = screen.getByRole("checkbox", { name: "启用工具 take_snapshot" });
+    expect(snapshotCheckbox).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "启用工具调用" })).toBeChecked();
   });
 
   it("聊天页展示气泡消息、思考过程和提取模式开关", async () => {

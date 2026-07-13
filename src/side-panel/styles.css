@@ -3447,12 +3447,8 @@ body {
   gap: 0.25rem;
 }
 
-.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.composer-tool-menu-wrap) {
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap) {
   display: none !important;
-}
-
-.sidebar-shell .composer-tool-menu-wrap {
-  order: 1;
 }
 
 .sidebar-shell .composer-mode-menu-wrap {
@@ -3694,12 +3690,11 @@ body {
 }
 
 .sidebar-shell .composer-switches > *,
-.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.composer-tool-menu-wrap):not(.sidepanel-add-tab-button) {
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.sidepanel-add-tab-button) {
   display: flex !important;
 }
 
-.sidebar-shell .composer-switches > .composer-mode-menu-wrap,
-.sidebar-shell .composer-switches > .composer-tool-menu-wrap {
+.sidebar-shell .composer-switches > .composer-mode-menu-wrap {
   display: block !important;
   width: 100%;
   margin-left: 0;
