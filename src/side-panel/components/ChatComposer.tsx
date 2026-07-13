@@ -895,6 +895,22 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
         ) : null}
         <div className="composer-actions">
           <button
+            className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
+            type="button"
+            data-sending={sending && !hasDraft ? "true" : "false"}
+            data-stop-generation={sending && !hasDraft ? "true" : "false"}
+            disabled={sending ? false : !canSubmit}
+            onClick={() => {
+              if (sending && !hasDraft) {
+                stopGeneration();
+                return;
+              }
+              void (sending ? submitFollowUp() : submit());
+            }}
+          >
+            {submitButtonLabel}
+          </button>
+          <button
             className="composer-switch sidepanel-tools-toggle"
             type="button"
             aria-label="工具"
@@ -907,6 +923,26 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               <path d={TOOLS_TOGGLE_ICON_PATH} />
             </svg>
           </button>
+          <div className="workflow-create-wrap">
+            <button
+              className="composer-switch workflow-create-button"
+              type="button"
+              aria-label="新建任务"
+              aria-haspopup="menu"
+              aria-expanded={workflowMenuOpen}
+              title="新建任务"
+              disabled={!input.trim()}
+              onClick={() => setWorkflowMenuOpen((value) => !value)}
+            >
+              <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6h11M9 12h11M9 18h11" />
+                <path d="m4 6 1.2 1.2L7.5 5" />
+                <path d="m4 12 1.2 1.2L7.5 11" />
+                <path d="m4 18 1.2 1.2L7.5 17" />
+              </svg>
+            </button>
+            {workflowMenuOpen ? <WorkflowTemplateMenu onSelect={(template) => void createWorkflow(template)} /> : null}
+          </div>
           <div className="composer-switches" id="composer-switches" data-open={toolShelfOpen}>
             <label
               className={`image-upload-button${currentModelSupportsVision ? "" : " image-upload-button-disabled"}`}
@@ -1115,50 +1151,12 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             </svg>
           </button>
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
-          <div className="workflow-create-wrap">
-            <button
-              className="composer-switch workflow-create-button"
-              type="button"
-              aria-label="新建任务"
-              aria-haspopup="menu"
-              aria-expanded={workflowMenuOpen}
-              data-label="任务"
-              title="新建任务"
-              disabled={!input.trim()}
-              onClick={() => setWorkflowMenuOpen((value) => !value)}
-            >
-              <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 6h11M9 12h11M9 18h11" />
-                <path d="m4 6 1.2 1.2L7.5 5" />
-                <path d="m4 12 1.2 1.2L7.5 11" />
-                <path d="m4 18 1.2 1.2L7.5 17" />
-              </svg>
-              <span className="workflow-create-button-label">任务</span>
-            </button>
-            {workflowMenuOpen ? <WorkflowTemplateMenu onSelect={(template) => void createWorkflow(template)} /> : null}
-          </div>
           <ModelSelector />
           {stopStatusText ? (
             <span className="sr-only" role="status" aria-live="polite">
               {stopStatusText}
             </span>
           ) : null}
-          <button
-            className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}
-            type="button"
-            data-sending={sending && !hasDraft ? "true" : "false"}
-            data-stop-generation={sending && !hasDraft ? "true" : "false"}
-            disabled={sending ? false : !canSubmit}
-            onClick={() => {
-              if (sending && !hasDraft) {
-                stopGeneration();
-                return;
-              }
-              void (sending ? submitFollowUp() : submit());
-            }}
-          >
-            {submitButtonLabel}
-          </button>
         </div>
       </div>
       {previewAttachment ? (

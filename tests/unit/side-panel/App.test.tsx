@@ -2245,10 +2245,16 @@ describe("App", () => {
     expect(addTabButton.closest(".composer-switches")).toBeNull();
 
     const footerChildren = Array.from(composerActions?.children ?? []);
-    expect(footerChildren[0]).toBe(visibleToolsToggle);
+    const taskButton = screen.getByRole("button", { name: "新建任务" });
+    expect(footerChildren[0]).toBe(sendButton);
+    expect(footerChildren[1]).toBe(visibleToolsToggle);
+    expect(footerChildren[2]).toBe(taskButton.closest(".workflow-create-wrap"));
     expect(footerChildren.indexOf(addTabButton)).toBeGreaterThan(footerChildren.indexOf(visibleToolsToggle));
     expect(footerChildren.indexOf(footerSpacer as Element)).toBeLessThan(footerChildren.indexOf(modelSelector as Element));
-    expect(footerChildren.indexOf(modelSelector as Element)).toBeLessThan(footerChildren.indexOf(sendButton));
+    expect(footerChildren.indexOf(modelSelector as Element)).toBeGreaterThan(footerChildren.indexOf(taskButton.closest(".workflow-create-wrap") as Element));
+    expect(taskButton).not.toHaveTextContent("任务");
+    expect(taskButton.querySelector(".composer-switch-icon")).not.toBeNull();
+    expect(styles).toMatch(/\.workflow-template-menu\s*\{(?=[^}]*left:\s*0;)(?=[^}]*bottom:\s*calc\(100% \+ 0\.375rem\);)[^}]*}/s);
 
     await userEvent.click(visibleToolsToggle);
     expect(screen.getByLabelText("聊天输入区")).toHaveClass("is-tools-open");
