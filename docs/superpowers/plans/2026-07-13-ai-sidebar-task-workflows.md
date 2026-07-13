@@ -502,7 +502,7 @@ git commit -m "功能：提供侧栏任务模板与上下文界面"
 - Test: `tests/unit/side-panel/workflowMarkdownExport.test.ts`
 - Test: `tests/unit/side-panel/TaskArtifactsPanel.test.tsx`
 
-- [ ] **Step 1: 写出导出与产物呈现的失败用例**
+- [x] **Step 1: 写出导出与产物呈现的失败用例**
 
 ```ts
 it("导出任务时只包含产物与已脱敏上下文摘要", () => {
@@ -525,13 +525,13 @@ it("产物面板可复制和导出 Markdown", async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run: `npx vitest run tests/unit/side-panel/workflowMarkdownExport.test.ts tests/unit/side-panel/TaskArtifactsPanel.test.tsx`
 
 Expected: FAIL，提示导出函数和产物组件不存在。
 
-- [ ] **Step 3: 实现任务 Markdown 导出**
+- [x] **Step 3: 实现任务 Markdown 导出**
 
 创建 `workflowMarkdownExport.ts` 并导出：
 
@@ -542,7 +542,7 @@ export function downloadWorkflowTaskMarkdown(task: WorkflowTask, exportedAt?: nu
 
 导出顺序固定为标题、模板/状态/导出时间、上下文摘要、产物。对标题、摘要和产物正文使用现有 `redactSensitiveText`；不导出 `sensitive` 上下文、不导出截图 `dataUrl`、不导出工具参数或附件详情。
 
-- [ ] **Step 4: 实现产物面板与三个模板的产物规则**
+- [x] **Step 4: 实现产物面板与三个模板的产物规则**
 
 `TaskArtifactsPanel` 显示产物类型、标题和内容，提供复制与 Markdown 导出。`appStoreWorkflowTasks.ts` 新增：
 
@@ -556,7 +556,7 @@ export function createWorkflowArtifactFromAssistantMessage(
 
 该函数在任务最终 assistant 消息非空时创建 `conclusion`；当模板为 `debug` 且有成功 Network/JS/Source Map/Runtime 步骤时创建 `debug-report`；当模板为 `automation` 且有浏览器操作步骤时创建 `automation-report`。研究任务保留 `conclusion`，若正文包含 Markdown 表格则额外创建 `table`。所有内容先脱敏且上限为 12,000 字符。
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
 Run: `npx vitest run tests/unit/side-panel/workflowMarkdownExport.test.ts tests/unit/side-panel/TaskArtifactsPanel.test.tsx`
 
@@ -574,10 +574,13 @@ git commit -m "功能：沉淀任务产物并支持导出"
 - Modify: `src/side-panel/components/WorkflowTaskCard.tsx`
 - Modify: `src/side-panel/state/appStoreWorkflowTasks.ts`
 - Modify: `src/side-panel/components/ChatPanel.tsx`
+- Modify: `src/side-panel/styles.css`
 - Test: `tests/unit/side-panel/WorkflowSkillDialog.test.tsx`
+- Test: `tests/unit/side-panel/ChatPanel.test.tsx`
+- Test: `tests/unit/side-panel/WorkflowTaskCard.test.tsx`
 - Test: `tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
 
-- [ ] **Step 1: 写出技能变量与运行时降级的失败用例**
+- [x] **Step 1: 写出技能变量与运行时降级的失败用例**
 
 ```tsx
 it("缺少必填变量时不启动技能", async () => {
@@ -599,35 +602,35 @@ it("所需工具不可用时，创建等待任务而不是调用工具", async (
 });
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run: `npx vitest run tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
 
 Expected: FAIL，提示技能对话框或运行时校验尚未实现。
 
-- [ ] **Step 3: 实现技能对话框**
+- [x] **Step 3: 实现技能对话框**
 
-`WorkflowSkillDialog` 使用现有 Radix Dialog 模式，显示技能标题、模板、变量输入和运行时状态。启动时：
+`WorkflowSkillDialog` 使用现有弹窗覆盖层模式，显示技能标题、模板和变量输入。启动时：
 
 1. 对 `required === true` 的变量做 `trim()` 非空校验。
 2. 将 `{{variableId}}` 替换为经过 `redactSensitiveText` 的用户值。
 3. 调用 `startWorkflowSkill`。
-4. 对 `waiting` 任务显示状态原因并保留“转为普通聊天”的按钮。
+4. 对推荐工具不可用的技能创建 `waiting` 任务，由任务卡展示状态原因并保留继续入口。
 
 不显示、编辑或保存任一任务上下文摘要、页面元素 UID、Cookie、Token 或工具参数。
 
-- [ ] **Step 4: 为任务卡片接入显式保存技能**
+- [x] **Step 4: 为任务卡片接入显式保存技能**
 
 仅 `completed` 任务显示“保存为技能”。草稿包含标题和从任务目标中明确标记的 `{{变量}}`；没有变量时保存空变量数组。保存时仅写入模板、目标模板、所需上下文 `kind`、推荐 tool ID 和产物 `kind`，不复制产物正文。
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
-Run: `npx vitest run tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
+Run: `npm test -- tests/unit/side-panel/ChatPanel.test.tsx tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/WorkflowTaskCard.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts`
 
 Expected: PASS。
 
 ```powershell
-git add src/side-panel/components/WorkflowSkillDialog.tsx src/side-panel/components/WorkflowTaskCard.tsx src/side-panel/components/ChatPanel.tsx src/side-panel/state/appStoreWorkflowTasks.ts tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts
+git add src/side-panel/components/WorkflowSkillDialog.tsx src/side-panel/components/WorkflowTaskCard.tsx src/side-panel/components/ChatPanel.tsx src/side-panel/state/appStoreWorkflowTasks.ts src/side-panel/styles.css tests/unit/side-panel/ChatPanel.test.tsx tests/unit/side-panel/WorkflowSkillDialog.test.tsx tests/unit/side-panel/WorkflowTaskCard.test.tsx tests/unit/side-panel/appStoreWorkflowTasks.test.ts
 git commit -m "功能：保存并启动侧栏本地技能"
 ```
 
@@ -638,7 +641,7 @@ git commit -m "功能：保存并启动侧栏本地技能"
 - Modify: `scripts/verify_ai_sidebar_quality.ps1`
 - Test: `tests/e2e/workflow-tasks.spec.ts`
 
-- [ ] **Step 1: 写出三个任务模板的 Playwright 闭环**
+- [x] **Step 1: 写出三个任务模板的 Playwright 闭环**
 
 ```ts
 test("网页研究任务从草稿创建、显示上下文并导出结论", async ({ extensionPage }) => {
@@ -652,17 +655,23 @@ test("网页研究任务从草稿创建、显示上下文并导出结论", async
 
 为 `开发调试` 覆盖 Network/工具步骤与调试报告，为 `网页自动化` 覆盖浏览器工具步骤与自动化报告。三个测试均使用本地假 OpenAI 服务和现有扩展 fixture，不能依赖远程模型或真实页面。
 
-- [ ] **Step 2: 运行 E2E 并确认先失败**
+- 实现：`tests/e2e/workflow-tasks.spec.ts` 覆盖 `网页研究`、`开发调试`、`网页自动化` 三类任务模板，使用 web-preview + IndexedDB seed + mock runtime port，不依赖远程模型或真实扩展后台。
+
+- [x] **Step 2: 运行 E2E 并确认先失败**
 
 Run: `npx playwright test tests/e2e/workflow-tasks.spec.ts`
 
 Expected: 在功能接入前 FAIL，缺少任务入口或任务卡片。
 
-- [ ] **Step 3: 补足稳定选择器和失败恢复断言**
+- 验证：首次执行 `npm run test:e2e -- tests/e2e/workflow-tasks.spec.ts` 先失败，暴露 IndexedDB 版本、任务卡 label 严格匹配和 web-preview `window.chrome` mock 问题；随后修正 seed、role selector 与 runtime mock。
+
+- [x] **Step 3: 补足稳定选择器和失败恢复断言**
 
 为任务入口、三种模板、任务卡片、上下文折叠、继续、取消和产物导出添加稳定 `aria-label`。在自动化测试中模拟 debugger 断开，断言任务进入 `waiting`、主聊天仍可发送普通消息、继续操作可见。
 
-- [ ] **Step 4: 纳入质量门并运行完整验证**
+- 实现：`WorkflowTaskCard` 增加任务卡 `aria-label`；测试使用 role 精确定位任务卡、验证上下文/步骤/产物/导出/保存技能入口，并模拟流式端口断开后任务保持 `waiting` 且普通聊天可继续发送。
+
+- [x] **Step 4: 纳入质量门并运行完整验证**
 
 在 `scripts/verify_ai_sidebar_quality.ps1` 的 Playwright 步骤后增加：
 
@@ -681,10 +690,16 @@ Run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_side
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- 验证：
+  - `npm test` PASS，98 个测试文件、1192 个用例通过。
+  - `npm run typecheck` PASS。
+  - `npm run test:e2e -- tests/e2e/workflow-tasks.spec.ts` PASS，4 个 workflow 任务用例通过。
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_quality.ps1` 退出码 0，最终输出 `AI sidebar quality checks passed.`；质量门会传播 npm/node/python 原生命令的非零退出码，smoke JSON 细项失败时会中止脚本。
+
+- [x] **Step 5: 提交**
 
 ```powershell
-git add tests/e2e/workflow-tasks.spec.ts scripts/verify_ai_sidebar_quality.ps1
+git add docs/superpowers/plans/2026-07-13-ai-sidebar-task-workflows.md playwright.config.ts scripts/verify_ai_sidebar_quality.ps1 src/side-panel/components/WorkflowTaskCard.tsx tests/e2e/workflow-tasks.spec.ts tests/unit/background/currentTimeTool.test.ts tests/unit/background/tavilyTool.test.ts tests/unit/shared/syncSnapshot.test.ts tests/unit/side-panel/App.test.tsx
 git commit -m "测试：覆盖侧栏任务工作流闭环"
 ```
 

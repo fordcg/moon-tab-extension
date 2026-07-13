@@ -134,7 +134,7 @@ export async function moveExtractionRule(ruleId: string, direction: "up" | "down
 }
 
 export async function saveChatSession(session: ChatSession): Promise<void> {
-  await db.chatSessions.put(session);
+  await db.chatSessions.put(normalizeChatSessionWorkflowTasks(session));
 }
 
 export async function getChatSession(id: string): Promise<ChatSession | undefined> {
@@ -166,8 +166,9 @@ export async function updateChatSession(
       return undefined;
     }
 
-    await db.chatSessions.put(nextSession);
-    return nextSession;
+    const normalizedSession = normalizeChatSessionWorkflowTasks(nextSession);
+    await db.chatSessions.put(normalizedSession);
+    return normalizedSession;
   });
 }
 
@@ -185,10 +186,10 @@ export async function deleteChatFolder(folderId: string): Promise<void> {
     const sessions = await db.chatSessions.where("folderId").equals(folderId).toArray();
     await Promise.all(
       sessions.map((session) =>
-        db.chatSessions.put({
+        db.chatSessions.put(normalizeChatSession({
           ...normalizeChatSession(session),
           folderId: undefined,
-        }),
+        })),
       ),
     );
   });
@@ -277,7 +278,7 @@ export async function replaceAllDataFromSync(snapshot: SyncDataSnapshot): Promis
         db.providerModels.bulkPut(snapshot.providerModels),
         db.extractionRules.bulkPut(snapshot.extractionRules),
         db.promptTemplates.bulkPut(snapshot.promptTemplates ?? []),
-        db.chatSessions.bulkPut(snapshot.chatSessions),
+        db.chatSessions.bulkPut(snapshot.chatSessions.map(normalizeChatSessionWorkflowTasks)),
         db.chatFolders.bulkPut(snapshot.chatFolders),
         db.appSettings.bulkPut(snapshot.appSettings),
       ]);
@@ -292,6 +293,13 @@ function normalizeChatSession(session: ChatSession): ChatSession {
     chatPreferenceOverrides: normalizeChatPreferenceOverrides(session.chatPreferenceOverrides),
     messages: session.messages.map(normalizeChatMessage),
     tokenUsageEntries: normalizeTokenUsageEntries(session.tokenUsageEntries),
+    workflowTasks: normalizeWorkflowTasks(session.workflowTasks),
+  };
+}
+
+function normalizeChatSessionWorkflowTasks(session: ChatSession): ChatSession {
+  return {
+    ...session,
     workflowTasks: normalizeWorkflowTasks(session.workflowTasks),
   };
 }

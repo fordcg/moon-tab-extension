@@ -293,7 +293,78 @@ describe("存储仓库", () => {
 
     await saveChatSession(session);
 
-    expect(await getChatSession("session-1")).toEqual(session);
+    expect(await getChatSession("session-1")).toEqual({
+      ...session,
+      workflowTasks: [],
+    });
+  });
+
+  it("保存、读取和同步聊天会话时会丢弃未脱敏或敏感的工作流上下文", async () => {
+    const session = {
+      id: "session-workflow-context",
+      title: "工作流上下文",
+      archived: false,
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 2,
+      messages: [],
+      workflowTasks: [
+        {
+          id: "workflow-task-safe",
+          sessionId: "session-workflow-context",
+          template: "research",
+          title: "安全任务",
+          objective: "验证持久化",
+          status: "preparing",
+          createdAt: 1,
+          updatedAt: 2,
+          steps: [],
+          artifacts: [],
+          contextItems: [
+            {
+              id: "context-unredacted",
+              kind: "page-content",
+              title: "未脱敏内容",
+              summary: "不应保存",
+              capturedAt: 1,
+              redacted: false,
+              truncated: false,
+              sensitive: false,
+            },
+            {
+              id: "context-sensitive",
+              kind: "network",
+              title: "敏感内容",
+              summary: "不应保存",
+              capturedAt: 1,
+              redacted: true,
+              truncated: false,
+              sensitive: true,
+            },
+            {
+              id: "context-safe",
+              kind: "web-search",
+              title: "安全摘要",
+              summary: "可保存摘要",
+              capturedAt: 1,
+              redacted: true,
+              truncated: false,
+              sensitive: false,
+            },
+          ],
+        },
+      ],
+    } as ChatSession;
+
+    await saveChatSession(session);
+
+    const stored = await db.chatSessions.get(session.id);
+    const loaded = await getChatSession(session.id);
+    const synced = await import("../../../src/shared/storage/repositories").then(({ exportAllDataForSync }) => exportAllDataForSync());
+
+    expect(stored?.workflowTasks?.[0].contextItems.map((item) => item.id)).toEqual(["context-safe"]);
+    expect(loaded?.workflowTasks?.[0].contextItems.map((item) => item.id)).toEqual(["context-safe"]);
+    expect(synced.chatSessions[0].workflowTasks?.[0].contextItems.map((item) => item.id)).toEqual(["context-safe"]);
   });
 
   it("读取聊天会话时会忽略旧版网络搜索附件字段", async () => {
@@ -513,11 +584,12 @@ describe("存储仓库", () => {
       workflowTasks: [],
     };
 
-    await db.chatSessions.put(legacySession as ChatSession);
+    await db.chatSessions.put(legacySession as unknown as ChatSession);
 
     const expectedSession: ChatSession = {
       ...legacySession,
       archived: false,
+      workflowTasks: [],
       messages: [
         {
           ...legacySession.messages[0],

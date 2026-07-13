@@ -141,6 +141,12 @@ import {
 } from "./appStorePreferences";
 import { upsertSession } from "./appStoreSessionUtils";
 import {
+  createWorkflowArtifactsFromAssistantMessage,
+  createWorkflowContextItemsFromToolAttachments,
+  createWorkflowTaskActions,
+  createWorkflowTaskStepFromToolRecord,
+} from "./appStoreWorkflowTasks";
+import {
   abortChatTaskHandle,
   clearChatTask,
   clearChatTaskAbortHandles,
@@ -156,7 +162,6 @@ import {
   upsertChatTask,
 } from "./appStoreChatTasks";
 import { sendStreamingChatMessage } from "./appStoreStreaming";
-import { createWorkflowTaskActions } from "./appStoreWorkflowTasks";
 import {
   backupNowAction,
   loadRemoteBackupsAction,
@@ -249,6 +254,7 @@ export interface AppState {
   models: ProviderModel[];
   extractionRules: ExtractionRule[];
   promptTemplates: PromptTemplate[];
+  workflowSkills: WorkflowSkill[];
   chatSessions: ChatSession[];
   chatFolders: ChatFolder[];
   pageContext: PageContextState;
@@ -289,7 +295,6 @@ export interface AppState {
   syncOperation: SyncOperationState;
   failure?: RequestFailure;
   notifications: AppNotification[];
-  workflowSkills: WorkflowSkill[];
   addNotification: (notification: AppNotificationDraft) => string;
   dismissNotification: (notificationId: string) => void;
   clearFailure: () => void;
@@ -340,6 +345,22 @@ export interface AppState {
   savePromptTemplateDraft: (promptId: string | undefined, draft: Pick<PromptTemplate, "title" | "content">) => Promise<{ ok: true; prompt: PromptTemplate } | { ok: false; message: string }>;
   deletePrompt: (promptId: string) => Promise<void>;
   reorderPromptTemplates: (orderedIds: string[]) => Promise<void>;
+  createWorkflowTask: (template: WorkflowTaskTemplate, objective: string) => Promise<WorkflowTask>;
+  updateWorkflowTaskStatus: (taskId: string, status: WorkflowTaskStatus, reason?: string) => Promise<void>;
+  upsertWorkflowTaskStep: (taskId: string, step: WorkflowTaskStep) => Promise<void>;
+  addWorkflowContextItem: (taskId: string, item: WorkflowContextItem) => Promise<void>;
+  updateWorkflowContextItem: (
+    taskId: string,
+    contextItemId: string,
+    updates: Pick<WorkflowContextItem, "title" | "summary" | "capturedAt" | "truncated">,
+  ) => Promise<void>;
+  removeWorkflowContextItem: (taskId: string, contextItemId: string) => Promise<void>;
+  toggleWorkflowContextPinned: (taskId: string, contextItemId: string) => Promise<void>;
+  addWorkflowArtifact: (taskId: string, artifact: WorkflowArtifact) => Promise<void>;
+  loadWorkflowSkills: () => Promise<void>;
+  saveWorkflowSkill: (taskId: string, draft: Pick<WorkflowSkill, "title" | "variables">) => Promise<WorkflowSkill>;
+  startWorkflowSkill: (skillId: string, values: Record<string, string>) => Promise<WorkflowTask>;
+  sendWorkflowTaskMessage: (taskId: string, content: string) => Promise<void>;
   refreshPageContext: () => Promise<void>;
   loadContextTabs: () => Promise<void>;
   toggleContextTabSelection: (tabId: number) => void;
@@ -363,17 +384,6 @@ export interface AppState {
   backupNow: () => Promise<void>;
   restoreNow: (backupId: string) => Promise<void>;
   sendChatMessage: (content: string, attachments?: ChatImageAttachment[], promptInvocations?: ChatPromptInvocation[]) => Promise<void>;
-  createWorkflowTask: (template: WorkflowTaskTemplate, objective: string) => Promise<WorkflowTask>;
-  updateWorkflowTaskStatus: (taskId: string, status: WorkflowTaskStatus, reason?: string) => Promise<void>;
-  upsertWorkflowTaskStep: (taskId: string, step: WorkflowTaskStep) => Promise<void>;
-  addWorkflowContextItem: (taskId: string, item: WorkflowContextItem) => Promise<void>;
-  removeWorkflowContextItem: (taskId: string, contextItemId: string) => Promise<void>;
-  toggleWorkflowContextPinned: (taskId: string, contextItemId: string) => Promise<void>;
-  addWorkflowArtifact: (taskId: string, artifact: WorkflowArtifact) => Promise<void>;
-  loadWorkflowSkills: () => Promise<void>;
-  saveWorkflowSkill: (taskId: string, draft: Pick<WorkflowSkill, "title" | "variables">) => Promise<WorkflowSkill>;
-  startWorkflowSkill: (skillId: string, values: Record<string, string>) => Promise<WorkflowTask>;
-  sendWorkflowTaskMessage: (taskId: string, content: string) => Promise<void>;
   submitChatFollowUp: (
     content: string,
     attachments?: ChatImageAttachment[],
@@ -426,6 +436,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   models: [],
   extractionRules: [],
   promptTemplates: [],
+  workflowSkills: [],
   chatSessions: [],
   chatFolders: [],
   pageContext: {
@@ -473,7 +484,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
     loading: false,
   },
   notifications: [],
-  workflowSkills: [],
   addNotification: (notification) => {
     const item = createAppNotification(notification);
     set((state) => ({ notifications: [item, ...state.notifications].slice(0, 5) }));
@@ -1263,14 +1273,29 @@ export const useAppStore = create<AppState>()((set, get) => ({
   sendChatMessage: async (content, attachments = [], promptInvocations = []) => {
     await sendChatMessageWithState({ content, attachments, promptInvocations, get, set });
   },
-  ...createWorkflowTaskActions(get, set),
   sendWorkflowTaskMessage: async (taskId, content) => {
+    const state = get();
+    const task = findWorkflowTaskInState(state, taskId);
+    if (!task) {
+      throw new Error("未找到工作流任务");
+    }
+
+    if (task.status === "running") {
+      return;
+    }
+    if (task.status !== "preparing" && task.status !== "waiting") {
+      throw new Error("任务已结束，不能继续发送");
+    }
     await get().updateWorkflowTaskStatus(taskId, "running");
-    const sent = await sendChatMessageWithState({ content, get, set });
-    if (sent) {
-      await get().updateWorkflowTaskStatus(taskId, "completed");
-    } else {
-      await get().updateWorkflowTaskStatus(taskId, "waiting", "消息未发送，请检查模型配置后继续任务");
+    const sent = await sendChatMessageWithState({
+      content,
+      targetSessionId: task.sessionId,
+      workflowTaskId: taskId,
+      get,
+      set,
+    });
+    if (!sent) {
+      await get().updateWorkflowTaskStatus(taskId, "waiting");
     }
   },
   submitChatFollowUp: (content, attachments = [], promptInvocations = [], options = {}) =>
@@ -1344,6 +1369,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       models: [],
       extractionRules: [],
       promptTemplates: [],
+      workflowSkills: [],
       chatSessions: [],
       chatFolders: [],
       pageContext: {
@@ -1394,6 +1420,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       notifications: [],
     });
   },
+  ...createWorkflowTaskActions({ get, set }),
 }));
 
 async function persistSessionSelectedModel(session: ChatSession): Promise<void> {
@@ -1419,6 +1446,22 @@ function createVisibleUserTitleContent(content: string, promptInvocations: ChatP
 
 export type StoreGetter = StoreApi<AppState>["getState"];
 export type StoreSetter = StoreApi<AppState>["setState"];
+
+function findWorkflowTaskInState(state: AppState, taskId: string): WorkflowTask | undefined {
+  const privateTask = state.privateChatSession?.workflowTasks?.find((task) => task.id === taskId);
+  if (privateTask) {
+    return privateTask;
+  }
+
+  for (const session of state.chatSessions) {
+    const task = session.workflowTasks?.find((item) => item.id === taskId);
+    if (task) {
+      return task;
+    }
+  }
+
+  return undefined;
+}
 
 export type AppChatSendMessage = {
   type: "chat.send";
@@ -1526,6 +1569,7 @@ interface SendChatMessageWithStateInput {
   attachments?: ChatImageAttachment[];
   promptInvocations?: ChatPromptInvocation[];
   targetSessionId?: string;
+  workflowTaskId?: string;
   get: StoreGetter;
   set: StoreSetter;
 }
@@ -1566,6 +1610,7 @@ interface RunChatRequestInput {
   fallbackTitle: string;
   model: ProviderModel;
   provider: ModelProvider;
+  workflowTaskId?: string;
   get: StoreGetter;
   set: StoreSetter;
 }
@@ -1654,6 +1699,7 @@ async function sendChatMessageWithState(input: SendChatMessageWithStateInput): P
     fallbackTitle: session.messages.length === 0 ? createDefaultSessionTitle(createVisibleUserTitleContent(trimmedContent, promptInvocations)) : session.title,
     model,
     provider,
+    workflowTaskId: input.workflowTaskId,
     get: input.get,
     set: input.set,
   });
@@ -1864,6 +1910,25 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
     };
   });
   let taskStatus: "completed" | "failed" | "canceled" = "completed";
+  const updateWorkflowTaskStatus = async (status: WorkflowTaskStatus): Promise<void> => {
+    if (input.workflowTaskId) {
+      await input.get().updateWorkflowTaskStatus(input.workflowTaskId, status);
+    }
+  };
+  const addWorkflowArtifactsFromAssistantMessage = async (message: ChatMessage): Promise<void> => {
+    if (!input.workflowTaskId) {
+      return;
+    }
+
+    const task = findWorkflowTaskInState(input.get(), input.workflowTaskId);
+    if (!task) {
+      return;
+    }
+
+    for (const artifact of createWorkflowArtifactsFromAssistantMessage(task, message, message.createdAt)) {
+      await input.get().addWorkflowArtifact(input.workflowTaskId, artifact);
+    }
+  };
 
   try {
     if (input.privateMode) {
@@ -1995,15 +2060,49 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
         onFollowUpHandle: (handle) => registerChatTaskFollowUpHandle(nextSession.id, chatTask.id, handle),
         onFollowUpConsumed: (followUpId) => markChatFollowUpConsumed(input.set, nextSession.id, followUpId),
         shouldShowFailure: () => shouldShowFailureForSession(input.get(), nextSession.id),
+        onWorkflowToolStart: async (record) => {
+          if (!input.workflowTaskId) {
+            return;
+          }
+          await input.get().upsertWorkflowTaskStep(input.workflowTaskId, createWorkflowTaskStepFromToolRecord(record));
+        },
+        onWorkflowToolComplete: async (record, attachments) => {
+          if (!input.workflowTaskId) {
+            return;
+          }
+          await input.get().upsertWorkflowTaskStep(input.workflowTaskId, createWorkflowTaskStepFromToolRecord(record));
+          for (const contextItem of createWorkflowContextItemsFromToolAttachments(attachments)) {
+            await input.get().addWorkflowContextItem(input.workflowTaskId, contextItem);
+          }
+        },
       });
       unregisterChatTaskAbortHandle(nextSession.id, chatTask.id);
       unregisterChatTaskFollowUpHandle(nextSession.id, chatTask.id);
       if (streamResult.canceled) {
         taskStatus = "canceled";
+        await updateWorkflowTaskStatus("canceled");
       } else if (streamResult.failed) {
         taskStatus = "failed";
+        await updateWorkflowTaskStatus("waiting");
       }
       if (streamResult.completed) {
+        if (!streamResult.canceled && !streamResult.failed) {
+          const workflowAssistantCreatedAt = Date.now();
+          await addWorkflowArtifactsFromAssistantMessage({
+            id: `message-${workflowAssistantCreatedAt}-assistant-workflow-artifact`,
+            role: "assistant",
+            content: streamResult.assistantContent ?? "",
+            createdAt: workflowAssistantCreatedAt,
+            modelId: input.model.id,
+            endpointType: input.provider.endpointType,
+            streamMode: requestStreamMode,
+            systemPrompt: effectiveChatPreferences.systemPrompt,
+            contextPrompt: input.pageContextPrompt,
+            contextMode: input.state.contextMode,
+            matchedRuleId: input.state.pageContext.matchedRuleId,
+          });
+          await updateWorkflowTaskStatus("completed");
+        }
         return;
       }
 
@@ -2027,12 +2126,14 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
 
     if (!response) {
       taskStatus = "failed";
+      await updateWorkflowTaskStatus("waiting");
       input.set((current) => (shouldShowFailureForSession(current, nextSession.id) ? { failure: { message: "模型请求失败，请重试" } } : {}));
       return;
     }
 
     if (!response.ok) {
       taskStatus = "failed";
+      await updateWorkflowTaskStatus("waiting");
       input.set((current) => (shouldShowFailureForSession(current, nextSession.id) ? { failure: { message: response.message } } : {}));
       return;
     }
@@ -2071,6 +2172,8 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
           },
         };
       });
+      await addWorkflowArtifactsFromAssistantMessage(assistantMessage);
+      await updateWorkflowTaskStatus("completed");
       return;
     }
 
@@ -2099,8 +2202,11 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
         }),
       };
     });
+    await addWorkflowArtifactsFromAssistantMessage(assistantMessage);
+    await updateWorkflowTaskStatus("completed");
   } catch {
     taskStatus = "failed";
+    await updateWorkflowTaskStatus("waiting");
     input.set((current) =>
       shouldShowFailureForSession(current, nextSession.id)
         ? {

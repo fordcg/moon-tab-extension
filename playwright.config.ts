@@ -25,7 +25,7 @@ export default defineConfig({
   projects: [
     {
       name: "web-preview",
-      testMatch: /extension-smoke\.spec\.ts/,
+      testMatch: /(?:extension-smoke|workflow-tasks)\.spec\.ts/,
     },
     {
       name: "chrome-extension",

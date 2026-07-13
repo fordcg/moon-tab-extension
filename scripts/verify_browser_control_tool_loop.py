@@ -51,14 +51,14 @@ class FakeOpenAiHandler(BaseHTTPRequestHandler):
 
         if not completed_tools:
             response = self.make_tool_call(
-                "call_network_idle",
-                "wait_for_network_idle",
-                {"idleMs": 200, "timeout": 3000},
+                "call_wait_for_state",
+                "wait_for_state",
+                {"state": "network_idle", "timeout": 3000},
             )
-        elif "scroll_page" not in completed_tools:
+        elif "scroll" not in completed_tools:
             response = self.make_tool_call(
                 "call_scroll",
-                "scroll_page",
+                "scroll",
                 {"direction": "down", "amount": 300},
             )
         elif "take_snapshot" not in completed_tools:
@@ -252,8 +252,8 @@ def main():
                                 contextPrompt: "",
                             }],
                             enabledToolIds: [
-                                "browser.wait_for_network_idle",
-                                "browser.scroll_page",
+                                "browser.wait_for_state",
+                                "browser.scroll",
                                 "browser.take_snapshot",
                                 "browser.click"
                             ],
@@ -282,24 +282,24 @@ def main():
 
                 chat = response.get("chat") or {}
                 records = flatten_tool_records(chat)
-                network_idle_record = next((item for item in records if item.get("name") == "wait_for_network_idle"), {})
-                scroll_record = next((item for item in records if item.get("name") == "scroll_page"), {})
+                wait_for_state_record = next((item for item in records if item.get("name") == "wait_for_state"), {})
+                scroll_record = next((item for item in records if item.get("name") == "scroll"), {})
                 snapshot_record = next((item for item in records if item.get("name") == "take_snapshot"), {})
                 click_record = next((item for item in records if item.get("name") == "click"), {})
 
                 add_check(
                     result,
-                    "fake model can trigger wait_for_network_idle through chat tool loop",
-                    bool(chat.get("ok") and network_idle_record.get("status") == "success"),
-                    actual=network_idle_record,
-                    expected="chat.send returns a successful wait_for_network_idle tool record",
+                    "fake model can trigger wait_for_state network_idle through chat tool loop",
+                    bool(chat.get("ok") and wait_for_state_record.get("status") == "success"),
+                    actual=wait_for_state_record,
+                    expected="chat.send returns a successful wait_for_state tool record",
                 )
                 add_check(
                     result,
-                    "fake model can trigger scroll_page through chat tool loop",
+                    "fake model can trigger scroll through chat tool loop",
                     bool(chat.get("ok") and scroll_record.get("status") == "success"),
                     actual=scroll_record,
-                    expected="chat.send returns a successful scroll_page tool record",
+                    expected="chat.send returns a successful scroll tool record",
                 )
                 add_check(
                     result,

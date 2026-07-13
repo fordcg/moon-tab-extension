@@ -89,7 +89,14 @@ describe("同步快照", () => {
     });
 
     expect(await getModelProviders()).toEqual([]);
-    expect(await getChatSessions()).toEqual([{ ...session, workflowTasks: [] }]);
+    expect(await getChatSessions()).toEqual([
+      {
+        ...session,
+        chatPreferenceOverrides: undefined,
+        tokenUsageEntries: undefined,
+        workflowTasks: [],
+      },
+    ]);
     await expect(getAppSetting("syncSettings")).resolves.toEqual({ syncEnabled: true });
   });
 

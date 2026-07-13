@@ -496,6 +496,81 @@ export interface ChatMessage {
   streaming?: boolean;
 }
 
+export type WorkflowTaskTemplate = "debug" | "research" | "automation";
+
+export type WorkflowTaskStatus = "preparing" | "running" | "waiting" | "completed" | "failed" | "canceled";
+
+export type WorkflowStepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export type WorkflowContextKind = "tab" | "page-content" | "screenshot" | "network" | "js-source" | "source-map" | "runtime" | "web-search" | "mcp";
+
+export type WorkflowArtifactKind = "conclusion" | "table" | "code" | "debug-report" | "automation-report" | "screenshot";
+
+export interface WorkflowTaskStep {
+  id: string;
+  title: string;
+  status: WorkflowStepStatus;
+  toolCallId?: string;
+  detail?: string;
+  updatedAt: number;
+}
+
+export interface WorkflowContextItem {
+  id: string;
+  kind: WorkflowContextKind;
+  title: string;
+  summary: string;
+  capturedAt: number;
+  redacted: boolean;
+  truncated: boolean;
+  sensitive: boolean;
+  pinned?: boolean;
+  referenceCount?: number;
+}
+
+export interface WorkflowArtifact {
+  id: string;
+  kind: WorkflowArtifactKind;
+  title: string;
+  content: string;
+  contextItemIds: string[];
+  createdAt: number;
+}
+
+export interface WorkflowTask {
+  id: string;
+  sessionId: string;
+  template: WorkflowTaskTemplate;
+  title: string;
+  objective: string;
+  status: WorkflowTaskStatus;
+  statusReason?: string;
+  createdAt: number;
+  updatedAt: number;
+  contextItems: WorkflowContextItem[];
+  steps: WorkflowTaskStep[];
+  artifacts: WorkflowArtifact[];
+}
+
+export interface WorkflowSkillVariable {
+  id: string;
+  label: string;
+  required: boolean;
+}
+
+export interface WorkflowSkill {
+  id: string;
+  title: string;
+  template: WorkflowTaskTemplate;
+  objectiveTemplate: string;
+  variables: WorkflowSkillVariable[];
+  requiredContextKinds: WorkflowContextKind[];
+  recommendedToolIds: string[];
+  artifactKinds: WorkflowArtifactKind[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ChatSession {
   id: string;
   title: string;
@@ -511,18 +586,6 @@ export interface ChatSession {
   chatPreferenceOverrides?: ChatSessionPreferenceOverrides;
   workflowTasks?: WorkflowTask[];
 }
-
-export type WorkflowTaskTemplate = "debug" | "research" | "automation";
-export type WorkflowTaskStatus = "preparing" | "running" | "waiting" | "completed" | "failed" | "canceled";
-export type WorkflowStepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
-export type WorkflowContextKind = "tab" | "page-content" | "screenshot" | "network" | "js-source" | "source-map" | "runtime" | "web-search" | "mcp";
-export type WorkflowArtifactKind = "conclusion" | "table" | "code" | "debug-report" | "automation-report" | "screenshot";
-export interface WorkflowTaskStep { id: string; title: string; status: WorkflowStepStatus; toolCallId?: string; detail?: string; updatedAt: number; }
-export interface WorkflowContextItem { id: string; kind: WorkflowContextKind; title: string; summary: string; capturedAt: number; redacted: boolean; truncated: boolean; sensitive: boolean; pinned?: boolean; referenceCount?: number; }
-export interface WorkflowArtifact { id: string; kind: WorkflowArtifactKind; title: string; content: string; contextItemIds: string[]; createdAt: number; }
-export interface WorkflowTask { id: string; sessionId: string; template: WorkflowTaskTemplate; title: string; objective: string; status: WorkflowTaskStatus; statusReason?: string; createdAt: number; updatedAt: number; contextItems: WorkflowContextItem[]; steps: WorkflowTaskStep[]; artifacts: WorkflowArtifact[]; }
-export interface WorkflowSkillVariable { id: string; label: string; required: boolean; }
-export interface WorkflowSkill { id: string; title: string; template: WorkflowTaskTemplate; objectiveTemplate: string; variables: WorkflowSkillVariable[]; requiredContextKinds: WorkflowContextKind[]; recommendedToolIds: string[]; artifactKinds: WorkflowArtifactKind[]; createdAt: number; updatedAt: number; }
 
 export interface ChatFolder {
   id: string;

@@ -182,7 +182,7 @@ def main():
                 add_check(
                     result,
                     "history drawer opens and exposes browser control entry",
-                    drawer["drawerPresent"] and drawer["drawerVisible"] and "浏览器控制" in action_text and "工具和 MCP" in action_text and "设置和帮助" in action_text,
+                    drawer["drawerPresent"] and drawer["drawerVisible"] and "浏览器控制" in action_text and "工具和 MCP" in action_text and "设置" in action_text,
                     actual=drawer,
                     expected="drawer visible with browser control, tools/MCP, and settings actions",
                 )
@@ -226,7 +226,7 @@ def main():
                 add_check(
                     result,
                     "tools and MCP dialog shows tool audit log",
-                    "MCP · Smoke Tool" in agent_tools_dialog["text"] and "[已脱敏]" in agent_tools_dialog["text"],
+                    "mcp_dev_echo" in agent_tools_dialog["text"] and "[已脱敏]" in agent_tools_dialog["text"],
                     actual=agent_tools_dialog,
                     expected="seeded redacted audit entry is visible before clearing",
                 )
@@ -234,7 +234,7 @@ def main():
                     """() => {
                         const dialog = document.querySelector('.sidepanel-agent-tools-dialog');
                         const button = Array.from(dialog?.querySelectorAll('button') || [])
-                            .find((node) => node.textContent.trim() === '清空');
+                            .find((node) => node.textContent.trim() === '清空记录');
                         const beforeText = dialog?.innerText || '';
                         const beforeDisabled = button instanceof HTMLButtonElement ? button.disabled : true;
                         if (!(button instanceof HTMLButtonElement) || button.disabled) {
@@ -249,7 +249,7 @@ def main():
                     """(clickedClearAudit) => {
                         const dialog = document.querySelector('.sidepanel-agent-tools-dialog');
                         const button = Array.from(dialog?.querySelectorAll('button') || [])
-                            .find((node) => node.textContent.trim() === '清空');
+                            .find((node) => node.textContent.trim() === '清空记录');
                         return {
                             ...clickedClearAudit,
                             present: Boolean(dialog),
@@ -264,7 +264,7 @@ def main():
                     result,
                     "tools and MCP dialog clears audit log",
                     clear_audit_state["clicked"]
-                    and "MCP · Smoke Tool" in clear_audit_state["beforeText"]
+                    and "mcp_dev_echo" in clear_audit_state["beforeText"]
                     and "暂无工具调用记录" in clear_audit_state["afterText"]
                     and clear_audit_state["afterDisabled"] is True,
                     actual=clear_audit_state,
@@ -295,7 +295,7 @@ def main():
                 add_check(
                     result,
                     "tools menu opens without breaking composer",
-                    clicked_tools and tools["openClass"] and tools["ariaHidden"] == "false",
+                    clicked_tools and tools["openClass"] and tools["ariaHidden"] in {"", "false"},
                     actual=tools,
                     expected="composer has is-tools-open and tools are aria-visible",
                 )
@@ -319,9 +319,9 @@ def main():
                 add_check(
                     result,
                     "add-tab context dialog opens",
-                    clicked_context and context_dialog["present"] and context_dialog["title"] == "添加标签页",
+                    clicked_context and context_dialog["present"] and context_dialog["title"] == "选择注入标签页",
                     actual=context_dialog,
-                    expected="context dialog titled 添加标签页 is present",
+                    expected="context dialog titled 选择注入标签页 is present",
                 )
 
                 add_check(

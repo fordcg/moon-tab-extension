@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent as ReactClipboardEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { hasTokenUsage, sumSessionTokenUsage } from "../../shared/chat/tokenUsage";
 import { isPngDataUrl, isTabCaptureImageAttachment, TAB_CAPTURE_VISIBLE_MESSAGE_TYPE, type TabCaptureVisibleResponse } from "../../shared/tabCapture";
-import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, PromptTemplate, SendShortcut } from "../../shared/types";
+import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, PromptTemplate, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
@@ -164,6 +164,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const guideChatFollowUp = useAppStore((state) => state.guideChatFollowUp);
   const abortActiveChatTask = useAppStore((state) => state.abortActiveChatTask);
   const respondBoundaryChoice = useAppStore((state) => state.respondBoundaryChoice);
+  const addNotification = useAppStore((state) => state.addNotification);
   const effectiveBrowserAutomationMode: BrowserAutomationMode = browserControlEnabled ? browserAutomationMode : "normal_restricted";
   const pageContextKey = `${pageContext.url ?? ""}\u0001${pageContext.title ?? ""}\u0001${pageContext.text}`;
   const sharedContextTabs = useMemo(
@@ -364,14 +365,25 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setAttachmentError("");
     await sendChatMessage(content, sendingAttachments, sendingPromptInvocations);
   };
-  const createWorkflow = async (template: import("../../shared/types").WorkflowTaskTemplate) => {
-    const content = input.trim();
-    if (!content) return;
+  const createWorkflow = async (template: WorkflowTaskTemplate) => {
+    const objective = input.trim();
+    if (!objective || sending || !canSend) {
+      return;
+    }
+
     setWorkflowMenuOpen(false);
-    const task = await createWorkflowTask(template, content);
     setInput("");
     setPromptInvocations([]);
-    await sendWorkflowTaskMessage(task.id, content);
+    setSlashMenuOpen(false);
+    setSlashQuery("");
+    setSlashStartIndex(undefined);
+    try {
+      const task = await createWorkflowTask(template, objective);
+      await sendWorkflowTaskMessage(task.id, objective);
+    } catch (error: unknown) {
+      setInput(objective);
+      addNotification({ type: "error", title: "任务创建失败", message: error instanceof Error ? error.message : "任务创建失败" });
+    }
   };
 
   const submitFollowUp = async (behavior = followUpBehavior) => {
@@ -869,8 +881,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               aria-label="新建任务"
               aria-haspopup="menu"
               aria-expanded={workflowMenuOpen}
-              title="新建任务"
-              disabled={!input.trim()}
+              title={!canSend ? "配置可用模型后可新建任务" : sending ? "当前响应结束后可新建任务" : !input.trim() ? "输入任务目标后可新建任务" : "新建任务"}
+              disabled={!canSend || sending || !input.trim()}
               onClick={toggleWorkflowMenu}
             >
               <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">

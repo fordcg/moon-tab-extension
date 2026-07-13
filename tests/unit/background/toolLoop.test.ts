@@ -226,6 +226,63 @@ describe("通用模型工具循环", () => {
     );
   });
 
+  it("工具调用记录会脱敏敏感参数", async () => {
+    const requestModel = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        content: "",
+        toolCalls: [
+          {
+            id: "call-secret",
+            name: "read_page_context",
+            arguments: {
+              mode: "text",
+              apiKey: "sk-secret",
+              nested: { password: "client-password", safe: "visible" },
+              headers: { Authorization: "Bearer header-secret" },
+              inline: "token=inline-secret",
+              list: [{ session: "session-secret" }],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, content: "最终回答" });
+    const executeTool: ModelToolExecutor = vi.fn(async (call) => ({
+      toolCallId: call.id,
+      name: call.name,
+      content: "页面标题：示例",
+    }));
+
+    const result = await runModelToolLoop({
+      initialMessages: baseMessages,
+      tools: [tool],
+      enabledToolIds: [tool.id],
+      requestModel,
+      executeTool,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("工具调用应返回成功结果");
+    }
+    const record = result.toolTurnMessages?.[0]?.toolCallRecords?.[0];
+    expect(record?.arguments).toMatchObject({
+      mode: "text",
+      apiKey: "[已脱敏]",
+      nested: { password: "[已脱敏]", safe: "visible" },
+      headers: { Authorization: "[已脱敏]" },
+      inline: "token=[已脱敏]",
+      list: [{ session: "[已脱敏]" }],
+    });
+    const serializedArguments = JSON.stringify(record?.arguments);
+    expect(serializedArguments).not.toContain("sk-secret");
+    expect(serializedArguments).not.toContain("client-password");
+    expect(serializedArguments).not.toContain("header-secret");
+    expect(serializedArguments).not.toContain("inline-secret");
+    expect(serializedArguments).not.toContain("session-secret");
+  });
+
   it("运行中引导会在下一轮模型决策前作为用户补充注入", async () => {
     const requestModel = vi
       .fn()
