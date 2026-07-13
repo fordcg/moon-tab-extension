@@ -1088,8 +1088,7 @@ describe("App", () => {
     const historyDialog = screen.getByRole("dialog", { name: "历史记录" });
     expect(historyDialog).toHaveClass("history-drawer");
     expect(within(historyDialog).queryByRole("button", { name: "关闭历史记录" })).not.toBeInTheDocument();
-    expect(within(historyDialog).getByRole("button", { name: "浏览器控制" })).toHaveClass("sidepanel-drawer-action", "sidepanel-browser-control-action");
-    expect(within(historyDialog).getByRole("button", { name: "浏览器控制" })).toHaveTextContent("已关闭");
+    expect(within(historyDialog).queryByRole("button", { name: "浏览器控制" })).not.toBeInTheDocument();
     expect(within(historyDialog).getByRole("button", { name: "工具和 MCP" })).toHaveClass("sidepanel-drawer-action");
     expect(within(historyDialog).getByRole("button", { name: "设置" })).toHaveClass("sidepanel-drawer-action", "sidepanel-drawer-action-chevron");
     expect(styles).toMatch(/\.drawer-panel\.history-drawer\s*\{[^}]*right:\s*var\(--sidepanel-popover-right\);/s);
@@ -1683,40 +1682,6 @@ describe("App", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "跟进行为" }), "guide");
 
     expect(updateChatPreferences).toHaveBeenCalledWith({ followUpBehavior: "guide" });
-  });
-
-  it("聊天偏好可以保存浏览器自动化默认模式", async () => {
-    const user = userEvent.setup();
-    const updateChatPreferences = vi.fn(async () => undefined);
-    useAppStore.setState({
-      chatPreferences: {
-        systemPrompt: "你是网页助手",
-        aiRequestRetryCount: 5,
-        browserAutomationMaxToolIterations: 32,
-        defaultBrowserAutomationMode: "normal_restricted",
-        toolCallingEnabled: false,
-        enabledToolIds: [],
-        temperature: 0.7,
-        maxTokens: 1024,
-        sendShortcut: "enter",
-        followUpBehavior: "queue",
-        historyDrawerDefaultOpen: true,
-        injectPageContextByDefault: true,
-        extractHtmlByDefault: false,
-        toolCallDisplayMode: "assistant_grouped",
-        showToolCallProcessInAssistantMode: false,
-        workspaceRequestLoggingEnabled: false,
-      },
-      updateChatPreferences,
-    });
-
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "浏览器自动化默认模式" }), "controlled_enhanced");
-
-    expect(updateChatPreferences).toHaveBeenCalledWith({ defaultBrowserAutomationMode: "controlled_enhanced" });
   });
 
   it("聊天偏好可以保存工具调用总开关并显示空工具列表", async () => {
@@ -6157,13 +6122,13 @@ describe("App", () => {
     expect(styles).toMatch(/\.sidebar-shell \.chat-composer\.is-tools-open \.composer-switches\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\);)(?=[^}]*transform:\s*none;)[^}]*}/s);
     expect(styles).toMatch(/\.composer-tool-menu\s*\{(?=[^}]*max-height:\s*min\(52dvh, calc\(100dvh - 5rem\)\) !important;)(?=[^}]*overflow-y:\s*auto !important;)[^}]*}/s);
     expect(styles).toMatch(/\.composer-tool-menu-item-check\s*\{(?=[^}]*height:\s*0\.75rem !important;)(?=[^}]*width:\s*0\.75rem !important;)[^}]*}/s);
-    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch,\s*\.sidebar-shell \.composer-switches \.composer-mode-trigger,\s*\.sidebar-shell \.composer-switches \.image-upload-button\s*\{(?=[^}]*display:\s*flex !important;)(?=[^}]*height:\s*2\.25rem;)[^}]*}/s);
+    expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch,\s*\.sidebar-shell \.composer-switches \.image-upload-button\s*\{(?=[^}]*display:\s*flex !important;)(?=[^}]*height:\s*2\.25rem;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch::after\s*\{(?=[^}]*content:\s*attr\(data-label\);)(?=[^}]*flex:\s*1 1 auto;)(?=[^}]*order:\s*2;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch-icon,\s*\.sidebar-shell \.composer-switches \.image-upload-button::before\s*\{(?=[^}]*order:\s*1;)(?=[^}]*width:\s*1\.25rem;)[^}]*}/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switches \.composer-switch\[aria-checked="true"\]::before,\s*\.sidebar-shell \.composer-switches \.composer-switch\[aria-pressed="true"\]::before\s*\{(?=[^}]*height:\s*0\.75rem;)(?=[^}]*width:\s*0\.75rem;)(?=[^}]*order:\s*3;)(?=[^}]*margin-left:\s*auto;)[^}]*}/s);
   });
 
-  it("全局浏览器控制按钮位于设置按钮左侧并更新运行态", async () => {
+  it("工具弹窗内提供浏览器控制开关并更新运行态", async () => {
     const user = userEvent.setup();
     const setBrowserControlEnabled = vi.fn(async (enabled: boolean) => {
       useAppStore.setState({ browserControlEnabled: enabled });
@@ -6176,39 +6141,36 @@ describe("App", () => {
 
     render(<App />);
 
-    const browserControlButton = screen.getByRole("button", { name: "浏览器控制" });
-    const settingsButton = screen.getByRole("button", { name: "设置" });
-    expect(browserControlButton.nextElementSibling).toBe(settingsButton);
-    expect(browserControlButton).toHaveClass("ui-button-secondary", "app-header-icon-button");
-    expect(settingsButton).toHaveClass("ui-button-secondary", "app-header-icon-button");
-    expect(browserControlButton).toHaveTextContent("");
-    expect(settingsButton).toHaveTextContent("");
-    expect(browserControlButton).not.toHaveClass("browser-control-global-button-active");
-    expect(browserControlButton).toHaveAttribute("aria-pressed", "false");
-    expect(browserControlButton).toHaveAttribute("title", expect.stringContaining("Chrome 调试协议"));
-    expect(settingsButton).toHaveAttribute("title", "设置");
-    expect(browserControlButton.querySelector(".app-header-icon")).not.toBeNull();
-    expect([...browserControlButton.querySelectorAll(".app-header-icon path")].map((path) => path.getAttribute("d")).join(" ")).not.toContain("l-2 3");
-    expect(settingsButton.querySelector(".app-header-icon")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "浏览器控制" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "设置" })).toHaveClass("ui-button-secondary", "app-header-icon-button");
     expect(screen.queryByRole("checkbox", { name: "启用浏览器自动化控制" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "运行时只读分析" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "工具" }));
+    const toolCallingButton = screen.getByRole("button", { name: /工具调用：/ });
+    await user.click(toolCallingButton);
+
+    const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
+    const browserControlButton = within(toolDialog).getByRole("button", { name: "浏览器控制" });
+    expect(browserControlButton).toHaveAttribute("aria-pressed", "false");
+    expect(browserControlButton).toHaveAttribute("title", expect.stringContaining("Chrome 调试协议"));
+    expect(within(toolDialog).getByText("开启后才能使用浏览器自动化工具，并选择普通/受控增强/完全访问模式。")).toBeInTheDocument();
+    expect(within(toolDialog).queryByRole("group", { name: "浏览器自动化模式" })).not.toBeInTheDocument();
 
     await user.click(browserControlButton);
 
     expect(setBrowserControlEnabled).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器控制" })).toHaveAttribute("aria-pressed", "true"));
-    expect(screen.getByRole("button", { name: "浏览器控制" })).toHaveClass("browser-control-global-button-active");
-    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).not.toBeDisabled();
+    await waitFor(() => expect(within(toolDialog).getByRole("button", { name: "浏览器控制" })).toHaveAttribute("aria-pressed", "true"));
+    expect(within(toolDialog).getByRole("group", { name: "浏览器自动化模式" })).toBeInTheDocument();
+    expect(within(toolDialog).getByRole("button", { name: "普通模式" })).toHaveAttribute("aria-pressed", "true");
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
     expect(styles).toContain(".app-header-icon-button");
     expect(styles).toMatch(/\.sidebar-shell \.app-header-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
     expect(styles).toMatch(/\.sidebar-shell \.composer-switch-icon\s*\{[^}]*height:\s*1\.25rem;[^}]*width:\s*1\.25rem;[^}]*fill:\s*none;[^}]*stroke:\s*currentColor;/s);
     expect(styles).toMatch(/\.sidebar-shell \.message-icon-button svg\s*\{[^}]*height:\s*1rem;[^}]*width:\s*1rem;[^}]*stroke-width:\s*1\.8;/s);
-    expect(styles.indexOf(".ui-button-secondary.browser-control-global-button-active")).toBeGreaterThan(styles.indexOf(".ui-button-secondary"));
-    expect(styles).toContain(".composer-mode-trigger");
-    expect(styles).toContain(".composer-mode-menu-header");
+    expect(styles).toContain(".composer-tool-menu-browser-control");
+    expect(styles).toContain(".composer-tool-menu-mode-chip");
   });
 
   it("普通侧边栏顶部操作区提供打开悬浮助手按钮并发送 runtime 消息", async () => {
@@ -6226,8 +6188,8 @@ describe("App", () => {
     render(<App />);
 
     const floatingButton = screen.getByRole("button", { name: "打开悬浮助手" });
-    const browserControlButton = screen.getByRole("button", { name: "浏览器控制" });
-    expect(floatingButton.nextElementSibling).toBe(browserControlButton);
+    const settingsButton = screen.getByRole("button", { name: "设置" });
+    expect(floatingButton.nextElementSibling).toBe(settingsButton);
     expect(floatingButton).toHaveClass("ui-button-secondary", "app-header-icon-button");
     expect(floatingButton).toHaveAttribute("title", "打开悬浮助手");
     expect(floatingButton).toHaveTextContent("");
@@ -6254,8 +6216,8 @@ describe("App", () => {
     render(<App />);
 
     const floatingButton = screen.getByRole("button", { name: "关闭悬浮助手" });
-    const browserControlButton = screen.getByRole("button", { name: "浏览器控制" });
-    expect(floatingButton.nextElementSibling).toBe(browserControlButton);
+    const settingsButton = screen.getByRole("button", { name: "设置" });
+    expect(floatingButton.nextElementSibling).toBe(settingsButton);
     expect(floatingButton).toHaveClass("ui-button-secondary", "app-header-icon-button");
     expect(floatingButton).toHaveAttribute("title", "关闭悬浮助手");
     expect(floatingButton).toHaveTextContent("");
@@ -6284,7 +6246,7 @@ describe("App", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("缺少有效的标签页 ID，无法关闭悬浮助手");
   });
 
-  it("用户点击 Chrome 调试提示栏取消后回滚全局浏览器控制按钮状态", async () => {
+  it("用户点击 Chrome 调试提示栏取消后回滚浏览器控制运行态", async () => {
     let runtimeListener: ((message: unknown) => void) | undefined;
     const addListener = vi.fn((listener: (message: unknown) => void) => {
       runtimeListener = listener;
@@ -6302,17 +6264,13 @@ describe("App", () => {
 
     const { unmount } = render(<App />);
 
-    const browserControlButton = screen.getByRole("button", { name: "浏览器控制" });
-    expect(browserControlButton).toHaveAttribute("aria-pressed", "true");
-    expect(browserControlButton).toHaveClass("browser-control-global-button-active");
+    expect(useAppStore.getState().browserControlEnabled).toBe(true);
 
     act(() => {
       runtimeListener?.({ type: "browserControl.detached", tabId: 9, reason: "canceled_by_user" });
     });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器控制" })).toHaveAttribute("aria-pressed", "false"));
-    expect(screen.getByRole("button", { name: "浏览器控制" })).not.toHaveClass("browser-control-global-button-active");
-    expect(useAppStore.getState().browserControlEnabled).toBe(false);
+    await waitFor(() => expect(useAppStore.getState().browserControlEnabled).toBe(false));
     expect(useAppStore.getState().runtimeReadonlyEnabled).toBe(false);
 
     unmount();
@@ -6347,8 +6305,7 @@ describe("App", () => {
       });
     });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("受控增强"));
-    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveClass("composer-mode-trigger-controlled_enhanced");
+    await waitFor(() => expect(useAppStore.getState().browserAutomationMode).toBe("controlled_enhanced"));
 
     act(() => {
       runtimeListener?.({
@@ -6359,7 +6316,7 @@ describe("App", () => {
       });
     });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("受控增强"));
+    await waitFor(() => expect(useAppStore.getState().browserAutomationMode).toBe("controlled_enhanced"));
 
     act(() => {
       runtimeListener?.({
@@ -6369,15 +6326,14 @@ describe("App", () => {
       });
     });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("普通模式"));
-    expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted");
+    await waitFor(() => expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted"));
 
     unmount();
 
     expect(removeListener).toHaveBeenCalledWith(runtimeListener);
   });
 
-  it("浏览器自动化模式菜单使用说明型弹窗并按风险着色", async () => {
+  it("工具弹窗内的浏览器自动化模式可直接切换", async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, "confirm");
     const setBrowserAutomationMode = vi.fn(async (mode) => {
@@ -6392,27 +6348,23 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "工具" }));
-    const modeButton = screen.getByRole("button", { name: "浏览器自动化模式" });
-    await user.click(modeButton);
+    await user.click(screen.getByRole("button", { name: /工具调用：/ }));
 
-    const modeMenu = screen.getByRole("listbox", { name: "浏览器自动化模式" });
-    expect(modeMenu).toBeInTheDocument();
-    expect(modeMenu).toHaveAttribute("style", expect.stringMatching(/left:\s*\d/));
-    expect(modeMenu).toHaveAttribute("style", expect.stringMatching(/top:\s*\d/));
-    expect(screen.getByText("选择浏览器自动化模式")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /普通模式/ })).toHaveTextContent("默认受限");
-    expect(screen.getByRole("option", { name: /受控增强/ })).toHaveTextContent("允许 AI 请求一次性边界授权");
-    expect(screen.getByRole("option", { name: /完全访问/ })).toHaveTextContent("最高风险");
+    const toolDialog = screen.getByRole("dialog", { name: "工具调用设置" });
+    const modeGroup = within(toolDialog).getByRole("group", { name: "浏览器自动化模式" });
+    expect(within(modeGroup).getByRole("button", { name: "普通模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(modeGroup).getByRole("button", { name: "受控增强" })).toHaveAttribute("title", expect.stringContaining("一次性边界授权"));
+    expect(within(modeGroup).getByRole("button", { name: "完全访问" })).toHaveAttribute("title", expect.stringContaining("最高风险"));
 
-    await user.click(screen.getByRole("option", { name: /完全访问/ }));
+    await user.click(within(modeGroup).getByRole("button", { name: "完全访问" }));
 
     expect(setBrowserAutomationMode).toHaveBeenCalledWith("full_access");
     expect(confirmSpy).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveTextContent("完全访问"));
-    expect(screen.getByRole("button", { name: "浏览器自动化模式" })).toHaveClass("composer-mode-trigger-full_access");
+    await waitFor(() => expect(within(modeGroup).getByRole("button", { name: "完全访问" })).toHaveAttribute("aria-pressed", "true"));
 
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toMatch(/\.composer-mode-menu\s*\{(?=[^}]*position:\s*fixed !important;)(?=[^}]*transform:\s*translateY\(-100%\) !important;)[^}]*}/s);
+    expect(styles).toContain(".composer-tool-menu-mode-chip");
+    expect(styles).toContain(".composer-tool-menu-browser-control");
 
     confirmSpy.mockRestore();
   });
@@ -6493,7 +6445,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /click/ })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /take_snapshot/ })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: /click/ })).not.toBeDisabled();
-    expect(screen.getByText("读取当前页面结构快照")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /take_snapshot/ })).toHaveAttribute("title", expect.stringContaining("快照"));
 
     await user.click(screen.getByRole("button", { name: "启用全部" }));
 

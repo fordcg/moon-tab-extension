@@ -8,7 +8,6 @@ import {
   getRegisteredModelTools,
 } from "../../../shared/models/toolRegistry";
 import type { ModelToolCapability, ModelToolRisk, ModelToolRuntimeRequirement } from "../../../shared/models/types";
-import type { BrowserAutomationMode } from "../../../shared/toolAuthorization";
 import type { ChatPreferenceValues, SendShortcut } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
@@ -25,12 +24,6 @@ const sendShortcutOptions: Array<{ value: SendShortcut; label: string }> = [
 const followUpBehaviorOptions: Array<{ value: ChatPreferenceValues["followUpBehavior"]; label: string }> = [
   { value: "queue", label: "排队" },
   { value: "guide", label: "引导" },
-];
-
-const browserAutomationModeOptions: Array<{ value: BrowserAutomationMode; label: string }> = [
-  { value: "normal_restricted", label: "普通模式" },
-  { value: "controlled_enhanced", label: "受控增强" },
-  { value: "full_access", label: "完全访问" },
 ];
 
 const toolRuntimeLabels: Record<ModelToolRuntimeRequirement, string> = {
@@ -118,15 +111,6 @@ export function ChatPreferenceSettings() {
           step={1}
           onChange={(value) => void updateChatPreferences({ browserAutomationMaxToolIterations: value })}
         />
-        <label className="chat-preference-field">
-          浏览器自动化默认模式
-          <SettingsSelect
-            ariaLabel="浏览器自动化默认模式"
-            value={chatPreferences.defaultBrowserAutomationMode ?? "normal_restricted"}
-            options={browserAutomationModeOptions}
-            onChange={(value) => void updateChatPreferences({ defaultBrowserAutomationMode: value as BrowserAutomationMode })}
-          />
-        </label>
         <GlobalPreferenceNumberInput
           label="temperature"
           value={chatPreferences.temperature}

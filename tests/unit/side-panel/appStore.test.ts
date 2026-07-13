@@ -1732,7 +1732,7 @@ describe("appStore", () => {
     expect(useAppStore.getState().chatPreferences.extractHtmlByDefault).toBe(false);
     expect(useAppStore.getState().chatPreferences.aiRequestRetryCount).toBe(5);
     expect(useAppStore.getState().chatPreferences.browserAutomationMaxToolIterations).toBe(32);
-    expect(useAppStore.getState().chatPreferences.defaultBrowserAutomationMode).toBe("normal_restricted");
+    expect(useAppStore.getState().chatPreferences).not.toHaveProperty("defaultBrowserAutomationMode");
     expect(useAppStore.getState().chatPreferences.toolCallingEnabled).toBe(true);
     expect(useAppStore.getState().chatPreferences.enabledToolIds).toEqual(getRegisteredModelTools().map((tool) => tool.id));
     expect(useAppStore.getState().chatPreferences.toolCallDisplayMode).toBe("assistant_grouped");
@@ -1831,17 +1831,6 @@ describe("appStore", () => {
     expect(await getAppSetting("chatPreferences")).toMatchObject({
       toolCallingEnabled: true,
       enabledToolIds: ["page.read_context"],
-    });
-  });
-
-  it("可以保存聊天偏好中的浏览器自动化默认模式", async () => {
-    await useAppStore.getState().updateChatPreferences({
-      defaultBrowserAutomationMode: "full_access",
-    });
-
-    expect(useAppStore.getState().chatPreferences.defaultBrowserAutomationMode).toBe("full_access");
-    expect(await getAppSetting("chatPreferences")).toMatchObject({
-      defaultBrowserAutomationMode: "full_access",
     });
   });
 

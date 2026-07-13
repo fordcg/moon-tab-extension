@@ -8,7 +8,6 @@ import { useAppStore } from "../state/appStore";
 export type SidePanelDrawerPage = "history" | "settings";
 
 interface SessionHistoryDialogProps {
-  browserControlEnabled: boolean;
   open: boolean;
   page: SidePanelDrawerPage;
   origin: "header" | "history";
@@ -18,13 +17,8 @@ interface SessionHistoryDialogProps {
   onOpenSettings: (tab?: SettingsTab) => void;
   onReturnToHistory: () => void;
   onRestoreFocus: () => void;
-  onToggleBrowserControl: () => void;
 }
 
-const BROWSER_CONTROL_ICON_PATHS = [
-  "M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z",
-  "M3 9h18M12 12v4M10 14h4",
-];
 const TOOLS_ICON_PATHS = [
   "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3",
   "M2 14h4M10 8h4M18 16h4",
@@ -60,7 +54,6 @@ function usePrefersReducedMotion() {
 }
 
 export function SessionHistoryDialog({
-  browserControlEnabled,
   open,
   page,
   origin,
@@ -70,7 +63,6 @@ export function SessionHistoryDialog({
   onOpenSettings,
   onReturnToHistory,
   onRestoreFocus,
-  onToggleBrowserControl,
 }: SessionHistoryDialogProps) {
   const [historyMode, setHistoryMode] = useState<HistoryDrawerMode>("compact");
   const [historyPageTransitionClassName, setHistoryPageTransitionClassName] = useState<HistoryPageTransition>("");
@@ -360,16 +352,6 @@ export function SessionHistoryDialog({
                     ) : null}
                   </div>
                   <div className="sidepanel-drawer-footer" data-variant="recent-menu">
-                    <DrawerAction
-                      active={browserControlEnabled}
-                      ariaPressed={browserControlEnabled}
-                      className="sidepanel-browser-control-action"
-                      iconPaths={BROWSER_CONTROL_ICON_PATHS}
-                      label="浏览器控制"
-                      status={browserControlEnabled ? "已开启" : "已关闭"}
-                      title={browserControlEnabled ? "浏览器控制已开启。点击后关闭。" : "浏览器控制已关闭。点击后开启。"}
-                      onClick={onToggleBrowserControl}
-                    />
                     <DrawerAction iconPaths={TOOLS_ICON_PATHS} label="工具和 MCP" onClick={onOpenAgentTools} />
                     <DrawerAction buttonRef={settingsActionRef} chevron iconPaths={SETTINGS_ICON_PATHS} label="设置" onClick={() => onOpenSettings("channels")} />
                   </div>

@@ -45,8 +45,6 @@ export function App() {
   const refreshPageContext = useAppStore((state) => state.refreshPageContext);
   const createChatSession = useAppStore((state) => state.createChatSession);
   const composerHasDraft = useAppStore((state) => state.composerHasDraft);
-  const browserControlEnabled = useAppStore((state) => state.browserControlEnabled);
-  const setBrowserControlEnabled = useAppStore((state) => state.setBrowserControlEnabled);
   const markBrowserControlDetached = useAppStore((state) => state.markBrowserControlDetached);
   const markBrowserAutomationModeChanged = useAppStore((state) => state.markBrowserAutomationModeChanged);
   const showBoundaryChoiceRequest = useAppStore((state) => state.showBoundaryChoiceRequest);
@@ -215,23 +213,6 @@ export function App() {
             </svg>
           </button>
           <button
-            className={
-              browserControlEnabled
-                ? "ui-button-secondary app-header-icon-button browser-control-global-button-active"
-                : "ui-button-secondary app-header-icon-button"
-            }
-            type="button"
-            aria-label="浏览器控制"
-            aria-pressed={browserControlEnabled}
-            title={`${browserControlEnabled ? "浏览器控制已开启" : "浏览器控制已关闭"}。开启后扩展会通过 Chrome 调试协议连接当前普通网页，浏览器会显示正在调试提示；关闭会立即断开调试会话。`}
-            onClick={() => void setBrowserControlEnabled(!browserControlEnabled)}
-          >
-            <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
-              <path d="M3 9h18M12 12v4M10 14h4" />
-            </svg>
-          </button>
-          <button
             className="ui-button-secondary app-header-icon-button"
             type="button"
             aria-label="设置"
@@ -253,14 +234,12 @@ export function App() {
           drawerOrigin={drawerOrigin}
           settingsInitialTab={settingsInitialTab}
           historyPanelOpen={historyPanelOpen}
-          browserControlEnabled={browserControlEnabled}
           onDrawerOpenChange={handleDrawerOpenChange}
           onRestoreDrawerFocus={restoreDrawerFocus}
           onOpenHistoryDrawer={openHistoryDrawer}
           onOpenSettings={openSettings}
           onReturnSettingsToHistory={returnSettingsToHistory}
           onOpenAgentTools={openAgentTools}
-          onToggleBrowserControl={() => void setBrowserControlEnabled(!browserControlEnabled)}
           onToggleHistoryPanel={handleToggleHistoryPanel}
         />
       </section>

@@ -133,7 +133,6 @@ import {
 } from "./appStoreModelSelection";
 import {
   createDefaultChatPreferences,
-  normalizeBrowserAutomationMode,
   normalizeChatPreferenceOverrides,
   normalizeChatPreferences,
   resolveDefaultContextMode,
@@ -711,12 +710,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       return;
     }
 
-    const defaultBrowserAutomationMode = enabled
-      ? normalizeBrowserAutomationMode(get().chatPreferences.defaultBrowserAutomationMode)
-      : "normal_restricted";
     set({
       browserControlEnabled: enabled,
-      browserAutomationMode: defaultBrowserAutomationMode,
+      browserAutomationMode: "normal_restricted",
       ...(enabled ? { pendingBoundaryChoice: undefined } : { runtimeReadonlyEnabled: false, pendingBoundaryChoice: undefined }),
     });
     const response = await syncBrowserControlEnabled(enabled);
@@ -726,18 +722,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
         browserAutomationMode: previousMode,
         failure: { message: response.message },
       });
-      return;
-    }
-
-    if (enabled && defaultBrowserAutomationMode !== "normal_restricted") {
-      const modeResponse = await syncBrowserAutomationMode(defaultBrowserAutomationMode);
-      if (!modeResponse.ok) {
-        set({
-          browserAutomationMode: "normal_restricted",
-          pendingBoundaryChoice: undefined,
-          failure: { message: modeResponse.message },
-        });
-      }
     }
   },
   setBrowserAutomationMode: async (mode) => {
@@ -1954,7 +1938,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
         ? {
             requestLogging: {
               sidebarState: {
-                mode: input.state.browserAutomationMode ?? input.state.chatPreferences.defaultBrowserAutomationMode ?? "normal_restricted",
+                mode: input.state.browserAutomationMode ?? "normal_restricted",
                 privateMode: Boolean(input.privateMode),
                 toolCallingEnabled: effectiveChatPreferences.toolCallingEnabled,
                 enabledToolIds,

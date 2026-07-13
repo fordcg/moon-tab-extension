@@ -10,7 +10,6 @@ import { WorkflowTaskCard } from "./WorkflowTaskCard";
 import { WorkflowSkillDialog } from "./WorkflowSkillDialog";
 
 interface ChatPanelProps {
-  browserControlEnabled: boolean;
   drawerOpen: boolean;
   drawerOrigin: "header" | "history";
   drawerPage: "history" | "settings";
@@ -22,12 +21,10 @@ interface ChatPanelProps {
   onOpenHistoryDrawer: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onReturnSettingsToHistory: () => void;
-  onToggleBrowserControl: () => void;
   onToggleHistoryPanel: () => void;
 }
 
 export function ChatPanel({
-  browserControlEnabled,
   drawerOpen,
   drawerOrigin,
   drawerPage,
@@ -39,7 +36,6 @@ export function ChatPanel({
   onOpenHistoryDrawer,
   onOpenSettings,
   onReturnSettingsToHistory,
-  onToggleBrowserControl,
   onToggleHistoryPanel,
 }: ChatPanelProps) {
   const [chatPreferencesOpen, setChatPreferencesOpen] = useState(false);
@@ -204,13 +200,11 @@ export function ChatPanel({
         page={drawerPage}
         origin={drawerOrigin}
         settingsInitialTab={settingsInitialTab}
-        browserControlEnabled={browserControlEnabled}
         onOpenChange={onDrawerOpenChange}
         onRestoreFocus={onRestoreDrawerFocus}
         onOpenAgentTools={onOpenAgentTools}
         onOpenSettings={onOpenSettings}
         onReturnToHistory={onReturnSettingsToHistory}
-        onToggleBrowserControl={onToggleBrowserControl}
       />
       <ChatPreferenceDrawer open={chatPreferencesOpen} onOpenChange={setChatPreferencesOpen} />
     </section>

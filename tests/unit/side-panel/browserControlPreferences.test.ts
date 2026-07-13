@@ -9,7 +9,7 @@ describe("浏览器控制全局运行态", () => {
     await clearDatabase();
   });
 
-  it("启动后默认关闭浏览器控制，但会从聊天偏好恢复默认自动化模式", async () => {
+  it("启动后默认关闭浏览器控制，并忽略历史偏好中的自动化默认模式字段", async () => {
     await saveAppSetting({
       key: "chatPreferences",
       value: {
@@ -25,7 +25,7 @@ describe("浏览器控制全局运行态", () => {
     await useAppStore.getState().loadChannelConfig();
 
     expect(useAppStore.getState().browserControlEnabled).toBe(false);
-    expect(useAppStore.getState().chatPreferences.defaultBrowserAutomationMode).toBe("controlled_enhanced");
+    expect(useAppStore.getState().chatPreferences).not.toHaveProperty("defaultBrowserAutomationMode");
     expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted");
   });
 
@@ -68,68 +68,35 @@ describe("浏览器控制全局运行态", () => {
     expect(await getAppSetting("chatPreferences")).toBeUndefined();
   });
 
-  it("开启浏览器控制后会应用聊天偏好中的默认自动化模式", async () => {
+  it("开启浏览器控制后始终从普通模式起步", async () => {
     const sendMessage = vi.fn((message: { type: string; enabled?: boolean; mode?: string }, callback: (response: unknown) => void) => {
       callback({ ok: true, attached: true, tabId: 7, message: "ok" });
       return undefined;
     });
     vi.stubGlobal("chrome", { runtime: { sendMessage } });
-    await useAppStore.getState().updateChatPreferences({ defaultBrowserAutomationMode: "controlled_enhanced" });
-
-    await useAppStore.getState().setBrowserControlEnabled(true);
-
-    expect(useAppStore.getState().browserControlEnabled).toBe(true);
-    expect(useAppStore.getState().browserAutomationMode).toBe("controlled_enhanced");
-    expect(sendMessage).toHaveBeenNthCalledWith(1, { type: "browserControl.setEnabled", enabled: true }, expect.any(Function));
-    expect(sendMessage).toHaveBeenNthCalledWith(2, {
-      type: "browserControl.setAutomationMode",
-      mode: "controlled_enhanced",
-      reason: "用户在输入区切换浏览器自动化模式。",
-    }, expect.any(Function));
-    expect(await getAppSetting("chatPreferences")).toMatchObject({
-      defaultBrowserAutomationMode: "controlled_enhanced",
-    });
-  });
-
-  it("工具偏好可以保存高风险工具 ID，但不会保存实时授权态", async () => {
-    await useAppStore.getState().updateChatPreferences({
-      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
-      defaultBrowserAutomationMode: "full_access",
-    });
-
-    const stored = await getAppSetting("chatPreferences");
-    expect(stored).toMatchObject({
-      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
-      defaultBrowserAutomationMode: "full_access",
-    });
-    expect(stored).not.toHaveProperty("browserControlEnabled");
-    expect(stored).not.toHaveProperty("browserAutomationMode");
-    expect(stored).not.toHaveProperty("pendingBoundaryChoice");
-  });
-
-  it("默认自动化模式同步失败时保持浏览器控制开启并回退普通模式", async () => {
-    const sendMessage = vi.fn((message: { type: string; enabled?: boolean; mode?: string }, callback: (response: unknown) => void) => {
-      if (message.type === "browserControl.setAutomationMode") {
-        callback({ ok: false, message: "当前页面无法切换到完全访问" });
-        return undefined;
-      }
-
-      callback({ ok: true, attached: true, tabId: 7, message: "ok" });
-      return undefined;
-    });
-    vi.stubGlobal("chrome", { runtime: { sendMessage } });
-    await useAppStore.getState().updateChatPreferences({ defaultBrowserAutomationMode: "full_access" });
+    useAppStore.setState({ browserAutomationMode: "full_access" });
 
     await useAppStore.getState().setBrowserControlEnabled(true);
 
     expect(useAppStore.getState().browserControlEnabled).toBe(true);
     expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted");
-    expect(useAppStore.getState().failure?.message).toBe("当前页面无法切换到完全访问");
-    expect(sendMessage).toHaveBeenNthCalledWith(2, {
-      type: "browserControl.setAutomationMode",
-      mode: "full_access",
-      reason: "用户在输入区切换浏览器自动化模式。",
-    }, expect.any(Function));
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith({ type: "browserControl.setEnabled", enabled: true }, expect.any(Function));
+  });
+
+  it("工具偏好可以保存高风险工具 ID，但不会保存实时授权态", async () => {
+    await useAppStore.getState().updateChatPreferences({
+      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
+    });
+
+    const stored = await getAppSetting("chatPreferences");
+    expect(stored).toMatchObject({
+      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
+    });
+    expect(stored).not.toHaveProperty("defaultBrowserAutomationMode");
+    expect(stored).not.toHaveProperty("browserControlEnabled");
+    expect(stored).not.toHaveProperty("browserAutomationMode");
+    expect(stored).not.toHaveProperty("pendingBoundaryChoice");
   });
 
   it("关闭或外部断开浏览器控制会清理增强模式和边界确认", async () => {
