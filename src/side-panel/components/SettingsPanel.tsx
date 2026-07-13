@@ -14,7 +14,7 @@ const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
   { id: "channels", label: "渠道管理" },
   { id: "rules", label: "提取规则" },
   { id: "chat", label: "聊天偏好" },
-  { id: "mcp", label: "MCP 工具" },
+  { id: "mcp", label: "工具和 MCP" },
   { id: "playbooks", label: "任务策略" },
   { id: "prompts", label: "提示词" },
   { id: "sync", label: "同步设置" },
