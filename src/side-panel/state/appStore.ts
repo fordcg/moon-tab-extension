@@ -27,6 +27,7 @@ import {
   saveChatSession,
   saveModelProvider,
   saveProviderModel,
+  recoverInterruptedChatSessions,
   updateChatSession,
 } from "../../shared/storage/repositories";
 import {
@@ -54,6 +55,7 @@ import type {
   ChatFolder,
   ChatImageAttachment,
   ChatMessage,
+  ChatPendingFollowUp,
   ChatPromptInvocation,
   ChatPreferenceValues,
   ChatSession,
@@ -155,8 +157,10 @@ import {
   type ChatTaskMap,
   isSessionTaskRunning,
   registerChatTaskAbortHandle,
+  registerChatTaskExecution,
   registerChatTaskFollowUpHandle,
   sendChatTaskFollowUp,
+  settleChatTaskExecution,
   unregisterChatTaskAbortHandle,
   unregisterChatTaskFollowUpHandle,
   upsertChatTask,
@@ -238,16 +242,7 @@ export interface ChatRetryProgress {
   maxRetries: number;
 }
 
-export interface ChatFollowUpItem {
-  id: string;
-  sessionId: string;
-  content: string;
-  attachments?: ChatImageAttachment[];
-  promptInvocations?: ChatPromptInvocation[];
-  behavior: ChatPreferenceValues["followUpBehavior"];
-  createdAt: number;
-  userMessageId?: string;
-}
+export type ChatFollowUpItem = ChatPendingFollowUp;
 
 export interface AppState {
   providers: ModelProvider[];
@@ -293,6 +288,7 @@ export interface AppState {
   mcpBearerTokens: McpServerSecretMap;
   remoteBackups: SyncRemoteBackupMeta[];
   syncOperation: SyncOperationState;
+  syncRestoreBarrierActive: boolean;
   failure?: RequestFailure;
   notifications: AppNotification[];
   addNotification: (notification: AppNotificationDraft) => string;
@@ -347,6 +343,7 @@ export interface AppState {
   reorderPromptTemplates: (orderedIds: string[]) => Promise<void>;
   createWorkflowTask: (template: WorkflowTaskTemplate, objective: string) => Promise<WorkflowTask>;
   updateWorkflowTaskStatus: (taskId: string, status: WorkflowTaskStatus, reason?: string) => Promise<void>;
+  cancelWorkflowTask: (taskId: string) => Promise<void>;
   upsertWorkflowTaskStep: (taskId: string, step: WorkflowTaskStep) => Promise<void>;
   addWorkflowContextItem: (taskId: string, item: WorkflowContextItem) => Promise<void>;
   updateWorkflowContextItem: (
@@ -483,6 +480,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   syncOperation: {
     loading: false,
   },
+  syncRestoreBarrierActive: false,
   notifications: [],
   addNotification: (notification) => {
     const item = createAppNotification(notification);
@@ -684,11 +682,29 @@ export const useAppStore = create<AppState>()((set, get) => ({
   updateActiveSessionChatPreferences: async (updates) => {
     const state = get();
     const now = Date.now();
+    if (state.privateModeActive && state.privateChatSession) {
+      set((current) => {
+        if (!current.privateModeActive || !current.privateChatSession || current.privateChatSession.id !== state.privateChatSession?.id) {
+          return {};
+        }
+        return {
+          privateChatSession: {
+            ...current.privateChatSession,
+            updatedAt: Math.max(now, current.privateChatSession.updatedAt + 1),
+            chatPreferenceOverrides: normalizeChatPreferenceOverrides({
+              ...current.privateChatSession.chatPreferenceOverrides,
+              ...updates,
+            }),
+          },
+        };
+      });
+      return;
+    }
+
     const existingSession = state.chatSessions.find((session) => session.id === state.activeSessionId);
-    const activeSession =
-      existingSession ??
-      ({
-        id: `session-${now}`,
+    if (!existingSession) {
+      const session: ChatSession = {
+        id: createSessionId(now),
         title: "新对话",
         archived: false,
         sortOrder: now,
@@ -696,21 +712,30 @@ export const useAppStore = create<AppState>()((set, get) => ({
         updatedAt: now,
         selectedModelId: state.selectedModelId,
         messages: [],
-      } satisfies ChatSession);
-    const chatPreferenceOverrides = normalizeChatPreferenceOverrides({
-      ...activeSession.chatPreferenceOverrides,
-      ...updates,
-    });
-    const nextSession: ChatSession = {
-      ...activeSession,
-      updatedAt: now,
-      chatPreferenceOverrides,
-    };
+        chatPreferenceOverrides: normalizeChatPreferenceOverrides(updates),
+      };
+      await saveChatSession(session);
+      set((current) => ({
+        activeSessionId: session.id,
+        chatSessions: upsertSession(current.chatSessions, session),
+      }));
+      return;
+    }
 
-    await saveChatSession(nextSession);
+    const updatedSession = await updateChatSession(existingSession.id, (latestSession) => ({
+      ...latestSession,
+      updatedAt: Math.max(now, latestSession.updatedAt + 1),
+      chatPreferenceOverrides: normalizeChatPreferenceOverrides({
+        ...latestSession.chatPreferenceOverrides,
+        ...updates,
+      }),
+    }));
+    if (!updatedSession) {
+      return;
+    }
     set((current) => ({
-      activeSessionId: nextSession.id,
-      chatSessions: upsertSession(current.chatSessions, nextSession),
+      activeSessionId: updatedSession.id,
+      chatSessions: upsertSession(current.chatSessions, updatedSession),
     }));
   },
   setBrowserControlEnabled: async (enabled) => {
@@ -951,10 +976,24 @@ export const useAppStore = create<AppState>()((set, get) => ({
     });
   },
   loadChatData: async () => {
+    if (globalThis.chrome?.runtime?.id) {
+      let activeStreamSessionIds: string[] = [];
+      const response = await sendRuntimeMessage<{ ok?: boolean; sessionIds?: string[] }>({ type: "chat.getActiveStreamSessions" });
+      if (response?.ok && Array.isArray(response.sessionIds)) {
+        activeStreamSessionIds = response.sessionIds.filter((sessionId): sessionId is string => typeof sessionId === "string");
+      }
+      await recoverInterruptedChatSessions(activeStreamSessionIds);
+    }
     const [chatSessions, chatFolders] = await Promise.all([getChatSessions(), getChatFolders()]);
+    const followUpsBySessionId = Object.fromEntries(
+      chatSessions
+        .filter((session) => session.pendingFollowUps?.length)
+        .map((session) => [session.id, session.pendingFollowUps ?? []]),
+    );
     set((state) => ({
       chatSessions,
       chatFolders,
+      followUpsBySessionId,
       ...resolveActiveChatSessionSelection(state, chatSessions),
     }));
     await get().loadWorkflowSkills();
@@ -975,6 +1014,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
       selectedModelId,
       messages: [],
     };
+
+    if (currentState.syncRestoreBarrierActive) {
+      return currentState.privateChatSession
+        ?? currentState.chatSessions.find((item) => item.id === currentState.activeSessionId)
+        ?? currentState.chatSessions[0]
+        ?? session;
+    }
 
     await saveChatSession(session);
     const defaultContextMode = resolveDefaultContextMode(currentState.chatPreferences);
@@ -1004,7 +1050,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   enterPrivateMode: async () => {
     const state = get();
-    if (state.privateModeActive) {
+    if (state.syncRestoreBarrierActive || state.privateModeActive) {
       return;
     }
 
@@ -1059,6 +1105,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   savePrivateChatSession: async () => {
     const state = get();
+    if (state.syncRestoreBarrierActive) {
+      return;
+    }
     const privateChatSession = state.privateChatSession;
     if (!state.privateModeActive || !privateChatSession || privateChatSession.messages.length === 0) {
       set({ privateModeActive: false, privateChatSession: undefined });
@@ -1069,10 +1118,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
       return;
     }
 
+    const sessionId = privateChatSession.id.replace(/^private-session-/, "session-");
+    const pendingFollowUps = (state.followUpsBySessionId[privateChatSession.id] ?? []).map((followUp) => ({
+      ...followUp,
+      sessionId,
+    }));
     const sessionToSave: ChatSession = {
       ...privateChatSession,
-      id: privateChatSession.id.replace(/^private-session-/, "session-"),
+      id: sessionId,
       updatedAt: Date.now(),
+      pendingFollowUps: pendingFollowUps.length ? pendingFollowUps : undefined,
+      workflowTasks: privateChatSession.workflowTasks?.map((task) => ({
+        ...task,
+        sessionId,
+      })),
     };
 
     await saveChatSession(sessionToSave);
@@ -1130,10 +1189,21 @@ export const useAppStore = create<AppState>()((set, get) => ({
       };
     });
   },
-  renameChatSession: (sessionId, title) => renameChatSessionAction({ sessionId, title, get, set }),
-  archiveChatSession: (sessionId) => archiveChatSessionAction({ sessionId, get, set }),
-  requestDeleteChatSession: (sessionId) => requestDeleteChatSessionAction({ sessionId, set }),
+  renameChatSession: (sessionId, title) => get().syncRestoreBarrierActive
+    ? Promise.resolve()
+    : renameChatSessionAction({ sessionId, title, get, set }),
+  archiveChatSession: (sessionId) => get().syncRestoreBarrierActive
+    ? Promise.resolve()
+    : archiveChatSessionAction({ sessionId, get, set }),
+  requestDeleteChatSession: (sessionId) => {
+    if (!get().syncRestoreBarrierActive) {
+      requestDeleteChatSessionAction({ sessionId, set });
+    }
+  },
   confirmDeleteChatSession: async (sessionId) => {
+    if (get().syncRestoreBarrierActive) {
+      return;
+    }
     get().abortChatTask(sessionId);
     await confirmDeleteChatSessionAction({ sessionId, set });
     set((state) => {
@@ -1154,7 +1224,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   createChatFolder: (name) => createChatFolderAction({ name, set }),
   renameChatFolder: (folderId, name) => renameChatFolderAction({ folderId, name, get, set }),
   deleteEmptyChatFolder: (folderId) => deleteEmptyChatFolderAction({ folderId, get, set }),
-  moveChatSessionToFolder: (sessionId, folderId) => moveChatSessionToFolderAction({ sessionId, folderId, get, set }),
+  moveChatSessionToFolder: (sessionId, folderId) => get().syncRestoreBarrierActive
+    ? Promise.resolve()
+    : moveChatSessionToFolderAction({ sessionId, folderId, get, set }),
   loadExtractionRules: () => loadExtractionRulesAction({ set }),
   saveRuleDraft: (ruleId, draft) => saveRuleDraftAction({ ruleId, draft, get }),
   deleteRule: (ruleId) => deleteRuleAction({ ruleId, get }),
@@ -1228,6 +1300,21 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const selectedModelId = normalizedModelId
       ? resolveAvailableModelId(normalizedModelId, state.models, state.providers)
       : "";
+    if (state.privateModeActive && state.privateChatSession) {
+      const privateSessionId = state.privateChatSession.id;
+      set((current) => current.privateModeActive && current.privateChatSession?.id === privateSessionId
+        ? {
+            selectedModelId,
+            privateChatSession: {
+              ...current.privateChatSession,
+              selectedModelId,
+              updatedAt: Date.now(),
+            },
+          }
+        : {});
+      return;
+    }
+
     const activeSession = state.chatSessions.find((session) => session.id === state.activeSessionId);
 
     if (!activeSession) {
@@ -1275,6 +1362,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   sendWorkflowTaskMessage: async (taskId, content) => {
     const state = get();
+    if (state.syncRestoreBarrierActive) {
+      return;
+    }
     const task = findWorkflowTaskInState(state, taskId);
     if (!task) {
       throw new Error("未找到工作流任务");
@@ -1295,22 +1385,30 @@ export const useAppStore = create<AppState>()((set, get) => ({
       set,
     });
     if (!sent) {
-      await get().updateWorkflowTaskStatus(taskId, "waiting");
+      await get().updateWorkflowTaskStatus(taskId, "failed", "消息未发送，请检查模型配置后重试");
     }
   },
   submitChatFollowUp: (content, attachments = [], promptInvocations = [], options = {}) =>
     submitChatFollowUpWithState({ content, attachments, promptInvocations, behavior: options.behavior, get, set }),
-  removeChatFollowUp: (sessionId, followUpId) =>
-    set((state) => ({
-      followUpsBySessionId: {
-        ...state.followUpsBySessionId,
-        [sessionId]: (state.followUpsBySessionId[sessionId] ?? []).filter((item) => item.id !== followUpId),
-      },
-    })),
+  removeChatFollowUp: (sessionId, followUpId) => {
+    set((state) => updateSessionFollowUpsInState(
+      state,
+      sessionId,
+      (state.followUpsBySessionId[sessionId] ?? []).filter((item) => item.id !== followUpId),
+    ));
+    void persistSessionFollowUps(sessionId, (followUps) => followUps.filter((item) => item.id !== followUpId));
+  },
   guideChatFollowUp: (sessionId, followUpId) => {
     const state = get();
+    if (state.syncRestoreBarrierActive) {
+      return;
+    }
     const followUp = state.followUpsBySessionId[sessionId]?.find((item) => item.id === followUpId);
     if (!followUp) {
+      return;
+    }
+    if (!isSessionTaskRunning(state.chatTasksBySessionId, sessionId)) {
+      void consumeQueuedFollowUp(sessionId, followUpId, get, set);
       return;
     }
     const userMessageId = followUp.userMessageId ?? appendFollowUpUserMessage({
@@ -1319,7 +1417,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       state,
       set,
     });
-    sendChatTaskFollowUp(sessionId, {
+    const delivered = sendChatTaskFollowUp(sessionId, {
       id: followUp.id,
       content: followUp.content,
       attachments: followUp.attachments,
@@ -1327,14 +1425,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
       userMessageId,
     });
 
-    set((current) => ({
-      followUpsBySessionId: {
-        ...current.followUpsBySessionId,
-        [sessionId]: (current.followUpsBySessionId[sessionId] ?? []).map((item) =>
-          item.id === followUpId ? { ...item, behavior: "guide", userMessageId } : item,
-        ),
-      },
-    }));
+    set((current) => updateSessionFollowUpsInState(
+      current,
+      sessionId,
+      (current.followUpsBySessionId[sessionId] ?? []).map((item) =>
+        item.id === followUpId ? { ...item, behavior: delivered ? "guide" : "queue", userMessageId } : item,
+      ),
+    ));
+    void persistSessionFollowUps(sessionId, (followUps) => followUps.map((item) =>
+      item.id === followUpId ? { ...item, behavior: delivered ? "guide" : "queue", userMessageId } : item,
+    ));
   },
   regenerateMessage: (messageId) => regenerateChatMessage({ messageId, get, set }),
   editAndRegenerateUserMessage: (messageId, content, promptInvocations) => editAndRegenerateUserMessage({ messageId, content, promptInvocations, get, set }),
@@ -1347,6 +1447,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         chatTasksBySessionId,
         chatRetryProgressByMessageId: clearChatRetryProgressForSession(state, sessionId),
         sending: isSessionTaskRunning(chatTasksBySessionId, state.activeSessionId),
+        pendingBoundaryChoice: undefined,
         ...(aborted ? { failure: undefined } : {}),
       };
     });
@@ -1415,6 +1516,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       syncOperation: {
         loading: false,
       },
+      syncRestoreBarrierActive: false,
       remoteBackups: [],
       failure: undefined,
       notifications: [],
@@ -1624,6 +1726,9 @@ async function sendChatMessageWithState(input: SendChatMessageWithStateInput): P
   }
 
   const state = input.get();
+  if (state.syncRestoreBarrierActive) {
+    return false;
+  }
   const targetSessionId = input.targetSessionId ?? (state.privateModeActive ? state.privateChatSession?.id : state.activeSessionId);
   const baseSession = input.targetSessionId
     ? state.privateChatSession?.id === input.targetSessionId
@@ -1708,6 +1813,9 @@ async function sendChatMessageWithState(input: SendChatMessageWithStateInput): P
 
 async function regenerateChatMessage(input: RegenerateChatMessageInput): Promise<void> {
   const state = input.get();
+  if (state.syncRestoreBarrierActive) {
+    return;
+  }
 
   const session = state.privateModeActive
     ? state.privateChatSession
@@ -1766,6 +1874,9 @@ async function regenerateChatMessage(input: RegenerateChatMessageInput): Promise
 async function editAndRegenerateUserMessage(input: EditAndRegenerateUserMessageInput): Promise<void> {
   const trimmedContent = input.content.trim();
   const state = input.get();
+  if (state.syncRestoreBarrierActive) {
+    return;
+  }
   const promptInvocations = input.promptInvocations;
   if (!trimmedContent && (!promptInvocations || promptInvocations.length === 0)) {
     return;
@@ -1889,7 +2000,8 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
   const effectiveChatPreferences = resolveEffectiveChatPreferences(input.state.chatPreferences, input.session.chatPreferenceOverrides);
   const modelConfig = createModelConfig(input.provider, input.model, effectiveChatPreferences);
   const now = Date.now();
-  const chatTask = createChatTask(input.session.id, now);
+  const chatTask = createChatTask(input.session.id, now, input.workflowTaskId);
+  registerChatTaskExecution(chatTask.sessionId, chatTask.id);
   const nextSession: ChatSession = {
     ...input.session,
     title: input.nextTitle,
@@ -1910,9 +2022,10 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
     };
   });
   let taskStatus: "completed" | "failed" | "canceled" = "completed";
-  const updateWorkflowTaskStatus = async (status: WorkflowTaskStatus): Promise<void> => {
+  let restoreCanceled = false;
+  const updateWorkflowTaskStatus = async (status: WorkflowTaskStatus, reason?: string): Promise<void> => {
     if (input.workflowTaskId) {
-      await input.get().updateWorkflowTaskStatus(input.workflowTaskId, status);
+      await input.get().updateWorkflowTaskStatus(input.workflowTaskId, status, reason);
     }
   };
   const addWorkflowArtifactsFromAssistantMessage = async (message: ChatMessage): Promise<void> => {
@@ -1934,11 +2047,19 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
     if (input.privateMode) {
       input.set({ privateChatSession: nextSession });
     } else {
-      await saveChatSession(nextSession);
+      const updatedSession = await updateChatSession(nextSession.id, (latestSession) => mergeSessionForChatRequest(
+        latestSession,
+        input.session,
+        nextSession,
+      ));
+      const persistedSession = updatedSession ?? nextSession;
+      if (!updatedSession) {
+        await saveChatSession(nextSession);
+      }
       input.set((current) => ({
-        activeSessionId: current.activeSessionId || nextSession.id,
-        chatSessions: upsertSession(current.chatSessions, nextSession),
-        sending: isSessionTaskRunning(current.chatTasksBySessionId, current.activeSessionId || nextSession.id),
+        activeSessionId: current.activeSessionId || persistedSession.id,
+        chatSessions: upsertSession(current.chatSessions, persistedSession),
+        sending: isSessionTaskRunning(current.chatTasksBySessionId, current.activeSessionId || persistedSession.id),
       }));
     }
 
@@ -2078,12 +2199,16 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       });
       unregisterChatTaskAbortHandle(nextSession.id, chatTask.id);
       unregisterChatTaskFollowUpHandle(nextSession.id, chatTask.id);
-      if (streamResult.canceled) {
+      if (streamResult.restoreCanceled) {
+        restoreCanceled = true;
+        taskStatus = "canceled";
+        return;
+      } else if (streamResult.canceled) {
         taskStatus = "canceled";
         await updateWorkflowTaskStatus("canceled");
       } else if (streamResult.failed) {
         taskStatus = "failed";
-        await updateWorkflowTaskStatus("waiting");
+        await updateWorkflowTaskStatus("failed", "流式响应失败，请重试");
       }
       if (streamResult.completed) {
         if (!streamResult.canceled && !streamResult.failed) {
@@ -2120,20 +2245,30 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
           toolTurnMessages?: ChatMessage[];
           tokenUsageEntries?: ChatTokenUsageEntry[];
         }
-      | { ok: false; message: string }
+      | { ok: false; message: string; restoreCanceled?: boolean }
       | undefined
     >(request);
 
+    if (response?.ok === false && response.restoreCanceled) {
+      restoreCanceled = true;
+      taskStatus = "canceled";
+      return;
+    }
+    if (input.get().syncRestoreBarrierActive) {
+      restoreCanceled = true;
+      taskStatus = "canceled";
+      return;
+    }
     if (!response) {
       taskStatus = "failed";
-      await updateWorkflowTaskStatus("waiting");
+      await updateWorkflowTaskStatus("failed", "模型请求失败，请重试");
       input.set((current) => (shouldShowFailureForSession(current, nextSession.id) ? { failure: { message: "模型请求失败，请重试" } } : {}));
       return;
     }
 
     if (!response.ok) {
       taskStatus = "failed";
-      await updateWorkflowTaskStatus("waiting");
+      await updateWorkflowTaskStatus("failed", response.message);
       input.set((current) => (shouldShowFailureForSession(current, nextSession.id) ? { failure: { message: response.message } } : {}));
       return;
     }
@@ -2194,24 +2329,20 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       }
 
       return {
-        chatSessions: upsertSession(current.chatSessions, {
-          ...currentSession,
-          updatedAt: assistantMessage.createdAt,
-          tokenUsageEntries: mergeTokenUsageEntries(currentSession.tokenUsageEntries, response.tokenUsageEntries),
-          messages: [...currentSession.messages, ...assistantMessages],
-        }),
+        chatSessions: upsertSession(current.chatSessions, completedSession),
       };
     });
     await addWorkflowArtifactsFromAssistantMessage(assistantMessage);
     await updateWorkflowTaskStatus("completed");
   } catch {
     taskStatus = "failed";
-    await updateWorkflowTaskStatus("waiting");
+    const failureMessage = "消息保存失败，请重试";
+    await updateWorkflowTaskStatus("failed", failureMessage);
     input.set((current) =>
       shouldShowFailureForSession(current, nextSession.id)
         ? {
             failure: {
-              message: "消息保存失败，请重试",
+              message: failureMessage,
             },
           }
         : {},
@@ -2227,17 +2358,88 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
         sending: isSessionTaskRunning(chatTasksBySessionId, current.activeSessionId),
       };
     });
-    void consumeNextQueuedFollowUp(nextSession.id, input.get, input.set);
+    if (restoreCanceled) {
+      settleChatTaskExecution(nextSession.id, chatTask.id);
+    } else {
+      void consumeNextQueuedFollowUp(nextSession.id, input.get, input.set)
+        .finally(() => settleChatTaskExecution(nextSession.id, chatTask.id));
+    }
   }
 }
 
-function markChatFollowUpConsumed(set: StoreSetter, sessionId: string, followUpId: string): void {
-  set((current) => ({
-    followUpsBySessionId: {
-      ...current.followUpsBySessionId,
-      [sessionId]: (current.followUpsBySessionId[sessionId] ?? []).filter((item) => item.id !== followUpId),
-    },
-  }));
+function mergeSessionForChatRequest(latestSession: ChatSession, snapshotSession: ChatSession, nextSession: ChatSession): ChatSession {
+  const snapshotMessages = new Map(snapshotSession.messages.map((message) => [message.id, message]));
+  const latestMessages = new Map(latestSession.messages.map((message) => [message.id, message]));
+  const mergedMessages = nextSession.messages.map((message) => {
+    const snapshotMessage = snapshotMessages.get(message.id);
+    return snapshotMessage === message ? latestMessages.get(message.id) ?? message : message;
+  });
+  const mergedMessageIds = new Set(mergedMessages.map((message) => message.id));
+  for (const message of latestSession.messages) {
+    if (!snapshotMessages.has(message.id) && !mergedMessageIds.has(message.id)) {
+      mergedMessages.push(message);
+      mergedMessageIds.add(message.id);
+    }
+  }
+  mergedMessages.sort((left, right) => left.createdAt - right.createdAt);
+
+  const titleChangedConcurrently = latestSession.title !== snapshotSession.title
+    || latestSession.titleGenerating !== snapshotSession.titleGenerating;
+  return {
+    ...latestSession,
+    title: titleChangedConcurrently ? latestSession.title : nextSession.title,
+    titleGenerating: titleChangedConcurrently ? latestSession.titleGenerating : nextSession.titleGenerating,
+    selectedModelId: nextSession.selectedModelId,
+    updatedAt: Math.max(latestSession.updatedAt, nextSession.updatedAt),
+    messages: mergedMessages,
+  };
+}
+
+function updateSessionFollowUpsInState(state: AppState, sessionId: string, followUps: ChatFollowUpItem[]): Partial<AppState> {
+  const followUpsBySessionId = { ...state.followUpsBySessionId };
+  followUpsBySessionId[sessionId] = followUps;
+
+  if (state.privateModeActive && state.privateChatSession?.id === sessionId) {
+    return {
+      followUpsBySessionId,
+      privateChatSession: {
+        ...state.privateChatSession,
+        pendingFollowUps: followUps.length ? followUps : undefined,
+      },
+    };
+  }
+
+  return {
+    followUpsBySessionId,
+    chatSessions: state.chatSessions.map((session) => session.id === sessionId
+      ? { ...session, pendingFollowUps: followUps.length ? followUps : undefined }
+      : session),
+  };
+}
+
+async function persistSessionFollowUps(
+  sessionId: string,
+  updater: (followUps: ChatFollowUpItem[]) => ChatFollowUpItem[],
+): Promise<void> {
+  if (!globalThis.chrome?.runtime?.id) {
+    return;
+  }
+  await updateChatSession(sessionId, (latestSession) => {
+    const pendingFollowUps = updater(latestSession.pendingFollowUps ?? []);
+    return {
+      ...latestSession,
+      pendingFollowUps: pendingFollowUps.length ? pendingFollowUps : undefined,
+    };
+  });
+}
+
+async function markChatFollowUpConsumed(set: StoreSetter, sessionId: string, followUpId: string): Promise<void> {
+  set((current) => updateSessionFollowUpsInState(
+    current,
+    sessionId,
+    (current.followUpsBySessionId[sessionId] ?? []).filter((item) => item.id !== followUpId),
+  ));
+  await persistSessionFollowUps(sessionId, (followUps) => followUps.filter((item) => item.id !== followUpId));
 }
 
 function removeSessionFollowUps(
@@ -2271,12 +2473,21 @@ function migrateSessionFollowUps(
 
 async function consumeNextQueuedFollowUp(sessionId: string, get: StoreGetter, set: StoreSetter): Promise<void> {
   const nextFollowUp = get().followUpsBySessionId[sessionId]?.find((item) => item.behavior === "queue" || item.userMessageId);
-  if (!nextFollowUp || isSessionTaskRunning(get().chatTasksBySessionId, sessionId)) {
+  if (!nextFollowUp) {
+    return;
+  }
+
+  await consumeQueuedFollowUp(sessionId, nextFollowUp.id, get, set);
+}
+
+async function consumeQueuedFollowUp(sessionId: string, followUpId: string, get: StoreGetter, set: StoreSetter): Promise<void> {
+  const nextFollowUp = get().followUpsBySessionId[sessionId]?.find((item) => item.id === followUpId);
+  if (!nextFollowUp || isSessionTaskRunning(get().chatTasksBySessionId, sessionId) || get().syncRestoreBarrierActive) {
     return;
   }
 
   // 跟进队列必须等当前任务完成后再消费；先临时移除可避免 runChatRequest 收尾时重复看到同一条。
-  removeQueuedFollowUp(set, sessionId, nextFollowUp.id);
+  await removeQueuedFollowUp(set, sessionId, nextFollowUp.id);
   let sent = false;
   if (nextFollowUp.userMessageId) {
     sent = await sendExistingFollowUpMessageWithState({
@@ -2297,32 +2508,30 @@ async function consumeNextQueuedFollowUp(sessionId: string, get: StoreGetter, se
   }
 
   if (!sent) {
-    restoreQueuedFollowUp(set, sessionId, nextFollowUp);
+    await restoreQueuedFollowUp(set, sessionId, nextFollowUp);
   }
 }
 
-function removeQueuedFollowUp(set: StoreSetter, sessionId: string, followUpId: string): void {
-  set((current) => ({
-    followUpsBySessionId: {
-      ...current.followUpsBySessionId,
-      [sessionId]: (current.followUpsBySessionId[sessionId] ?? []).filter((item) => item.id !== followUpId),
-    },
-  }));
+async function removeQueuedFollowUp(set: StoreSetter, sessionId: string, followUpId: string): Promise<void> {
+  set((current) => updateSessionFollowUpsInState(
+    current,
+    sessionId,
+    (current.followUpsBySessionId[sessionId] ?? []).filter((item) => item.id !== followUpId),
+  ));
+  await persistSessionFollowUps(sessionId, (followUps) => followUps.filter((item) => item.id !== followUpId));
 }
 
-function restoreQueuedFollowUp(set: StoreSetter, sessionId: string, followUp: ChatFollowUpItem): void {
+async function restoreQueuedFollowUp(set: StoreSetter, sessionId: string, followUp: ChatFollowUpItem): Promise<void> {
   set((current) => {
     const currentItems = current.followUpsBySessionId[sessionId] ?? [];
     if (currentItems.some((item) => item.id === followUp.id)) {
       return current;
     }
-    return {
-      followUpsBySessionId: {
-        ...current.followUpsBySessionId,
-        [sessionId]: [followUp, ...currentItems],
-      },
-    };
+    return updateSessionFollowUpsInState(current, sessionId, [followUp, ...currentItems]);
   });
+  await persistSessionFollowUps(sessionId, (followUps) => followUps.some((item) => item.id === followUp.id)
+    ? followUps
+    : [followUp, ...followUps]);
 }
 
 function appendFollowUpUserMessage(input: {
@@ -2422,6 +2631,9 @@ async function submitChatFollowUpWithState(input: SubmitChatFollowUpInput): Prom
   }
 
   const state = input.get();
+  if (state.syncRestoreBarrierActive) {
+    return;
+  }
   const sessionId = state.privateModeActive ? state.privateChatSession?.id : state.activeSessionId;
   if (!sessionId || !isSessionTaskRunning(state.chatTasksBySessionId, sessionId)) {
     await sendChatMessageWithState({
@@ -2453,29 +2665,43 @@ async function submitChatFollowUpWithState(input: SubmitChatFollowUpInput): Prom
       state,
       set: input.set,
     });
-    const guidedFollowUp = { ...followUp, userMessageId };
-    sendChatTaskFollowUp(sessionId, {
-      id: guidedFollowUp.id,
-      content: guidedFollowUp.content,
-      attachments: guidedFollowUp.attachments,
-      promptInvocations: guidedFollowUp.promptInvocations,
+    const delivered = sendChatTaskFollowUp(sessionId, {
+      id: followUp.id,
+      content: followUp.content,
+      attachments: followUp.attachments,
+      promptInvocations: followUp.promptInvocations,
       userMessageId,
     });
-    input.set((current) => ({
-      followUpsBySessionId: {
-        ...current.followUpsBySessionId,
-        [sessionId]: [...(current.followUpsBySessionId[sessionId] ?? []), guidedFollowUp],
-      },
-    }));
+    const guidedFollowUp: ChatFollowUpItem = {
+      ...followUp,
+      behavior: delivered ? "guide" : "queue",
+      userMessageId,
+    };
+    // 运行状态检查后流仍可能断开；保留为 queue 可在恢复后发送已追加的用户消息。
+    input.set((current) => updateSessionFollowUpsInState(
+      current,
+      sessionId,
+      [...(current.followUpsBySessionId[sessionId] ?? []), guidedFollowUp],
+    ));
+    if (!state.privateModeActive || state.privateChatSession?.id !== sessionId) {
+      await persistSessionFollowUps(sessionId, (followUps) => followUps.some((item) => item.id === guidedFollowUp.id)
+        ? followUps
+        : [...followUps, guidedFollowUp]);
+    }
     return;
   }
 
-  input.set((current) => ({
-    followUpsBySessionId: {
-      ...current.followUpsBySessionId,
-      [sessionId]: [...(current.followUpsBySessionId[sessionId] ?? []), { ...followUp, behavior: "queue" }],
-    },
-  }));
+  const queuedFollowUp: ChatFollowUpItem = { ...followUp, behavior: "queue" };
+  input.set((current) => updateSessionFollowUpsInState(
+    current,
+    sessionId,
+    [...(current.followUpsBySessionId[sessionId] ?? []), queuedFollowUp],
+  ));
+  if (!state.privateModeActive || state.privateChatSession?.id !== sessionId) {
+    await persistSessionFollowUps(sessionId, (followUps) => followUps.some((item) => item.id === queuedFollowUp.id)
+      ? followUps
+      : [...followUps, queuedFollowUp]);
+  }
 }
 
 async function readMcpBearerTokens(settings: McpSettings): Promise<McpServerSecretMap> {

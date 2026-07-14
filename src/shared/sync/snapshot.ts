@@ -16,7 +16,7 @@ export async function exportSyncSnapshot(): Promise<SyncDataSnapshot> {
 }
 
 export async function restoreSyncSnapshot(snapshot: SyncDataSnapshot): Promise<void> {
-  assertValidSnapshot(snapshot);
+  assertValidSyncSnapshot(snapshot);
   const localSecretSettings = await readLocalSecretSettings();
   const localMcpSecretSettings = await readLocalMcpSecretSettings();
   const localWebSearchSettings = await getAppSetting(WEB_SEARCH_SETTINGS_KEY);
@@ -104,7 +104,7 @@ function normalizeUnknownWebSearchSettings(value: unknown) {
   return normalizeWebSearchSettings(value && typeof value === "object" ? (value as Parameters<typeof normalizeWebSearchSettings>[0]) : undefined);
 }
 
-function assertValidSnapshot(value: SyncDataSnapshot): void {
+export function assertValidSyncSnapshot(value: SyncDataSnapshot): void {
   const maybeSnapshot = value as Partial<SyncDataSnapshot>;
   const arrayKeys: Array<keyof Omit<SyncDataSnapshot, "version">> = [
     "modelConfigs",

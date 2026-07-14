@@ -124,7 +124,7 @@ test.describe("侧栏任务工作流", () => {
     });
   }
 
-  test("流式端口断开后任务进入等待，普通聊天仍可发送", async ({ page }) => {
+  test("流式端口断开后任务明确失败，普通聊天仍可发送", async ({ page }) => {
     await openSeededSidebar(page, {
       mode: "disconnect-once",
       toolId: "browser.click",
@@ -140,17 +140,17 @@ test.describe("侧栏任务工作流", () => {
     await startWorkflowTask(page, "提交表单时模拟调试器断开", "网页自动化");
 
     const taskCard = page.getByRole("article", { name: "任务：提交表单时模拟调试器断开" });
-    await expect(taskCard).toContainText("等待输入");
-    await expect(taskCard.getByRole("textbox", { name: "继续任务：提交表单时模拟调试器断开" })).toBeVisible();
-    await expect(taskCard.getByRole("button", { name: "继续" })).toBeDisabled();
-    await expect(taskCard.getByRole("button", { name: "取消任务" })).toBeVisible();
+    await expect(taskCard).toContainText("失败");
+    await expect(taskCard).toContainText("流式响应失败，请重试");
+    await expect(taskCard.getByRole("textbox", { name: "继续任务：提交表单时模拟调试器断开" })).toHaveCount(0);
+    await expect(taskCard.getByRole("button", { name: "取消任务" })).toHaveCount(0);
 
     const composer = page.getByRole("textbox", { name: "对话输入" });
     await composer.fill("普通消息");
     await page.getByRole("button", { name: "发送" }).click();
 
     await expect(page.getByLabel("消息列表")).toContainText("普通回复：主聊天仍然可用。");
-    await expect(taskCard).toContainText("等待输入");
+    await expect(taskCard).toContainText("失败");
   });
 });
 

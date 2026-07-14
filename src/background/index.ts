@@ -18,7 +18,16 @@ import {
 } from "./pageContextMessageHandler";
 import type { TabCaptureVisibleMessage } from "../shared/tabCapture";
 import type { ChatImageAttachment, ChatMessage, ChatPromptInvocation, ChatToolAttachment, ChatToolCallRecord } from "../shared/types";
-import { handleSyncAlarm, handleSyncBackupMessage, restoreSyncAlarmFromSettings, type SyncBackupMessage } from "./syncBackupHandler";
+import {
+  commitSyncRestore,
+  handleSyncAlarm,
+  handleSyncBackupMessage,
+  prepareSyncRestore,
+  restoreSyncAlarmFromSettings,
+  type SyncBackupMessage,
+  type SyncBackupResponse,
+} from "./syncBackupHandler";
+import type { PreparedSyncRestore } from "../shared/sync/backupService";
 import { handleTabCaptureVisibleMessage } from "./tabCaptureMessageHandler";
 import {
   handleCurrentTabUrlMessage,
@@ -31,10 +40,22 @@ import { getRegisteredModelTools } from "../shared/models/toolRegistry";
 import type { SidePanelRuntimeMessage } from "../shared/sidePanelRuntime";
 import { createNetworkDevtoolsBridge } from "./networkDevtoolsBridge";
 import { BrowserNetworkToolExecutor } from "./browserControl/networkToolExecutor";
+import { exportAllDataForSync, recoverInterruptedChatSessions, replaceAllDataFromSync } from "../shared/storage/repositories";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
 const networkDevtoolsBridge = createNetworkDevtoolsBridge();
 const CHAT_STREAM_KEEPALIVE_INTERVAL_MS = 20_000;
+const CHAT_RESTORE_SETTLEMENT_TIMEOUT_MS = 15_000;
+const CHAT_RESTORE_ABORT_REASON = "sync_restore";
+const CHAT_USER_ABORT_REASON = "user_cancel";
+const CHAT_RESTORE_ABORT_MESSAGE = "正在恢复备份，已停止旧的模型请求";
+const activeChatStreamCounts = new Map<string, number>();
+const activeDirectChatRequests = new Set<ActiveDirectChatRequest>();
+const activeChatStreamRequests = new Set<ActiveChatStreamRequest>();
+const deferredRestoreCanceledResponses = new Set<(response?: unknown) => void>();
+let syncRestoreInProgress = false;
+let syncRestoreOperationInProgress = false;
+let restoreBarrierActivityRevision = 0;
 const DEVTOOLS_LEGACY_NETWORK_TOOL_IDS = new Set([
   "network.list_requests",
   "network.get_request_details",
@@ -116,6 +137,8 @@ type RuntimeMessage =
   | BrowserControlMessage
   | McpMessage
   | SidePanelRuntimeMessage
+  | { type: "chat.getActiveStreamSessions" }
+  | { type: "sync.restoreStarted" | "sync.restoreCommitted" | "sync.restoreRolledBack" | "sync.restoreFailed" }
   | { type: `networkContext.${string}`; tabId?: number; requestIds?: string[] };
 
 type NetworkContextRuntimeMessage = Extract<RuntimeMessage, { type: `networkContext.${string}` }>;
@@ -137,7 +160,28 @@ interface ChatStreamFollowUpMessage {
   };
 }
 
+interface ChatStreamCancelMessage {
+  type: "chat.stream.cancel";
+}
+
+interface ActiveDirectChatRequest {
+  controller: AbortController;
+  settled: Promise<void>;
+}
+
+interface ActiveChatStreamRequest {
+  controller: AbortController;
+  settled: Promise<void>;
+  execution?: Promise<void>;
+  abortForRestore: () => void;
+}
+
 chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentToolsPrefixMessage, sender, sendResponse) => {
+  if (message.type === "chat.getActiveStreamSessions") {
+    sendResponse({ ok: true, sessionIds: Array.from(activeChatStreamCounts.keys()) });
+    return false;
+  }
+
   if (isNetworkContextMessage(message)) {
     const scopedMessage = resolveDirectNetworkContextMessage(message, sender);
     if (!scopedMessage) {
@@ -218,15 +262,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
   }
 
   if (message.type === "chat.send") {
-    const tabId = resolveChatRuntimeTabId(message, sender);
-    // 非流式 sendMessage 没有稳定端口可推送中间事件，Token 用量随最终响应一次性返回给调用方。
-    void handleChatSendMessage(
-      message,
-      fetch,
-      {},
-      createBackgroundToolExecutor(message, fetch, { networkCompatibilityExecutor: createNetworkCompatibilityExecutor(tabId) }),
-      { shouldExposeTool: shouldExposeToolWithNetworkCompatibility(tabId) },
-    ).then(sendResponse);
+    handleDirectChatRequest(message, sender, sendResponse);
     return true;
   }
 
@@ -244,7 +280,12 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
     return true;
   }
 
-  if (message.type === "sync.backupNow" || message.type === "sync.listRemoteBackups" || message.type === "sync.restoreNow" || message.type === "sync.configureAlarm") {
+  if (message.type === "sync.restoreNow") {
+    void handleSyncRestoreWithRequestBarrier(message).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "sync.backupNow" || message.type === "sync.listRemoteBackups" || message.type === "sync.configureAlarm") {
     void handleSyncBackupMessage(message).then(sendResponse);
     return true;
   }
@@ -276,6 +317,207 @@ function isNetworkContextMessage(message: RuntimeMessage | RuntimeAgentToolsPref
   return typeof message.type === "string" && message.type.startsWith("networkContext.");
 }
 
+function handleDirectChatRequest(
+  message: ChatSendMessage,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: unknown) => void,
+): void {
+  if (syncRestoreInProgress) {
+    restoreBarrierActivityRevision += 1;
+    deferredRestoreCanceledResponses.add(sendResponse);
+    return;
+  }
+
+  const controller = new AbortController();
+  const tabId = resolveChatRuntimeTabId(message, sender);
+  const chatMessage = { ...message, signal: controller.signal };
+  const execution = handleChatSendMessage(
+    chatMessage,
+    fetch,
+    {},
+    createBackgroundToolExecutor(message, fetch, { networkCompatibilityExecutor: createNetworkCompatibilityExecutor(tabId) }),
+    { shouldExposeTool: shouldExposeToolWithNetworkCompatibility(tabId) },
+  )
+    .then((response) => {
+      sendRuntimeResponseSafely(
+        sendResponse,
+        isRestoreAbort(controller.signal) ? createRestoreCanceledChatResponse() : response,
+      );
+    })
+    .catch(() => {
+      sendRuntimeResponseSafely(
+        sendResponse,
+        isRestoreAbort(controller.signal)
+          ? createRestoreCanceledChatResponse()
+          : { ok: false, message: "模型请求失败，请稍后重试" },
+      );
+    });
+  const request: ActiveDirectChatRequest = {
+    controller,
+    settled: execution.then(() => undefined),
+  };
+  activeDirectChatRequests.add(request);
+  void request.settled.finally(() => activeDirectChatRequests.delete(request));
+}
+
+function sendRuntimeResponseSafely(sendResponse: (response?: unknown) => void, response: unknown): void {
+  try {
+    sendResponse(response);
+  } catch {
+    // 请求页面可能在模型响应完成前关闭。
+  }
+}
+
+async function handleSyncRestoreWithRequestBarrier(message: Extract<SyncBackupMessage, { type: "sync.restoreNow" }>): Promise<SyncBackupResponse> {
+  if (syncRestoreOperationInProgress) {
+    return { ok: false, message: "已有备份恢复正在进行" };
+  }
+
+  syncRestoreOperationInProgress = true;
+  let prepared: PreparedSyncRestore;
+  try {
+    prepared = await prepareSyncRestore(message);
+  } catch (error) {
+    syncRestoreOperationInProgress = false;
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "同步操作失败，请重试",
+    };
+  }
+
+  syncRestoreInProgress = true;
+  restoreBarrierActivityRevision = 0;
+  await broadcastSyncRestoreEvent("sync.restoreStarted");
+  let rollbackSnapshot: Awaited<ReturnType<typeof exportAllDataForSync>> | undefined;
+  try {
+    const deadline = Date.now() + CHAT_RESTORE_SETTLEMENT_TIMEOUT_MS;
+    await abortAndWaitForAllChatRequests(deadline);
+    rollbackSnapshot = await exportAllDataForSync();
+    await commitSyncRestoreBehindBarrier(prepared, deadline);
+    flushDeferredRestoreCanceledResponses();
+    await broadcastSyncRestoreEvent("sync.restoreCommitted");
+    return { ok: true, message: "恢复完成" };
+  } catch (error) {
+    let rollbackSucceeded = true;
+    if (rollbackSnapshot) {
+      try {
+        await replaceAllDataFromSync(rollbackSnapshot);
+      } catch {
+        rollbackSucceeded = false;
+      }
+    }
+    await recoverAfterFailedRestore();
+    flushDeferredRestoreCanceledResponses();
+    await broadcastSyncRestoreEvent(rollbackSucceeded ? "sync.restoreRolledBack" : "sync.restoreFailed");
+    return {
+      ok: false,
+      message: rollbackSucceeded
+        ? error instanceof Error ? error.message : "等待旧模型请求结束失败，未恢复备份"
+        : "恢复失败且无法还原原有数据，请重新打开侧栏检查本地数据",
+    };
+  } finally {
+    syncRestoreInProgress = false;
+    syncRestoreOperationInProgress = false;
+    flushDeferredRestoreCanceledResponses();
+  }
+}
+
+async function commitSyncRestoreBehindBarrier(prepared: PreparedSyncRestore, deadline: number): Promise<void> {
+  while (true) {
+    if (Date.now() >= deadline) {
+      throw new Error("等待恢复静默窗口超时，未恢复备份");
+    }
+    await abortAndWaitForAllChatRequests(deadline);
+    const revisionBeforeCommit = restoreBarrierActivityRevision;
+    await commitSyncRestore(prepared);
+    await yieldBackgroundTask();
+    await abortAndWaitForAllChatRequests(deadline);
+    await yieldBackgroundTask();
+    if (restoreBarrierActivityRevision === revisionBeforeCommit) {
+      return;
+    }
+  }
+}
+
+async function recoverAfterFailedRestore(): Promise<void> {
+  await recoverInterruptedChatSessions([], Date.now()).catch(() => undefined);
+}
+
+function flushDeferredRestoreCanceledResponses(): void {
+  for (const sendResponse of deferredRestoreCanceledResponses) {
+    try {
+      sendResponse(createRestoreCanceledChatResponse());
+    } catch {
+      // 请求页面可能已经关闭。
+    }
+  }
+  deferredRestoreCanceledResponses.clear();
+}
+
+function yieldBackgroundTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function broadcastSyncRestoreEvent(type: "sync.restoreStarted" | "sync.restoreCommitted" | "sync.restoreRolledBack" | "sync.restoreFailed"): Promise<void> {
+  const runtime = chrome.runtime as typeof chrome.runtime & {
+    sendMessage?: (message: unknown) => Promise<unknown> | void;
+  };
+  try {
+    await runtime.sendMessage?.({ type });
+  } catch {
+    // 没有其他扩展页面监听时无需阻断恢复结果。
+  }
+}
+
+async function abortAndWaitForAllChatRequests(deadline: number): Promise<void> {
+  while (activeDirectChatRequests.size > 0 || activeChatStreamRequests.size > 0) {
+    const directRequests = Array.from(activeDirectChatRequests);
+    const streamRequests = Array.from(activeChatStreamRequests);
+    directRequests.forEach((request) => request.controller.abort(CHAT_RESTORE_ABORT_REASON));
+    streamRequests.forEach((request) => request.abortForRestore());
+    const settlements = [
+      ...directRequests.map((request) => request.settled),
+      ...streamRequests.map((request) => Promise.all([request.settled, request.execution ?? Promise.resolve()])),
+    ];
+    await waitForChatRequestSettlementBatch(settlements, deadline);
+    await Promise.resolve();
+  }
+}
+
+async function waitForChatRequestSettlementBatch(settlements: Promise<unknown>[], deadline: number): Promise<void> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) {
+    throw new Error("等待旧模型请求结束超时，未恢复备份");
+  }
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("等待旧模型请求结束超时，未恢复备份")), remainingMs);
+  });
+  try {
+    await Promise.race([Promise.all(settlements), timeout]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function createRestoreCanceledChatResponse() {
+  return {
+    ok: false as const,
+    message: CHAT_RESTORE_ABORT_MESSAGE,
+    restoreCanceled: true as const,
+  };
+}
+
+function isRestoreAbort(signal: AbortSignal): boolean {
+  return signal.aborted && signal.reason === CHAT_RESTORE_ABORT_REASON;
+}
+
+function isUserAbort(signal: AbortSignal): boolean {
+  return signal.aborted && signal.reason === CHAT_USER_ABORT_REASON;
+}
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   void handleSyncAlarm(alarm);
 });
@@ -298,6 +540,8 @@ chrome.runtime.onConnect.addListener((port) => {
     userMessageId?: string;
   }> = [];
   let disconnected = false;
+  let streamStarted = false;
+  let activeSessionId: string | undefined;
   // Grok MCP 等远程工具可能连续 60–180s 无 fetch 事件；MV3 service worker 空闲约 30s 会被挂起，
   // 导致 chat.stream 端口被动断开，侧栏误报“流式响应异常中断”。长连接期间做轻量保活。
   const keepAliveTimer = setInterval(() => {
@@ -307,13 +551,74 @@ chrome.runtime.onConnect.addListener((port) => {
       // ignore keep-alive failures; next tick retries while the port remains open.
     }
   }, CHAT_STREAM_KEEPALIVE_INTERVAL_MS);
-  const postToPort = (message: unknown) => {
-    if (!disconnected) {
-      port.postMessage(message);
-    }
+  let restoreAbortPosted = false;
+  let streamExecutionSettled = false;
+  let settleStreamRequest!: () => void;
+  const streamSettled = new Promise<void>((resolve) => {
+    settleStreamRequest = resolve;
+  });
+  const streamRequest: ActiveChatStreamRequest = {
+    controller,
+    settled: streamSettled,
+    abortForRestore: () => {
+      if (!controller.signal.aborted) {
+        controller.abort(CHAT_RESTORE_ABORT_REASON);
+      }
+      if (!restoreAbortPosted) {
+        restoreAbortPosted = postToPort({ type: "restore:abort", message: CHAT_RESTORE_ABORT_MESSAGE });
+      }
+    },
   };
-  const handlePortMessage = (message: ChatStreamStartMessage | ChatStreamFollowUpMessage) => {
+  function cleanUpDisconnectedStream(): void {
+    if (disconnected) {
+      return;
+    }
+    disconnected = true;
+    clearInterval(keepAliveTimer);
+    controller.abort();
+    if (!streamRequest.execution || streamExecutionSettled) {
+      activeChatStreamRequests.delete(streamRequest);
+    }
+    settleStreamRequest();
+    if (activeSessionId) {
+      const remaining = (activeChatStreamCounts.get(activeSessionId) ?? 1) - 1;
+      if (remaining > 0) {
+        activeChatStreamCounts.set(activeSessionId, remaining);
+      } else {
+        activeChatStreamCounts.delete(activeSessionId);
+      }
+      activeSessionId = undefined;
+    }
+  }
+  function postToPort(message: unknown): boolean {
+    if (disconnected) {
+      return false;
+    }
+    try {
+      port.postMessage(message);
+      return true;
+    } catch {
+      try {
+        port.disconnect();
+      } catch {
+        // 端口已经失效时仍需在本上下文完成清理。
+      } finally {
+        cleanUpDisconnectedStream();
+      }
+      return false;
+    }
+  }
+  activeChatStreamRequests.add(streamRequest);
+  if (syncRestoreInProgress) {
+    restoreBarrierActivityRevision += 1;
+    streamRequest.abortForRestore();
+  }
+  const handlePortMessage = (message: ChatStreamStartMessage | ChatStreamFollowUpMessage | ChatStreamCancelMessage) => {
     if (message.type === "chat.stream.followUp") {
+      if (syncRestoreInProgress) {
+        streamRequest.abortForRestore();
+        return;
+      }
       const content = typeof message.payload?.content === "string" ? message.payload.content.trim() : "";
       const id = typeof message.payload?.followUpId === "string" ? message.payload.followUpId : "";
       const attachments = Array.isArray(message.payload?.attachments) ? message.payload.attachments : undefined;
@@ -330,13 +635,36 @@ chrome.runtime.onConnect.addListener((port) => {
       return;
     }
 
+    if (message.type === "chat.stream.cancel") {
+      if (!controller.signal.aborted) {
+        controller.abort(CHAT_USER_ABORT_REASON);
+      }
+      return;
+    }
+
     if (message.type !== "chat.stream.start") {
       return;
+    }
+    if (streamStarted) {
+      postToPort({ type: "error", message: "同一流式连接不能重复启动请求" });
+      return;
+    }
+    streamStarted = true;
+    if (syncRestoreInProgress) {
+      restoreBarrierActivityRevision += 1;
+      streamRequest.abortForRestore();
+      return;
+    }
+
+    const sessionId = message.payload.debugContext?.sessionId;
+    if (!activeSessionId && sessionId) {
+      activeSessionId = sessionId;
+      activeChatStreamCounts.set(sessionId, (activeChatStreamCounts.get(sessionId) ?? 0) + 1);
     }
 
     const tabId = resolveChatRuntimeTabId(message.payload, port.sender);
     const chatMessage = { ...message.payload, signal: controller.signal };
-    void handleChatSendMessage(chatMessage, fetch, {
+    const execution = handleChatSendMessage(chatMessage, fetch, {
       onContentChunk: (content) => postToPort({ type: "chunk", content }),
       onThinkingChunk: (content) => postToPort({ type: "thinking", content }),
       onRetryProgress: (progress) => postToPort({ type: "retry:progress", ...progress }),
@@ -349,6 +677,14 @@ chrome.runtime.onConnect.addListener((port) => {
       onGuidanceConsumed: (followUpId: string) => postToPort({ type: "follow-up:consumed", followUpId }),
     }, createBackgroundToolExecutor(chatMessage, fetch, { networkCompatibilityExecutor: createNetworkCompatibilityExecutor(tabId) }), { shouldExposeTool: shouldExposeToolWithNetworkCompatibility(tabId) })
       .then((response) => {
+        if (isRestoreAbort(controller.signal)) {
+          streamRequest.abortForRestore();
+          return;
+        }
+        if (isUserAbort(controller.signal)) {
+          postToPort({ type: "canceled" });
+          return;
+        }
         if (disconnected) {
           return;
         }
@@ -368,16 +704,27 @@ chrome.runtime.onConnect.addListener((port) => {
         postToPort({ type: "error", message: response.message });
       })
       .catch(() => {
+        if (isRestoreAbort(controller.signal)) {
+          streamRequest.abortForRestore();
+          return;
+        }
+        if (isUserAbort(controller.signal)) {
+          postToPort({ type: "canceled" });
+          return;
+        }
         postToPort({ type: "error", message: "模型请求失败，请稍后重试" });
       });
+    streamRequest.execution = execution.then(() => undefined);
+    void streamRequest.execution.finally(() => {
+      streamExecutionSettled = true;
+      if (disconnected) {
+        activeChatStreamRequests.delete(streamRequest);
+      }
+    });
   };
 
   port.onMessage.addListener(handlePortMessage);
-  port.onDisconnect.addListener(() => {
-    disconnected = true;
-    clearInterval(keepAliveTimer);
-    controller.abort();
-  });
+  port.onDisconnect.addListener(cleanUpDisconnectedStream);
 });
 
 export {};

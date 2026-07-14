@@ -5,6 +5,7 @@ export type ChatTaskStatus = "running" | "completed" | "failed" | "canceled";
 export interface ChatTaskState {
   id: string;
   sessionId: string;
+  workflowTaskId?: string;
   status: ChatTaskStatus;
   startedAt: number;
   completedAt?: number;
@@ -26,11 +27,64 @@ const abortHandles = new Map<string, { taskId: string; handle: ChatTaskAbortHand
 const followUpHandles = new Map<string, { taskId: string; handle: ChatTaskFollowUpHandle }>();
 const pendingAbortSessionIds = new Set<string>();
 const consumedAbortSessionIds = new Set<string>();
+const taskExecutions = new Map<string, { sessionId: string; taskId: string; settled: Promise<void>; settle: () => void }>();
 
-export function createChatTask(sessionId: string, now = Date.now()): ChatTaskState {
+function executionKey(sessionId: string, taskId: string): string {
+  return `${sessionId}\u0000${taskId}`;
+}
+
+export function registerChatTaskExecution(sessionId: string, taskId: string): void {
+  const key = executionKey(sessionId, taskId);
+  if (taskExecutions.has(key)) {
+    return;
+  }
+
+  let settle!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  taskExecutions.set(key, { sessionId, taskId, settled, settle });
+}
+
+export function getChatTaskExecutions(): Array<{ sessionId: string; taskId: string }> {
+  return Array.from(taskExecutions.values(), ({ sessionId, taskId }) => ({ sessionId, taskId }));
+}
+
+export function settleChatTaskExecution(sessionId: string, taskId: string): void {
+  const key = executionKey(sessionId, taskId);
+  const execution = taskExecutions.get(key);
+  if (!execution) {
+    return;
+  }
+
+  taskExecutions.delete(key);
+  execution.settle();
+}
+
+export async function waitForChatTaskExecutionSettlement(sessionId: string, taskId: string, timeoutMs = 15_000): Promise<void> {
+  const execution = taskExecutions.get(executionKey(sessionId, taskId));
+  if (!execution) {
+    return;
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("等待正在运行的对话结束超时")), timeoutMs);
+  });
+  try {
+    await Promise.race([execution.settled, timeout]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+export function createChatTask(sessionId: string, now = Date.now(), workflowTaskId?: string): ChatTaskState {
   return {
     id: `chat-task-${now}-${Math.random().toString(36).slice(2, 8)}`,
     sessionId,
+    ...(workflowTaskId ? { workflowTaskId } : {}),
     status: "running",
     startedAt: now,
   };

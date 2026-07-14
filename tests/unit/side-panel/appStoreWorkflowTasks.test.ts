@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
+import { registerChatTaskAbortHandle } from "../../../src/side-panel/state/appStoreChatTasks";
 import {
   createWorkflowArtifactFromAssistantMessage,
   createWorkflowArtifactsFromAssistantMessage,
@@ -12,6 +13,7 @@ import {
   saveModelProvider,
   saveProviderModel,
 } from "../../../src/shared/storage/repositories";
+import { CURRENT_TIME_TOOL_ID } from "../../../src/shared/models/toolRegistry";
 import type { ChatMessage, ChatSession, ModelProvider, ProviderModel, WorkflowSkill, WorkflowTask } from "../../../src/shared/types";
 
 function createSession(id = "session-1"): ChatSession {
@@ -114,6 +116,32 @@ describe("appStore 工作流任务", () => {
     expect((await getChatSession(session.id))?.workflowTasks?.[0].status).toBe("waiting");
   });
 
+  it("首次没有会话时会自动创建会话并保存任务", async () => {
+    const task = await useAppStore.getState().createWorkflowTask("research", "研究当前页面");
+    const state = useAppStore.getState();
+
+    expect(state.activeSessionId).not.toBe("");
+    expect(state.chatSessions).toHaveLength(1);
+    expect(state.chatSessions[0]?.workflowTasks?.[0]?.id).toBe(task.id);
+    expect((await getChatSession(state.activeSessionId))?.workflowTasks?.[0]?.id).toBe(task.id);
+  });
+
+  it("恢复屏障期间拒绝创建工作流且不写入会话", async () => {
+    const session = createSession();
+    await saveChatSession(session);
+    useAppStore.setState({
+      activeSessionId: session.id,
+      chatSessions: [session],
+      syncRestoreBarrierActive: true,
+    });
+
+    await expect(useAppStore.getState().createWorkflowTask("research", "不应保存的任务"))
+      .rejects.toThrow("正在恢复备份，请稍后重试");
+
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks).toBeUndefined();
+    expect((await getChatSession(session.id))?.workflowTasks).toEqual([]);
+  });
+
   it("私密会话只更新内存，不写入 Dexie", async () => {
     const session = createSession("private-session-1");
     useAppStore.setState({
@@ -126,6 +154,48 @@ describe("appStore 工作流任务", () => {
 
     expect(useAppStore.getState().privateChatSession?.workflowTasks?.[0].id).toBe(task.id);
     expect(await getChatSession(session.id)).toBeUndefined();
+  });
+
+  it("保存私密会话时迁移工作流所属会话并保持任务可更新", async () => {
+    const privateSession = {
+      ...createSession("private-session-workflow"),
+      messages: [createAssistantMessage("需要保存的私密任务")],
+      workflowTasks: [createWorkflowTaskFixture({
+        id: "workflow-private",
+        sessionId: "private-session-workflow",
+        status: "preparing",
+      })],
+    };
+    useAppStore.setState({
+      privateModeActive: true,
+      privateChatSession: privateSession,
+      activeSessionId: "",
+    });
+
+    await useAppStore.getState().savePrivateChatSession();
+
+    const savedSessionId = "session-workflow";
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0]?.sessionId).toBe(savedSessionId);
+    expect((await getChatSession(savedSessionId))?.workflowTasks?.[0]?.sessionId).toBe(savedSessionId);
+
+    await useAppStore.getState().updateWorkflowTaskStatus("workflow-private", "running");
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0]?.status).toBe("running");
+  });
+
+  it("取消等待中的工作流不会终止同会话下一次普通发送", async () => {
+    const session = createSession();
+    await saveChatSession(session);
+    useAppStore.setState({ activeSessionId: session.id, chatSessions: [session] });
+    const task = await useAppStore.getState().createWorkflowTask("research", "等待补充信息");
+    await useAppStore.getState().updateWorkflowTaskStatus(task.id, "running");
+    await useAppStore.getState().updateWorkflowTaskStatus(task.id, "waiting", "等待输入");
+
+    await useAppStore.getState().cancelWorkflowTask(task.id);
+    const nextRequestAbort = vi.fn();
+    registerChatTaskAbortHandle(session.id, "ordinary-chat-task", nextRequestAbort);
+
+    expect(nextRequestAbort).not.toHaveBeenCalled();
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0]?.status).toBe("canceled");
   });
 
   it("保存技能不复制任务上下文摘要或产物正文", async () => {
@@ -195,6 +265,41 @@ describe("appStore 工作流任务", () => {
       status: "waiting",
     });
     expect(task.statusReason).toContain("不可用");
+  });
+
+  it("启动技能按会话级偏好校验推荐工具", async () => {
+    const session: ChatSession = {
+      ...createSession(),
+      chatPreferenceOverrides: {
+        toolCallingEnabled: false,
+        enabledToolIds: [CURRENT_TIME_TOOL_ID],
+      },
+    };
+    await saveChatSession(session);
+    useAppStore.setState((state) => ({
+      activeSessionId: session.id,
+      chatSessions: [session],
+      chatPreferences: {
+        ...state.chatPreferences,
+        toolCallingEnabled: true,
+        enabledToolIds: [CURRENT_TIME_TOOL_ID],
+      },
+    }));
+    const sourceTask = await useAppStore.getState().createWorkflowTask("research", "研究当前时间");
+    await useAppStore.getState().updateWorkflowTaskStatus(sourceTask.id, "running");
+    await useAppStore.getState().updateWorkflowTaskStatus(sourceTask.id, "completed");
+    const skill = await useAppStore.getState().saveWorkflowSkill(sourceTask.id, {
+      title: "时间研究",
+      variables: [],
+    });
+    useAppStore.setState({
+      workflowSkills: [{ ...skill, recommendedToolIds: [CURRENT_TIME_TOOL_ID] }],
+    });
+
+    const task = await useAppStore.getState().startWorkflowSkill(skill.id, {});
+
+    expect(task.status).toBe("waiting");
+    expect(task.statusReason).toContain(CURRENT_TIME_TOOL_ID);
   });
 
   it("启动技能会用替换后的目标创建任务并发送首条消息", async () => {
@@ -407,7 +512,7 @@ describe("appStore 工作流任务", () => {
     expect(researchArtifacts[1]?.content).toContain("| 指标 | 结果 |");
   });
 
-  it("工作流消息在取消或流错误后恢复等待状态", async () => {
+  it("工作流流错误进入失败状态，原子取消会终止所属请求", async () => {
     const session = createSession();
     const provider = createProvider();
     const model = createModel();
@@ -432,17 +537,23 @@ describe("appStore 工作流任务", () => {
     expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("running");
     messageListener?.({ type: "error", message: "网络中断" });
     await sending;
-    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("waiting");
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0]).toMatchObject({
+      status: "failed",
+      statusReason: "流式响应失败，请重试",
+    });
 
     messageListener = undefined;
     disconnectListener = undefined;
-    const cancelSending = useAppStore.getState().sendWorkflowTaskMessage(task.id, "再次检查");
+    const cancelTask = await useAppStore.getState().createWorkflowTask("debug", "检查取消");
+    const cancelSending = useAppStore.getState().sendWorkflowTaskMessage(cancelTask.id, "开始检查");
     await vi.waitFor(() => expect(messageListener).toBeTypeOf("function"));
     await vi.waitFor(() => expect(disconnectListener).toBeTypeOf("function"));
-    useAppStore.getState().abortChatTask(session.id);
-    (disconnectListener as (() => void) | undefined)?.();
+    await useAppStore.getState().cancelWorkflowTask(cancelTask.id);
+    expect(port.postMessage).toHaveBeenCalledWith({ type: "chat.stream.cancel" });
+    (messageListener as ((message: unknown) => void) | undefined)?.({ type: "canceled" });
     await cancelSending;
-    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.[0].status).toBe("canceled");
+    expect(port.disconnect).toHaveBeenCalled();
+    expect(useAppStore.getState().chatSessions[0]?.workflowTasks?.find((item) => item.id === cancelTask.id)?.status).toBe("canceled");
   });
 
   it("运行中的工作流任务重复发送不会恢复等待状态", async () => {

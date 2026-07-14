@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
 import { normalizeChatPreferenceOverrides } from "../../../src/side-panel/state/appStorePreferences";
+import { registerChatTaskExecution, settleChatTaskExecution } from "../../../src/side-panel/state/appStoreChatTasks";
 import { AUTOMATION_PLAYBOOK_SETTINGS_KEY } from "../../../src/shared/automationPlaybooks";
 import { getRegisteredModelTools } from "../../../src/shared/models/toolRegistry";
 import {
@@ -15,13 +16,14 @@ import {
   saveModelProvider,
   savePromptTemplate,
   saveProviderModel,
+  updateChatSession,
 } from "../../../src/shared/storage/repositories";
 import {
   SYNC_ENCRYPTION_SECRET_KEY,
   SYNC_S3_SECRET_KEY,
   SYNC_WEBDAV_PASSWORD_KEY,
 } from "../../../src/shared/sync/settings";
-import type { ChatFolder, ChatMessage, ChatPromptInvocation, ModelProvider, NetworkRequestDetail, PromptTemplate, ProviderModel } from "../../../src/shared/types";
+import type { ChatFolder, ChatMessage, ChatPromptInvocation, ChatSession, ModelProvider, NetworkRequestDetail, PromptTemplate, ProviderModel } from "../../../src/shared/types";
 
 const repositoryMockState = vi.hoisted(() => ({
   failSaveChatSession: false,
@@ -52,6 +54,22 @@ vi.mock("../../../src/shared/storage/repositories", async (importOriginal) => {
       }
 
       return actual.saveChatSession(...args);
+    }),
+    updateChatSession: vi.fn((...args: Parameters<typeof actual.updateChatSession>) => {
+      if (repositoryMockState.failSaveChatSession) {
+        throw new Error("IndexedDB 写入失败");
+      }
+
+      if (repositoryMockState.delaySaveChatSession) {
+        repositoryMockState.delaySaveChatSession = false;
+        return new Promise<Awaited<ReturnType<typeof actual.updateChatSession>>>((resolve, reject) => {
+          repositoryMockState.releaseSaveChatSession = () => {
+            actual.updateChatSession(...args).then(resolve, reject);
+          };
+        });
+      }
+
+      return actual.updateChatSession(...args);
     }),
     saveChatFolder: vi.fn((...args: Parameters<typeof actual.saveChatFolder>) => {
       if (repositoryMockState.failSaveChatFolder) {
@@ -800,6 +818,78 @@ describe("appStore", () => {
       webDavPassword: "webdav-password",
       s3SecretKey: "s3-secret",
     });
+  });
+
+  it("恢复备份会先终止并等待旧请求完整收尾", async () => {
+    const sendMessage = vi.fn((_message: unknown, callback: (response: unknown) => void) => {
+      callback({ ok: true, message: "恢复完成" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    registerChatTaskExecution("session-running", "task-running");
+    useAppStore.setState({
+      chatTasksBySessionId: {
+        "session-running": {
+          id: "task-running",
+          sessionId: "session-running",
+          status: "running",
+          startedAt: 1,
+        },
+      },
+      followUpsBySessionId: {
+        "session-running": [{
+          id: "follow-up-1",
+          sessionId: "session-running",
+          content: "不要在恢复时继续发送",
+          behavior: "queue",
+          createdAt: 1,
+        }],
+      },
+    });
+
+    const restoring = useAppStore.getState().restoreNow("backup-running");
+    await vi.waitFor(() => expect(useAppStore.getState().chatTasksBySessionId["session-running"]?.status).toBe("canceled"));
+    expect(sendMessage).not.toHaveBeenCalledWith(
+      { type: "sync.restoreNow", backupId: "backup-running" },
+      expect.any(Function),
+    );
+    expect(useAppStore.getState().followUpsBySessionId["session-running"]).toEqual([
+      expect.objectContaining({ id: "follow-up-1", behavior: "queue" }),
+    ]);
+
+    settleChatTaskExecution("session-running", "task-running");
+    await restoring;
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      { type: "sync.restoreNow", backupId: "backup-running" },
+      expect.any(Function),
+    );
+  });
+
+  it("恢复失败时保留当前排队跟进", async () => {
+    const sendMessage = vi.fn((_message: unknown, callback: (response: unknown) => void) => {
+      callback({ ok: false, message: "远程备份损坏" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    useAppStore.setState({
+      followUpsBySessionId: {
+        "session-restore-failed": [{
+          id: "follow-up-restore-failed",
+          sessionId: "session-restore-failed",
+          content: "恢复失败后仍需保留",
+          behavior: "queue",
+          createdAt: 1,
+        }],
+      },
+    });
+
+    await useAppStore.getState().restoreNow("backup-invalid");
+
+    expect(useAppStore.getState().followUpsBySessionId["session-restore-failed"]).toEqual([
+      expect.objectContaining({ id: "follow-up-restore-failed", content: "恢复失败后仍需保留" }),
+    ]);
+    expect(useAppStore.getState().syncOperation).toEqual({ loading: false, error: "远程备份损坏" });
   });
 
   it("刷新页面上下文时请求完整内容，等待发送前再决定是否裁剪", async () => {
@@ -2322,6 +2412,40 @@ describe("appStore", () => {
     expect(session?.messages.map((message) => message.content)).toEqual(["第一问", "AI 回复"]);
   });
 
+  it("恢复屏障终止标题请求后不会再写回旧会话", async () => {
+    const provider = createProvider();
+    const chatModel = createModel();
+    const titleModel = createTitleModel();
+    const sendMessage = vi.fn((message: { type: string; model?: ProviderModel }, callback: (response: unknown) => void) => {
+      callback(message.model?.id === titleModel.id
+        ? { ok: false, message: "正在恢复备份", restoreCanceled: true }
+        : { ok: true, content: "AI 回复" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    await saveModelProvider(provider);
+    await saveProviderModel(chatModel);
+    await saveProviderModel(titleModel);
+    await useAppStore.getState().loadChannelConfig();
+    useAppStore.getState().selectModel(chatModel.id);
+    useAppStore.getState().setTitleModel(titleModel.id);
+    useAppStore.getState().setStreamMode(false);
+
+    await useAppStore.getState().sendChatMessage("第一问");
+    await vi.waitFor(() => {
+      expect(sendMessage.mock.calls.some(([message]) => (message as { model?: ProviderModel }).model?.id === titleModel.id)).toBe(true);
+    });
+
+    expect(useAppStore.getState().chatSessions[0]).toMatchObject({
+      title: "第一问",
+      titleGenerating: true,
+    });
+    await expect(getChatSession(useAppStore.getState().activeSessionId)).resolves.toMatchObject({
+      title: "第一问",
+      titleGenerating: true,
+    });
+  });
+
   it("流式主回复进行中标题生成请求仍使用非流式", async () => {
     const provider = createProvider();
     const chatModel = createModel();
@@ -2661,7 +2785,21 @@ describe("appStore", () => {
     });
     portMessageListener?.({ type: "retry:progress", currentRetry: 1, maxRetries: 5 });
     const secondAssistantMessageId = useAppStore.getState().chatSessions[0]?.messages.at(-1)?.id ?? "";
+    useAppStore.setState({
+      pendingBoundaryChoice: {
+        type: "browserControl.boundaryChoiceRequest",
+        requestId: "boundary-canceling-chat",
+        question: "是否继续？",
+        reason: "验证取消会清理边界确认",
+        choices: [],
+        allowMultiple: false,
+        expiresAt: Date.now() + 30_000,
+      },
+    });
     useAppStore.getState().abortActiveChatTask();
+    expect(port.postMessage).toHaveBeenCalledWith({ type: "chat.stream.cancel" });
+    expect(useAppStore.getState().pendingBoundaryChoice).toBeUndefined();
+    portMessageListener?.({ type: "canceled" });
     await secondSendPromise;
 
     expect(useAppStore.getState().chatRetryProgressByMessageId[secondAssistantMessageId]).toBeUndefined();
@@ -2759,6 +2897,7 @@ describe("appStore", () => {
     });
     vi.stubGlobal("chrome", {
       runtime: {
+        id: "test-extension",
         connect,
         sendMessage: vi.fn((_message: unknown, callback: (response: unknown) => void) => {
           callback({ ok: true });
@@ -2786,6 +2925,14 @@ describe("appStore", () => {
 
     expect(connect).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().followUpsBySessionId[sessionId]).toHaveLength(1);
+    expect((await getChatSession(sessionId))?.pendingFollowUps).toEqual([
+      expect.objectContaining({ content: "第二问", behavior: "queue" }),
+    ]);
+    useAppStore.setState({ followUpsBySessionId: {} });
+    await useAppStore.getState().loadChatData();
+    expect(useAppStore.getState().followUpsBySessionId[sessionId]).toEqual([
+      expect.objectContaining({ content: "第二问", behavior: "queue" }),
+    ]);
 
     listeners[0]?.({ type: "complete", content: "第一答" });
     await firstSend;
@@ -2797,8 +2944,57 @@ describe("appStore", () => {
       expect(session?.messages.map((message) => message.content)).toEqual(["第一问", "第一答", "第二问", "第二答"]);
     });
     expect(useAppStore.getState().followUpsBySessionId[sessionId]).toEqual([]);
+    await vi.waitFor(async () => expect((await getChatSession(sessionId))?.pendingFollowUps).toBeUndefined());
     expect(ports[0].disconnect).toHaveBeenCalled();
     expect(ports[1].disconnect).toHaveBeenCalled();
+  });
+
+  it("冷启动恢复的排队跟进点击引导后会立即发送", async () => {
+    const provider = createProvider();
+    const model = createModel();
+    const session: ChatSession = {
+      id: "session-restored-follow-up",
+      title: "恢复的会话",
+      archived: false,
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      selectedModelId: model.id,
+      messages: [],
+      pendingFollowUps: [{
+        id: "follow-up-restored",
+        sessionId: "session-restored-follow-up",
+        content: "恢复后继续提问",
+        behavior: "queue",
+        createdAt: 2,
+      }],
+    };
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      callback(message.type === "chat.getActiveStreamSessions"
+        ? { ok: true, sessionIds: [] }
+        : message.type === "chat.send"
+          ? { ok: true, content: "恢复后的回答" }
+          : { ok: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { id: "test-extension", sendMessage } });
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await saveChatSession(session);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    useAppStore.getState().setStreamMode(false);
+
+    useAppStore.getState().guideChatFollowUp(session.id, "follow-up-restored");
+
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().chatSessions[0]?.messages.map((message) => message.content)).toEqual([
+        "恢复后继续提问",
+        "恢复后的回答",
+      ]);
+    });
+    expect(useAppStore.getState().followUpsBySessionId[session.id]).toEqual([]);
+    await vi.waitFor(async () => expect((await getChatSession(session.id))?.pendingFollowUps).toBeUndefined());
   });
 
   it("排队跟进自动消费前置校验失败时会保留队列项", async () => {
@@ -2852,7 +3048,7 @@ describe("appStore", () => {
     await firstSend;
 
     expect(connect).toHaveBeenCalledTimes(1);
-    expect(useAppStore.getState().failure?.message).toBe("当前模型不支持视觉理解，无法添加图片");
+    await vi.waitFor(() => expect(useAppStore.getState().failure?.message).toBe("当前模型不支持视觉理解，无法添加图片"));
     expect(useAppStore.getState().followUpsBySessionId[sessionId]).toEqual([
       expect.objectContaining({
         behavior: "queue",
@@ -3036,7 +3232,9 @@ describe("appStore", () => {
       | { payload?: { followUpId?: string } }
       | undefined;
     listeners[0]?.({ type: "follow-up:consumed", followUpId: followUpMessage?.payload?.followUpId });
-    expect(useAppStore.getState().followUpsBySessionId[useAppStore.getState().activeSessionId]).toEqual([]);
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().followUpsBySessionId[useAppStore.getState().activeSessionId]).toEqual([]);
+    });
     listeners[0]?.({ type: "complete", content: "第一答" });
     await firstSend;
   });
@@ -3182,7 +3380,7 @@ describe("appStore", () => {
     const model = createModel();
     const listeners: Array<(message: unknown) => void> = [];
     const disconnectListeners: Array<() => void> = [];
-    const ports: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [];
+    const ports: Array<{ postMessage: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
     const connect = vi.fn(() => {
       const portIndex = ports.length;
       const port = {
@@ -3224,13 +3422,16 @@ describe("appStore", () => {
 
     useAppStore.getState().abortActiveChatTask();
     expect(ports[0].disconnect).not.toHaveBeenCalled();
-    expect(ports[1].disconnect).toHaveBeenCalled();
+    expect(ports[0].postMessage).not.toHaveBeenCalledWith({ type: "chat.stream.cancel" });
+    expect(ports[1].postMessage).toHaveBeenCalledWith({ type: "chat.stream.cancel" });
     expect(useAppStore.getState().chatTasksBySessionId[secondSession.id]?.status).toBe("canceled");
 
+    listeners[1]?.({ type: "canceled" });
     listeners[0]?.({ type: "complete", content: "第一答" });
     await firstSend;
     await secondSend;
 
+    expect(ports[1].disconnect).toHaveBeenCalled();
     expect(useAppStore.getState().chatTasksBySessionId[firstSessionId]?.status).toBe("completed");
   });
 
@@ -3899,6 +4100,22 @@ describe("appStore", () => {
     expect(useAppStore.getState().pendingDeleteSessionId).toBe(session.id);
     await useAppStore.getState().confirmDeleteChatSession(session.id);
     expect(useAppStore.getState().chatSessions.some((item) => item.id === session.id)).toBe(false);
+  });
+
+  it("恢复屏障期间会话增改删不会污染持久化数据", async () => {
+    const session = await useAppStore.getState().createChatSession();
+    useAppStore.setState({ syncRestoreBarrierActive: true });
+
+    const blockedCreateResult = await useAppStore.getState().createChatSession();
+    await useAppStore.getState().renameChatSession(session.id, "不应保存的新标题");
+    await useAppStore.getState().archiveChatSession(session.id);
+    useAppStore.getState().requestDeleteChatSession(session.id);
+    await useAppStore.getState().confirmDeleteChatSession(session.id);
+
+    expect(blockedCreateResult.id).toBe(session.id);
+    expect(useAppStore.getState().chatSessions).toEqual([session]);
+    expect(useAppStore.getState().pendingDeleteSessionId).toBeUndefined();
+    await expect(getChatSession(session.id)).resolves.toMatchObject(session);
   });
 
   it("可以重命名聊天文件夹", async () => {
@@ -4928,6 +5145,109 @@ describe("appStore", () => {
     expect(useAppStore.getState().selectedModelId).toBe("model-second");
     await expect(getChatSession(firstSession.id)).resolves.toMatchObject({ selectedModelId: "model-second" });
     await expect(getChatSession(secondSession.id)).resolves.toMatchObject({ selectedModelId: "model-1" });
+  });
+
+  it("隐私模式切换模型会更新内存会话并用于下一次请求", async () => {
+    const provider = createProvider();
+    const firstModel = createModel();
+    const secondModel: ProviderModel = {
+      ...createModel(),
+      id: "model-private-second",
+      displayName: "隐私模式模型",
+      modelId: "gpt-private-second",
+      updatedAt: 2,
+    };
+    let chatRequest: { model?: { modelId?: string } } | undefined;
+    const sendMessage = vi.fn((message: { type: string; model?: { modelId?: string } }, callback: (response: unknown) => void) => {
+      if (message.type === "chat.send") {
+        chatRequest = message;
+        callback({ ok: true, content: "隐私回复" });
+      } else {
+        callback({ ok: true });
+      }
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    await saveModelProvider(provider);
+    await saveProviderModel(firstModel);
+    await saveProviderModel(secondModel);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    await useAppStore.getState().enterPrivateMode();
+    const privateSessionId = useAppStore.getState().privateChatSession?.id;
+
+    await useAppStore.getState().selectModel(secondModel.id);
+    useAppStore.setState({ streamMode: false });
+    await useAppStore.getState().sendChatMessage("使用隐私模型");
+
+    expect(useAppStore.getState().privateChatSession?.selectedModelId).toBe(secondModel.id);
+    expect(useAppStore.getState().selectedModelId).toBe(secondModel.id);
+    expect(chatRequest?.model?.modelId).toBe(secondModel.modelId);
+    await expect(getChatSession(privateSessionId ?? "missing")).resolves.toBeUndefined();
+  });
+
+  it("发送消息会合并数据库中的并发消息而不被旧内存快照覆盖", async () => {
+    const provider = createProvider();
+    const model = createModel();
+    const initialMessage: ChatMessage = {
+      id: "message-initial",
+      role: "user",
+      content: "初始消息",
+      createdAt: 1,
+      modelId: model.id,
+      endpointType: provider.endpointType,
+      streamMode: false,
+      systemPrompt: "",
+      contextPrompt: "",
+      contextMode: "text",
+    };
+    const session: ChatSession = {
+      id: "session-concurrent",
+      title: "并发会话",
+      archived: false,
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      selectedModelId: model.id,
+      messages: [initialMessage],
+    };
+    const concurrentMessage: ChatMessage = {
+      ...initialMessage,
+      id: "message-other-window",
+      role: "assistant",
+      content: "另一个窗口刚写入的消息",
+      createdAt: 2,
+    };
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      callback(message.type === "chat.send" ? { ok: true, content: "本窗口回复" } : { ok: true });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await saveChatSession(session);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    await updateChatSession(session.id, (latestSession) => ({
+      ...latestSession,
+      updatedAt: 2,
+      messages: [...latestSession.messages, concurrentMessage],
+    }));
+    disableDefaultToolCalling();
+    useAppStore.setState({ streamMode: false });
+
+    await useAppStore.getState().sendChatMessage("本窗口消息");
+
+    const storedSession = await getChatSession(session.id);
+    expect(storedSession?.messages.map((message) => message.content)).toEqual([
+      "初始消息",
+      "另一个窗口刚写入的消息",
+      "本窗口消息",
+      "本窗口回复",
+    ]);
+    expect(useAppStore.getState().chatSessions[0]?.messages.map((message) => message.content)).toEqual(
+      storedSession?.messages.map((message) => message.content),
+    );
   });
 
   it("流式连接未返回内容就断开时保留 AI 气泡且不回退非流式", async () => {

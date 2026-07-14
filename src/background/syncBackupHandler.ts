@@ -1,4 +1,11 @@
-import { backupNow, listRemoteBackups, resolveProviderFromSettings, restoreNow } from "../shared/sync/backupService";
+import {
+  backupNow,
+  commitPreparedRestore,
+  listRemoteBackups,
+  prepareRestore,
+  resolveProviderFromSettings,
+  type PreparedSyncRestore,
+} from "../shared/sync/backupService";
 import { getSyncSecrets, getSyncSettings } from "../shared/sync/settings";
 import type { SyncRemoteBackupMeta, SyncSettings } from "../shared/sync/types";
 
@@ -26,17 +33,17 @@ export async function handleSyncBackupMessage(message: SyncBackupMessage): Promi
       return { ok: true, message: "自动同步设置已更新" };
     }
 
+    if (message.type === "sync.restoreNow") {
+      await commitSyncRestore(await prepareSyncRestore(message));
+      return { ok: true, message: "恢复完成" };
+    }
+
     const settings = await getSyncSettings();
     const secrets = await getSyncSecrets();
     const provider = resolveProviderFromSettings(settings, secrets, chrome.storage.sync, fetch);
 
     if (message.type === "sync.listRemoteBackups") {
       return { ok: true, backups: await listRemoteBackups({ provider }) };
-    }
-
-    if (message.type === "sync.restoreNow") {
-      await restoreNow({ provider, backupId: message.backupId });
-      return { ok: true, message: "恢复完成" };
     }
 
     await backupNow({ provider });
@@ -47,6 +54,17 @@ export async function handleSyncBackupMessage(message: SyncBackupMessage): Promi
       message: error instanceof Error ? error.message : "同步操作失败，请重试",
     };
   }
+}
+
+export async function prepareSyncRestore(message: Extract<SyncBackupMessage, { type: "sync.restoreNow" }>): Promise<PreparedSyncRestore> {
+  const settings = await getSyncSettings();
+  const secrets = await getSyncSecrets();
+  const provider = resolveProviderFromSettings(settings, secrets, chrome.storage.sync, fetch);
+  return prepareRestore({ provider, backupId: message.backupId });
+}
+
+export async function commitSyncRestore(prepared: PreparedSyncRestore): Promise<void> {
+  await commitPreparedRestore(prepared);
 }
 
 export async function configureSyncAlarm(settings: SyncSettings): Promise<void> {

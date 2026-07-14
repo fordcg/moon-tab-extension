@@ -18,6 +18,8 @@ interface GenerateTitleForSessionInput {
   set: StoreSetter;
 }
 
+class RestoreCanceledTitleRequestError extends Error {}
+
 
 export function hasAvailableTitleModel(state: AppState): boolean {
   const titleModel = state.models.find((model) => model.isTitleModel && model.enabled);
@@ -55,6 +57,7 @@ function getDebugTimeZone(): string | undefined {
 
 export async function generateTitleForSession(input: GenerateTitleForSessionInput): Promise<void> {
   let tokenUsageEntries: ChatTokenUsageEntry[] | undefined;
+  let restoreCanceled = false;
   try {
     const state = input.get();
     const titleModel = state.models.find((model) => model.isTitleModel && model.enabled);
@@ -82,7 +85,7 @@ export async function generateTitleForSession(input: GenerateTitleForSessionInpu
       titleModel: titleModelConfig,
       retryCount: input.retryCount,
       requestTitle: async (model, messages, retryCount) => {
-        const response = await sendRuntimeMessage<{ ok: true; content: string; tokenUsageEntries?: ChatTokenUsageEntry[] } | { ok: false; message: string } | undefined>({
+        const response = await sendRuntimeMessage<{ ok: true; content: string; tokenUsageEntries?: ChatTokenUsageEntry[] } | { ok: false; message: string; restoreCanceled?: boolean } | undefined>({
           type: "chat.send",
           model,
           messages,
@@ -96,6 +99,10 @@ export async function generateTitleForSession(input: GenerateTitleForSessionInpu
             requestMessageCount: messages.length,
           }),
         });
+        if (response?.ok === false && response.restoreCanceled) {
+          restoreCanceled = true;
+          throw new RestoreCanceledTitleRequestError();
+        }
         if (!response?.ok) {
           throw new Error(response?.message ?? "标题生成失败");
         }
@@ -105,14 +112,21 @@ export async function generateTitleForSession(input: GenerateTitleForSessionInpu
       },
     });
 
+    if (restoreCanceled || input.get().syncRestoreBarrierActive) {
+      return;
+    }
     await updateGeneratedTitle(input, title, tokenUsageEntries);
-  } catch {
+  } catch (error) {
+    if (error instanceof RestoreCanceledTitleRequestError) {
+      return;
+    }
     await clearTitleGenerating(input);
   }
 }
 
 export async function generateTitleFromSavedPrivateSession(input: { session: ChatSession; get: StoreGetter; set: StoreSetter }): Promise<void> {
   let tokenUsageEntries: ChatTokenUsageEntry[] | undefined;
+  let restoreCanceled = false;
   try {
     const state = input.get();
     const titleModel = state.models.find((model) => model.isTitleModel && model.enabled);
@@ -137,7 +151,7 @@ export async function generateTitleFromSavedPrivateSession(input: { session: Cha
       titleModel: titleModelConfig,
       retryCount: state.chatPreferences.aiRequestRetryCount,
       requestTitle: async (model, messages, retryCount) => {
-        const response = await sendRuntimeMessage<{ ok: true; content: string; tokenUsageEntries?: ChatTokenUsageEntry[] } | { ok: false; message: string } | undefined>({
+        const response = await sendRuntimeMessage<{ ok: true; content: string; tokenUsageEntries?: ChatTokenUsageEntry[] } | { ok: false; message: string; restoreCanceled?: boolean } | undefined>({
           type: "chat.send",
           model,
           messages,
@@ -151,6 +165,10 @@ export async function generateTitleFromSavedPrivateSession(input: { session: Cha
             requestMessageCount: messages.length,
           }),
         });
+        if (response?.ok === false && response.restoreCanceled) {
+          restoreCanceled = true;
+          throw new RestoreCanceledTitleRequestError();
+        }
         if (!response?.ok) {
           throw new Error(response?.message ?? "标题生成失败");
         }
@@ -160,13 +178,19 @@ export async function generateTitleFromSavedPrivateSession(input: { session: Cha
       },
     });
 
+    if (restoreCanceled || input.get().syncRestoreBarrierActive) {
+      return;
+    }
     await updateSavedPrivateSessionTitle({
       sessionId: input.session.id,
       title,
       tokenUsageEntries,
       set: input.set,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RestoreCanceledTitleRequestError) {
+      return;
+    }
     // 隐私会话已完成保存；标题生成失败时保留原标题，避免影响用户显式保存结果。
   }
 }

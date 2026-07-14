@@ -31,7 +31,11 @@ import { callMcpTool } from "../shared/mcp/httpClient";
 import { parseMcpToolId } from "../shared/mcp/toolAdapter";
 
 type Fetcher = typeof fetch;
-type NetworkCompatibilityExecutor = (toolCall: ModelToolCall, tool: ModelToolRegistryEntry) => ModelToolResult | undefined | Promise<ModelToolResult | undefined>;
+type NetworkCompatibilityExecutor = (
+  toolCall: ModelToolCall,
+  tool: ModelToolRegistryEntry,
+  signal?: AbortSignal,
+) => ModelToolResult | undefined | Promise<ModelToolResult | undefined>;
 
 const DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS = 32;
 
@@ -101,56 +105,63 @@ export function createModelToolDefinition(tool: ModelToolRegistryEntry): ModelTo
 
 export function createBackgroundToolExecutor(message: BackgroundToolExecutorMessage, fetcher: Fetcher, options: BackgroundToolExecutorOptions = {}): ModelToolExecutor {
   return async (toolCall, tool, context) => {
+    const signal = context?.signal;
     if (tool.id === BROWSER_TAKE_SNAPSHOT_TOOL_ID && tool.name === BROWSER_TAKE_SNAPSHOT_TOOL_NAME) {
-      return browserControlManager.takeSnapshot(toolCall);
+      return runWithAbortSignal(() => browserControlManager.takeSnapshot(toolCall, signal), signal);
     }
 
     if (tool.id === BROWSER_EXTRACT_CONTENT_TOOL_ID) {
-      return browserControlManager.extractContent(toolCall, message.extractionRules ?? []);
+      return runWithAbortSignal(
+        () => browserControlManager.extractContent(toolCall, message.extractionRules ?? [], signal),
+        signal,
+      );
     }
 
     if (tool.id === IMAGEFREE_GENERATE_IMAGE_TOOL_ID) {
-      return executeImagefreeGenerateTool(toolCall, fetcher);
+      return executeImagefreeGenerateTool(toolCall, withAbortSignal(fetcher, context?.signal));
     }
 
     if (tool.id.startsWith("browser.")) {
-      return browserControlManager.executeBrowserTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeBrowserTool(toolCall, signal), signal);
     }
 
     if (tool.id.startsWith("network.")) {
       if (browserControlManager.canExposeNetworkTool()) {
-        return browserControlManager.executeNetworkTool(toolCall);
+        return runWithAbortSignal(() => browserControlManager.executeNetworkTool(toolCall, signal), signal);
       }
 
-      const compatibilityResult = await options.networkCompatibilityExecutor?.(toolCall, tool);
+      const compatibilityResult = await runWithAbortSignal(
+        () => options.networkCompatibilityExecutor?.(toolCall, tool, signal),
+        signal,
+      );
       if (compatibilityResult !== undefined) {
         return compatibilityResult;
       }
-      return browserControlManager.executeNetworkTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeNetworkTool(toolCall, signal), signal);
     }
 
     if (tool.id.startsWith("js.")) {
-      return browserControlManager.executeJsSourceTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeJsSourceTool(toolCall, signal), signal);
     }
 
     if (tool.id.startsWith("sourcemap.")) {
-      return browserControlManager.executeSourceMapTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeSourceMapTool(toolCall, signal), signal);
     }
 
     if (tool.id === RUNTIME_INSPECT_GLOBALS_TOOL_ID ||
       tool.id === RUNTIME_SEARCH_MODULES_TOOL_ID ||
       tool.id === RUNTIME_DESCRIBE_FUNCTION_TOOL_ID) {
-      return browserControlManager.executeRuntimeReadTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeRuntimeReadTool(toolCall, signal), signal);
     }
 
     if (tool.id === BOUNDARY_REQUEST_USER_CHOICE_TOOL_ID) {
-      return browserControlManager.executeBoundaryChoiceTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeBoundaryChoiceTool(toolCall, signal), signal);
     }
 
     if (tool.id === REPLAY_PREPARE_REQUEST_TOOL_ID ||
       tool.id === REPLAY_SEND_REQUEST_TOOL_ID ||
       tool.id === REPLAY_COMPARE_RESPONSES_TOOL_ID) {
-      return browserControlManager.executeReplayTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeReplayTool(toolCall, signal), signal);
     }
 
     if (tool.id === FULL_ACCESS_EXECUTE_SCRIPT_TOOL_ID ||
@@ -158,11 +169,11 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
       tool.id === FULL_ACCESS_GET_NETWORK_DETAILS_TOOL_ID ||
       tool.id === FULL_ACCESS_READ_STORAGE_TOOL_ID ||
       tool.id === FULL_ACCESS_REVOKE_TOOL_ID) {
-      return browserControlManager.executeFullAccessTool(toolCall);
+      return runWithAbortSignal(() => browserControlManager.executeFullAccessTool(toolCall, signal), signal);
     }
 
     if (tool.name === TAVILY_SEARCH_TOOL_NAME) {
-      return executeTavilySearchTool(toolCall, message.tavily, fetcher);
+      return executeTavilySearchTool(toolCall, message.tavily, withAbortSignal(fetcher, context?.signal));
     }
 
     if (tool.name === CURRENT_TIME_TOOL_NAME) {
@@ -175,6 +186,50 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
 
     return createUnavailableToolResult(toolCall);
   };
+}
+
+function withAbortSignal(fetcher: Fetcher, signal?: AbortSignal): Fetcher {
+  if (!signal) {
+    return fetcher;
+  }
+
+  return (input, init) => fetcher(input, { ...init, signal });
+}
+
+async function runWithAbortSignal<T>(operation: () => T | Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return operation();
+  }
+  throwIfAborted(signal);
+
+  let removeAbortListener: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const handleAbort = () => reject(createAbortError(signal));
+    signal.addEventListener("abort", handleAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener("abort", handleAbort);
+  });
+  const pendingOperation = Promise.resolve().then(() => {
+    throwIfAborted(signal);
+    return operation();
+  });
+  try {
+    return await Promise.race([pendingOperation, aborted]);
+  } finally {
+    removeAbortListener?.();
+  }
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw createAbortError(signal);
+  }
+}
+
+function createAbortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason;
+  }
+  return new DOMException("The operation was aborted", "AbortError");
 }
 
 export function appendBrowserControlPromptIfNeeded(

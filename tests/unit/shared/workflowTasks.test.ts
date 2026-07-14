@@ -192,7 +192,7 @@ describe("工作流任务状态机", () => {
   });
 
   it("上下文固定切换和移除会返回更新后的任务", () => {
-    const task = addWorkflowContextItem(createWorkflowTask("session-1", "automation", "提交表单", 1), {
+    const initialTask = addWorkflowContextItem(createWorkflowTask("session-1", "automation", "提交表单", 1), {
       id: "context-1",
       kind: "page-content",
       title: "表单",
@@ -202,17 +202,24 @@ describe("工作流任务状态机", () => {
       truncated: false,
       sensitive: false,
     });
+    const task = addWorkflowContextItem(initialTask, {
+      ...initialTask.contextItems[0],
+      summary: "更新后的脱敏内容",
+      capturedAt: 3,
+    });
 
     const pinned = toggleWorkflowContextPinned(task, "context-1");
     const removed = removeWorkflowContextItem(pinned, "context-1");
 
+    expect(task.contextItems).toHaveLength(1);
+    expect(task.contextItems[0]).toMatchObject({ summary: "更新后的脱敏内容", capturedAt: 3 });
     expect(task.contextItems[0].pinned).toBeUndefined();
     expect(pinned.contextItems[0].pinned).toBe(true);
     expect(removed.contextItems).toEqual([]);
   });
 
   it("可追加产物", () => {
-    const task = addWorkflowArtifact(createWorkflowTask("session-1", "automation", "提交表单", 1), {
+    const initialTask = addWorkflowArtifact(createWorkflowTask("session-1", "automation", "提交表单", 1), {
       id: "artifact-1",
       kind: "automation-report",
       title: "执行报告",
@@ -220,15 +227,20 @@ describe("工作流任务状态机", () => {
       contextItemIds: [],
       createdAt: 2,
     });
+    const task = addWorkflowArtifact(initialTask, {
+      ...initialTask.artifacts[0],
+      content: "更新后的报告",
+      createdAt: 3,
+    });
 
     expect(task.artifacts).toEqual([
       {
         id: "artifact-1",
         kind: "automation-report",
         title: "执行报告",
-        content: "已完成",
+        content: "更新后的报告",
         contextItemIds: [],
-        createdAt: 2,
+        createdAt: 3,
       },
     ]);
   });

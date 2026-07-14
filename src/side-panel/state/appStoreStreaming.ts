@@ -27,6 +27,8 @@ type ChatStreamPortMessage =
   | { type: "assistant:tool-turn"; message: ChatMessage }
   | { type: "tool:start"; record: ChatToolCallRecord }
   | { type: "tool:complete"; record: ChatToolCallRecord; attachments?: ChatToolAttachment[] }
+  | { type: "restore:abort"; message?: string }
+  | { type: "canceled" }
   | {
       type: "complete";
       content: string;
@@ -44,6 +46,7 @@ interface StreamingChatResult {
   assistantContent?: string;
   canceled?: boolean;
   failed?: boolean;
+  restoreCanceled?: boolean;
   unconsumedFollowUpIds?: string[];
 }
 
@@ -71,7 +74,7 @@ interface StreamingChatInput {
     promptInvocations?: ChatPromptInvocation[];
     userMessageId?: string;
   }) => void) => void;
-  onFollowUpConsumed?: (followUpId: string) => void;
+  onFollowUpConsumed?: (followUpId: string) => void | Promise<void>;
   shouldShowFailure?: () => boolean;
 }
 
@@ -177,6 +180,7 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
     let settled = false;
     let receivedFinalComplete = false;
     let canceledByUser = false;
+    let canceledForRestore = false;
     let pendingTokenUsageEntries: ChatTokenUsageEntry[] | undefined;
     const pendingFollowUpIds = new Set<string>();
     let writeQueue = Promise.resolve();
@@ -201,7 +205,11 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       }
 
       canceledByUser = true;
-      port.disconnect();
+      try {
+        port.postMessage({ type: "chat.stream.cancel" });
+      } catch {
+        port.disconnect();
+      }
     });
     input.onFollowUpHandle?.((followUp) => {
       if (settled || receivedFinalComplete) {
@@ -228,6 +236,18 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       });
       return writeQueue;
     };
+    const runWorkflowHook = async (operation: (() => void | Promise<void>) | undefined) => {
+      if (!operation) {
+        return;
+      }
+      try {
+        await operation();
+      } catch {
+        if (input.shouldShowFailure?.() ?? true) {
+          input.set({ failure: { message: "任务进度保存失败，聊天内容已保留" } });
+        }
+      }
+    };
     const ensureFinalAssistantMessage = async (): Promise<ChatMessage | undefined> => {
       if (assistantMessage) {
         return assistantMessage;
@@ -241,6 +261,27 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
     };
 
     port.onMessage.addListener((message: ChatStreamPortMessage) => {
+      if (message.type === "restore:abort") {
+        canceledForRestore = true;
+        void writeQueue.then(() => finish({ completed: true, restoreCanceled: true }));
+        return;
+      }
+      if (canceledForRestore) {
+        return;
+      }
+      if (message.type === "canceled") {
+        canceledByUser = true;
+        void enqueueWrite(async () => {
+          const finalAssistantMessage = await ensureFinalAssistantMessage();
+          if (finalAssistantMessage) {
+            pendingRetryProgress = undefined;
+            clearAssistantRetryProgress(finalAssistantMessage.id, input.set);
+            await failAssistantMessage(input.sessionId, finalAssistantMessage.id, STREAM_CANCELED_MESSAGE, input.set, input.privateMode, pendingTokenUsageEntries);
+          }
+        }).then(() => finish({ completed: true, canceled: true, unconsumedFollowUpIds: Array.from(pendingFollowUpIds) }));
+        return;
+      }
+
       if (message.type === "chunk") {
         void enqueueWrite(async () => {
           const finalAssistantMessage = await ensureFinalAssistantMessage();
@@ -266,7 +307,9 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       if (message.type === "follow-up:consumed") {
         if (typeof message.followUpId === "string") {
           pendingFollowUpIds.delete(message.followUpId);
-          input.onFollowUpConsumed?.(message.followUpId);
+          void enqueueWrite(async () => {
+            await input.onFollowUpConsumed?.(message.followUpId);
+          });
         }
         return;
       }
@@ -312,10 +355,10 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
 
       if (message.type === "tool:start") {
         void enqueueWrite(async () => {
-          await input.onWorkflowToolStart?.(message.record);
           if (currentToolTurnMessageId) {
             await upsertAssistantToolCallRecord(input.sessionId, currentToolTurnMessageId, message.record, [], input.set, input.privateMode);
           }
+          await runWorkflowHook(() => input.onWorkflowToolStart?.(message.record));
         });
         return;
       }
@@ -323,10 +366,10 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       if (message.type === "tool:complete") {
         void enqueueWrite(async () => {
           const attachments = message.attachments ?? [];
-          await input.onWorkflowToolComplete?.(message.record, attachments);
           if (currentToolTurnMessageId) {
             await upsertAssistantToolCallRecord(input.sessionId, currentToolTurnMessageId, message.record, attachments, input.set, input.privateMode);
           }
+          await runWorkflowHook(() => input.onWorkflowToolComplete?.(message.record, attachments));
         });
         return;
       }
@@ -364,6 +407,10 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
     });
 
     port.onDisconnect.addListener(() => {
+      if (canceledForRestore) {
+        void writeQueue.then(() => finish({ completed: true, restoreCanceled: true }, { disconnect: false }));
+        return;
+      }
       if (receivedFinalComplete) {
         finish({ completed: true }, { disconnect: false });
         return;

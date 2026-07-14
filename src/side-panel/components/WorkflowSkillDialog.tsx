@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { WorkflowSkill, WorkflowSkillVariable, WorkflowTask } from "../../shared/types";
 import { useAppStore } from "../state/appStore";
+import { useModalDialogFocus } from "./useModalDialogFocus";
 
 type WorkflowSkillDialogProps =
   | {
@@ -21,6 +22,12 @@ const VARIABLE_PATTERN = /{{\s*([^{}]+?)\s*}}/g;
 
 export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
   const titleId = useId();
+  const errorId = useId();
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const firstVariableRef = useRef<HTMLInputElement>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const saveWorkflowSkill = useAppStore((state) => state.saveWorkflowSkill);
   const startWorkflowSkill = useAppStore((state) => state.startWorkflowSkill);
   const addNotification = useAppStore((state) => state.addNotification);
@@ -37,6 +44,25 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const submittingRef = useRef(submitting);
+  submittingRef.current = submitting;
+  const closeDialog = useCallback(() => {
+    if (!submittingRef.current) {
+      onOpenChange(false);
+    }
+  }, [onOpenChange]);
+  const initialFocusRef = props.mode === "save"
+    ? titleInputRef
+    : variables.length > 0
+      ? firstVariableRef
+      : submitButtonRef;
+
+  useModalDialogFocus({
+    dialogRef,
+    initialFocusRef,
+    onEscape: closeDialog,
+    open,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -49,18 +75,10 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
   }, [initialTitle, open, variableSignature]);
 
   useEffect(() => {
-    if (!open) {
-      return undefined;
+    if (errorMessage) {
+      errorRef.current?.focus({ preventScroll: true });
     }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !submitting) {
-        onOpenChange(false);
-      }
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [onOpenChange, open, submitting]);
+  }, [errorMessage]);
 
   if (!open) {
     return null;
@@ -69,12 +87,6 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
   const dialogTitle = props.mode === "save" ? "保存为技能" : "启动技能";
   const missingRequiredValue = props.mode === "start" && variables.some((variable) => variable.required && !variableValues[variable.id]?.trim());
   const canSubmit = props.mode === "save" ? Boolean(title.trim()) : !missingRequiredValue;
-
-  const closeDialog = () => {
-    if (!submitting) {
-      onOpenChange(false);
-    }
-  };
 
   const submitDialog = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -105,7 +117,17 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
   return (
     <>
       <div className="dialog-overlay" aria-hidden="true" onClick={closeDialog} />
-      <form className="workflow-skill-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={submitDialog}>
+      <form
+        ref={dialogRef}
+        className="workflow-skill-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={errorMessage ? errorId : undefined}
+        aria-busy={submitting || undefined}
+        tabIndex={-1}
+        onSubmit={submitDialog}
+      >
         <div className="workflow-skill-dialog-header">
           <div className="workflow-skill-dialog-heading">
             <h2 className="workflow-skill-dialog-title" id={titleId}>
@@ -113,7 +135,7 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
             </h2>
             <span className="workflow-skill-dialog-subtitle">{sourceTask?.title ?? sourceSkill?.title}</span>
           </div>
-          <button className="workflow-skill-dialog-close" type="button" aria-label="关闭任务技能弹窗" onClick={closeDialog}>
+          <button className="workflow-skill-dialog-close" type="button" aria-label="关闭任务技能弹窗" disabled={submitting} onClick={closeDialog}>
             ×
           </button>
         </div>
@@ -123,10 +145,15 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
             <label className="workflow-skill-field">
               <span className="workflow-skill-field-label">技能名称</span>
               <input
+                ref={titleInputRef}
                 className="workflow-skill-input"
                 type="text"
+                required
                 value={title}
-                onChange={(event) => setTitle(event.target.value)}
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  setErrorMessage("");
+                }}
               />
             </label>
             <div className="workflow-skill-variable-group">
@@ -149,28 +176,51 @@ export function WorkflowSkillDialog(props: WorkflowSkillDialogProps) {
           <div className="workflow-skill-variable-fields">
             {variables.map((variable, index) => (
               <label className="workflow-skill-field" htmlFor={`${titleId}-variable-${index}`} key={variable.id}>
-                <span className="workflow-skill-field-label">{variable.label}</span>
+                <span className="workflow-skill-field-label">
+                  {variable.label}
+                  {variable.required ? <span className="workflow-skill-field-required" aria-hidden="true">必填</span> : null}
+                </span>
                 <input
+                  ref={index === 0 ? firstVariableRef : undefined}
                   id={`${titleId}-variable-${index}`}
                   className="workflow-skill-input"
                   type="text"
+                  aria-label={variable.label}
                   value={variableValues[variable.id] ?? ""}
                   required={variable.required}
-                  onChange={(event) => setVariableValues((current) => ({ ...current, [variable.id]: event.target.value }))}
+                  onChange={(event) => {
+                    setVariableValues((current) => ({ ...current, [variable.id]: event.target.value }));
+                    setErrorMessage("");
+                  }}
                 />
               </label>
             ))}
           </div>
         )}
 
-        {errorMessage ? <p className="workflow-skill-dialog-error" role="alert">{errorMessage}</p> : null}
+        {errorMessage ? (
+          <p
+            ref={errorRef}
+            className="workflow-skill-dialog-error"
+            id={errorId}
+            role="alert"
+            tabIndex={-1}
+          >
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="workflow-skill-dialog-actions">
           <button className="ui-button-secondary workflow-skill-dialog-button" type="button" disabled={submitting} onClick={closeDialog}>
             取消
           </button>
-          <button className="ui-button-primary workflow-skill-dialog-button" type="submit" disabled={!canSubmit || submitting}>
-            {props.mode === "save" ? "保存技能" : "启动技能"}
+          <button
+            ref={submitButtonRef}
+            className="ui-button-primary workflow-skill-dialog-button"
+            type="submit"
+            disabled={!canSubmit || submitting}
+          >
+            {submitting ? (props.mode === "save" ? "保存中..." : "启动中...") : props.mode === "save" ? "保存技能" : "启动技能"}
           </button>
         </div>
       </form>

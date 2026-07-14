@@ -35,7 +35,9 @@ assertContains(backgroundRuntimeSource, /browserControlManager\.extractContent/,
 assertContains(backgroundRuntimeSource, /tool\.id\.startsWith\("network\."\)/, "background runtime dispatches network tools by source registry id");
 assertContains(backgroundRuntimeSource, /networkCompatibilityExecutor/, "background runtime supports DevTools Network compatibility executor");
 assertContains(backgroundRuntimeSource, /IMAGEFREE_GENERATE_IMAGE_TOOL_ID/, "background runtime dispatches Imagefree by source registry id");
-assertContains(backgroundRuntimeSource, /executeImagefreeGenerateTool\(toolCall, fetcher\)/, "background runtime calls source-owned Imagefree executor hook");
+assertContains(backgroundRuntimeSource, /executeImagefreeGenerateTool\(toolCall, withAbortSignal\(fetcher, context\?\.signal\)\)/, "background runtime passes the chat cancellation signal to Imagefree");
+assertContains(backgroundRuntimeSource, /executeTavilySearchTool\(toolCall, message\.tavily, withAbortSignal\(fetcher, context\?\.signal\)\)/, "background runtime passes the chat cancellation signal to Tavily");
+assertContains(backgroundRuntimeSource, /fetcher\(input, \{ \.\.\.init, signal \}\)/, "background runtime injects the cancellation signal into tool fetch calls");
 assertContains(backgroundRuntimeSource, /parseMcpToolId\(tool\.id\)/, "background runtime routes MCP registry tools by parsed source id");
 
 assertContains(backgroundRuntimeSource, /需要读取当前页面正文、全文 HTML[\s\S]*不执行自定义脚本，不读取 Cookie、Storage 或跨域 iframe/, "browser prompt includes extract_content read-only safety boundaries");
@@ -75,10 +77,9 @@ assertContains(imagefreeRuntimeSource, /IMAGEFREE_TOOL_NAME = IMAGEFREE_GENERATE
 assertContains(imagefreeRuntimeSource, /IMAGEFREE_BASE_URL = "https:\/\/imagefree\.net"/, "Imagefree runtime targets imagefree.net");
 assertContains(imagefreeRuntimeSource, /IMAGEFREE_GENERATE_URL = `\$\{IMAGEFREE_BASE_URL\}\/api\/generate`/, "Imagefree runtime calls the generate endpoint");
 assertContains(imagefreeRuntimeSource, /IMAGEFREE_STATUS_URL = `\$\{IMAGEFREE_GENERATE_URL\}\/status`/, "Imagefree runtime polls the status endpoint");
-assertContains(imagefreeRuntimeSource, /IMAGEFREE_TURNSTILE_SITE_KEY = "0x4AAAAAACE-XLGoQUckKKm_"/, "Imagefree runtime uses the current Turnstile site key");
-assertContains(imagefreeRuntimeSource, /IMAGEFREE_TURNSTILE_BACKGROUND_ATTEMPT_MS = 2500/, "Imagefree runtime tries background Turnstile resolution before focusing the tab");
-assertContains(imagefreeRuntimeSource, /turnstile_token: turnstileToken/, "Imagefree runtime sends the resolved Turnstile token to the generate endpoint");
-assertNotContains(imagefreeRuntimeSource, /turnstile_token:\s*null/, "Imagefree runtime must not send a null Turnstile token");
+assertContains(imagefreeRuntimeSource, /key !== "prompt" && key !== "aspect_ratio"/, "Imagefree runtime rejects caller-provided authentication fields");
+assertContains(imagefreeRuntimeSource, /turnstile_token:\s*null/, "Imagefree runtime follows the public endpoint contract without a caller-provided token");
+assertNotContains(imagefreeRuntimeSource, /IMAGEFREE_TURNSTILE_SITE_KEY|IMAGEFREE_TURNSTILE_BACKGROUND_ATTEMPT_MS/, "Imagefree runtime does not embed the retired Turnstile flow");
 assertContains(imagefreeRuntimeSource, /void migrateImagefreeToolSelection\(\)/, "Imagefree runtime starts selection migration without blocking side panel startup");
 
 assertNotContains(backgroundSource, /src\/ai-assistant/, "background wiring test must not depend on legacy bundle paths");

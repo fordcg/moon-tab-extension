@@ -64,4 +64,12 @@ describe("Phase 7 发布验收合约", () => {
     expect(claude).toContain("release readiness");
     expect(claude).toContain("Do not load the repository root directly");
   });
+
+  it("Windows CI 总门禁执行扩展打包检查", async () => {
+    const workflow = await readProjectFile(".github/workflows/ai-sidebar-quality.yml");
+    const qualityScript = await readProjectFile("scripts/verify_ai_sidebar_quality.ps1");
+
+    expect(workflow).toContain("scripts\\verify_ai_sidebar_quality.ps1");
+    expect(qualityScript).toContain("Invoke-CheckedCommand npm run check:package");
+  });
 });

@@ -90,6 +90,23 @@ describe("AI 请求失败重试", () => {
     expect(delay).toHaveBeenCalledTimes(1);
   });
 
+  it("请求在退避等待期间被终止时立即退出且不再重试", async () => {
+    const controller = new AbortController();
+    const delay = vi.fn(() => new Promise<void>(() => undefined));
+    const operation = vi.fn<() => Promise<Response>>().mockResolvedValue(new Response("server error", { status: 500 }));
+
+    const request = withModelRequestRetry(operation, 5, {
+      signal: controller.signal,
+      delay,
+      random: () => 0,
+    });
+    await vi.waitFor(() => expect(delay).toHaveBeenCalledTimes(1));
+    controller.abort("sync_restore");
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
   it("归一化重试次数时会防御脏数据和越界值", () => {
     expect(normalizeModelRequestRetryCount(undefined)).toBe(DEFAULT_MODEL_REQUEST_RETRY_COUNT);
     expect(normalizeModelRequestRetryCount(Number.NaN)).toBe(DEFAULT_MODEL_REQUEST_RETRY_COUNT);

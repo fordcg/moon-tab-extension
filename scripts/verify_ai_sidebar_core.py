@@ -67,6 +67,30 @@ def click_if_present(page, selector):
     )
 
 
+def resolve_extension_id(context):
+    service_worker = context.service_workers[0] if context.service_workers else None
+    if service_worker is None:
+        try:
+            service_worker = context.wait_for_event("serviceworker", timeout=3000)
+        except TimeoutError:
+            service_worker = None
+
+    if service_worker is not None:
+        return service_worker.url.split("/")[2], service_worker.url
+
+    discovery_page = context.new_page()
+    try:
+        discovery_page.goto("chrome://newtab/")
+        discovery_page.wait_for_url(
+            lambda url: url.startswith("chrome-extension://")
+            and url.endswith("/src/pages/newtab/index.html"),
+            timeout=5000,
+        )
+        return discovery_page.url.split("/")[2], discovery_page.url
+    finally:
+        discovery_page.close()
+
+
 def main():
     if not (DIST_DIR / "manifest.json").exists():
         raise FileNotFoundError("缺少 dist/manifest.json，请先运行 npm run build:extension")
@@ -98,10 +122,9 @@ def main():
                 context = playwright.chromium.launch_persistent_context(**launch_kwargs)
 
             try:
-                service_worker = context.service_workers[0] if context.service_workers else context.wait_for_event("serviceworker", timeout=15000)
-                extension_id = service_worker.url.split("/")[2]
+                extension_id, extension_source_url = resolve_extension_id(context)
                 result["extension_id"] = extension_id
-                add_check(result, "extension service worker is available", bool(extension_id), actual=service_worker.url)
+                add_check(result, "extension identity is available", bool(extension_id), actual=extension_source_url)
 
                 page = context.new_page()
                 page.on("pageerror", lambda error: result["page_errors"].append(str(error)))
@@ -181,61 +204,76 @@ def main():
                 action_text = "\n".join(action["text"] for action in drawer["actions"])
                 add_check(
                     result,
-                    "history drawer opens and exposes browser control entry",
-                    drawer["drawerPresent"] and drawer["drawerVisible"] and "浏览器控制" in action_text and "工具和 MCP" in action_text and "设置" in action_text,
+                    "history drawer opens and exposes settings entry",
+                    drawer["drawerPresent"] and drawer["drawerVisible"] and "设置" in action_text,
                     actual=drawer,
-                    expected="drawer visible with browser control, tools/MCP, and settings actions",
+                    expected="drawer visible with settings action",
                 )
 
-                clicked_agent_tools = page.evaluate(
+                clicked_settings = page.evaluate(
                     """() => {
                         const buttons = Array.from(document.querySelectorAll('.sidepanel-drawer-action'));
-                        const button = buttons.find((node) => node.textContent.includes('工具和 MCP'));
+                        const button = buttons.find((node) => node.textContent.trim() === '设置');
                         if (!(button instanceof HTMLElement)) return false;
                         button.click();
                         return true;
                     }"""
                 )
                 page.wait_for_timeout(900)
-                agent_tools_dialog = page.evaluate(
-                    """(clickedAgentTools) => {
-                        const dialog = document.querySelector('.sidepanel-agent-tools-dialog');
+                clicked_agent_tools = page.evaluate(
+                    """() => {
+                        const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+                        const tab = tabs.find((node) => node.textContent.trim() === '工具和 MCP');
+                        if (!(tab instanceof HTMLElement)) return false;
+                        tab.click();
+                        return true;
+                    }"""
+                )
+                page.wait_for_timeout(900)
+                agent_tools_settings = page.evaluate(
+                    """({ clickedSettings, clickedAgentTools }) => {
+                        const panel = document.querySelector('[role="tabpanel"] section[aria-label="工具和 MCP"]');
                         return {
+                            clickedSettings,
                             clickedAgentTools,
-                            present: Boolean(dialog),
-                            title: dialog?.querySelector('#sidepanel-agent-tools-title')?.textContent?.trim() || '',
-                            hasUrlInput: Boolean(dialog?.querySelector('input[type="url"]')),
-                            buttons: Array.from(dialog?.querySelectorAll('button') || []).map((node) => node.textContent.trim()).filter(Boolean),
-                            text: dialog?.innerText?.slice(0, 500) || '',
+                            present: Boolean(panel),
+                            title: panel?.querySelector('h3')?.textContent?.trim() || '',
+                            hasServerUrlInput: Boolean(panel?.querySelector('input[aria-label="MCP Server 地址"]')),
+                            buttons: Array.from(panel?.querySelectorAll('button') || []).map((node) => node.textContent.trim()).filter(Boolean),
+                            auditText: panel?.querySelector('.sidepanel-agent-tools-audit-list')?.innerText || '',
                         };
                     }""",
-                    clicked_agent_tools,
+                    {
+                        "clickedSettings": clicked_settings,
+                        "clickedAgentTools": clicked_agent_tools,
+                    },
                 )
-                result["snapshots"]["agentToolsDialog"] = agent_tools_dialog
+                result["snapshots"]["agentToolsSettings"] = agent_tools_settings
                 add_check(
                     result,
-                    "tools and MCP dialog opens",
-                    clicked_agent_tools
-                    and agent_tools_dialog["present"]
-                    and agent_tools_dialog["title"] == "工具和 MCP"
-                    and agent_tools_dialog["hasUrlInput"]
-                    and "保存并刷新" in agent_tools_dialog["buttons"],
-                    actual=agent_tools_dialog,
-                    expected="dialog titled 工具和 MCP with MCP URL input and save action",
+                    "tools and MCP settings open",
+                    clicked_settings
+                    and clicked_agent_tools
+                    and agent_tools_settings["present"]
+                    and agent_tools_settings["title"] == "工具和 MCP"
+                    and agent_tools_settings["hasServerUrlInput"]
+                    and "保存并刷新" in agent_tools_settings["buttons"],
+                    actual=agent_tools_settings,
+                    expected="settings tab titled 工具和 MCP with MCP URL input and save action",
                 )
                 add_check(
                     result,
-                    "tools and MCP dialog shows tool audit log",
-                    "mcp_dev_echo" in agent_tools_dialog["text"] and "[已脱敏]" in agent_tools_dialog["text"],
-                    actual=agent_tools_dialog,
+                    "tools and MCP settings show tool audit log",
+                    "mcp_dev_echo" in agent_tools_settings["auditText"] and "[已脱敏]" in agent_tools_settings["auditText"],
+                    actual=agent_tools_settings,
                     expected="seeded redacted audit entry is visible before clearing",
                 )
                 clicked_clear_audit = page.evaluate(
                     """() => {
-                        const dialog = document.querySelector('.sidepanel-agent-tools-dialog');
-                        const button = Array.from(dialog?.querySelectorAll('button') || [])
+                        const panel = document.querySelector('[role="tabpanel"] section[aria-label="工具和 MCP"]');
+                        const button = Array.from(panel?.querySelectorAll('button') || [])
                             .find((node) => node.textContent.trim() === '清空记录');
-                        const beforeText = dialog?.innerText || '';
+                        const beforeText = panel?.querySelector('.sidepanel-agent-tools-audit-list')?.innerText || '';
                         const beforeDisabled = button instanceof HTMLButtonElement ? button.disabled : true;
                         if (!(button instanceof HTMLButtonElement) || button.disabled) {
                             return { clicked: false, beforeText, beforeDisabled };
@@ -247,13 +285,13 @@ def main():
                 page.wait_for_timeout(900)
                 clear_audit_state = page.evaluate(
                     """(clickedClearAudit) => {
-                        const dialog = document.querySelector('.sidepanel-agent-tools-dialog');
-                        const button = Array.from(dialog?.querySelectorAll('button') || [])
+                        const panel = document.querySelector('[role="tabpanel"] section[aria-label="工具和 MCP"]');
+                        const button = Array.from(panel?.querySelectorAll('button') || [])
                             .find((node) => node.textContent.trim() === '清空记录');
                         return {
                             ...clickedClearAudit,
-                            present: Boolean(dialog),
-                            afterText: dialog?.innerText?.slice(0, 500) || '',
+                            present: Boolean(panel),
+                            afterText: panel?.querySelector('.sidepanel-agent-tools-audit-list')?.innerText || '',
                             afterDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
                         };
                     }""",
@@ -270,7 +308,7 @@ def main():
                     actual=clear_audit_state,
                     expected="clicking 清空 removes audit entries and disables the clear button",
                 )
-                click_if_present(page, ".sidepanel-agent-tools-close")
+                click_if_present(page, ".settings-dialog-back")
                 page.wait_for_timeout(200)
 
                 clicked_tools = click_if_present(page, ".sidepanel-tools-toggle")
@@ -294,10 +332,13 @@ def main():
                 result["snapshots"]["tools"] = tools
                 add_check(
                     result,
-                    "tools menu opens without breaking composer",
-                    clicked_tools and tools["openClass"] and tools["ariaHidden"] in {"", "false"},
+                    "tools menu opens and exposes browser control",
+                    clicked_tools
+                    and tools["openClass"]
+                    and tools["ariaHidden"] in {"", "false"}
+                    and any("浏览器控制" in label for label in tools["labels"]),
                     actual=tools,
-                    expected="composer has is-tools-open and tools are aria-visible",
+                    expected="composer has is-tools-open and an aria-visible browser control entry",
                 )
 
                 clicked_context = click_if_present(page, ".sidepanel-add-tab-button")

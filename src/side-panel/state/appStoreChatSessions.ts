@@ -1,4 +1,4 @@
-import { deleteChatSession, saveChatSession } from "../../shared/storage/repositories";
+import { deleteChatSession, updateChatSession } from "../../shared/storage/repositories";
 import { resolveActiveChatSessionSelection } from "./appStoreModelSelection";
 import type { StoreGetter, StoreSetter } from "./appStore";
 
@@ -18,11 +18,24 @@ export async function renameChatSessionAction(input: {
     return;
   }
 
-  const updatedSession = { ...session, title: trimmedTitle, titleGenerating: false };
-  await saveChatSession(updatedSession);
-  input.set((state) => ({
-    chatSessions: state.chatSessions.map((item) => (item.id === input.sessionId ? updatedSession : item)),
+  const updatedSession = await updateChatSession(session.id, (latestSession) => ({
+    ...latestSession,
+    title: trimmedTitle,
+    titleGenerating: false,
+    updatedAt: Math.max(Date.now(), latestSession.updatedAt + 1),
   }));
+  if (updatedSession) {
+    input.set((state) => ({
+      chatSessions: state.chatSessions.map((item) => item.id === input.sessionId
+        ? {
+            ...item,
+            title: updatedSession.title,
+            titleGenerating: updatedSession.titleGenerating,
+            updatedAt: Math.max(item.updatedAt, updatedSession.updatedAt),
+          }
+        : item),
+    }));
+  }
 }
 
 export async function archiveChatSessionAction(input: {
@@ -35,10 +48,17 @@ export async function archiveChatSessionAction(input: {
     return;
   }
 
-  const updatedSession = { ...session, archived: true, updatedAt: Date.now() };
-  await saveChatSession(updatedSession);
+  const updatedSession = await updateChatSession(session.id, (latestSession) => ({
+    ...latestSession,
+    archived: true,
+    updatedAt: Math.max(Date.now(), latestSession.updatedAt + 1),
+  }));
   input.set((state) => ({
-    chatSessions: state.chatSessions.map((item) => (item.id === input.sessionId ? updatedSession : item)),
+    chatSessions: updatedSession
+      ? state.chatSessions.map((item) => item.id === input.sessionId
+          ? { ...item, archived: true, updatedAt: Math.max(item.updatedAt, updatedSession.updatedAt) }
+          : item)
+      : state.chatSessions,
     pendingDeleteSessionId: undefined,
   }));
 }

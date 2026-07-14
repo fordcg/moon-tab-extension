@@ -4,8 +4,11 @@ import {
   clearChatTaskAbortHandles,
   finishChatTask,
   registerChatTaskAbortHandle,
+  registerChatTaskExecution,
+  settleChatTaskExecution,
   unregisterChatTaskAbortHandle,
   upsertChatTask,
+  waitForChatTaskExecutionSettlement,
   type ChatTaskState,
 } from "../../../src/side-panel/state/appStoreChatTasks";
 
@@ -55,5 +58,20 @@ describe("appStoreChatTasks", () => {
 
     expect(abortChatTaskHandle("session-1")).toBe(true);
     expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("执行生命周期只在整个聊天请求收尾后解除等待", async () => {
+    registerChatTaskExecution("session-1", "task-1");
+    let settled = false;
+    const waiting = waitForChatTaskExecutionSettlement("session-1", "task-1").then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    settleChatTaskExecution("session-1", "task-1");
+    await waiting;
+    expect(settled).toBe(true);
   });
 });

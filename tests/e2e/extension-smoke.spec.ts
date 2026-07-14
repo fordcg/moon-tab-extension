@@ -3,13 +3,15 @@ import { expect, test } from "@playwright/test";
 test("侧边栏页面可以渲染首次使用提示和设置入口", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Browser AI Assistant" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "月标签 AI 助手" })).toBeVisible();
   await expect(page.getByText("请先配置 API Key 后再开始对话")).toBeVisible();
   await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
 
-  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "历史", exact: true }).click();
+  const historyDrawer = page.getByRole("dialog", { name: "历史记录" });
+  await historyDrawer.getByRole("button", { name: "设置", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "设置" })).toBeVisible();
+  await expect(page.locator(".settings-dialog-title")).toHaveText("设置");
   await expect(page.getByRole("tab", { name: "渠道管理" })).toBeVisible();
   await page.getByRole("tab", { name: "同步设置" }).click();
   await expect(page.getByText("备份当前插件域本地存储的全部内容，密钥和远程凭据除外")).toBeVisible();
@@ -19,15 +21,15 @@ test("侧边栏页面可以渲染首次使用提示和设置入口", async ({ pa
 test("构建后的侧边栏页面应包含 Tailwind 工具类样式", async ({ page }) => {
   await page.goto("/");
 
-  const heading = page.getByRole("heading", { name: "Browser AI Assistant" });
+  const heading = page.getByRole("heading", { name: "月标签 AI 助手" });
   await expect(heading).toBeVisible();
 
-  const headerPadding = await heading.evaluate((element) => {
-    const header = element.parentElement;
-    return header ? getComputedStyle(header).paddingTop : "";
+  const shellLayout = await page.locator(".app-shell").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { display: style.display, flexDirection: style.flexDirection };
   });
 
-  expect(headerPadding).toBe("16px");
+  expect(shellLayout).toEqual({ display: "flex", flexDirection: "column" });
 });
 
 test("构建后的 Moon Tab 新标签页可以渲染搜索入口", async ({ page }) => {

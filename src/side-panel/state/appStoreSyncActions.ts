@@ -11,6 +11,7 @@ import type { SyncRemoteBackupMeta, SyncSecrets, SyncSettings } from "../../shar
 import type { WebSearchSettings } from "../../shared/types";
 import { normalizeWebSearchSettings, saveWebSearchSettings } from "../../shared/webSearch/settings";
 import type { StoreGetter, StoreSetter } from "./appStore";
+import { getChatTaskExecutions, waitForChatTaskExecutionSettlement } from "./appStoreChatTasks";
 import { sendRuntimeMessage } from "./runtimeMessage";
 
 export async function loadSyncSettingsAction(input: { set: StoreSetter }): Promise<void> {
@@ -100,7 +101,25 @@ export async function loadRemoteBackupsAction(input: { set: StoreSetter }): Prom
 }
 
 export async function restoreNowAction(input: { backupId: string; get: StoreGetter; set: StoreSetter }): Promise<void> {
-  input.set({ syncOperation: { loading: true } });
+  const runningTasks = Object.values(input.get().chatTasksBySessionId).filter((task) => task.status === "running");
+  const taskExecutions = getChatTaskExecutions();
+  input.set({ syncOperation: { loading: true }, syncRestoreBarrierActive: true });
+  try {
+    for (const task of runningTasks) {
+      input.get().abortChatTask(task.sessionId);
+    }
+    await Promise.all(taskExecutions.map((task) => waitForChatTaskExecutionSettlement(task.sessionId, task.taskId)));
+  } catch (error: unknown) {
+    input.set({
+      syncOperation: {
+        loading: false,
+        error: error instanceof Error ? error.message : "等待正在运行的对话结束失败",
+      },
+      syncRestoreBarrierActive: false,
+    });
+    return;
+  }
+
   const response = await sendRuntimeMessage<{ ok: boolean; message?: string }>({ type: "sync.restoreNow", backupId: input.backupId });
 
   if (response?.ok) {
@@ -112,11 +131,11 @@ export async function restoreNowAction(input: { backupId: string; get: StoreGett
       input.get().loadPromptTemplates(),
       input.get().loadSyncSettings(),
     ]);
-    input.set({ syncOperation: { loading: false, message: response.message ?? "恢复完成" } });
+    input.set({ syncOperation: { loading: false, message: response.message ?? "恢复完成" }, syncRestoreBarrierActive: false });
     return;
   }
 
-  input.set({ syncOperation: { loading: false, error: response?.message ?? "恢复失败，请重试" } });
+  input.set({ syncOperation: { loading: false, error: response?.message ?? "恢复失败，请重试" }, syncRestoreBarrierActive: false });
 }
 
 function getSyncSecretSettingKey(key: keyof SyncSecrets): string {

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { backupNow, listRemoteBackups, restoreNow } from "../../../src/shared/sync/backupService";
-import type { SyncRemoteBackup, SyncRemoteBackupMeta, SyncRemoteProvider } from "../../../src/shared/sync/types";
+import type { SyncRemoteBackup, SyncRemoteBackupMeta, SyncRemoteProvider, SyncSettings } from "../../../src/shared/sync/types";
 import {
   clearDatabase,
+  getAppSetting,
   getModelProviders,
   saveAppSetting,
   saveModelProvider,
@@ -168,10 +169,21 @@ describe("同步备份服务", () => {
       updatedAt: 1,
     });
 
+    const restoredBefore = Date.now();
     await restoreNow({ provider: { read, write: vi.fn(), list: vi.fn(), delete: vi.fn() }, backupId: "home-1" });
+    const restoredAfter = Date.now();
 
     expect(await getModelProviders()).toEqual([]);
     expect(read).toHaveBeenCalledWith("home-1");
+    const persistedSettings = await getAppSetting<SyncSettings>("syncSettings");
+    expect(persistedSettings).toMatchObject({
+      syncEnabled: true,
+      backupPrefix: "work",
+      lastStatus: "success",
+      lastMessage: "恢复完成",
+    });
+    expect(persistedSettings?.lastRestoreAt).toBeGreaterThanOrEqual(restoredBefore);
+    expect(persistedSettings?.lastRestoreAt).toBeLessThanOrEqual(restoredAfter);
   });
 
   it("恢复指定备份时拒绝 provider 不匹配的远程数据", async () => {

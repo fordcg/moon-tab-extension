@@ -8,7 +8,7 @@ import {
   toggleWorkflowContextPinned as toggleContextPinned,
   transitionWorkflowTask,
 } from "../../shared/chat/workflowTasks";
-import { getRegisteredModelTools } from "../../shared/models/toolRegistry";
+import { getRegisteredModelTools, resolveEnabledModelTools } from "../../shared/models/toolRegistry";
 import { redactSensitiveText } from "../../shared/security/redaction";
 import {
   getAppSetting,
@@ -33,6 +33,7 @@ import type {
   WorkflowTaskTemplate,
 } from "../../shared/types";
 import type { AppState } from "./appStore";
+import { resolveEffectiveChatPreferences, resolveRuntimeEnabledToolIds } from "./appStorePreferences";
 import { upsertSession } from "./appStoreSessionUtils";
 
 export const WORKFLOW_SKILLS_SETTINGS_KEY = "aiSidebar.workflowSkills.v1";
@@ -119,6 +120,19 @@ export function createWorkflowArtifactsFromAssistantMessage(
 }
 
 export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: StoreSet }) {
+  async function ensureCurrentSession(): Promise<void> {
+    const state = get();
+    const currentSessionId = state.privateModeActive ? state.privateChatSession?.id : state.activeSessionId;
+    if (currentSessionId) {
+      return;
+    }
+    if (state.privateModeActive) {
+      throw new Error("隐私会话不可用，请退出隐私模式后重试");
+    }
+
+    await state.createChatSession({ preserveSelectedModel: true });
+  }
+
   async function updateCurrentSession(
     update: (session: ChatSession) => ChatSession,
   ): Promise<ChatSession | undefined> {
@@ -132,6 +146,9 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
     update: (session: ChatSession) => ChatSession,
   ): Promise<ChatSession | undefined> {
     const state = get();
+    if (state.syncRestoreBarrierActive) {
+      return undefined;
+    }
     const privateSession = state.privateChatSession?.id === sessionId ? state.privateChatSession : undefined;
     if (privateSession) {
       const nextSession = update(privateSession);
@@ -153,7 +170,9 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
       return undefined;
     }
 
-    const persistedSession = await updateChatSession(session.id, (latestSession) => update(latestSession));
+    const persistedSession = await updateChatSession(session.id, (latestSession) => (
+      get().syncRestoreBarrierActive ? undefined : update(latestSession)
+    ));
     if (persistedSession) {
       set((current) => ({
         chatSessions: upsertSession(current.chatSessions, persistedSession),
@@ -188,6 +207,10 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
 
   return {
     createWorkflowTask: async (template: WorkflowTaskTemplate, objective: string): Promise<WorkflowTask> => {
+      if (get().syncRestoreBarrierActive) {
+        throw new Error("正在恢复备份，请稍后重试");
+      }
+      await ensureCurrentSession();
       let createdTask: WorkflowTask | undefined;
       const session = await updateCurrentSession((currentSession) => {
         const now = nextSessionTimestamp(currentSession);
@@ -200,12 +223,24 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
       });
 
       if (!session || !createdTask) {
-        throw new Error("请先选择一个会话");
+        throw new Error("任务会话创建失败");
       }
       return createdTask;
     },
     updateWorkflowTaskStatus: async (taskId: string, status: WorkflowTaskStatus, reason?: string): Promise<void> => {
       await updateTask(taskId, (task, now) => transitionWorkflowTask(task, status, now, reason));
+    },
+    cancelWorkflowTask: async (taskId: string): Promise<void> => {
+      const owner = findTaskOwner(get(), taskId);
+      if (!owner || !["preparing", "running", "waiting"].includes(owner.task.status)) {
+        return;
+      }
+
+      const activeChatTask = get().chatTasksBySessionId[owner.sessionId];
+      if (activeChatTask?.status === "running" && activeChatTask.workflowTaskId === taskId) {
+        get().abortChatTask(owner.sessionId);
+      }
+      await updateTask(taskId, (task, now) => transitionWorkflowTask(task, "canceled", now));
     },
     upsertWorkflowTaskStep: async (taskId: string, step: WorkflowTaskStep): Promise<void> => {
       await updateTask(taskId, (task, now) => {
@@ -308,7 +343,16 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
 
       const objective = resolveSkillObjective(skill, values);
       const task = await get().createWorkflowTask(skill.template, objective);
-      const availableToolIds = new Set(getRegisteredModelTools(get().mcpSettings).map((tool) => tool.id));
+      const state = get();
+      const session = state.privateChatSession?.id === task.sessionId
+        ? state.privateChatSession
+        : state.chatSessions.find((item) => item.id === task.sessionId);
+      const effectiveChatPreferences = resolveEffectiveChatPreferences(state.chatPreferences, session?.chatPreferenceOverrides);
+      const registeredTools = getRegisteredModelTools(state.mcpSettings);
+      const enabledToolIds = effectiveChatPreferences.toolCallingEnabled
+        ? resolveRuntimeEnabledToolIds(effectiveChatPreferences.enabledToolIds, state.browserControlEnabled, state.browserAutomationMode)
+        : [];
+      const availableToolIds = new Set(resolveEnabledModelTools(registeredTools, enabledToolIds).map((tool) => tool.id));
       const unavailableToolIds = skill.recommendedToolIds.filter((toolId) => !availableToolIds.has(toolId));
       if (unavailableToolIds.length) {
         await get().updateWorkflowTaskStatus(task.id, "running");
@@ -324,13 +368,13 @@ export function createWorkflowTaskActions({ get, set }: { get: StoreGet; set: St
 function findTaskOwner(state: AppState, taskId: string): { sessionId: string; task: WorkflowTask } | undefined {
   const privateTask = state.privateChatSession?.workflowTasks?.find((task) => task.id === taskId);
   if (privateTask) {
-    return { sessionId: privateTask.sessionId, task: privateTask };
+    return { sessionId: state.privateChatSession!.id, task: privateTask };
   }
 
   for (const session of state.chatSessions) {
     const task = session.workflowTasks?.find((item) => item.id === taskId);
     if (task) {
-      return { sessionId: task.sessionId, task };
+      return { sessionId: session.id, task };
     }
   }
 

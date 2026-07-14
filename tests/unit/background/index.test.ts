@@ -105,6 +105,38 @@ function createTestModel() {
   };
 }
 
+function createSyncBackup() {
+  return {
+    version: 1,
+    createdAt: 1,
+    prefix: "home",
+    provider: "chrome_sync" as const,
+    encrypted: false,
+    payload: {
+      version: 1,
+      modelConfigs: [],
+      modelProviders: [],
+      providerModels: [],
+      extractionRules: [],
+      chatSessions: [],
+      chatFolders: [],
+      appSettings: [],
+    },
+  };
+}
+
+function createAbortablePendingFetch() {
+  return vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    const signal = init?.signal;
+    const abort = () => reject(new DOMException("aborted", "AbortError"));
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  }));
+}
+
 function connectDevtoolsNetworkBridge(mock: ReturnType<typeof createChromeMock>, tabId = 7) {
   const devtoolsPort = createPortMock("network.devtools", {
     url: mock.chrome.runtime.getURL("src/devtools/network.html"),
@@ -1048,6 +1080,177 @@ describe("background 入口", () => {
       expect(sendResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" });
     });
     expect(mock.chrome.storage.sync.get).toHaveBeenCalledWith("browserAiAssistantBackup:home:1");
+  });
+
+  it("恢复备份会终止所有非流式模型请求并返回专用取消标记", async () => {
+    const mock = createChromeMock();
+    const backupId = "browserAiAssistantBackup:home:direct";
+    mock.chrome.storage.sync.get.mockResolvedValue({ [backupId]: createSyncBackup() });
+    const fetcher = createAbortablePendingFetch();
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", fetcher);
+    await saveAppSetting({ key: "syncSettings", value: { syncEnabled: true, backupPrefix: "work" }, updatedAt: 1 });
+    await import("../../../src/background/index");
+    const chatResponse = vi.fn();
+    const restoreResponse = vi.fn();
+
+    mock.messageListeners[0]({
+      type: "chat.send",
+      model: createTestModel(),
+      messages: [],
+      stream: false,
+    }, {}, chatResponse);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, restoreResponse);
+
+    await vi.waitFor(() => {
+      expect(chatResponse).toHaveBeenCalledWith({
+        ok: false,
+        message: "正在恢复备份，已停止旧的模型请求",
+        restoreCanceled: true,
+      });
+      expect(restoreResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" });
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("非流式请求页面关闭导致回调抛错时仍能完成恢复", async () => {
+    const mock = createChromeMock();
+    const backupId = "browserAiAssistantBackup:home:direct-response-closed";
+    mock.chrome.storage.sync.get.mockResolvedValue({ [backupId]: createSyncBackup() });
+    const fetcher = createAbortablePendingFetch();
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", fetcher);
+    await saveAppSetting({ key: "syncSettings", value: { syncEnabled: true, backupPrefix: "work" }, updatedAt: 1 });
+    await import("../../../src/background/index");
+    const chatResponse = vi.fn(() => {
+      throw new Error("消息通道已关闭");
+    });
+    const restoreResponse = vi.fn();
+
+    mock.messageListeners[0]({
+      type: "chat.send",
+      model: createTestModel(),
+      messages: [],
+      stream: false,
+    }, {}, chatResponse);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, restoreResponse);
+
+    await vi.waitFor(() => expect(restoreResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" }));
+    expect(chatResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it("恢复备份会等待所有流端口确认断开后再提交", async () => {
+    const mock = createChromeMock();
+    const backupId = "browserAiAssistantBackup:home:stream";
+    mock.chrome.storage.sync.get.mockResolvedValue({ [backupId]: createSyncBackup() });
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", createAbortablePendingFetch());
+    await saveAppSetting({ key: "syncSettings", value: { syncEnabled: true, backupPrefix: "work" }, updatedAt: 1 });
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream");
+    mock.connectListeners[0](port);
+    port.emitMessage({
+      type: "chat.stream.start",
+      payload: { type: "chat.send", model: createTestModel(), messages: [], stream: true },
+    });
+    const restoreResponse = vi.fn();
+
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, restoreResponse);
+    await vi.waitFor(() => {
+      expect(port.postMessage).toHaveBeenCalledWith({
+        type: "restore:abort",
+        message: "正在恢复备份，已停止旧的模型请求",
+      });
+    });
+    expect(restoreResponse).not.toHaveBeenCalled();
+
+    port.emitDisconnect();
+    await vi.waitFor(() => expect(restoreResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" }));
+  });
+
+  it("恢复通知流端口抛错时会立即清理请求并继续提交", async () => {
+    const mock = createChromeMock();
+    const backupId = "browserAiAssistantBackup:home:stream-post-failed";
+    mock.chrome.storage.sync.get.mockResolvedValue({ [backupId]: createSyncBackup() });
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", createAbortablePendingFetch());
+    await saveAppSetting({ key: "syncSettings", value: { syncEnabled: true, backupPrefix: "work" }, updatedAt: 1 });
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream");
+    port.postMessage.mockImplementation((message: unknown) => {
+      if ((message as { type?: string }).type === "restore:abort") {
+        throw new Error("端口已关闭");
+      }
+    });
+    mock.connectListeners[0](port);
+    port.emitMessage({
+      type: "chat.stream.start",
+      payload: { type: "chat.send", model: createTestModel(), messages: [], stream: true },
+    });
+    const restoreResponse = vi.fn();
+
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, restoreResponse);
+
+    await vi.waitFor(() => expect(restoreResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" }));
+    expect(port.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("流端口意外断开后仍等待后台执行真正结束再恢复", async () => {
+    const mock = createChromeMock();
+    const backupId = "browserAiAssistantBackup:home:stream-disconnected";
+    mock.chrome.storage.sync.get.mockResolvedValue({ [backupId]: createSyncBackup() });
+    let resolveFetch!: (response: Response) => void;
+    const fetcher = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", fetcher);
+    await saveAppSetting({ key: "syncSettings", value: { syncEnabled: true, backupPrefix: "work" }, updatedAt: 1 });
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream");
+    mock.connectListeners[0](port);
+    port.emitMessage({
+      type: "chat.stream.start",
+      payload: { type: "chat.send", model: createTestModel(), messages: [], stream: true },
+    });
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    port.emitDisconnect();
+    const restoreResponse = vi.fn();
+
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, restoreResponse);
+    await Promise.resolve();
+    expect(restoreResponse).not.toHaveBeenCalled();
+
+    resolveFetch(new Response(JSON.stringify({ choices: [{ message: { content: "late response" } }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    await vi.waitFor(() => expect(restoreResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" }));
+  });
+
+  it("并发恢复只允许第一个请求进入远端准备阶段", async () => {
+    const mock = createChromeMock();
+    const backupId = "browserAiAssistantBackup:home:concurrent";
+    let resolveBackup!: (value: Record<string, unknown>) => void;
+    mock.chrome.storage.sync.get.mockImplementation(() => new Promise((resolve) => {
+      resolveBackup = resolve;
+    }));
+    vi.stubGlobal("chrome", mock.chrome);
+    await saveAppSetting({ key: "syncSettings", value: { syncEnabled: true, backupPrefix: "work" }, updatedAt: 1 });
+    await import("../../../src/background/index");
+    const firstResponse = vi.fn();
+    const secondResponse = vi.fn();
+
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, firstResponse);
+    await vi.waitFor(() => expect(mock.chrome.storage.sync.get).toHaveBeenCalledTimes(1));
+    mock.messageListeners[0]({ type: "sync.restoreNow", backupId }, {}, secondResponse);
+    await vi.waitFor(() => expect(secondResponse).toHaveBeenCalledWith({ ok: false, message: "已有备份恢复正在进行" }));
+
+    resolveBackup({ [backupId]: createSyncBackup() });
+    await vi.waitFor(() => expect(firstResponse).toHaveBeenCalledWith({ ok: true, message: "恢复完成" }));
+    expect(mock.chrome.storage.sync.get).toHaveBeenCalledTimes(1);
   });
 
   it("WebDAV 配置备份时不写入 Chrome Sync", async () => {
@@ -2002,6 +2205,80 @@ describe("background 入口", () => {
     expect(decisionBody.tools).toEqual([
       expect.objectContaining({ function: expect.objectContaining({ name: "network_list_requests" }) }),
     ]);
+  });
+
+  it("可查询活跃流式会话，并在端口断开后清理", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream", { tab: { id: 7 } as chrome.tabs.Tab });
+    mock.connectListeners[0](port);
+    port.emitMessage({
+      type: "chat.stream.start",
+      payload: {
+        type: "chat.send",
+        model: createTestModel(),
+        messages: [],
+        stream: true,
+        debugContext: { sessionId: "session-active-stream" },
+      },
+    });
+
+    const activeResponse = vi.fn();
+    expect(mock.messageListeners[0]({ type: "chat.getActiveStreamSessions" }, {}, activeResponse)).toBe(false);
+    expect(activeResponse).toHaveBeenCalledWith({ ok: true, sessionIds: ["session-active-stream"] });
+
+    port.emitDisconnect();
+    const inactiveResponse = vi.fn();
+    expect(mock.messageListeners[0]({ type: "chat.getActiveStreamSessions" }, {}, inactiveResponse)).toBe(false);
+    expect(inactiveResponse).toHaveBeenCalledWith({ ok: true, sessionIds: [] });
+  });
+
+  it("流式聊天由后台确认用户取消后再通知侧栏收尾", async () => {
+    const mock = createChromeMock();
+    const fetcher = createAbortablePendingFetch();
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", fetcher);
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream");
+    mock.connectListeners[0](port);
+    port.emitMessage({
+      type: "chat.stream.start",
+      payload: { type: "chat.send", model: createTestModel(), messages: [], stream: true },
+    });
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+
+    port.emitMessage({ type: "chat.stream.cancel" });
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledWith({ type: "canceled" }));
+    const signal = fetcher.mock.calls[0][1]?.signal as AbortSignal;
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBe("user_cancel");
+    port.emitDisconnect();
+  });
+
+  it("同一流端口拒绝重复启动模型请求", async () => {
+    const mock = createChromeMock();
+    const fetcher = createAbortablePendingFetch();
+    vi.stubGlobal("chrome", mock.chrome);
+    vi.stubGlobal("fetch", fetcher);
+    await import("../../../src/background/index");
+    const port = createPortMock("chat.stream");
+    mock.connectListeners[0](port);
+    const startMessage = {
+      type: "chat.stream.start",
+      payload: { type: "chat.send", model: createTestModel(), messages: [], stream: true },
+    };
+
+    port.emitMessage(startMessage);
+    port.emitMessage(startMessage);
+
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(port.postMessage).toHaveBeenCalledWith({ type: "error", message: "同一流式连接不能重复启动请求" });
+    });
+    port.emitDisconnect();
   });
 
   it("流式聊天不会把其他标签页的 DevTools Network bridge 暴露给当前 sender tab", async () => {

@@ -5,9 +5,10 @@ test("构建产物可以作为 Chrome 扩展加载并渲染侧边栏页面", asy
 
   await page.goto(`chrome-extension://${extensionId}/index.html`);
 
-  await expect(page.getByRole("heading", { name: "Browser AI Assistant" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "月标签 AI 助手" })).toBeVisible();
   await expect(page.getByText("请先配置 API Key 后再开始对话")).toBeVisible();
-  await expect(page.getByRole("button", { name: "设置", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "历史", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "历史记录" }).getByRole("button", { name: "设置", exact: true })).toBeVisible();
 });
 
 test("真实扩展侧边栏暴露发布验收所需的工具、MCP、同步和悬浮入口", async ({ extensionContext, extensionId }) => {
@@ -21,20 +22,23 @@ test("真实扩展侧边栏暴露发布验收所需的工具、MCP、同步和�
   expect(manifestText).toContain('"debugger"');
 
   await expect(page.getByRole("button", { name: "打开悬浮助手" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "浏览器控制" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "设置", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "工具" }).click();
+  await expect(page.getByRole("switch", { name: /浏览器控制已关闭/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "设置", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "设置" })).toBeVisible();
-  await expect(page.getByText("浏览器自动化诊断")).toBeVisible();
-  await expect(page.getByText(/debugger_recorder|unavailable/)).toBeVisible();
+  await page.getByRole("button", { name: "历史", exact: true }).click();
+  const historyDrawer = page.getByRole("dialog", { name: "历史记录" });
+  await historyDrawer.getByRole("button", { name: "设置", exact: true }).click();
+  await expect(page.locator(".settings-dialog-title")).toHaveText("设置");
+  await page.getByRole("button", { name: /浏览器自动化诊断/ }).click();
+  await expect(page.locator("#automation-diagnostics-panel")).toContainText("Network 来源");
+  await expect(page.locator("#automation-diagnostics-panel")).toContainText(/debugger_recorder|devtools_fallback|unavailable/);
   await expect(page.getByRole("tab", { name: "渠道管理" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "MCP 工具" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "工具和 MCP" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "聊天偏好" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "同步设置" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "MCP 工具" }).click();
-  await expect(page.getByRole("heading", { name: "MCP 工具" })).toBeVisible();
+  await page.getByRole("tab", { name: "工具和 MCP" }).click();
+  await expect(page.getByRole("heading", { name: "工具和 MCP" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新增 MCP Server" })).toBeVisible();
 
   await page.getByRole("tab", { name: "聊天偏好" }).click();

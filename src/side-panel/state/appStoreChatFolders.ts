@@ -1,4 +1,4 @@
-import { deleteChatFolder, saveChatFolder, saveChatSession } from "../../shared/storage/repositories";
+import { deleteChatFolder, saveChatFolder, updateChatSession } from "../../shared/storage/repositories";
 import type { ChatFolder } from "../../shared/types";
 import type { StoreGetter, StoreSetter } from "./appStore";
 
@@ -111,8 +111,14 @@ export async function moveChatSessionToFolderAction(input: {
       return;
     }
 
-    const updatedAt = Date.now();
-    await saveChatSession({ ...latestSession, folderId: input.folderId, updatedAt });
+    const updatedSession = await updateChatSession(latestSession.id, (persistedSession) => ({
+      ...persistedSession,
+      folderId: input.folderId,
+      updatedAt: Math.max(Date.now(), persistedSession.updatedAt + 1),
+    }));
+    if (!updatedSession) {
+      return;
+    }
     input.set((current) => {
       const currentSession = current.chatSessions.find((item) => item.id === input.sessionId);
       if (!currentSession || currentSession.archived || (input.folderId && !current.chatFolders.some((folder) => folder.id === input.folderId))) {
@@ -120,9 +126,13 @@ export async function moveChatSessionToFolderAction(input: {
       }
 
       return {
-        chatSessions: current.chatSessions.map((item) =>
-          item.id === input.sessionId ? { ...item, folderId: input.folderId, updatedAt } : item,
-        ),
+        chatSessions: current.chatSessions.map((item) => item.id === input.sessionId
+          ? {
+              ...item,
+              folderId: updatedSession.folderId,
+              updatedAt: Math.max(item.updatedAt, updatedSession.updatedAt),
+            }
+          : item),
         pendingDeleteSessionId: undefined,
       };
     });

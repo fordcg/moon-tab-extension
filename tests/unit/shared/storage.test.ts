@@ -23,6 +23,7 @@ import {
   deletePromptTemplate,
   getPromptTemplates,
   reorderPromptTemplates,
+  recoverInterruptedChatSessions,
   savePromptTemplate,
 } from "../../../src/shared/storage/repositories";
 import { db } from "../../../src/shared/storage/db";
@@ -78,6 +79,63 @@ async function deleteDatabaseByName(name: string): Promise<void> {
 }
 
 describe("存储仓库", () => {
+  it("恢复非活跃会话中被刷新遗留的流式消息和运行中任务", async () => {
+    const createStreamingSession = (id: string): ChatSession => ({
+      id,
+      title: "流式会话",
+      archived: false,
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 2,
+      messages: [{
+        id: `${id}-assistant`,
+        role: "assistant",
+        content: "部分回复",
+        createdAt: 2,
+        modelId: "model-1",
+        endpointType: "openai_chat",
+        streamMode: true,
+        systemPrompt: "",
+        contextPrompt: "",
+        contextMode: "text",
+        streaming: true,
+        toolCallRecords: [{
+          id: `${id}-tool`,
+          toolId: "browser.click",
+          name: "browser_click",
+          displayName: "点击",
+          arguments: {},
+          status: "running",
+          startedAt: 2,
+        }],
+      }],
+      workflowTasks: [{
+        id: `${id}-workflow`,
+        sessionId: id,
+        template: "automation",
+        title: "执行任务",
+        objective: "执行任务",
+        status: "running",
+        createdAt: 1,
+        updatedAt: 2,
+        contextItems: [],
+        steps: [],
+        artifacts: [],
+      }],
+    });
+    await saveChatSession(createStreamingSession("session-interrupted"));
+    await saveChatSession(createStreamingSession("session-active"));
+
+    await recoverInterruptedChatSessions(["session-active"], 100);
+
+    const interrupted = await getChatSession("session-interrupted");
+    expect(interrupted?.messages[0]).toMatchObject({ streaming: false });
+    expect(interrupted?.messages[0]?.content).toContain("侧栏关闭或刷新而中断");
+    expect(interrupted?.messages[0]?.toolCallRecords?.[0]).toMatchObject({ status: "error", completedAt: 100 });
+    expect(interrupted?.workflowTasks?.[0]).toMatchObject({ status: "failed" });
+    expect((await getChatSession("session-active"))?.messages[0]?.streaming).toBe(true);
+  });
+
   afterEach(async () => {
     await clearDatabase();
   });

@@ -12,12 +12,12 @@ interface WorkflowTaskCardProps {
 export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
   const [reply, setReply] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [skillDialogOpen, setSkillDialogOpen] = useState(false);
   const sending = useAppStore((state) => state.sending);
   const addNotification = useAppStore((state) => state.addNotification);
   const sendWorkflowTaskMessage = useAppStore((state) => state.sendWorkflowTaskMessage);
-  const updateWorkflowTaskStatus = useAppStore((state) => state.updateWorkflowTaskStatus);
-  const abortChatTask = useAppStore((state) => state.abortChatTask);
+  const cancelWorkflowTask = useAppStore((state) => state.cancelWorkflowTask);
   const canContinue = task.status === "waiting";
   const canCancel = task.status === "preparing" || task.status === "running" || task.status === "waiting";
   const canSaveSkill = task.status === "completed";
@@ -40,15 +40,32 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
     }
   };
   const cancelTask = async () => {
-    abortChatTask(task.sessionId);
-    await updateWorkflowTaskStatus(task.id, "canceled");
+    if (canceling) {
+      return;
+    }
+
+    setCanceling(true);
+    try {
+      await cancelWorkflowTask(task.id);
+    } catch (error: unknown) {
+      addNotification({ type: "error", title: "任务取消失败", message: error instanceof Error ? error.message : "任务取消失败" });
+    } finally {
+      setCanceling(false);
+    }
   };
 
   return (
     <article className="workflow-task-card" data-status={task.status} aria-label={`任务：${task.title}`}>
       <div className="workflow-task-card-header">
         <span className="workflow-task-template">{formatTemplateLabel(task.template)}</span>
-        <span className="workflow-task-status" data-status={task.status}>
+        <span
+          className="workflow-task-status"
+          data-status={task.status}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={`任务状态：${formatStatusLabel(task.status)}`}
+        >
           {formatStatusLabel(task.status)}
         </span>
       </div>
@@ -74,15 +91,17 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
             aria-label={`继续任务：${task.title}`}
             value={reply}
             rows={2}
+            disabled={submitting || sending}
             onChange={(event) => setReply(event.target.value)}
           />
           <button
             className="ui-button-primary workflow-task-continue"
             type="button"
             disabled={!reply.trim() || submitting || sending}
+            aria-busy={submitting || undefined}
             onClick={() => void continueTask()}
           >
-            继续
+            {submitting ? "继续中..." : "继续"}
           </button>
         </div>
       ) : null}
@@ -94,8 +113,8 @@ export function WorkflowTaskCard({ task }: WorkflowTaskCardProps) {
             </button>
           ) : null}
           {canCancel ? (
-            <button className="ui-button-secondary workflow-task-cancel" type="button" onClick={() => void cancelTask()}>
-              取消任务
+            <button className="ui-button-secondary workflow-task-cancel" type="button" disabled={canceling} aria-busy={canceling || undefined} onClick={() => void cancelTask()}>
+              {canceling ? "取消中..." : "取消任务"}
             </button>
           ) : null}
         </div>

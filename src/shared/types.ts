@@ -496,6 +496,17 @@ export interface ChatMessage {
   streaming?: boolean;
 }
 
+export interface ChatPendingFollowUp {
+  id: string;
+  sessionId: string;
+  content: string;
+  attachments?: ChatImageAttachment[];
+  promptInvocations?: ChatPromptInvocation[];
+  behavior: "queue" | "guide";
+  createdAt: number;
+  userMessageId?: string;
+}
+
 export type WorkflowTaskTemplate = "debug" | "research" | "automation";
 
 export type WorkflowTaskStatus = "preparing" | "running" | "waiting" | "completed" | "failed" | "canceled";
@@ -582,6 +593,7 @@ export interface ChatSession {
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
+  pendingFollowUps?: ChatPendingFollowUp[];
   tokenUsageEntries?: ChatTokenUsageEntry[];
   chatPreferenceOverrides?: ChatSessionPreferenceOverrides;
   workflowTasks?: WorkflowTask[];

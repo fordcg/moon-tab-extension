@@ -8,6 +8,10 @@ const root = path.resolve(process.cwd(), "dist");
 const host = process.env.PLAYWRIGHT_STATIC_HOST || "127.0.0.1";
 const port = Number(process.env.PLAYWRIGHT_STATIC_PORT || 4173);
 
+if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+  throw new Error(`Invalid PLAYWRIGHT_STATIC_PORT: ${process.env.PLAYWRIGHT_STATIC_PORT}`);
+}
+
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
@@ -21,7 +25,7 @@ const contentTypes = new Map([
 ]);
 
 const server = createServer(async (request, response) => {
-  const requestUrl = new URL(request.url || "/", `http://${host}:${port}`);
+  const requestUrl = new URL(request.url || "/", `http://${host}`);
   const filePath = resolveFilePath(requestUrl.pathname);
   if (!filePath) {
     response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
@@ -44,7 +48,13 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Playwright static server listening on http://${host}:${port}`);
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Playwright static server did not expose a TCP address.");
+  }
+  const serverUrl = `http://${host}:${address.port}`;
+  console.log(`Playwright static server listening on ${serverUrl}`);
+  process.send?.({ type: "playwright-static-server-ready", url: serverUrl });
 });
 
 process.on("SIGTERM", shutdown);

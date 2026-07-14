@@ -87,7 +87,6 @@ function renderChatPanel() {
       settingsInitialTab="channels"
       onDrawerOpenChange={vi.fn()}
       onRestoreDrawerFocus={vi.fn()}
-      onOpenAgentTools={vi.fn()}
       onOpenHistoryDrawer={vi.fn()}
       onOpenSettings={vi.fn()}
       onReturnSettingsToHistory={vi.fn()}

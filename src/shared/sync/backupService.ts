@@ -1,6 +1,6 @@
 import { decryptJson, encryptJson } from "../crypto/encryption";
-import { getSyncSecrets, getSyncSettings, saveSyncSettings } from "./settings";
-import { exportSyncSnapshot, restoreSyncSnapshot } from "./snapshot";
+import { getSyncSecrets, getSyncSettings, saveSyncSettings, SYNC_SETTINGS_KEY } from "./settings";
+import { assertValidSyncSnapshot, exportSyncSnapshot, restoreSyncSnapshot } from "./snapshot";
 import { createChromeSyncProvider } from "./chromeSyncProvider";
 import { createS3Provider } from "./s3Provider";
 import { createWebDavProvider } from "./webDavProvider";
@@ -12,6 +12,11 @@ interface SyncOperationInput {
 
 interface SyncRestoreInput extends SyncOperationInput {
   backupId: string;
+}
+
+export interface PreparedSyncRestore {
+  settings: SyncSettings;
+  snapshot: SyncDataSnapshot;
 }
 
 export async function backupNow(input: SyncOperationInput): Promise<SyncRemoteBackup> {
@@ -54,6 +59,10 @@ export async function listRemoteBackups(input: SyncOperationInput): Promise<Sync
 }
 
 export async function restoreNow(input: SyncRestoreInput): Promise<void> {
+  await commitPreparedRestore(await prepareRestore(input));
+}
+
+export async function prepareRestore(input: SyncRestoreInput): Promise<PreparedSyncRestore> {
   const settings = await getSyncSettings();
   assertSyncEnabled(settings);
   assertBackupPrefix(settings.backupPrefix);
@@ -68,12 +77,28 @@ export async function restoreNow(input: SyncRestoreInput): Promise<void> {
 
   const secrets = await getSyncSecrets();
   const snapshot = await resolveBackupSnapshot(backup, secrets.encryptionSecret);
-  await restoreSyncSnapshot(snapshot);
-  await saveSyncSettings({
-    ...settings,
-    lastRestoreAt: Date.now(),
+  assertValidSyncSnapshot(snapshot);
+  return { settings, snapshot };
+}
+
+export async function commitPreparedRestore(prepared: PreparedSyncRestore): Promise<void> {
+  const restoredAt = Date.now();
+  const syncSettings: SyncSettings = {
+    ...prepared.settings,
+    lastRestoreAt: restoredAt,
     lastStatus: "success",
     lastMessage: "恢复完成",
+  };
+  await restoreSyncSnapshot({
+    ...prepared.snapshot,
+    appSettings: [
+      ...prepared.snapshot.appSettings.filter((setting) => setting.key !== SYNC_SETTINGS_KEY),
+      {
+        key: SYNC_SETTINGS_KEY,
+        value: syncSettings,
+        updatedAt: restoredAt,
+      },
+    ],
   });
 }
 

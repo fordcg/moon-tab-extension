@@ -134,6 +134,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const contextMode = useAppStore((state) => state.contextMode);
   const appendPageContextToSystemPrompt = useAppStore((state) => state.appendPageContextToSystemPrompt);
   const sending = useAppStore((state) => state.sending);
+  const syncRestoreBarrierActive = useAppStore((state) => state.syncRestoreBarrierActive);
   const pageContext = useAppStore((state) => state.pageContext);
   const activeSession = useAppStore((state) =>
     state.privateModeActive
@@ -387,6 +388,9 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   };
 
   const submitFollowUp = async (behavior = followUpBehavior) => {
+    if (syncRestoreBarrierActive) {
+      return;
+    }
     const content = input.trim();
     if (!content && attachments.length === 0 && promptInvocations.length === 0) {
       return;
@@ -437,7 +441,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
 
     event.preventDefault();
     const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
-    if (!hasDraft || (!sending && !canSend)) {
+    if (!hasDraft || syncRestoreBarrierActive || (!sending && !canSend)) {
       return;
     }
 
@@ -881,7 +885,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               aria-label="新建任务"
               aria-haspopup="menu"
               aria-expanded={workflowMenuOpen}
-              title={!canSend ? "配置可用模型后可新建任务" : sending ? "当前响应结束后可新建任务" : !input.trim() ? "输入任务目标后可新建任务" : "新建任务"}
+              title={syncRestoreBarrierActive ? "正在恢复备份，完成后可新建任务" : !canSend ? "配置可用模型后可新建任务" : sending ? "当前响应结束后可新建任务" : !input.trim() ? "输入任务目标后可新建任务" : "新建任务"}
               disabled={!canSend || sending || !input.trim()}
               onClick={toggleWorkflowMenu}
             >
@@ -908,6 +912,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               checked={browserControlEnabled}
               icon="browserControl"
               label="浏览器控制"
+              title={browserControlTitle}
               onToggle={() => void setBrowserControlEnabled(!browserControlEnabled)}
             />
             <div className="composer-mode-menu-wrap">
@@ -991,7 +996,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             type="button"
             data-sending={sending && !hasDraft ? "true" : "false"}
             data-stop-generation={sending && !hasDraft ? "true" : "false"}
-            disabled={sending ? false : !canSubmit}
+            disabled={syncRestoreBarrierActive || (sending ? false : !canSubmit)}
+            title={syncRestoreBarrierActive ? "正在恢复备份，完成后可发送" : undefined}
             onClick={() => {
               if (sending && !hasDraft) {
                 stopGeneration();

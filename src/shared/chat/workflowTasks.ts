@@ -24,8 +24,6 @@ const transitions: Record<WorkflowTaskStatus, readonly WorkflowTaskStatus[]> = {
   canceled: [],
 };
 
-let taskSequence = 0;
-
 export function createWorkflowTask(
   sessionId: string,
   template: WorkflowTaskTemplate,
@@ -36,7 +34,7 @@ export function createWorkflowTask(
   const timestamp = normalizeOperationTimestamp(now, 0);
 
   return {
-    id: `workflow-task-${timestamp}-${taskSequence++}`,
+    id: `workflow-task-${timestamp}-${Math.random().toString(36).slice(2, 10)}`,
     sessionId: cleanText(sessionId) || "unknown-session",
     template,
     title: cleanedObjective.slice(0, 80),
@@ -127,7 +125,15 @@ export function addWorkflowContextItem(task: WorkflowTask, item: WorkflowContext
     return task;
   }
 
-  return { ...task, contextItems: [...task.contextItems, normalizedItem] };
+  const existingIndex = task.contextItems.findIndex((existing) => existing.id === normalizedItem.id);
+  if (existingIndex < 0) {
+    return { ...task, contextItems: [...task.contextItems, normalizedItem] };
+  }
+
+  return {
+    ...task,
+    contextItems: task.contextItems.map((existing, index) => index === existingIndex ? normalizedItem : existing),
+  };
 }
 
 export function removeWorkflowContextItem(task: WorkflowTask, contextItemId: string): WorkflowTask {
@@ -154,7 +160,15 @@ export function addWorkflowArtifact(task: WorkflowTask, artifact: WorkflowArtifa
     return task;
   }
 
-  return { ...task, artifacts: [...task.artifacts, normalizedArtifact] };
+  const existingIndex = task.artifacts.findIndex((existing) => existing.id === normalizedArtifact.id);
+  if (existingIndex < 0) {
+    return { ...task, artifacts: [...task.artifacts, normalizedArtifact] };
+  }
+
+  return {
+    ...task,
+    artifacts: task.artifacts.map((existing, index) => index === existingIndex ? normalizedArtifact : existing),
+  };
 }
 
 function normalizeWorkflowStep(value: unknown): WorkflowTask["steps"][number] | null {

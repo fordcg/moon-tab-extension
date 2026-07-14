@@ -163,7 +163,7 @@ Phase 6 迁入只清空缓存的 `network.clear_requests`。该工具只通过�
 - `external`：访问外部网络或远端服务。
 - `mcp`：通过 MCP Bridge 调用外部工具。
 
-当前“工具和 MCP”入口是通用工具中心。Grok 搜索只是内置预设，不再是唯一 MCP 形态。
+当前“设置 -> 工具和 MCP”标签页是通用工具中心。Grok 搜索只是内置预设，不再是唯一 MCP 形态。
 
 当前后台已接入 source-owned `src/background/agentToolsMessageHandler.ts` 路由，并由 `src/background/index.ts` 分发 `agentTools.*` runtime 消息：
 
@@ -177,7 +177,7 @@ MCP 配置以 Server 列表保存，Bearer Token 使用 `mcpBearerToken:<serverI
 
 MCP 工具会被注册为稳定的 `mcp.<serverId>.<toolName>` 工具 ID，并转换成模型可调用的安全函数名，例如 `mcp.grok-search-127-0-0-1-17333.search` → `mcp_grok_search_127_0_0_1_17333_search`。模型触发 `mcp_*` 工具后，后台通过统一工具分发转发到对应 Server，再把结果作为 tool message 回填聊天循环。
 
-当前 UI 已在历史抽屉 footer 增加“工具和 MCP”入口，可配置：
+当前 UI 已将工具中心收拢到“设置 -> 工具和 MCP”标签页，可配置：
 
 - 新增 HTTP / Streamable HTTP MCP Server。
 - 使用“添加 Grok 搜索预设”快速接入本地 Grok Search MCP Bridge。
@@ -185,7 +185,7 @@ MCP 工具会被注册为稳定的 `mcp.<serverId>.<toolName>` 工具 ID，并�
 - 刷新并查看 MCP Server 已发现工具。
 - 查看最近工具调用审计日志和清空审计日志。
 
-当前“工具和 MCP”浮层由 `src/side-panel/**` React 组件和设置面板维护，负责读取工具状态、配置 MCP Bridge、展示 MCP 工具、展示/清空审计日志，并与历史抽屉入口协同。
+当前“设置 -> 工具和 MCP”标签页由 `src/side-panel/**` React 组件维护，负责读取工具状态、配置 MCP Bridge、展示 MCP 工具以及展示/清空审计日志。
 
 工具摘要现在会返回风险信息：
 
@@ -202,7 +202,7 @@ MCP 工具会被注册为稳定的 `mcp.<serverId>.<toolName>` 工具 ID，并�
 - 审计覆盖统一工具分发下的浏览器控制、MCP、搜索、系统时间等工具。
 - 每条记录包含工具 ID、函数名、展示名、权限域、开始/结束时间、耗时、状态、脱敏后的参数、结果摘要或错误信息。
 - 参数默认通过统一脱敏逻辑处理，`apiKey`、`token`、`secret`、`password`、`authorization`、`cookie` 等字段不会以原文写入聊天工具记录或审计日志。
-- 用户可在“工具和 MCP”浮层查看最近工具调用，也可以一键清空审计日志。
+- 用户可在“设置 -> 工具和 MCP”标签页查看最近工具调用，也可以一键清空审计日志。
 
 审计日志保留最近 80 条工具调用，参数和结果摘要默认脱敏。审计日志用于复盘工具调用，不保存 Bearer Token、API Key、Cookie 或响应体原文。
 
@@ -248,17 +248,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify_ai_sidebar_qu
 
 它会依次执行：
 
+- `npm run typecheck`：检查当前 TypeScript 源码类型。
+- `npm test`：运行完整 Vitest 回归套件。
+- `npm run test:legacy`：运行仍由独立 Node 脚本维护的兼容性回归。
 - `node --check`：检查侧边栏增强脚本、DevTools 脚本和共享模块语法。
 - `node scripts\test_network_redaction.mjs`：验证 Network URL、headers、JSON/body 脱敏。
 - `node scripts\test_tool_registry.mjs`：验证工具注册、参数校验、串行队列、MCP HTTP adapter。
 - `node scripts\test_browser_control_queue.mjs`：验证浏览器控制契约、队列顺序、非法参数拦截、失败后续跑、超时。
 - `node scripts\test_background_browser_queue_wiring.mjs`：验证后台 `browser.*` 工具路由已接入 `BrowserControlActionQueue`。
 - `node scripts\test_background_agent_tools_wiring.mjs`：验证后台 Tool Registry / MCP 路由已接入聊天工具分发和 runtime 消息。
+- `npm run build:extension`：构建完整 MV3 扩展产物。
+- `npm run check:package`：校验并生成可发布扩展包。
 - `python scripts\verify_ai_sidebar_core.py`：加载扩展并验证侧边栏不白屏、历史抽屉、浏览器控制入口、工具菜单、添加标签页弹窗。
-- 该 smoke test 还会种入一条已脱敏工具审计记录，验证“工具和 MCP”浮层能展示并清空审计日志。
+- 该 smoke test 还会种入一条已脱敏工具审计记录，验证“设置 -> 工具和 MCP”标签页能展示并清空审计日志。
 - `python scripts\verify_browser_control_attach.py`：启动本地普通 HTTP 页面，验证 `browserControl.setEnabled` 可以 attach / detach，不依赖真实模型调用。
 - `python scripts\verify_browser_control_tool_loop.py`：启动本地普通 HTTP 页面和本地假 OpenAI 接口，验证 `chat.send → wait_for_network_idle → scroll_page → take_snapshot → click → 最终回复` 的真实工具闭环。
 - `python scripts\verify_mcp_bridge_tool_loop.py`：启动本地假 MCP Bridge 和假 OpenAI 接口，验证 `chat.send → mcp_dev_echo → POST /tools/call → 最终回复` 的真实 MCP 工具闭环。
+- `npm run test:e2e`：运行网页预览和真实 Chrome 扩展的全部 Playwright 场景。
 
 Phase 3/4/5/6 的 `network.list_requests`、`network.get_request_details`、`network.clear_requests`、`network.compare_requests`、`network.find_parameter_candidates`、`network.extract_js_candidates` 纯 Node 回归由 `npm test` 中的 `node scripts\test_network_tools.mjs` 覆盖；修改 Network 工具契约或后台适配时，也应单独运行 `node scripts\test_network_tools.mjs` 和 `node scripts\test_background_agent_tools_wiring.mjs`。
 
@@ -266,7 +272,7 @@ CI 已预置：
 
 - `.github/workflows/ai-sidebar-quality.yml`
   - Windows runner。
-  - 安装 Node.js、Python Playwright 和 Chromium。
+  - 安装 Node.js 依赖、Python/Node.js Playwright 和 Chromium。
   - 执行同一条 `scripts\verify_ai_sidebar_quality.ps1` 质量门。
 
 ## 不做的事

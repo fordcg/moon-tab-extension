@@ -70,8 +70,11 @@ describe("WorkflowSkillDialog", () => {
       />,
     );
 
-    await user.clear(screen.getByLabelText("技能名称"));
-    await user.type(screen.getByLabelText("技能名称"), "竞品研究");
+    const titleInput = screen.getByLabelText("技能名称");
+    expect(titleInput).toHaveFocus();
+    expect(titleInput).toBeRequired();
+    await user.clear(titleInput);
+    await user.type(titleInput, "竞品研究");
     await user.click(screen.getByRole("button", { name: "保存技能" }));
 
     await waitFor(() => expect(saveWorkflowSkill).toHaveBeenCalledWith("workflow-task-1", {
@@ -92,8 +95,12 @@ describe("WorkflowSkillDialog", () => {
 
     render(<WorkflowSkillDialog mode="start" open skill={createSkill()} onOpenChange={onOpenChange} />);
 
+    const variableInput = screen.getByLabelText("对象");
+    expect(variableInput).toHaveFocus();
+    expect(variableInput).toBeRequired();
+    expect(screen.getByText("必填")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "启动技能" })).toBeDisabled();
-    await user.type(screen.getByLabelText("对象"), "当前页面");
+    await user.type(variableInput, "当前页面");
     await user.click(screen.getByRole("button", { name: "启动技能" }));
 
     await waitFor(() => expect(startWorkflowSkill).toHaveBeenCalledWith("workflow-skill-1", { subject: "当前页面" }));

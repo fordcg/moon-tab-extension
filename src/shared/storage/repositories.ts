@@ -4,6 +4,7 @@ import type {
   AppSetting,
   ChatFolder,
   ChatMessage,
+  ChatPendingFollowUp,
   ChatSessionPreferenceOverrides,
   ChatSession,
   ChatToolAttachment,
@@ -16,7 +17,9 @@ import type {
 } from "../types";
 import { createNetworkToolAttachment, mergeCompatibleToolAttachments, normalizeToolAttachment } from "../toolArtifacts";
 import { normalizeTokenUsageEntries } from "../chat/tokenUsage";
-import { normalizeWorkflowTasks } from "../chat/workflowTasks";
+import { normalizeWorkflowTasks, transitionWorkflowTask } from "../chat/workflowTasks";
+
+const INTERRUPTED_STREAM_MESSAGE = "上次生成因侧栏关闭或刷新而中断，请重新生成后重试";
 
 export async function saveModelConfig(model: ModelConfig): Promise<void> {
   await db.modelConfigs.put(model);
@@ -287,20 +290,126 @@ export async function replaceAllDataFromSync(snapshot: SyncDataSnapshot): Promis
 }
 
 function normalizeChatSession(session: ChatSession): ChatSession {
+  const { pendingFollowUps: _pendingFollowUps, ...sessionWithoutPendingFollowUps } = session;
+  const pendingFollowUps = normalizePendingFollowUps(session.pendingFollowUps, session.id);
   return {
-    ...session,
+    ...sessionWithoutPendingFollowUps,
     archived: session.archived ?? false,
     chatPreferenceOverrides: normalizeChatPreferenceOverrides(session.chatPreferenceOverrides),
     messages: session.messages.map(normalizeChatMessage),
     tokenUsageEntries: normalizeTokenUsageEntries(session.tokenUsageEntries),
     workflowTasks: normalizeWorkflowTasks(session.workflowTasks),
+    ...(pendingFollowUps.length ? { pendingFollowUps } : {}),
   };
 }
 
+function normalizePendingFollowUps(value: unknown, sessionId: string): ChatPendingFollowUp[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const source = item as Partial<ChatPendingFollowUp>;
+    const id = typeof source.id === "string" ? source.id.trim() : "";
+    const content = typeof source.content === "string" ? source.content.trim() : "";
+    const attachments = Array.isArray(source.attachments) ? source.attachments.filter((attachment) => attachment && typeof attachment === "object") : undefined;
+    const promptInvocations = Array.isArray(source.promptInvocations) ? source.promptInvocations.filter((invocation) => invocation && typeof invocation === "object") : undefined;
+    if (!id || (source.behavior !== "queue" && source.behavior !== "guide") || typeof source.createdAt !== "number" || !Number.isFinite(source.createdAt)) {
+      return [];
+    }
+    if (!content && !attachments?.length && !promptInvocations?.length) {
+      return [];
+    }
+
+    return [{
+      id,
+      sessionId,
+      content,
+      attachments,
+      promptInvocations,
+      behavior: source.behavior,
+      createdAt: source.createdAt,
+      ...(typeof source.userMessageId === "string" && source.userMessageId.trim() ? { userMessageId: source.userMessageId.trim() } : {}),
+    }];
+  });
+}
+
+export async function recoverInterruptedChatSessions(activeSessionIds: string[], now = Date.now()): Promise<void> {
+  const activeSessions = new Set(activeSessionIds);
+  await db.transaction("rw", db.chatSessions, async () => {
+    const sessions = await db.chatSessions.toArray();
+    for (const storedSession of sessions) {
+      const session = normalizeChatSession(storedSession);
+      if (activeSessions.has(session.id)) {
+        continue;
+      }
+
+      let changed = session.titleGenerating === true;
+      const messages = session.messages.map((message) => {
+        let toolRecordsChanged = false;
+        const mappedToolCallRecords = message.toolCallRecords?.map((record) => {
+          if (record.status !== "running") {
+            return record;
+          }
+          changed = true;
+          toolRecordsChanged = true;
+          return {
+            ...record,
+            status: "error" as const,
+            completedAt: now,
+            errorMessage: INTERRUPTED_STREAM_MESSAGE,
+          };
+        });
+        if (!message.streaming && !toolRecordsChanged) {
+          return message;
+        }
+        if (message.streaming) {
+          changed = true;
+        }
+        const content = message.streaming
+          ? message.content.trim()
+            ? `${message.content}\n\n${INTERRUPTED_STREAM_MESSAGE}`
+            : INTERRUPTED_STREAM_MESSAGE
+          : message.content;
+        return {
+          ...message,
+          content,
+          streaming: false,
+          toolCallRecords: toolRecordsChanged ? mappedToolCallRecords : message.toolCallRecords,
+        };
+      });
+      const workflowTasks = (session.workflowTasks ?? []).map((task) => {
+        if (task.status !== "running") {
+          return task;
+        }
+        changed = true;
+        return transitionWorkflowTask(task, "failed", Math.max(now, task.updatedAt), INTERRUPTED_STREAM_MESSAGE);
+      });
+      if (!changed) {
+        continue;
+      }
+
+      await db.chatSessions.put(normalizeChatSessionWorkflowTasks({
+        ...session,
+        titleGenerating: false,
+        updatedAt: Math.max(now, session.updatedAt),
+        messages,
+        workflowTasks,
+      }));
+    }
+  });
+}
+
 function normalizeChatSessionWorkflowTasks(session: ChatSession): ChatSession {
+  const { pendingFollowUps: _pendingFollowUps, ...sessionWithoutPendingFollowUps } = session;
+  const pendingFollowUps = normalizePendingFollowUps(session.pendingFollowUps, session.id);
   return {
-    ...session,
+    ...sessionWithoutPendingFollowUps,
     workflowTasks: normalizeWorkflowTasks(session.workflowTasks),
+    ...(pendingFollowUps.length ? { pendingFollowUps } : {}),
   };
 }
 

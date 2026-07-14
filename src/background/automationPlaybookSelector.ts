@@ -75,6 +75,7 @@ export async function selectAutomationPlaybook(input: {
       () => fetchAndReadSelectionResponse(fetcher, payload.url, requestInit),
       normalizeModelRequestRetryCount(input.retryCount),
       {
+        signal: input.signal,
         shouldRetryResult: (result) => result.retryable,
         onRetryResult: (result) => result.response.body?.cancel().catch(() => undefined),
       },

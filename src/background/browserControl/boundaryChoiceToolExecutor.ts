@@ -97,7 +97,7 @@ export class BoundaryChoiceToolExecutor {
     return true;
   }
 
-  async execute(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async execute(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
     if (!this.canExpose()) {
       return createErrorResult(toolCall, "当前不是受控增强模式，无法请求用户边界确认。");
     }
@@ -138,7 +138,7 @@ export class BoundaryChoiceToolExecutor {
         origin: context.origin,
       },
       expiresAt,
-    });
+    }, signal);
     if (response.selectedChoiceIds.length === 0 && response.otherText) {
       return {
         toolCallId: toolCall.id,
@@ -181,18 +181,34 @@ export class BoundaryChoiceToolExecutor {
     request: BrowserControlBoundaryChoiceRequestMessage,
     timeoutMs: number,
     pendingContext: Pick<PendingBoundaryChoice, "toolCallId" | "scopeKey" | "choices" | "allowMultiple" | "context" | "expiresAt">,
+    signal?: AbortSignal,
   ): Promise<BoundaryChoiceResponse> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const handleAbort = () => finish({ selectedChoiceIds: [] });
+      const finish = (response: BoundaryChoiceResponse) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", handleAbort);
         this.pendingChoices.delete(request.requestId);
-        resolve({ selectedChoiceIds: [] });
-      }, timeoutMs);
+        resolve(response);
+      };
+      timer = setTimeout(() => finish({ selectedChoiceIds: [] }), timeoutMs);
+      if (signal?.aborted) {
+        finish({ selectedChoiceIds: [] });
+        return;
+      }
       this.pendingChoices.set(request.requestId, {
         request,
         ...pendingContext,
-        resolve,
+        resolve: finish,
         timer,
       });
+      signal?.addEventListener("abort", handleAbort, { once: true });
       this.notify(request);
     });
   }

@@ -133,6 +133,28 @@ describe("边界确认工具执行器", () => {
     expect(executor.getCurrentGrantContext()).toBeUndefined();
   });
 
+  it("请求取消时立即清理等待中的边界确认并拒绝迟到响应", async () => {
+    let pendingRequest: BrowserControlBoundaryChoiceRequestMessage | undefined;
+    const controller = new AbortController();
+    const executor = new BoundaryChoiceToolExecutor(
+      vi.fn((request) => {
+        pendingRequest = request;
+      }),
+      () => ({ tabId: 7, origin: "https://example.com", enhanced: true }),
+    );
+
+    const resultPromise = executor.execute(createToolCall(createRequestArguments()), controller.signal);
+    await vi.waitFor(() => expect(pendingRequest).toBeDefined());
+    controller.abort();
+
+    await expect(resultPromise).resolves.toMatchObject({
+      isError: true,
+      content: "用户未授权本次边界请求。",
+    });
+    expect(executor.respond(pendingRequest!.requestId, { selectedChoiceIds: ["send_once"] })).toBe(false);
+    expect(executor.getCurrentGrantContext()).toBeUndefined();
+  });
+
   it("伪造未知选项或违反单选约束时不会解除等待确认", async () => {
     let pendingRequest: BrowserControlBoundaryChoiceRequestMessage | undefined;
     const executor = new BoundaryChoiceToolExecutor(

@@ -7,8 +7,7 @@ import type { WorkflowSkill, WorkflowTask } from "../../../src/shared/types";
 
 const originalActions = {
   sendWorkflowTaskMessage: useAppStore.getState().sendWorkflowTaskMessage,
-  updateWorkflowTaskStatus: useAppStore.getState().updateWorkflowTaskStatus,
-  abortChatTask: useAppStore.getState().abortChatTask,
+  cancelWorkflowTask: useAppStore.getState().cancelWorkflowTask,
   addNotification: useAppStore.getState().addNotification,
   refreshPageContext: useAppStore.getState().refreshPageContext,
   updateWorkflowContextItem: useAppStore.getState().updateWorkflowContextItem,
@@ -51,24 +50,23 @@ describe("WorkflowTaskCard", () => {
 
     render(<WorkflowTaskCard task={createTask()} />);
 
+    expect(screen.getByRole("status", { name: "任务状态：等待输入" })).toBeInTheDocument();
     await user.type(screen.getByRole("textbox", { name: "继续任务：等待任务" }), "补充信息");
     await user.click(screen.getByRole("button", { name: "继续" }));
 
     await waitFor(() => expect(sendWorkflowTaskMessage).toHaveBeenCalledWith("workflow-task-1", "补充信息"));
   });
 
-  it("运行状态可取消所属会话的聊天任务并标记工作流取消", async () => {
+  it("运行状态通过原子操作取消所属会话和工作流", async () => {
     const user = userEvent.setup();
-    const abortChatTask = vi.fn();
-    const updateWorkflowTaskStatus = vi.fn(async () => undefined);
-    useAppStore.setState({ abortChatTask, updateWorkflowTaskStatus });
+    const cancelWorkflowTask = vi.fn(async () => undefined);
+    useAppStore.setState({ cancelWorkflowTask });
 
     render(<WorkflowTaskCard task={createTask({ status: "running" })} />);
 
     await user.click(screen.getByRole("button", { name: "取消任务" }));
 
-    expect(abortChatTask).toHaveBeenCalledWith("session-1");
-    await waitFor(() => expect(updateWorkflowTaskStatus).toHaveBeenCalledWith("workflow-task-1", "canceled"));
+    await waitFor(() => expect(cancelWorkflowTask).toHaveBeenCalledWith("workflow-task-1"));
   });
 
   it("上下文面板支持固定、摘要、刷新和移除", async () => {

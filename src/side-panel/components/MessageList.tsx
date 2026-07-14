@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatNetworkAttachmentSummary, redactNetworkRequestDetail } from "../../shared/networkContext";
@@ -25,6 +25,7 @@ import { CopyMessageIcon, ExportImageIcon } from "./MessageActionIcons";
 import { PromptInlineEditor, PromptTokenContent } from "./PromptInlineEditor";
 import type { ChatRetryProgress } from "../state/appStore";
 import { ConversationContinuityPrompt } from "./ConversationContinuityPrompt";
+import { useModalDialogFocus } from "./useModalDialogFocus";
 
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 8;
 const MESSAGE_POPOVER_VIEWPORT_PADDING = 12;
@@ -137,10 +138,20 @@ export function MessageList({
   const regeneratePopoverRef = useRef<HTMLDivElement>(null);
   const toolCallPopoverRef = useRef<HTMLDivElement>(null);
   const regenerateTimerRef = useRef<number | undefined>(undefined);
+  const previewDialogRef = useRef<HTMLElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
+  const closePreview = useCallback(() => setPreviewAttachment(undefined), []);
   const displayAttachmentGroups = useMemo(
     () => createDisplayAttachmentGroups(messages, toolCallDisplayMode),
     [messages, toolCallDisplayMode],
   );
+
+  useModalDialogFocus({
+    dialogRef: previewDialogRef,
+    initialFocusRef: previewCloseRef,
+    onEscape: closePreview,
+    open: Boolean(previewAttachment),
+  });
 
   const handleMessageListScroll = () => {
     const messageList = messageListRef.current;
@@ -374,6 +385,7 @@ export function MessageList({
             ) : null}
           {hasVisibleArticle ? (
           <article className={message.role === "user" ? "message-row message-row-user" : "message-row"}>
+            <span className="sr-only">{message.role === "user" ? "你：" : "AI："}</span>
             <div className="message-avatar" aria-hidden="true">
               {message.role === "user" ? "我" : "AI"}
             </div>
@@ -530,12 +542,15 @@ export function MessageList({
                   </button>
                 ) : null}
                 {pendingRegenerateMessageId === message.id ? (
-                  <div className="message-regenerate-popover" role="dialog" aria-label="正在重新生成" ref={regeneratePopoverRef}>
+                  <div className="message-regenerate-popover" role="status" aria-live="polite" aria-label="正在重新生成" ref={regeneratePopoverRef}>
                     <p>正在重新生成...</p>
                   </div>
                 ) : null}
                 {messageActionFeedback?.messageId === message.id ? (
-                  <span className={`message-action-feedback message-action-feedback-${messageActionFeedback.tone}`} role="status">
+                  <span
+                    className={`message-action-feedback message-action-feedback-${messageActionFeedback.tone}`}
+                    role={messageActionFeedback.tone === "error" ? "alert" : "status"}
+                  >
                     {messageActionFeedback.text}
                   </span>
                 ) : null}
@@ -565,9 +580,22 @@ export function MessageList({
         ) : null}
         {previewAttachment ? (
           <>
-            <div className="dialog-overlay" aria-hidden="true" />
-            <section className="image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-              <button className="ui-button-secondary image-preview-close" type="button" aria-label="关闭图片预览" onClick={() => setPreviewAttachment(undefined)} />
+            <div className="dialog-overlay" aria-hidden="true" onClick={closePreview} />
+            <section
+              ref={previewDialogRef}
+              className="image-preview-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="图片预览"
+              tabIndex={-1}
+            >
+              <button
+                ref={previewCloseRef}
+                className="ui-button-secondary image-preview-close"
+                type="button"
+                aria-label="关闭图片预览"
+                onClick={closePreview}
+              />
               <img src={previewAttachment.dataUrl} alt={previewAttachment.name} />
             </section>
           </>

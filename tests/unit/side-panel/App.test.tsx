@@ -2579,7 +2579,7 @@ describe("App", () => {
 
     vi.useFakeTimers();
     fireEvent.click(buttons[1]);
-    const regenerateDialog = screen.getByRole("dialog", { name: "正在重新生成" });
+    const regenerateDialog = screen.getByRole("status", { name: "正在重新生成" });
     expect(regenerateDialog).toBeInTheDocument();
     expect(document.body).toHaveClass("sidepanel-regenerate-direct-pending");
     expect(regenerateDialog).toHaveTextContent("正在重新生成...");
@@ -2594,7 +2594,7 @@ describe("App", () => {
 
     expect(regenerateMessage).toHaveBeenCalledWith("message-regenerate-ai");
     expect(document.body).not.toHaveClass("sidepanel-regenerate-direct-pending");
-    expect(screen.queryByRole("dialog", { name: "正在重新生成" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "正在重新生成" })).not.toBeInTheDocument();
   });
 
   it("用户和 AI 消息下方提供复制按钮，AI 消息额外提供导出图片按钮", async () => {
@@ -2801,7 +2801,7 @@ describe("App", () => {
     vi.useFakeTimers();
     fireEvent.click(buttons[0]);
     fireEvent.click(buttons[1]);
-    expect(screen.getByRole("dialog", { name: "正在重新生成" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "正在重新生成" })).toBeInTheDocument();
     expect(document.body).toHaveClass("sidepanel-regenerate-direct-pending");
 
     act(() => {
@@ -2810,7 +2810,7 @@ describe("App", () => {
 
     expect(regenerateMessage).toHaveBeenCalledTimes(1);
     expect(regenerateMessage).toHaveBeenCalledWith("message-regenerate-dismiss-ai");
-    expect(screen.queryByRole("dialog", { name: "正在重新生成" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "正在重新生成" })).not.toBeInTheDocument();
     expect(document.body).not.toHaveClass("sidepanel-regenerate-direct-pending");
   });
 
@@ -2850,7 +2850,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "发送编辑后的消息" }));
 
     expect(editAndRegenerateUserMessage).toHaveBeenCalledWith("message-edit-user", "改写后的问题");
-    expect(screen.queryByRole("dialog", { name: "正在重新生成" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "正在重新生成" })).not.toBeInTheDocument();
     expect(styles).toContain(".message-bubble-wrap:has(.message-edit-panel)");
     expect(styles).toContain("width: 80%;");
   });
@@ -2891,7 +2891,7 @@ describe("App", () => {
 
     expect(screen.queryByRole("textbox", { name: "编辑用户消息" })).not.toBeInTheDocument();
     expect(screen.getByText("原始问题")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "正在重新生成" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "正在重新生成" })).not.toBeInTheDocument();
     expect(editAndRegenerateUserMessage).not.toHaveBeenCalled();
   });
 
@@ -3280,6 +3280,16 @@ describe("App", () => {
     expect(Array.from(groups[0].querySelectorAll(".model-select-option-name")).map((item) => item.textContent)).toEqual(["阿尔法 1", "阿尔法 2"]);
     expect(Array.from(groups[1].querySelectorAll(".model-select-option-name")).map((item) => item.textContent)).toEqual(["贝塔 1", "贝塔 2"]);
     expect(within(menu).queryByRole("option", { name: "未选择模型" })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("group", { name: "阿尔法渠道" })).toBeInTheDocument();
+    const modelOptions = within(menu).getAllByRole("option");
+    const selectedOptionIndex = modelOptions.findIndex((option) => option.getAttribute("aria-selected") === "true");
+    expect(selectedOptionIndex).toBeGreaterThanOrEqual(0);
+    await waitFor(() => expect(modelOptions[selectedOptionIndex]).toHaveFocus());
+    await user.keyboard("{ArrowDown}");
+    expect(modelOptions[(selectedOptionIndex + 1) % modelOptions.length]).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "当前模型" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /模型：/ })).toHaveFocus();
   });
 
   it("默认按 Enter 触发发送，Shift+Enter 保留换行", async () => {
@@ -3706,6 +3716,7 @@ describe("App", () => {
         },
       }));
     });
+    registerChatTaskFollowUpHandle("session-guide-hidden-from-queue", "task-guide-hidden-from-queue", vi.fn());
 
     await user.click(screen.getByRole("button", { name: "展开排队对话" }));
     await user.click(screen.getByRole("button", { name: "引导第 1 条排队对话：这条已经改为引导" }));
@@ -3791,9 +3802,10 @@ describe("App", () => {
 
     expect(screen.getAllByText("马上显示这条引导").length).toBeGreaterThanOrEqual(1);
     expect(useAppStore.getState().followUpsBySessionId["session-guide-immediate"]?.[0]).toMatchObject({
-      behavior: "guide",
+      behavior: "queue",
       userMessageId: expect.any(String),
     });
+    expect(screen.getByRole("button", { name: "引导第 1 条排队对话：马上显示这条引导" })).toBeInTheDocument();
   });
 
   it("排队对话折叠时显示下一条等待执行的内容", async () => {
@@ -3913,7 +3925,7 @@ describe("App", () => {
     expect(iconFocusStyle).toContain("outline:");
   });
 
-  it("排队对话折叠时可以直接引导下一条对话", async () => {
+  it("排队对话折叠时引导句柄缺失会保留下一条对话", async () => {
     const user = userEvent.setup();
     const provider: ModelProvider = {
       id: "provider-queue-preview-guide",
@@ -3988,12 +4000,10 @@ describe("App", () => {
 
     expect(useAppStore.getState().followUpsBySessionId["session-queue-preview-guide"]?.[0]).toMatchObject({
       content: "折叠态第一条",
-      behavior: "guide",
+      behavior: "queue",
       userMessageId: expect.any(String),
     });
-    expect(screen.getByText("折叠态第二条")).toBeInTheDocument();
-    expect(screen.getByLabelText("下一条排队对话")).not.toHaveTextContent("折叠态第一条");
-    expect(screen.queryByText("排队对话（1）")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("下一条排队对话")).toHaveTextContent("折叠态第一条");
   });
 
   it("输入斜杠可以搜索并调用 Prompt，气泡只显示标题链接", async () => {
@@ -5815,6 +5825,32 @@ describe("App", () => {
 
   it("任务菜单支持再次点击、外部点击和 Escape 关闭，并与工具弹层互斥", async () => {
     const user = userEvent.setup();
+    const provider: ModelProvider = {
+      id: "provider-workflow-menu",
+      name: "任务测试渠道",
+      endpointType: "openai_chat",
+      endpointUrl: "https://api.example.com/v1/chat/completions",
+      apiKey: "sk-test",
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const model: ProviderModel = {
+      id: "model-workflow-menu",
+      providerId: provider.id,
+      displayName: "任务测试模型",
+      modelId: "gpt-test",
+      temperature: 0.7,
+      maxTokens: 1024,
+      systemPrompt: "",
+      isTitleModel: false,
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    useAppStore.setState({ providers: [provider], models: [model], selectedModelId: model.id });
     render(<App />);
 
     const input = screen.getByLabelText("对话输入");
@@ -6252,6 +6288,160 @@ describe("App", () => {
     expect(sendMessage).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("缺少有效的标签页 ID，无法关闭悬浮助手");
   });
+
+  it("收到恢复开始广播后立即设置发送屏障并禁用发送入口", async () => {
+    const user = userEvent.setup();
+    let runtimeListener: ((message: unknown) => void) | undefined;
+    const originalActions = {
+      loadChannelConfig: useAppStore.getState().loadChannelConfig,
+      loadExtractionRules: useAppStore.getState().loadExtractionRules,
+      loadPromptTemplates: useAppStore.getState().loadPromptTemplates,
+      loadChatData: useAppStore.getState().loadChatData,
+      loadSyncSettings: useAppStore.getState().loadSyncSettings,
+      refreshPageContext: useAppStore.getState().refreshPageContext,
+    };
+    const loadChannelConfig = vi.fn(async () => undefined);
+    const loadExtractionRules = vi.fn(async () => undefined);
+    const loadPromptTemplates = vi.fn(async () => undefined);
+    const loadChatData = vi.fn(async () => undefined);
+    const loadSyncSettings = vi.fn(async () => undefined);
+    const refreshPageContext = vi.fn(async () => undefined);
+    vi.stubGlobal("chrome", {
+      runtime: {
+        onMessage: {
+          addListener: vi.fn((listener: (message: unknown) => void) => {
+            runtimeListener = listener;
+          }),
+          removeListener: vi.fn(),
+        },
+      },
+    });
+    useAppStore.setState({
+      providers: [{
+        id: "provider-restore-barrier",
+        name: "恢复测试渠道",
+        endpointType: "openai_chat",
+        endpointUrl: "https://api.example.com/v1/chat/completions",
+        apiKey: "sk-restore",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+      models: [{
+        id: "model-restore-barrier",
+        providerId: "provider-restore-barrier",
+        displayName: "恢复测试模型",
+        modelId: "gpt-restore",
+        temperature: 0.7,
+        maxTokens: 1024,
+        systemPrompt: "你是网页助手",
+        isTitleModel: false,
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+      selectedModelId: "model-restore-barrier",
+      loadChannelConfig,
+      loadExtractionRules,
+      loadPromptTemplates,
+      loadChatData,
+      loadSyncSettings,
+      refreshPageContext,
+    });
+
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(refreshPageContext).toHaveBeenCalled());
+    await user.type(screen.getByLabelText("对话输入"), "等待恢复后发送");
+    expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+
+    act(() => {
+      runtimeListener?.({ type: "sync.restoreStarted" });
+    });
+
+    expect(useAppStore.getState().syncRestoreBarrierActive).toBe(true);
+    expect(useAppStore.getState().syncOperation.loading).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("正在恢复备份，侧栏操作暂不可用");
+    expect(screen.getByText("正在恢复备份，完成后可继续发送")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("region", { name: "侧栏操作", hidden: true })).toHaveAttribute("inert");
+    expect(document.querySelector(".chat-main-layout")).toHaveAttribute("inert");
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "发送" })).toHaveAttribute("title", "正在恢复备份，完成后可发送");
+    expect(screen.getByRole("button", { name: "新建任务" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "新建任务" })).toHaveAttribute("title", "正在恢复备份，完成后可新建任务");
+    unmount();
+    useAppStore.setState(originalActions);
+  });
+
+  it.each(["sync.restoreCommitted", "sync.restoreRolledBack", "sync.restoreFailed"])(
+    "收到 %s 广播后重置状态并重新加载侧栏数据",
+    async (eventType) => {
+      let runtimeListener: ((message: unknown) => void) | undefined;
+      const originalActions = {
+        reset: useAppStore.getState().reset,
+        loadChannelConfig: useAppStore.getState().loadChannelConfig,
+        loadExtractionRules: useAppStore.getState().loadExtractionRules,
+        loadPromptTemplates: useAppStore.getState().loadPromptTemplates,
+        loadChatData: useAppStore.getState().loadChatData,
+        loadSyncSettings: useAppStore.getState().loadSyncSettings,
+        refreshPageContext: useAppStore.getState().refreshPageContext,
+      };
+      const reset = vi.fn();
+      const loadChannelConfig = vi.fn(async () => undefined);
+      const loadExtractionRules = vi.fn(async () => undefined);
+      const loadPromptTemplates = vi.fn(async () => undefined);
+      const loadChatData = vi.fn(async () => undefined);
+      const loadSyncSettings = vi.fn(async () => undefined);
+      const refreshPageContext = vi.fn(async () => undefined);
+      vi.stubGlobal("chrome", {
+        runtime: {
+          onMessage: {
+            addListener: vi.fn((listener: (message: unknown) => void) => {
+              runtimeListener = listener;
+            }),
+            removeListener: vi.fn(),
+          },
+        },
+      });
+      useAppStore.setState({
+        syncRestoreBarrierActive: true,
+        reset,
+        loadChannelConfig,
+        loadExtractionRules,
+        loadPromptTemplates,
+        loadChatData,
+        loadSyncSettings,
+        refreshPageContext,
+      });
+
+      const { unmount } = render(<App />);
+      await waitFor(() => expect(refreshPageContext).toHaveBeenCalled());
+      reset.mockClear();
+      loadChannelConfig.mockClear();
+      loadExtractionRules.mockClear();
+      loadPromptTemplates.mockClear();
+      loadChatData.mockClear();
+      loadSyncSettings.mockClear();
+      refreshPageContext.mockClear();
+
+      act(() => {
+        runtimeListener?.({ type: eventType });
+      });
+
+      expect(reset).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(loadChannelConfig).toHaveBeenCalledTimes(1);
+        expect(loadExtractionRules).toHaveBeenCalledTimes(1);
+        expect(loadPromptTemplates).toHaveBeenCalledTimes(1);
+        expect(loadChatData).toHaveBeenCalledTimes(1);
+        expect(loadSyncSettings).toHaveBeenCalledTimes(1);
+        expect(refreshPageContext).toHaveBeenCalledTimes(1);
+      });
+      unmount();
+      useAppStore.setState(originalActions);
+      originalActions.reset();
+    },
+  );
 
   it("用户点击 Chrome 调试提示栏取消后回滚浏览器控制运行态", async () => {
     let runtimeListener: ((message: unknown) => void) | undefined;

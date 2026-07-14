@@ -60,12 +60,13 @@ export function ChatPanel({
   const savePrivateChatSession = useAppStore((state) => state.savePrivateChatSession);
   const workflowSkills = useAppStore((state) => state.workflowSkills);
   const loadWorkflowSkills = useAppStore((state) => state.loadWorkflowSkills);
+  const syncRestoreBarrierActive = useAppStore((state) => state.syncRestoreBarrierActive);
   const activeSession = privateModeActive ? privateChatSession : storedActiveSession;
   const selectedWorkflowSkill = workflowSkills.find((skill) => skill.id === selectedWorkflowSkillId);
   const selectedModel = models.find((model) => model.id === selectedModelId);
   const selectedProvider = providers.find((provider) => provider.id === selectedModel?.providerId);
   const matchedRule = extractionRules.find((rule) => rule.id === pageContext.matchedRuleId);
-  const canSend = Boolean(selectedModel?.enabled && selectedProvider?.enabled);
+  const canSend = Boolean(selectedModel?.enabled && selectedProvider?.enabled && !syncRestoreBarrierActive);
   const matchedRuleLabel = pageContext.usedFallback && pageContext.matchedRuleId
     ? "规则命中但无内容，已回退"
     : matchedRule
@@ -219,7 +220,13 @@ export function ChatPanel({
           ))}
         </section>
       ) : null}
-      {providers.length === 0 || models.length === 0 ? <p className="chat-warning">请先配置 API Key 后再开始对话</p> : null}
+      {syncRestoreBarrierActive ? (
+        <p className="chat-warning chat-restore-status" aria-hidden="true">
+          正在恢复备份，完成后可继续发送
+        </p>
+      ) : providers.length === 0 || models.length === 0 ? (
+        <p className="chat-warning">请先配置 API Key 后再开始对话</p>
+      ) : null}
       <ChatComposer canSend={canSend} matchedRuleLabel={matchedRuleLabel} />
       <SessionHistoryDialog
         open={drawerOpen}

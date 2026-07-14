@@ -479,7 +479,7 @@ describe("background 工具运行时封装", () => {
       content: "Browser Control Network",
     });
     expect(networkCompatibilityExecutor).not.toHaveBeenCalled();
-    expect(browserControlManagerMock.executeNetworkTool).toHaveBeenCalledWith(toolCall);
+    expect(browserControlManagerMock.executeNetworkTool).toHaveBeenCalledWith(toolCall, undefined);
   });
 
   it("network 工具在 debugger recorder 不可用时使用 DevTools fallback", async () => {
@@ -500,7 +500,7 @@ describe("background 工具运行时封装", () => {
     const tool = { id: "network.list_requests", name: "network_list_requests", parameters: {} };
 
     await expect(executor(toolCall, tool)).resolves.toBe(compatibilityResult);
-    expect(networkCompatibilityExecutor).toHaveBeenCalledWith(toolCall, tool);
+    expect(networkCompatibilityExecutor).toHaveBeenCalledWith(toolCall, tool, undefined);
     expect(browserControlManagerMock.executeNetworkTool).not.toHaveBeenCalled();
   });
 
@@ -519,8 +519,27 @@ describe("background 工具运行时封装", () => {
     await expect(executor(toolCall, tool)).resolves.toMatchObject({
       content: "Browser Control Network",
     });
-    expect(networkCompatibilityExecutor).toHaveBeenCalledWith(toolCall, tool);
-    expect(browserControlManagerMock.executeNetworkTool).toHaveBeenCalledWith(toolCall);
+    expect(networkCompatibilityExecutor).toHaveBeenCalledWith(toolCall, tool, undefined);
+    expect(browserControlManagerMock.executeNetworkTool).toHaveBeenCalledWith(toolCall, undefined);
+  });
+
+  it("浏览器边界确认会接收请求取消信号并立即退出等待", async () => {
+    const controller = new AbortController();
+    const toolCall = createToolCall("boundary_request_user_choice");
+    const tool = { id: "boundary.request_user_choice", name: "boundary_request_user_choice", parameters: {} };
+    browserControlManagerMock.executeBoundaryChoiceTool.mockImplementation(() => new Promise(() => undefined));
+    const executor = createBackgroundToolExecutor(
+      { model: createModel(), tavily: undefined },
+      vi.fn() as unknown as typeof fetch,
+    );
+
+    const execution = executor(toolCall, tool, { signal: controller.signal });
+    await vi.waitFor(() => {
+      expect(browserControlManagerMock.executeBoundaryChoiceTool).toHaveBeenCalledWith(toolCall, controller.signal);
+    });
+    controller.abort();
+
+    await expect(execution).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("Tavily 工具拒绝空 query 和额外参数", async () => {
@@ -604,6 +623,48 @@ describe("background 工具运行时封装", () => {
         isError: true,
         content: "Imagefree 图片生成运行时暂不可用，已拒绝执行。",
       });
+    } finally {
+      globalWithHook.__imagefreeGenerateTool = previousHook;
+    }
+  });
+
+  it("Tavily 和 Imagefree 网络请求继承当前聊天的取消信号", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })) as unknown as typeof fetch;
+    executeTavilySearchFromSettingsMock.mockImplementation(async (_query, _options, toolFetcher: typeof fetch) => {
+      await toolFetcher("https://search.example.com", { method: "POST" });
+      return { ok: false, message: "搜索已取消" };
+    });
+    const executor = createBackgroundToolExecutor({ model: createModel(), tavily: undefined }, fetcher);
+
+    await executor(
+      createToolCall(TAVILY_SEARCH_TOOL_NAME, { query: "Codex" }),
+      { id: TAVILY_SEARCH_TOOL_ID, name: TAVILY_SEARCH_TOOL_NAME, parameters: {} },
+      { signal: controller.signal },
+    );
+    expect(fetcher).toHaveBeenLastCalledWith(
+      "https://search.example.com",
+      expect.objectContaining({ method: "POST", signal: controller.signal }),
+    );
+
+    const globalWithHook = globalThis as typeof globalThis & {
+      __imagefreeGenerateTool?: (toolCall: ModelToolCall, toolFetcher: typeof fetch) => Promise<ModelToolResult>;
+    };
+    const previousHook = globalWithHook.__imagefreeGenerateTool;
+    try {
+      globalWithHook.__imagefreeGenerateTool = vi.fn(async (toolCall, toolFetcher) => {
+        await toolFetcher("https://image.example.com", { method: "POST" });
+        return { toolCallId: toolCall.id, name: toolCall.name, content: "ok" };
+      });
+      await executor(
+        createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, { prompt: "moon" }),
+        { id: IMAGEFREE_GENERATE_IMAGE_TOOL_ID, name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, parameters: {} },
+        { signal: controller.signal },
+      );
+      expect(fetcher).toHaveBeenLastCalledWith(
+        "https://image.example.com",
+        expect.objectContaining({ method: "POST", signal: controller.signal }),
+      );
     } finally {
       globalWithHook.__imagefreeGenerateTool = previousHook;
     }

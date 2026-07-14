@@ -6,6 +6,7 @@ const DEFAULT_RETRY_MAX_DELAY_MS = 10_000;
 const RETRY_DELAY_JITTER_RATIO = 0.2;
 
 export interface ModelRequestRetryOptions<T = unknown> {
+  signal?: AbortSignal;
   delay?: (durationMs: number) => Promise<void> | void;
   random?: () => number;
   baseDelayMs?: number;
@@ -35,6 +36,7 @@ export async function withModelRequestRetry<T>(operation: () => Promise<T>, retr
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    throwIfRetryAborted(options.signal);
     try {
       const result = await operation();
       if (!shouldRetryOperationResult(result, options) || attempt === maxAttempts) {
@@ -45,7 +47,7 @@ export async function withModelRequestRetry<T>(operation: () => Promise<T>, retr
       await waitBeforeRetry(attempt, result, options);
     } catch (error) {
       lastError = error;
-      if (attempt === maxAttempts) {
+      if (options.signal?.aborted || isAbortError(error) || attempt === maxAttempts) {
         throw error;
       }
       await options.onRetryScheduled?.({ currentRetry: attempt, maxRetries: normalizedRetryCount });
@@ -75,7 +77,46 @@ function shouldRetryResponseResult(result: unknown): boolean {
 async function waitBeforeRetry<T>(attempt: number, result: T | undefined, options: ModelRequestRetryOptions<T>): Promise<void> {
   const delay = options.delay ?? defaultDelay;
   const durationMs = resolveRetryDelayMs(attempt, result, options);
-  await delay(durationMs);
+  const pendingDelay = Promise.resolve(delay(durationMs));
+  if (!options.signal) {
+    await pendingDelay;
+    return;
+  }
+  await raceWithAbort(pendingDelay, options.signal);
+}
+
+async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  throwIfRetryAborted(signal);
+  let removeAbortListener: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const handleAbort = () => reject(createAbortError(signal));
+    signal.addEventListener("abort", handleAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener("abort", handleAbort);
+  });
+  try {
+    return await Promise.race([operation, aborted]);
+  } finally {
+    removeAbortListener?.();
+  }
+}
+
+function throwIfRetryAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError(signal);
+  }
+}
+
+function createAbortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason;
+  }
+  return new DOMException("The operation was aborted", "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : Boolean(error && typeof error === "object" && "name" in error && (error as { name?: unknown }).name === "AbortError");
 }
 
 function resolveRetryDelayMs<T>(attempt: number, result: T | undefined, options: ModelRequestRetryOptions<T>): number {

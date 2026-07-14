@@ -22,6 +22,8 @@ function getFocusableElements(dialog: HTMLElement): HTMLElement[] {
 
 export function useModalDialogFocus({ dialogRef, initialFocusRef, onEscape, open }: ModalDialogFocusOptions) {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
 
   useEffect(() => {
     if (!open) {
@@ -40,7 +42,7 @@ export function useModalDialogFocus({ dialogRef, initialFocusRef, onEscape, open
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        onEscape?.();
+        onEscapeRef.current?.();
         return;
       }
       if (event.key !== "Tab") {
@@ -68,5 +70,5 @@ export function useModalDialogFocus({ dialogRef, initialFocusRef, onEscape, open
         queueMicrotask(() => restoreFocus.focus({ preventScroll: true }));
       }
     };
-  }, [dialogRef, initialFocusRef, onEscape, open]);
+  }, [dialogRef, initialFocusRef, open]);
 }

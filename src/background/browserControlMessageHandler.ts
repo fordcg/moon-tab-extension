@@ -1003,7 +1003,7 @@ export class BrowserControlManager {
     return this.canExposeTakeSnapshotTool();
   }
 
-  async extractContent(toolCall: ModelToolCall, extractionRules: ExtractionRule[] = []): Promise<ModelToolResult> {
+  async extractContent(toolCall: ModelToolCall, extractionRules: ExtractionRule[] = [], _signal?: AbortSignal): Promise<ModelToolResult> {
     if (!this.canExposeBrowserTool()) {
       return createBrowserActionDisabledResult(toolCall);
     }
@@ -1083,7 +1083,7 @@ export class BrowserControlManager {
     };
   }
 
-  async executeNetworkTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async executeNetworkTool(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
     if (this.canExposeFullAccessTool() && isNetworkDetailLikeToolCall(toolCall)) {
       return this.networkToolExecutor.execute(toolCall);
     }
@@ -1095,7 +1095,7 @@ export class BrowserControlManager {
       this.boundaryChoiceToolExecutor.clearGrantContext();
       return initialResult;
     }
-    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult);
+    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult, signal);
     if (!hadGrantBefore && isNetworkDetailLikeToolCall(toolCall) && this.canRevealSensitiveNetworkResult(scopeKey)) {
       const revealedResult = await this.withBoundaryGrantScope(scopeKey, () => this.networkToolExecutor.execute(toolCall));
       this.boundaryChoiceToolExecutor.clearGrantContext();
@@ -1104,7 +1104,7 @@ export class BrowserControlManager {
     return boundaryResult;
   }
 
-  async executeJsSourceTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async executeJsSourceTool(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
     const scopeKey = createBoundaryGrantScopeKey(toolCall);
     const hadGrantBefore = this.canExpandJsOrSourceMapContext(scopeKey);
     const initialResult = await this.withBoundaryGrantScope(scopeKey, () => this.jsSourceToolExecutor.execute(toolCall));
@@ -1112,7 +1112,7 @@ export class BrowserControlManager {
       this.boundaryChoiceToolExecutor.clearGrantContext();
       return initialResult;
     }
-    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult);
+    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult, signal);
     if (!hadGrantBefore && this.canExpandJsOrSourceMapContext(scopeKey)) {
       const expandedResult = await this.withBoundaryGrantScope(scopeKey, () => this.jsSourceToolExecutor.execute(toolCall));
       this.boundaryChoiceToolExecutor.clearGrantContext();
@@ -1121,7 +1121,7 @@ export class BrowserControlManager {
     return boundaryResult;
   }
 
-  async executeSourceMapTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async executeSourceMapTool(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
     await this.jsSourceToolExecutor.refreshResourcesForAnalysis();
     const scopeKey = createBoundaryGrantScopeKey(toolCall);
     const hadGrantBefore = this.canExpandJsOrSourceMapContext(scopeKey);
@@ -1130,7 +1130,7 @@ export class BrowserControlManager {
       this.boundaryChoiceToolExecutor.clearGrantContext();
       return initialResult;
     }
-    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult);
+    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult, signal);
     if (!hadGrantBefore && this.canExpandJsOrSourceMapContext(scopeKey)) {
       const expandedResult = await this.withBoundaryGrantScope(scopeKey, () => this.sourceMapToolExecutor.execute(toolCall));
       this.boundaryChoiceToolExecutor.clearGrantContext();
@@ -1139,7 +1139,7 @@ export class BrowserControlManager {
     return boundaryResult;
   }
 
-  async executeRuntimeReadTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async executeRuntimeReadTool(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
     if (!this.canExposeRuntimeReadTool()) {
       return createBrowserToolErrorResult(toolCall, "当前浏览器自动化模式不允许执行 runtime.* 工具。");
     }
@@ -1151,7 +1151,7 @@ export class BrowserControlManager {
       this.boundaryChoiceToolExecutor.clearGrantContext();
       return initialResult;
     }
-    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult);
+    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult, signal);
     if (!hadGrantBefore && this.canExpandRuntimeSummary(scopeKey)) {
       const expandedResult = await this.runtimeReadToolExecutor.execute(createExpandedRuntimeToolCall(toolCall));
       this.boundaryChoiceToolExecutor.clearGrantContext();
@@ -1164,15 +1164,15 @@ export class BrowserControlManager {
     return this.canExposeNetworkTool() && this.boundaryChoiceToolExecutor.canExpose();
   }
 
-  executeBoundaryChoiceTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
-    return this.boundaryChoiceToolExecutor.execute(toolCall);
+  executeBoundaryChoiceTool(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
+    return this.boundaryChoiceToolExecutor.execute(toolCall, signal);
   }
 
   canExposeReplayTool(): boolean {
     return this.canExposeNetworkTool() && this.replayToolExecutor.canExpose();
   }
 
-  async executeReplayTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async executeReplayTool(toolCall: ModelToolCall, signal?: AbortSignal): Promise<ModelToolResult> {
     const scopeKey = createBoundaryGrantScopeKey(toolCall);
     const hadGrantBefore = this.hasReplaySendGrant(scopeKey);
     const initialResult = await this.withBoundaryGrantScope(scopeKey, () => this.replayToolExecutor.execute(toolCall));
@@ -1180,7 +1180,7 @@ export class BrowserControlManager {
       this.boundaryChoiceToolExecutor.clearGrantContext();
       return initialResult;
     }
-    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult);
+    const boundaryResult = await this.applyAutomationBoundaryConfirmation(toolCall, initialResult, signal);
     if (!hadGrantBefore && isReplaySendToolCall(toolCall) && this.hasReplaySendGrant(scopeKey)) {
       const replayResult = await this.withBoundaryGrantScope(scopeKey, () => this.replayToolExecutor.execute(toolCall));
       this.boundaryChoiceToolExecutor.clearGrantContext();
@@ -1193,7 +1193,7 @@ export class BrowserControlManager {
     return this.canExposeNetworkTool() && this.fullAccessToolExecutor.canExpose();
   }
 
-  executeFullAccessTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  executeFullAccessTool(toolCall: ModelToolCall, _signal?: AbortSignal): Promise<ModelToolResult> {
     return this.fullAccessToolExecutor.execute(toolCall);
   }
 
@@ -1201,7 +1201,7 @@ export class BrowserControlManager {
     return this.boundaryChoiceToolExecutor.respond(requestId, response);
   }
 
-  async takeSnapshot(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async takeSnapshot(toolCall: ModelToolCall, _signal?: AbortSignal): Promise<ModelToolResult> {
     const extraKeys = Object.keys(toolCall.arguments);
     if (extraKeys.length > 0) {
       return createBrowserToolErrorResult(toolCall, "浏览器页面快照工具不接受任何参数。");
@@ -1222,7 +1222,7 @@ export class BrowserControlManager {
     }
   }
 
-  async executeBrowserTool(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  async executeBrowserTool(toolCall: ModelToolCall, _signal?: AbortSignal): Promise<ModelToolResult> {
     if (toolCall.name === BROWSER_GET_PAGE_STATE_TOOL_NAME) {
       if (!this.canExposeBrowserTool()) {
         return createBrowserActionDisabledResult(toolCall);
@@ -2005,7 +2005,11 @@ export class BrowserControlManager {
     return Boolean(grant && grant.scopeKey === scopeKey && grant.grants.includes("send_single_confirmed_replay_request_without_credentials"));
   }
 
-  private async applyAutomationBoundaryConfirmation(toolCall: ModelToolCall, result: ModelToolResult): Promise<ModelToolResult> {
+  private async applyAutomationBoundaryConfirmation(
+    toolCall: ModelToolCall,
+    result: ModelToolResult,
+    signal?: AbortSignal,
+  ): Promise<ModelToolResult> {
     return applyAutomationBoundaryConfirmation(result, async (request) => {
       if (!this.canExposeBoundaryChoiceTool()) {
         return undefined;
@@ -2018,7 +2022,7 @@ export class BrowserControlManager {
           targetToolName: toolCall.name,
           targetToolArguments: toolCall.arguments,
         },
-      });
+      }, signal);
       return confirmation.content;
     });
   }

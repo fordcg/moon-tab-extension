@@ -179,29 +179,13 @@ body {
     align-items: start;
     pointer-events: auto;
     background: color-mix(in srgb, var(--color-canvas) 96%, var(--color-on-primary));
-    border: 1px solid var(--color-hairline);
+    border: 0;
     box-shadow: 0 8px 28px rgba(20, 20, 19, 0.14);
     animation: notification-slide-in 180ms ease-out;
   }
 
   .notification-closing {
     animation: notification-slide-out 160ms ease-in forwards;
-  }
-
-  .notification-success {
-    border-left: 4px solid var(--color-success);
-  }
-
-  .notification-warning {
-    border-left: 4px solid var(--color-warning);
-  }
-
-  .notification-error {
-    border-left: 4px solid var(--color-error);
-  }
-
-  .notification-info {
-    border-left: 4px solid var(--color-primary);
   }
 
   .notification-icon {
@@ -3630,6 +3614,12 @@ body {
   order: 2;
 }
 
+.chat-warning.chat-restore-status {
+  border-color: var(--sidepanel-line);
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-ink);
+}
+
 .sidebar-shell .composer-switches {
   order: 4;
 }
@@ -3659,7 +3649,7 @@ body {
   gap: 0.5rem;
   padding: 0 1rem 0.625rem;
   overflow-y: auto;
-  background: #ffffff;
+  background: var(--sidepanel-canvas);
 }
 
 .sidebar-shell .workflow-task-card {
@@ -3669,7 +3659,7 @@ body {
   padding: 0.75rem;
   border: 1px solid var(--sidepanel-line);
   border-radius: 0.5rem;
-  background: #ffffff;
+  background: var(--sidepanel-canvas);
   color: var(--sidepanel-ink);
 }
 
@@ -3781,14 +3771,18 @@ body {
 }
 
 .sidebar-shell .workflow-task-status[data-status="completed"] {
-  background: #ecfdf5;
-  color: #047857;
+  background: color-mix(in srgb, var(--color-success) 12%, var(--sidepanel-canvas));
+  color: var(--color-success);
 }
 
-.sidebar-shell .workflow-task-status[data-status="failed"],
+.sidebar-shell .workflow-task-status[data-status="failed"] {
+  background: color-mix(in srgb, var(--color-error) 10%, var(--sidepanel-canvas));
+  color: var(--color-error);
+}
+
 .sidebar-shell .workflow-task-status[data-status="canceled"] {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-muted);
 }
 
 .sidebar-shell .workflow-task-title {
@@ -3835,20 +3829,18 @@ body {
 }
 
 .sidebar-shell .workflow-task-step[data-status="completed"] .workflow-task-step-dot {
-  background: #10b981;
+  background: var(--color-success);
 }
 
 .sidebar-shell .workflow-task-step[data-status="failed"] .workflow-task-step-dot {
-  background: #ef4444;
+  background: var(--color-error);
 }
 
 .sidebar-shell .workflow-task-step-title {
   min-width: 0;
   flex: 1 1 auto;
   color: var(--sidepanel-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .sidebar-shell .workflow-task-step-status {
@@ -3905,8 +3897,9 @@ body {
 
 .sidebar-shell .task-icon-button {
   display: grid;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
   place-items: center;
   padding: 0;
   border: 0;
@@ -3962,7 +3955,7 @@ body {
 
 .sidebar-shell .task-artifacts-export {
   display: inline-flex;
-  min-height: 1.75rem;
+  min-height: 2.25rem;
   align-items: center;
   gap: 0.3125rem;
   padding: 0 0.5rem;
@@ -4042,7 +4035,7 @@ body {
 }
 
 .sidebar-shell .workflow-task-continue {
-  min-height: 2rem;
+  min-height: 2.25rem;
   border-radius: 0.5rem;
   padding: 0 0.75rem;
   font-size: 0.8125rem;
@@ -4050,7 +4043,7 @@ body {
 
 .sidebar-shell .workflow-task-cancel,
 .sidebar-shell .workflow-task-save-skill {
-  min-height: 2rem;
+  min-height: 2.25rem;
   padding: 0 0.625rem;
   color: var(--sidepanel-muted);
   font-size: 0.75rem;
@@ -4118,8 +4111,8 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
 
 .sidebar-shell .workflow-skill-dialog-close {
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--sidepanel-line);
@@ -4137,6 +4130,11 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
   outline: 0;
 }
 
+.sidebar-shell .workflow-skill-dialog-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .sidebar-shell .workflow-skill-field {
   display: grid;
   gap: 0.3125rem;
@@ -4148,6 +4146,13 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
   font-size: 0.75rem;
   font-weight: 650;
   line-height: 1.35;
+}
+
+.sidebar-shell .workflow-skill-field-required {
+  margin-inline-start: 0.375rem;
+  color: var(--sidepanel-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 
 .sidebar-shell .workflow-skill-input {
@@ -4213,7 +4218,7 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
 }
 
 .sidebar-shell .workflow-skill-dialog-button {
-  min-height: 2rem;
+  min-height: 2.25rem;
   padding: 0 0.75rem;
   font-size: 0.8125rem;
 }
@@ -4546,7 +4551,7 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
   min-width: 0;
   overflow: hidden;
   transform-origin: top;
-  transition: height 180ms ease-out, min-height 180ms ease-out, opacity 140ms ease-out, transform 180ms ease-out;
+  transition: opacity 140ms ease-out, transform 180ms ease-out;
 }
 
 .sidepanel-page-banner.is-multi {
@@ -4607,7 +4612,7 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
   overflow: hidden;
   position: relative;
   transform: translateX(0) scale(1);
-  transition: margin-right 180ms ease-out, max-width 180ms ease-out, opacity 160ms ease-out, transform 180ms ease-out;
+  transition: opacity 160ms ease-out, transform 180ms ease-out;
 }
 
 .sidepanel-page-banner.is-open .sidepanel-page-banner-stack {
@@ -4690,7 +4695,7 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
   opacity: 0;
   overflow: hidden;
   transform: translateY(-0.25rem);
-  transition: max-height 180ms ease-out, opacity 140ms ease-out, transform 180ms ease-out;
+  transition: opacity 140ms ease-out, transform 180ms ease-out;
 }
 
 .sidepanel-page-banner.is-open .sidepanel-shared-drawer {
@@ -7146,7 +7151,7 @@ body:has(.context-dialog) .dialog-overlay {
 
 .notification {
   background: var(--sidepanel-canvas) !important;
-  border: 1px solid var(--sidepanel-line) !important;
+  border: 0 !important;
   border-radius: 0.875rem !important;
   box-shadow: var(--sidepanel-shadow) !important;
   color: var(--sidepanel-ink) !important;

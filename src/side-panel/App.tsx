@@ -47,6 +47,7 @@ export function App() {
   const markBrowserAutomationModeChanged = useAppStore((state) => state.markBrowserAutomationModeChanged);
   const showBoundaryChoiceRequest = useAppStore((state) => state.showBoundaryChoiceRequest);
   const addNotification = useAppStore((state) => state.addNotification);
+  const syncRestoreBarrierActive = useAppStore((state) => state.syncRestoreBarrierActive);
 
   const handleFloatingAssistantAction = async () => {
     if (floatingMode) {
@@ -135,6 +136,17 @@ export function App() {
     }
 
     const handleRuntimeMessage = (message: unknown) => {
+      if (isSyncRestoreStartedEvent(message)) {
+        useAppStore.setState({ syncOperation: { loading: true }, syncRestoreBarrierActive: true });
+        return;
+      }
+      if (isSyncRestoreRefreshEvent(message)) {
+        useAppStore.getState().reset();
+        void Promise.all([loadChannelConfig(), loadExtractionRules(), loadPromptTemplates(), loadChatData(), loadSyncSettings()])
+          .then(() => refreshPageContext());
+        return;
+      }
+
       if (isBrowserControlDetachedEvent(message)) {
         markBrowserControlDetached();
         return;
@@ -154,7 +166,7 @@ export function App() {
     return () => {
       runtime.onMessage.removeListener?.(handleRuntimeMessage);
     };
-  }, [markBrowserAutomationModeChanged, markBrowserControlDetached, showBoundaryChoiceRequest]);
+  }, [loadChannelConfig, loadChatData, loadExtractionRules, loadPromptTemplates, loadSyncSettings, markBrowserAutomationModeChanged, markBrowserControlDetached, refreshPageContext, showBoundaryChoiceRequest]);
 
   const chatMainLayoutClassName = [
     "chat-main-layout",
@@ -164,8 +176,17 @@ export function App() {
     .join(" ");
 
   return (
-    <main className="app-shell sidebar-shell">
-      <section className="app-header sidebar-topbar" aria-label="侧栏操作">
+    <main className="app-shell sidebar-shell" aria-busy={syncRestoreBarrierActive || undefined}>
+      {syncRestoreBarrierActive ? (
+        <span className="sr-only" role="status" aria-live="polite">
+          正在恢复备份，侧栏操作暂不可用
+        </span>
+      ) : null}
+      <section
+        className="app-header sidebar-topbar"
+        aria-label="侧栏操作"
+        inert={syncRestoreBarrierActive || undefined}
+      >
         <h1 className="app-title sidebar-topbar-title">月标签 AI 助手</h1>
         <div className="app-header-actions">
           <button
@@ -217,7 +238,7 @@ export function App() {
           </button>
         </div>
       </section>
-      <section className={chatMainLayoutClassName}>
+      <section className={chatMainLayoutClassName} inert={syncRestoreBarrierActive || undefined}>
         {historyPanelOpen ? <SessionList /> : <div aria-hidden="true" className="session-list-placeholder" />}
         <ChatPanel
           drawerOpen={drawerOpen}
@@ -296,6 +317,18 @@ async function sendTabMessage<T>(tabId: number, message: unknown): Promise<T> {
       } as T);
     }
   });
+}
+
+function isSyncRestoreStartedEvent(message: unknown): message is { type: "sync.restoreStarted" } {
+  return typeof message === "object" && message !== null && (message as { type?: unknown }).type === "sync.restoreStarted";
+}
+
+function isSyncRestoreRefreshEvent(message: unknown): message is { type: "sync.restoreCommitted" | "sync.restoreRolledBack" | "sync.restoreFailed" } {
+  if (typeof message !== "object" || message === null) {
+    return false;
+  }
+  const type = (message as { type?: unknown }).type;
+  return type === "sync.restoreCommitted" || type === "sync.restoreRolledBack" || type === "sync.restoreFailed";
 }
 
 function isBrowserControlDetachedEvent(message: unknown): message is BrowserControlRuntimeEvent {

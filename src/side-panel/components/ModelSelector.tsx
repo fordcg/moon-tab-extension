@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useAppStore } from "../state/appStore";
 import { formatModelLabelWithVision } from "./ModelVisionIndicator";
 
 export function ModelSelector() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeModelId, setActiveModelId] = useState<string>();
+  const menuId = useId();
   const selectorRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const providers = useAppStore((state) => state.providers);
   const models = useAppStore((state) => state.models);
   const selectedModelId = useAppStore((state) => state.selectedModelId);
@@ -53,8 +57,33 @@ export function ModelSelector() {
         models: [...group.models].sort((left, right) => left.modelIndex - right.modelIndex),
       }));
   }, [models, providers]);
-  const selectableModels = selectableModelGroups.flatMap((group) => group.models);
+  const selectableModels = useMemo(
+    () => selectableModelGroups.flatMap((group) => group.models),
+    [selectableModelGroups],
+  );
   const selectedModelLabel = selectableModels.find((model) => model.id === selectedModelId)?.label ?? "未选择模型";
+
+  const focusModelOption = (modelId: string) => {
+    setActiveModelId(modelId);
+    queueMicrotask(() => optionRefs.current.get(modelId)?.focus({ preventScroll: true }));
+  };
+
+  const openMenu = (preferredModelId?: string) => {
+    const targetModelId = preferredModelId && selectableModels.some((model) => model.id === preferredModelId)
+      ? preferredModelId
+      : selectableModels.find((model) => model.id === selectedModelId)?.id ?? selectableModels[0]?.id;
+    setMenuOpen(true);
+    if (targetModelId) {
+      focusModelOption(targetModelId);
+    }
+  };
+
+  const closeMenu = (restoreFocus = false) => {
+    setMenuOpen(false);
+    if (restoreFocus) {
+      queueMicrotask(() => triggerRef.current?.focus({ preventScroll: true }));
+    }
+  };
 
   useEffect(() => {
     if (!menuOpen) {
@@ -70,7 +99,8 @@ export function ModelSelector() {
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setMenuOpen(false);
+        event.preventDefault();
+        closeMenu(true);
       }
     };
 
@@ -83,21 +113,66 @@ export function ModelSelector() {
   }, [menuOpen]);
 
   const handleSelectModel = (modelId: string) => {
-    setMenuOpen(false);
+    setActiveModelId(modelId);
+    closeMenu(true);
     void selectModel(modelId);
+  };
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+
+    event.preventDefault();
+    const selectedIndex = selectableModels.findIndex((model) => model.id === selectedModelId);
+    const fallbackIndex = event.key === "ArrowUp" ? selectableModels.length - 1 : 0;
+    openMenu(selectableModels[selectedIndex >= 0 ? selectedIndex : fallbackIndex]?.id);
+  };
+  const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, modelId: string) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu(true);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || selectableModels.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const currentIndex = Math.max(0, selectableModels.findIndex((model) => model.id === modelId));
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? selectableModels.length - 1
+        : event.key === "ArrowDown"
+          ? (currentIndex + 1) % selectableModels.length
+          : (currentIndex - 1 + selectableModels.length) % selectableModels.length;
+    const nextModelId = selectableModels[nextIndex]?.id;
+    if (nextModelId) {
+      focusModelOption(nextModelId);
+    }
   };
   const selectorClassName = menuOpen
     ? "model-select-label model-select-label-inline model-select-label-enhanced is-model-menu-open"
     : "model-select-label model-select-label-inline model-select-label-enhanced";
 
   return (
-    <div className="model-selector" ref={selectorRef}>
+    <div
+      className="model-selector"
+      ref={selectorRef}
+      onBlur={(event) => {
+        if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget)) {
+          setMenuOpen(false);
+        }
+      }}
+    >
       <div className={selectorClassName}>
         <label className="model-select-native-label model-select-label-inline">
           <span className="model-select-text">当前模型</span>
           <select
             className="ui-input model-select-input"
             aria-label="当前模型"
+            tabIndex={-1}
             value={selectedModelId}
             onChange={(event) => handleSelectModel(event.target.value)}
           >
@@ -110,31 +185,51 @@ export function ModelSelector() {
           </select>
         </label>
         <button
+          ref={triggerRef}
           className="model-select-trigger"
           type="button"
           aria-label={`模型：${selectedModelLabel}`}
           aria-haspopup="listbox"
           aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
+          aria-controls={menuOpen ? menuId : undefined}
+          title={selectedModelLabel}
+          onClick={() => (menuOpen ? closeMenu() : openMenu(selectedModelId))}
+          onKeyDown={handleTriggerKeyDown}
         >
           <span className="model-select-value" aria-hidden="true">{selectedModelLabel}</span>
           <span className="model-select-chevron" aria-hidden="true" />
         </button>
         {menuOpen ? (
-          <div className="model-select-menu" role="listbox" aria-label="当前模型">
+          <div className="model-select-menu" id={menuId} role="listbox" aria-label="当前模型">
             <div className="model-select-option-list">
               {selectableModelGroups.length > 0 ? (
-                selectableModelGroups.map((group) => (
-                  <div className="model-select-group" key={group.providerId}>
-                    <div className="model-select-group-title">{group.providerName}</div>
+                selectableModelGroups.map((group, groupIndex) => (
+                  <div
+                    className="model-select-group"
+                    key={group.providerId}
+                    role="group"
+                    aria-labelledby={`${menuId}-group-${groupIndex}`}
+                  >
+                    <div className="model-select-group-title" id={`${menuId}-group-${groupIndex}`}>{group.providerName}</div>
                     {group.models.map((model) => (
                       <button
+                        ref={(element) => {
+                          if (element) {
+                            optionRefs.current.set(model.id, element);
+                          } else {
+                            optionRefs.current.delete(model.id);
+                          }
+                        }}
                         key={model.id}
                         className={model.id === selectedModelId ? "model-select-option model-select-option-active is-selected" : "model-select-option"}
                         type="button"
                         role="option"
                         aria-selected={model.id === selectedModelId}
+                        tabIndex={model.id === activeModelId ? 0 : -1}
+                        title={model.label}
                         onClick={() => handleSelectModel(model.id)}
+                        onFocus={() => setActiveModelId(model.id)}
+                        onKeyDown={(event) => handleOptionKeyDown(event, model.id)}
                       >
                         <span className="model-select-option-copy">
                           <span className="model-select-option-name">{model.name}</span>
@@ -145,7 +240,7 @@ export function ModelSelector() {
                   </div>
                 ))
               ) : (
-                <p className="model-select-menu-empty">暂无可用模型</p>
+                <div className="model-select-menu-empty" role="option" aria-disabled="true">暂无可用模型</div>
               )}
             </div>
           </div>
