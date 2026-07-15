@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import {
   getRegisteredAutomationPlaybooks,
 } from "../../../shared/automationPlaybooks";
-import type { AutomationPlaybookRisk, AutomationPlaybookSource } from "../../../shared/types";
+import type {
+  AutomationPlaybookRisk,
+  AutomationPlaybookSource,
+  ImportedAutomationPlaybook,
+} from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 
 const sourceLabels: Record<AutomationPlaybookSource, string> = {
@@ -20,10 +24,17 @@ const riskLabels: Record<AutomationPlaybookRisk, string> = {
 
 export function AutomationPlaybookSettings() {
   const settings = useAppStore((state) => state.automationPlaybookSettings);
+  const importedSkillPlaybooks = useAppStore((state) => state.importedSkillPlaybooks);
   const updateAutomationPlaybookSettings = useAppStore((state) => state.updateAutomationPlaybookSettings);
+  const importSkillPlaybooksFromJson = useAppStore((state) => state.importSkillPlaybooksFromJson);
+  const removeImportedSkillPlaybook = useAppStore((state) => state.removeImportedSkillPlaybook);
+  const addNotification = useAppStore((state) => state.addNotification);
   const [expandedPlaybookIds, setExpandedPlaybookIds] = useState<Set<string>>(() => new Set());
+  const [importError, setImportError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const disabledIds = new Set(settings.disabledPlaybookIds);
-  const playbooks = getRegisteredAutomationPlaybooks();
+  const builtinPlaybooks = getRegisteredAutomationPlaybooks().filter((playbook) => playbook.source === "builtin");
 
   const handleToggle = (playbookId: string, checked: boolean) => {
     const nextIds = checked
@@ -44,6 +55,38 @@ export function AutomationPlaybookSettings() {
     });
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const result = await importSkillPlaybooksFromJson(text);
+      if (!result.ok) {
+        setImportError(result.message);
+        return;
+      }
+      setImportError("");
+      addNotification({
+        tone: "success",
+        title: "Skill 策略已导入",
+        message: `已导入 ${result.importedCount} 条 Skill 策略`,
+      });
+    } catch {
+      setImportError("无法读取文件");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <section className="grid w-full gap-3" aria-label="任务策略">
       <h3 className="text-base font-semibold">任务策略</h3>
@@ -54,116 +97,205 @@ export function AutomationPlaybookSettings() {
             <span className="ui-muted text-xs">第一版仅支持启用或禁用</span>
           </div>
           <div className="grid gap-2">
-            {playbooks.map((playbook) => {
-              const enabled = !disabledIds.has(playbook.id);
-              const detailsExpanded = expandedPlaybookIds.has(playbook.id);
-              return (
-                <article key={playbook.id} className="rounded border border-slate-200 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="grid gap-1">
-                      <h4 className="text-sm font-semibold">{playbook.title}</h4>
-                      <p className="ui-muted text-xs">{playbook.description}</p>
-                    </div>
-                    <label className="chat-preference-switch">
-                      <input
-                        className="chat-preference-switch-input"
-                        type="checkbox"
-                        aria-label={`启用任务策略 ${playbook.title}`}
-                        checked={enabled}
-                        onChange={(event) => handleToggle(playbook.id, event.target.checked)}
-                      />
-                      <span className="chat-preference-switch-control" aria-hidden="true">
-                        <span className="chat-preference-switch-thumb" />
-                      </span>
-                      <span className="chat-preference-switch-label">{enabled ? "已启用" : "已禁用"}</span>
-                    </label>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded border border-slate-200 px-2 py-1">{sourceLabels[playbook.source]}</span>
-                    <span className="rounded border border-slate-200 px-2 py-1">{riskLabels[playbook.risk]}</span>
-                    {playbook.recommendedCapabilities.map((capability) => (
-                      <span key={capability} className="rounded border border-slate-200 px-2 py-1">{capability}</span>
-                    ))}
-                    <button
-                      type="button"
-                      className="rounded border border-slate-300 px-2 py-1 text-xs"
-                      aria-expanded={detailsExpanded}
-                      aria-label={`${detailsExpanded ? "收起" : "查看"}任务策略 ${playbook.title} 详细信息`}
-                      onClick={() => handleToggleDetails(playbook.id)}
-                    >
-                      {detailsExpanded ? "收起" : "详细"}
-                    </button>
-                  </div>
-                  {detailsExpanded ? (
-                    <div
-                      className="mt-3 grid gap-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs"
-                      role="region"
-                      aria-label={`${playbook.title}详细信息`}
-                    >
-                      <dl className="grid gap-2">
-                        <div className="grid gap-1">
-                          <dt className="font-medium">策略 ID</dt>
-                          <dd className="ui-muted break-all">{playbook.id}</dd>
-                        </div>
-                        <div className="grid gap-1">
-                          <dt className="font-medium">来源</dt>
-                          <dd className="ui-muted">{sourceLabels[playbook.source]}</dd>
-                        </div>
-                        <div className="grid gap-1">
-                          <dt className="font-medium">风险</dt>
-                          <dd className="ui-muted">{riskLabels[playbook.risk]}</dd>
-                        </div>
-                        <div className="grid gap-1">
-                          <dt className="font-medium">默认启用</dt>
-                          <dd className="ui-muted">{playbook.defaultEnabled ? "是" : "否"}</dd>
-                        </div>
-                        <div className="grid gap-1">
-                          <dt className="font-medium">标签</dt>
-                          <dd className="flex flex-wrap gap-1">
-                            {playbook.tags.map((tag) => (
-                              <span key={tag} className="rounded border border-slate-200 bg-white px-2 py-1">{tag}</span>
-                            ))}
-                          </dd>
-                        </div>
-                        <div className="grid gap-1">
-                          <dt className="font-medium">推荐能力</dt>
-                          <dd className="flex flex-wrap gap-1">
-                            {playbook.recommendedCapabilities.map((capability) => (
-                              <span key={capability} className="rounded border border-slate-200 bg-white px-2 py-1">{capability}</span>
-                            ))}
-                          </dd>
-                        </div>
-                        <div className="grid gap-1">
-                          <dt className="font-medium">适用提示</dt>
-                          <dd className="flex flex-wrap gap-1">
-                            {playbook.selectionHints.map((hint) => (
-                              <span key={hint} className="rounded border border-slate-200 bg-white px-2 py-1">{hint}</span>
-                            ))}
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="grid gap-1">
-                        <h5 className="font-medium">完整策略提示</h5>
-                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700">
-                          {playbook.prompt}
-                        </pre>
-                      </div>
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
+            {builtinPlaybooks.map((playbook) => (
+              <PlaybookCard
+                key={playbook.id}
+                playbook={playbook}
+                enabled={!disabledIds.has(playbook.id)}
+                detailsExpanded={expandedPlaybookIds.has(playbook.id)}
+                onToggle={(checked) => handleToggle(playbook.id, checked)}
+                onToggleDetails={() => handleToggleDetails(playbook.id)}
+              />
+            ))}
           </div>
         </div>
         <div className="ui-panel grid gap-2 p-3">
-          <h4 className="text-sm font-semibold">Skill 策略</h4>
-          <p className="ui-muted text-xs">暂未接入。未来 Skill Playbook 会使用同一注册表与启用状态合并。</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-sm font-semibold">Skill 策略</h4>
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-2 py-1 text-xs"
+              onClick={handleImportClick}
+              disabled={importing}
+            >
+              导入 JSON
+            </button>
+            <input
+              ref={fileInputRef}
+              className="sr-only"
+              type="file"
+              accept="application/json,.json"
+              aria-label="导入 Skill 策略 JSON 文件"
+              onChange={(event) => {
+                void handleImportFile(event);
+              }}
+            />
+          </div>
+          {importError ? (
+            <p className="text-xs text-red-600" role="alert">
+              {importError}
+            </p>
+          ) : null}
+          {importedSkillPlaybooks.length === 0 ? (
+            <p className="ui-muted text-xs">尚未导入 Skill 策略</p>
+          ) : (
+            <div className="grid gap-2">
+              {importedSkillPlaybooks.map((playbook) => (
+                <PlaybookCard
+                  key={playbook.id}
+                  playbook={playbook}
+                  enabled={!disabledIds.has(playbook.id)}
+                  detailsExpanded={expandedPlaybookIds.has(playbook.id)}
+                  onToggle={(checked) => handleToggle(playbook.id, checked)}
+                  onToggleDetails={() => handleToggleDetails(playbook.id)}
+                  onDelete={() => {
+                    void removeImportedSkillPlaybook(playbook.id);
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className="ui-panel grid gap-2 p-3">
           <h4 className="text-sm font-semibold">我的策略</h4>
-          <p className="ui-muted text-xs">暂未开放。第一版不支持编辑、克隆或删除 Playbook。</p>
+          <p className="ui-muted text-xs">暂未开放。第一版不支持编辑、克隆或用户自建 Playbook。</p>
         </div>
       </div>
     </section>
+  );
+}
+
+interface PlaybookCardProps {
+  playbook: {
+    id: string;
+    title: string;
+    description: string;
+    tags: string[];
+    source: AutomationPlaybookSource;
+    defaultEnabled: boolean;
+    risk: AutomationPlaybookRisk;
+    recommendedCapabilities: string[];
+    selectionHints: string[];
+    prompt: string;
+  } | ImportedAutomationPlaybook;
+  enabled: boolean;
+  detailsExpanded: boolean;
+  onToggle: (checked: boolean) => void;
+  onToggleDetails: () => void;
+  onDelete?: () => void;
+}
+
+function PlaybookCard({
+  playbook,
+  enabled,
+  detailsExpanded,
+  onToggle,
+  onToggleDetails,
+  onDelete,
+}: PlaybookCardProps) {
+  return (
+    <article className="rounded border border-slate-200 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid gap-1">
+          <h4 className="text-sm font-semibold">{playbook.title}</h4>
+          <p className="ui-muted text-xs">{playbook.description}</p>
+        </div>
+        <label className="chat-preference-switch">
+          <input
+            className="chat-preference-switch-input"
+            type="checkbox"
+            aria-label={`启用任务策略 ${playbook.title}`}
+            checked={enabled}
+            onChange={(event) => onToggle(event.target.checked)}
+          />
+          <span className="chat-preference-switch-control" aria-hidden="true">
+            <span className="chat-preference-switch-thumb" />
+          </span>
+          <span className="chat-preference-switch-label">{enabled ? "已启用" : "已禁用"}</span>
+        </label>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded border border-slate-200 px-2 py-1">{sourceLabels[playbook.source]}</span>
+        <span className="rounded border border-slate-200 px-2 py-1">{riskLabels[playbook.risk]}</span>
+        {playbook.recommendedCapabilities.map((capability) => (
+          <span key={capability} className="rounded border border-slate-200 px-2 py-1">{capability}</span>
+        ))}
+        <button
+          type="button"
+          className="rounded border border-slate-300 px-2 py-1 text-xs"
+          aria-expanded={detailsExpanded}
+          aria-label={`${detailsExpanded ? "收起" : "查看"}任务策略 ${playbook.title} 详细信息`}
+          onClick={onToggleDetails}
+        >
+          {detailsExpanded ? "收起" : "详细"}
+        </button>
+        {onDelete ? (
+          <button
+            type="button"
+            className="rounded border border-slate-300 px-2 py-1 text-xs"
+            aria-label={`删除任务策略 ${playbook.title}`}
+            onClick={onDelete}
+          >
+            删除
+          </button>
+        ) : null}
+      </div>
+      {detailsExpanded ? (
+        <div
+          className="mt-3 grid gap-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs"
+          role="region"
+          aria-label={`${playbook.title}详细信息`}
+        >
+          <dl className="grid gap-2">
+            <div className="grid gap-1">
+              <dt className="font-medium">策略 ID</dt>
+              <dd className="ui-muted break-all">{playbook.id}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium">来源</dt>
+              <dd className="ui-muted">{sourceLabels[playbook.source]}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium">风险</dt>
+              <dd className="ui-muted">{riskLabels[playbook.risk]}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium">默认启用</dt>
+              <dd className="ui-muted">{playbook.defaultEnabled ? "是" : "否"}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium">标签</dt>
+              <dd className="flex flex-wrap gap-1">
+                {playbook.tags.map((tag) => (
+                  <span key={tag} className="rounded border border-slate-200 bg-white px-2 py-1">{tag}</span>
+                ))}
+              </dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium">推荐能力</dt>
+              <dd className="flex flex-wrap gap-1">
+                {playbook.recommendedCapabilities.map((capability) => (
+                  <span key={capability} className="rounded border border-slate-200 bg-white px-2 py-1">{capability}</span>
+                ))}
+              </dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium">适用提示</dt>
+              <dd className="flex flex-wrap gap-1">
+                {playbook.selectionHints.map((hint) => (
+                  <span key={hint} className="rounded border border-slate-200 bg-white px-2 py-1">{hint}</span>
+                ))}
+              </dd>
+            </div>
+          </dl>
+          <div className="grid gap-1">
+            <h5 className="font-medium">完整策略提示</h5>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700">
+              {playbook.prompt}
+            </pre>
+          </div>
+        </div>
+      ) : null}
+    </article>
   );
 }
