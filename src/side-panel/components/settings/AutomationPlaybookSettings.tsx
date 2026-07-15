@@ -1,8 +1,8 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   getRegisteredAutomationPlaybooks,
 } from "../../../shared/automationPlaybooks";
-import { getSkillPackages, getSkillPlaybooks } from "../../../skills/loadSkills";
+import { getSkillPlaybooks } from "../../../skills/loadSkills";
 import type {
   AutomationPlaybookRisk,
   AutomationPlaybookSource,
@@ -27,6 +27,7 @@ const riskLabels: Record<AutomationPlaybookRisk, string> = {
 export function AutomationPlaybookSettings() {
   const settings = useAppStore((state) => state.automationPlaybookSettings);
   const importedSkillPlaybooks = useAppStore((state) => state.importedSkillPlaybooks);
+  const metapiAdminSettings = useAppStore((state) => state.metapiAdminSettings);
   const updateAutomationPlaybookSettings = useAppStore((state) => state.updateAutomationPlaybookSettings);
   const importSkillPlaybooksFromJson = useAppStore((state) => state.importSkillPlaybooksFromJson);
   const removeImportedSkillPlaybook = useAppStore((state) => state.removeImportedSkillPlaybook);
@@ -47,7 +48,7 @@ export function AutomationPlaybookSettings() {
     ...skillPackagePlaybooks,
     ...importedSkillPlaybooks.filter((playbook) => !skillPackageIds.has(playbook.id)),
   ];
-  const hasMetapiSkillPackage = getSkillPackages().some((pkg) => pkg.id === "metapi-ops");
+  const metapiConfigured = Boolean(metapiAdminSettings.authToken);
 
   const handleToggle = (playbookId: string, checked: boolean) => {
     const nextIds = checked
@@ -151,12 +152,6 @@ export function AutomationPlaybookSettings() {
             />
           </div>
 
-          {hasMetapiSkillPackage ? (
-            <div className="rounded border border-slate-200 p-3">
-              <MetapiAdminSettingsPanel />
-            </div>
-          ) : null}
-
           {importError ? (
             <p className="text-xs text-red-600" role="alert">
               {importError}
@@ -169,6 +164,7 @@ export function AutomationPlaybookSettings() {
             <div className="grid gap-2">
               {skillPlaybooks.map((playbook) => {
                 const isImported = importedSkillPlaybooks.some((item) => item.id === playbook.id);
+                const showMetapiConfig = playbook.id === "register_relay_site";
                 return (
                   <PlaybookCard
                     key={playbook.id}
@@ -183,6 +179,20 @@ export function AutomationPlaybookSettings() {
                             void removeImportedSkillPlaybook(playbook.id);
                           }
                         : undefined
+                    }
+                    footerBadge={
+                      showMetapiConfig
+                        ? metapiConfigured
+                          ? "Metapi 已配置"
+                          : "Metapi 未配置"
+                        : undefined
+                    }
+                    extraDetails={
+                      showMetapiConfig ? (
+                        <div className="grid gap-2 border-t border-slate-200 pt-3">
+                          <MetapiAdminSettingsPanel compact />
+                        </div>
+                      ) : null
                     }
                   />
                 );
@@ -218,6 +228,8 @@ interface PlaybookCardProps {
   onToggle: (checked: boolean) => void;
   onToggleDetails: () => void;
   onDelete?: () => void;
+  footerBadge?: string;
+  extraDetails?: ReactNode;
 }
 
 function PlaybookCard({
@@ -227,6 +239,8 @@ function PlaybookCard({
   onToggle,
   onToggleDetails,
   onDelete,
+  footerBadge,
+  extraDetails,
 }: PlaybookCardProps) {
   return (
     <article className="rounded border border-slate-200 p-3">
@@ -252,6 +266,9 @@ function PlaybookCard({
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded border border-slate-200 px-2 py-1">{sourceLabels[playbook.source]}</span>
         <span className="rounded border border-slate-200 px-2 py-1">{riskLabels[playbook.risk]}</span>
+        {footerBadge ? (
+          <span className="rounded border border-slate-200 px-2 py-1">{footerBadge}</span>
+        ) : null}
         {playbook.recommendedCapabilities.map((capability) => (
           <span key={capability} className="rounded border border-slate-200 px-2 py-1">{capability}</span>
         ))}
@@ -281,6 +298,7 @@ function PlaybookCard({
           role="region"
           aria-label={`${playbook.title}详细信息`}
         >
+          {extraDetails}
           <dl className="grid gap-2">
             <div className="grid gap-1">
               <dt className="font-medium">策略 ID</dt>

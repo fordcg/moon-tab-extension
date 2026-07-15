@@ -1,7 +1,11 @@
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
 
-export function MetapiAdminSettingsPanel() {
+interface MetapiAdminSettingsPanelProps {
+  compact?: boolean;
+}
+
+export function MetapiAdminSettingsPanel({ compact = false }: MetapiAdminSettingsPanelProps) {
   const metapiAdminSettings = useAppStore((state) => state.metapiAdminSettings);
   const updateMetapiAdminSettings = useAppStore((state) => state.updateMetapiAdminSettings);
   const addNotification = useAppStore((state) => state.addNotification);
@@ -15,10 +19,21 @@ export function MetapiAdminSettingsPanel() {
 
   return (
     <section className="grid w-full gap-3" aria-label="Metapi 管理端">
-      <h3 className="text-base font-semibold">Metapi 管理端</h3>
-      <p className="ui-muted text-xs">
-        用于 `/收录中转站` 等运维命令调用本地 Metapi 管理 API。请求由扩展后台直接 fetch，不走浏览器页面。
-      </p>
+      {compact ? (
+        <div className="grid gap-0.5">
+          <h5 className="text-sm font-semibold">Metapi 管理端</h5>
+          <p className="ui-muted text-xs">
+            收录中转站会用这里的地址和令牌调用本地管理 API（后台 fetch，不走浏览器）。
+          </p>
+        </div>
+      ) : (
+        <>
+          <h3 className="text-base font-semibold">Metapi 管理端</h3>
+          <p className="ui-muted text-xs">
+            用于 `/收录中转站` 等运维命令调用本地 Metapi 管理 API。请求由扩展后台直接 fetch，不走浏览器页面。
+          </p>
+        </>
+      )}
       <label className="grid gap-1 text-sm">
         <span>管理端地址</span>
         <input

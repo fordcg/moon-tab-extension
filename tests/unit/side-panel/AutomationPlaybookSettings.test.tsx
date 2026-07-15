@@ -32,6 +32,10 @@ describe("任务策略设置", () => {
     expect(screen.getByText("源码/运行时分析")).toBeInTheDocument();
     expect(screen.getByText("收录中转站")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Skill 策略" })).toBeInTheDocument();
+    // Metapi 配置折叠在“收录中转站”详细信息内
+    expect(screen.queryByLabelText("Metapi 管理令牌")).not.toBeInTheDocument();
+    expect(screen.getByText("Metapi 未配置")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看任务策略 收录中转站 详细信息" }));
     expect(screen.getByLabelText("Metapi 管理令牌")).toBeInTheDocument();
     expect(screen.queryByText("克隆")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /删除任务策略 收录中转站/ })).not.toBeInTheDocument();
