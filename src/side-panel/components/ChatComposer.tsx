@@ -365,16 +365,16 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       : undefined;
 
     // Allow typing full command line without opening menu selection:
-    // "/收录中转站 gpt(name) 开启系统代理"
-    const inlineCommand = parseInlineRegisterRelayCommand(content, pageContext.url, pageContext.title);
+    // "/收录中转站 gpt(name) 开启系统代理" / "/开始签到" / "/补签"
+    const inlineCommand = parseInlineSkillCommand(content, pageContext.url, pageContext.title);
     if (inlineCommand) {
       content = inlineCommand.content;
-      forcedPlaybookId = "register_relay_site";
+      forcedPlaybookId = inlineCommand.playbookId;
       sendingPromptInvocations = [
         {
-          promptId: "register_relay_site",
-          title: "收录中转站",
-          contentSnapshot: "把当前打开的新中转站收录进本地 Metapi：建站点、取系统访问令牌/用户ID、验证并添加连接。已有站点直接返回。",
+          promptId: inlineCommand.playbookId,
+          title: inlineCommand.title,
+          contentSnapshot: inlineCommand.description,
         },
       ];
     }
@@ -528,15 +528,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     ]);
     setInput((current) => {
       const remaining = removeSlashCommandSegment(current, slashStartIndex);
-      if (playbook.id !== "register_relay_site") {
-        return remaining;
+      if (playbook.id === "register_relay_site") {
+        return buildRegisterRelaySiteInput({
+          remainingText: remaining,
+          slashQuery,
+          pageUrl: pageContext.url,
+          pageTitle: pageContext.title,
+        });
       }
-      return buildRegisterRelaySiteInput({
-        remainingText: remaining,
-        slashQuery,
-        pageUrl: pageContext.url,
-        pageTitle: pageContext.title,
-      });
+      if (playbook.id === "start_all_checkin" || playbook.id === "repair_failed_checkin") {
+        return remaining.trim();
+      }
+      return remaining;
     });
     setSlashMenuOpen(false);
     setSlashQuery("");
@@ -1347,8 +1350,8 @@ function findSlashCommand(value: string): { startIndex: number; query: string } 
     return { startIndex, query: "" };
   }
 
-  // Known multi-arg commands may contain spaces after the title.
-  if (/^(收录中转站|register_relay_site)(?:\s|$)/iu.test(query)) {
+  // Known multi-arg / multi-word commands may contain spaces after the title.
+  if (/^(收录中转站|register_relay_site|开始签到|全部签到|start_all_checkin|补签|repair_failed_checkin)(?:\s|$)/iu.test(query)) {
     return { startIndex, query };
   }
 
@@ -1441,25 +1444,60 @@ function buildRegisterRelaySiteInput(input: {
   return parts.join(" ").trim();
 }
 
+function parseInlineSkillCommand(
+  content: string,
+  pageUrl?: string,
+  pageTitle?: string,
+): { content: string; playbookId: string; title: string; description: string } | undefined {
+  const trimmed = content.trim();
+  const register = trimmed.match(/^\/\s*(收录中转站|register_relay_site)(?:\s+(.+))?$/iu);
+  if (register) {
+    const argsText = (register[2] ?? "").trim();
+    return {
+      playbookId: "register_relay_site",
+      title: "收录中转站",
+      description: "把当前打开的新中转站收录进本地 Metapi：建站点、取系统访问令牌/用户ID、验证并添加连接。已有站点直接返回。",
+      content: buildRegisterRelaySiteInput({
+        remainingText: "",
+        slashQuery: `收录中转站 ${argsText}`.trim(),
+        pageUrl,
+        pageTitle,
+      }),
+    };
+  }
+
+  if (/^\/\s*(开始签到|全部签到|start_all_checkin)\s*$/iu.test(trimmed)) {
+    return {
+      playbookId: "start_all_checkin",
+      title: "开始签到",
+      description: "触发 Metapi 全部签到任务，并读取签到日志汇总成功/失败/跳过。",
+      content: "开始全部签到并汇总结果",
+    };
+  }
+
+  if (/^\/\s*(补签|repair_failed_checkin)\s*$/iu.test(trimmed)) {
+    return {
+      playbookId: "repair_failed_checkin",
+      title: "补签",
+      description: "根据签到日志找出失败/跳过站点，用浏览器打开并点击签到/立即签到进行补签。",
+      content: "对签到失败和跳过的站点进行浏览器补签",
+    };
+  }
+
+  return undefined;
+}
+
 function parseInlineRegisterRelayCommand(
   content: string,
   pageUrl?: string,
   pageTitle?: string,
 ): { content: string } | undefined {
-  const trimmed = content.trim();
-  const matched = trimmed.match(/^\/\s*(收录中转站|register_relay_site)(?:\s+(.+))?$/iu);
-  if (!matched) {
+  // Back-compat alias used by older call sites/tests.
+  const parsed = parseInlineSkillCommand(content, pageUrl, pageTitle);
+  if (!parsed || parsed.playbookId !== "register_relay_site") {
     return undefined;
   }
-  const argsText = (matched[2] ?? "").trim();
-  return {
-    content: buildRegisterRelaySiteInput({
-      remainingText: "",
-      slashQuery: `收录中转站 ${argsText}`.trim(),
-      pageUrl,
-      pageTitle,
-    }),
-  };
+  return { content: parsed.content };
 }
 
 function sendRuntimeMessage<T>(message: { type: string }): Promise<T | undefined> {

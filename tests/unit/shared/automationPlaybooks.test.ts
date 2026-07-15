@@ -18,6 +18,8 @@ describe("浏览器自动化 Playbook 注册表", () => {
       "network_api_analysis",
       "source_runtime_analysis",
       "register_relay_site",
+      "start_all_checkin",
+      "repair_failed_checkin",
     ]);
     expect(new Set(playbooks.map((playbook) => playbook.id)).size).toBe(playbooks.length);
     for (const playbook of playbooks) {

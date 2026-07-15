@@ -18,10 +18,16 @@ import {
   METAPI_CREATE_SITE_TOOL_NAME,
   METAPI_DETECT_SITE_TOOL_ID,
   METAPI_DETECT_SITE_TOOL_NAME,
+  METAPI_GET_CHECKIN_LOGS_TOOL_ID,
+  METAPI_GET_CHECKIN_LOGS_TOOL_NAME,
   METAPI_LIST_SITES_TOOL_ID,
   METAPI_LIST_SITES_TOOL_NAME,
   METAPI_PARSE_REGISTER_ARGS_TOOL_ID,
   METAPI_PARSE_REGISTER_ARGS_TOOL_NAME,
+  METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_ID,
+  METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_NAME,
+  METAPI_TRIGGER_CHECKIN_TOOL_ID,
+  METAPI_TRIGGER_CHECKIN_TOOL_NAME,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_ID,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_NAME,
 } from "./toolIds";
@@ -54,6 +60,15 @@ export async function executeMetapiTool(
     }
     if (toolCall.id === METAPI_CREATE_ACCOUNT_TOOL_ID || toolName === METAPI_CREATE_ACCOUNT_TOOL_NAME) {
       return createAccount(toolCall, fetcher);
+    }
+    if (toolCall.id === METAPI_TRIGGER_CHECKIN_TOOL_ID || toolName === METAPI_TRIGGER_CHECKIN_TOOL_NAME) {
+      return triggerCheckin(toolCall, fetcher);
+    }
+    if (toolCall.id === METAPI_GET_CHECKIN_LOGS_TOOL_ID || toolName === METAPI_GET_CHECKIN_LOGS_TOOL_NAME) {
+      return getCheckinLogs(toolCall, fetcher);
+    }
+    if (toolCall.id === METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_ID || toolName === METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_NAME) {
+      return summarizeCheckinLogs(toolCall, fetcher);
     }
     return metapiError(toolCall, `未知 Metapi 工具：${toolCall.id || toolName}`);
   } catch (error) {
@@ -284,8 +299,208 @@ async function createAccount(toolCall: ModelToolCall, fetcher: typeof fetch): Pr
   return metapiOk(toolCall, redactSensitive(data));
 }
 
+async function triggerCheckin(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  const waitSeconds = clampInt(args.waitSeconds, 0, 180, 0);
+  const settings = await loadSettings();
+  const result = await metapiAdminFetch({
+    settings,
+    path: "/api/checkin/trigger",
+    method: "POST",
+    body: {},
+    fetcher,
+  });
+  if (!result.ok) {
+    return metapiError(toolCall, result.message, result);
+  }
+  if (waitSeconds > 0) {
+    await sleep(waitSeconds * 1000);
+  }
+  return metapiOk(toolCall, {
+    ...(typeof result.data === "object" && result.data ? result.data : { data: result.data }),
+    waitedSeconds: waitSeconds,
+  });
+}
+
+async function getCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  const limit = clampInt(args.limit, 1, 500, 100);
+  const jobId = typeof args.jobId === "string" ? args.jobId.trim() : "";
+  const settings = await loadSettings();
+  const result = await metapiAdminFetch({
+    settings,
+    path: `/api/checkin/logs?limit=${limit}`,
+    method: "GET",
+    fetcher,
+  });
+  if (!result.ok) {
+    return metapiError(toolCall, result.message, result);
+  }
+  const logs = extractLogArray(result.data);
+  const filtered = jobId
+    ? logs.filter((item) => String(item.jobId ?? item.job_id ?? item.runId ?? "") === jobId)
+    : logs;
+  return metapiOk(toolCall, {
+    limit,
+    jobId: jobId || null,
+    count: filtered.length,
+    logs: filtered.map((item) => redactSensitive(item)),
+  });
+}
+
+async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  const limit = clampInt(args.limit, 1, 500, 100);
+  const jobId = typeof args.jobId === "string" ? args.jobId.trim() : "";
+  const settings = await loadSettings();
+  const result = await metapiAdminFetch({
+    settings,
+    path: `/api/checkin/logs?limit=${limit}`,
+    method: "GET",
+    fetcher,
+  });
+  if (!result.ok) {
+    return metapiError(toolCall, result.message, result);
+  }
+  const logs = extractLogArray(result.data);
+  const filtered = jobId
+    ? logs.filter((item) => String(item.jobId ?? item.job_id ?? item.runId ?? "") === jobId)
+    : logs;
+  const summary = classifyCheckinLogs(filtered);
+  return metapiOk(toolCall, summary);
+}
+
 async function loadSettings(): Promise<MetapiAdminSettings> {
   return normalizeMetapiAdminSettings(await getAppSetting(METAPI_ADMIN_SETTINGS_KEY));
+}
+
+function extractLogArray(data: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(data)) {
+    return data.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+  }
+  if (data && typeof data === "object") {
+    const source = data as Record<string, unknown>;
+    for (const key of ["logs", "data", "items", "results", "records"]) {
+      const value = source[key];
+      if (Array.isArray(value)) {
+        return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+      }
+    }
+  }
+  return [];
+}
+
+function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
+  const success: Array<Record<string, unknown>> = [];
+  const failed: Array<Record<string, unknown>> = [];
+  const skipped: Array<Record<string, unknown>> = [];
+  const other: Array<Record<string, unknown>> = [];
+
+  for (const raw of logs) {
+    const entry = summarizeCheckinEntry(raw);
+    const bucket = entry.bucket;
+    if (bucket === "success") success.push(entry);
+    else if (bucket === "failed") failed.push(entry);
+    else if (bucket === "skipped") skipped.push(entry);
+    else other.push(entry);
+  }
+
+  const repairCandidates = [...failed, ...skipped]
+    .filter((item) => typeof item.siteUrl === "string" && item.siteUrl)
+    .map((item) => ({
+      siteId: item.siteId,
+      siteName: item.siteName,
+      siteUrl: item.siteUrl,
+      username: item.username,
+      status: item.status,
+      message: item.message,
+      bucket: item.bucket,
+    }));
+
+  return {
+    total: logs.length,
+    counts: {
+      success: success.length,
+      failed: failed.length,
+      skipped: skipped.length,
+      other: other.length,
+      repairCandidates: repairCandidates.length,
+    },
+    success,
+    failed,
+    skipped,
+    other,
+    repairCandidates,
+  };
+}
+
+function summarizeCheckinEntry(raw: Record<string, unknown>) {
+  const status = String(raw.status ?? raw.result ?? raw.state ?? raw.outcome ?? "").toLowerCase();
+  const message = String(raw.message ?? raw.error ?? raw.reason ?? raw.detail ?? "");
+  const site = raw.site && typeof raw.site === "object" && !Array.isArray(raw.site)
+    ? (raw.site as Record<string, unknown>)
+    : {};
+  const siteUrl = firstString(
+    raw.siteUrl,
+    raw.url,
+    raw.site_url,
+    site.url,
+    site.siteUrl,
+  );
+  const siteName = firstString(raw.siteName, raw.name, site.name, raw.site_name);
+  const username = firstString(raw.username, raw.userName, raw.accountName);
+  const siteId = toPositiveInt(raw.siteId ?? raw.site_id ?? site.id);
+  const bucket = classifyStatus(status, message);
+
+  return {
+    bucket,
+    status: status || null,
+    message: message || null,
+    siteId: siteId ?? null,
+    siteName: siteName || null,
+    siteUrl: siteUrl ? normalizeSiteUrl(String(siteUrl)) : null,
+    username: username || null,
+    jobId: firstString(raw.jobId, raw.job_id, raw.runId) || null,
+    checkedAt: firstString(raw.checkedAt, raw.createdAt, raw.updatedAt, raw.time, raw.timestamp) || null,
+  };
+}
+
+function classifyStatus(status: string, message: string): "success" | "failed" | "skipped" | "other" {
+  const text = `${status} ${message}`.toLowerCase();
+  if (/success|ok|succeeded|已签到|签到成功|完成/.test(text) && !/失败|failed|error/.test(text)) {
+    return "success";
+  }
+  if (/skip|skipped|ignore|ignored|跳过|无需|already/.test(text)) {
+    return "skipped";
+  }
+  if (/fail|failed|error|timeout|invalid|失败|错误|超时|异常/.test(text)) {
+    return "failed";
+  }
+  if (status === "pending" || status === "running" || status === "queued") {
+    return "other";
+  }
+  return "other";
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numberValue)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(numberValue)));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function asObject(value: unknown): Record<string, unknown> {
