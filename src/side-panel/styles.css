@@ -5497,7 +5497,7 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   pointer-events: none;
 }
 
-/* Enter: single-phase simultaneous out/in (shell height flips immediately). */
+/* Enter and return: single-phase simultaneous out/in (shell height flips immediately). */
 .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history {
   animation: sidepanel-slide-out-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 1;
@@ -5508,27 +5508,14 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   z-index: 2;
 }
 
-/* Return: two-phase like "更多" — out → swap shell → in. */
-.sidepanel-drawer-dialog.is-settings-to-history-out .sidepanel-drawer-page-settings {
+.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings {
   animation: sidepanel-slide-out-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  z-index: 2;
-}
-
-.sidepanel-drawer-dialog.is-settings-to-history-out .sidepanel-drawer-page-history {
-  opacity: 0;
-  pointer-events: none;
   z-index: 1;
 }
 
-.sidepanel-drawer-dialog.is-settings-to-history-in .sidepanel-drawer-page-history {
+.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history {
   animation: sidepanel-slide-in-from-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 2;
-}
-
-.sidepanel-drawer-dialog.is-settings-to-history-in .sidepanel-drawer-page-settings {
-  opacity: 0;
-  pointer-events: none;
-  z-index: 1;
 }
 
 .drawer-panel.history-drawer .drawer-header {
@@ -7662,10 +7649,8 @@ body.sidepanel-stop-requested .composer-abort-button {
   .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages,
   .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history,
   .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-settings,
-  .sidepanel-drawer-dialog.is-settings-to-history-out .sidepanel-drawer-page-history,
-  .sidepanel-drawer-dialog.is-settings-to-history-out .sidepanel-drawer-page-settings,
-  .sidepanel-drawer-dialog.is-settings-to-history-in .sidepanel-drawer-page-history,
-  .sidepanel-drawer-dialog.is-settings-to-history-in .sidepanel-drawer-page-settings,
+  .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history,
+  .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings,
   .sidepanel-history-content.is-history-page-out-left,
   .sidepanel-history-content.is-history-page-in-right,
   .sidepanel-history-content.is-history-page-out-right,

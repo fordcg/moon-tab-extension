@@ -1135,7 +1135,7 @@ describe("App", () => {
     const settingsAction = within(drawer).getByRole("button", { name: "设置" });
     await user.click(settingsAction);
 
-    // Enter is single-phase: shell/page flip immediately, content slides in parallel.
+    // Enter/return are both single-phase: shell/page flip immediately, content slides in parallel.
     await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "history-to-settings"));
     const enteringSettingsPage = drawer.querySelector<HTMLElement>('[data-drawer-page="settings"]');
     const leavingHistoryPage = drawer.querySelector<HTMLElement>('[data-drawer-page="history"]');
@@ -1154,13 +1154,8 @@ describe("App", () => {
     const backButton = within(drawer).getByRole("button", { name: "返回近期对话" });
     await waitFor(() => expect(backButton).toHaveFocus());
 
-    // Return is two-phase: out → swap shell → in.
     await user.click(backButton);
-    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history-out"));
-    const leavingSettings = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-settings");
-    fireEvent.animationEnd(leavingSettings as HTMLElement, { animationName: "sidepanel-slide-out-right" });
-
-    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history-in"));
+    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history"));
     const enteringHistory = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-history");
     fireEvent.animationEnd(enteringHistory as HTMLElement, { animationName: "sidepanel-slide-in-from-left" });
 
@@ -1169,10 +1164,7 @@ describe("App", () => {
     await waitFor(() => expect(within(drawer).getByRole("button", { name: "设置" })).toHaveFocus());
     expect(styles).toContain(".sidepanel-drawer-overlay");
     expect(styles).toContain(".sidepanel-drawer-dialog.is-history-to-settings");
-    expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history-out");
-    expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history-in");
-    expect(styles).not.toContain(".sidepanel-drawer-dialog.is-history-to-settings-out");
-    expect(styles).not.toContain(".sidepanel-drawer-dialog.is-history-to-settings-in");
+    expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history");
     expect(styles).toContain("sidepanel-slide-in-from-right");
     expect(styles).toContain("sidepanel-slide-out-left");
     expect(styles).toContain("sidepanel-slide-in-from-left");
