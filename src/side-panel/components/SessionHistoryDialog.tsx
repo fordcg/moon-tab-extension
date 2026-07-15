@@ -24,11 +24,10 @@ const SETTINGS_ICON_PATHS = [
 ];
 const RECENT_HISTORY_COMPACT_LIMIT = 5;
 type HistoryDrawerMode = "compact" | "expanded";
-// Two-phase page transition, same shape as "更多":
-// out → swap shell/content → in. Height only changes at the mid swap.
+// Enter (history→settings): single-phase, shell height flips immediately.
+// Return (settings→history): two-phase like "更多" — out → swap shell → in.
 type DrawerPageTransition =
-  | "history-to-settings-out"
-  | "history-to-settings-in"
+  | "history-to-settings"
   | "settings-to-history-out"
   | "settings-to-history-in"
   | "";
@@ -100,10 +99,13 @@ export function SessionHistoryDialog({
   // inactive page via aria-hidden so both never paint side-by-side.
   const showSettingsPage =
     displayedPage === "settings" || drawerTransitionTarget === "settings" || (open && settingsMounted);
-  // Shell height follows the currently visible page only. Like "更多", the target
-  // page/shell swaps after the out phase — not at click time.
-  const activePage = displayedPage;
-  const shellPage = displayedPage;
+  // Enter flips shell/active page immediately so settings height applies at click.
+  // Return keeps shell on settings until the out phase ends (two-phase swap).
+  const activePage =
+    drawerTransition.startsWith("settings-to-history")
+      ? displayedPage
+      : (drawerTransitionTarget ?? displayedPage);
+  const shellPage = activePage;
 
   const queueDrawerPageFocus = (nextPage: SidePanelDrawerPage) => {
     pendingDrawerFocusPageRef.current = nextPage;
@@ -184,9 +186,9 @@ export function SessionHistoryDialog({
     }
 
     if (drawerTransition) {
-      // Ignore prop churn while a two-phase transition is already running.
+      // Ignore prop churn while a transition is already running.
       // Reduced-motion or aborted target still snaps to the requested page.
-      if (reducedMotion) {
+      if (reducedMotion || drawerTransitionTargetRef.current !== page) {
         drawerTransitionTargetRef.current = null;
         setVisiblePage(page);
         setDrawerTransition("");
@@ -211,11 +213,11 @@ export function SessionHistoryDialog({
       return;
     }
 
-    // Same as "更多": only start the out phase here. Shell stays on the current
-    // page until out ends; then we swap and run the in phase.
     setDrawerTransitionHeight(null);
     drawerTransitionTargetRef.current = page;
-    setDrawerTransition(visiblePage === "history" ? "history-to-settings-out" : "settings-to-history-out");
+    // Enter: single-phase (height flips immediately via shellPage/activePage).
+    // Return: two-phase out first — shell stays on settings until out ends.
+    setDrawerTransition(visiblePage === "history" ? "history-to-settings" : "settings-to-history-out");
   }, [drawerTransition, open, page, reducedMotion, visiblePage]);
 
   const transitionHistoryMode = (nextMode: HistoryDrawerMode) => {
@@ -233,6 +235,23 @@ export function SessionHistoryDialog({
     setHistoryPageTransitionClassName(nextMode === "expanded" ? "is-history-page-out-left" : "is-history-page-out-right");
   };
 
+  const completeDrawerPageTransition = (completedPage: SidePanelDrawerPage) => {
+    if (!drawerTransition) {
+      return;
+    }
+
+    const target = drawerTransitionTargetRef.current;
+    if (!target || target !== completedPage || page !== target) {
+      return;
+    }
+
+    drawerTransitionTargetRef.current = null;
+    setVisiblePage(target);
+    setDrawerTransition("");
+    setDrawerTransitionHeight(null);
+    queueDrawerPageFocus(target);
+  };
+
   const handleDrawerTrackAnimationEnd = (event: AnimationEvent) => {
     if (event.target !== event.currentTarget) {
       return;
@@ -246,8 +265,20 @@ export function SessionHistoryDialog({
     const currentPage = (event.currentTarget as HTMLElement).dataset.drawerPage;
     const animationName = typeof event.animationName === "string" ? event.animationName : "";
 
-    // Phase 1 (out): leaving page finished sliding away → swap shell + start in.
-    if (drawerTransition.endsWith("-out")) {
+    // Enter (single-phase): finish when the entering settings page slides in.
+    if (drawerTransition === "history-to-settings") {
+      if (currentPage !== target) {
+        return;
+      }
+      if (animationName && !animationName.includes("sidepanel-slide-in")) {
+        return;
+      }
+      completeDrawerPageTransition(target);
+      return;
+    }
+
+    // Return phase 1 (out): settings finished sliding away → swap shell + start in.
+    if (drawerTransition === "settings-to-history-out") {
       if (currentPage !== visiblePage) {
         return;
       }
@@ -256,12 +287,12 @@ export function SessionHistoryDialog({
       }
 
       setVisiblePage(target);
-      setDrawerTransition(target === "settings" ? "history-to-settings-in" : "settings-to-history-in");
+      setDrawerTransition("settings-to-history-in");
       return;
     }
 
-    // Phase 2 (in): entering page finished sliding in → clear transition.
-    if (drawerTransition.endsWith("-in")) {
+    // Return phase 2 (in): history finished sliding in → clear transition.
+    if (drawerTransition === "settings-to-history-in") {
       if (currentPage !== target) {
         return;
       }
@@ -345,11 +376,10 @@ export function SessionHistoryDialog({
   ]
     .filter(Boolean)
     .join(" ");
-  // Idle: only the current page is interactive. During out/in, both stay mounted
-  // for the slide; the leaving/entering page is still inert for input.
+  // Enter uses activePage=target immediately. Return keeps leaving page active until
+  // the mid swap so pre-mounted pages never both accept input side-by-side.
   const historyPageIsInert = activePage !== "history";
   const settingsPageIsInert = activePage !== "settings";
-  const reportedPage = drawerTransitionTarget ?? activePage;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -358,7 +388,7 @@ export function SessionHistoryDialog({
         <Dialog.Content
           ref={drawerContentRef}
           className={drawerClassName}
-          data-sidepanel-drawer-page={reportedPage}
+          data-sidepanel-drawer-page={activePage}
           data-sidepanel-drawer-transition={drawerTransition || undefined}
           data-sidepanel-history-mode={historyMode}
           style={drawerTransitionHeight !== null ? { height: `${drawerTransitionHeight}px` } : undefined}
@@ -376,9 +406,9 @@ export function SessionHistoryDialog({
             }
           }}
         >
-          <Dialog.Title className="sr-only">{reportedPage === "settings" ? "设置" : "历史记录"}</Dialog.Title>
+          <Dialog.Title className="sr-only">{activePage === "settings" ? "设置" : "历史记录"}</Dialog.Title>
           <Dialog.Description className="sr-only">
-            {reportedPage === "settings" ? "管理助手设置" : "浏览和管理历史对话"}
+            {activePage === "settings" ? "管理助手设置" : "浏览和管理历史对话"}
           </Dialog.Description>
           <div ref={drawerPagesRef} className="sidepanel-drawer-pages">
             {showHistoryPage ? (
