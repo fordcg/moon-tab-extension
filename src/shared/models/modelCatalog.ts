@@ -143,18 +143,13 @@ export function createEndpointUrl(
 }
 
 function assertSecureCredentialEndpoint(url: URL, label: string): void {
-  if (url.protocol === "https:") {
+  // Model providers frequently use self-hosted OpenAI-compatible relays over plain HTTP
+  // (including public VPS IPs). HTTPS is preferred, but HTTP is allowed so list/test/chat work.
+  // API keys still travel in cleartext on HTTP — users should prefer HTTPS when available.
+  if (url.protocol === "https:" || url.protocol === "http:") {
     return;
   }
-  if (url.protocol === "http:" && isLoopbackHost(url.hostname)) {
-    return;
-  }
-  throw new Error(`${label} 必须使用 HTTPS；仅允许本机 loopback 使用 HTTP。`);
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+  throw new Error(`${label} 仅支持 HTTP 或 HTTPS 地址。`);
 }
 
 function removeKnownEndpointSuffix(segments: string[], knownSuffixes: string[][]): string[] {

@@ -37,7 +37,16 @@ describe("createEndpointUrl", () => {
     expect(payload.url).toBe("http://127.0.0.1:18000/v1/chat/completions");
   });
 
-  it("拒绝会携带 API Key 的远程 HTTP 模型端点", () => {
-    expect(() => createEndpointUrl("http://api.example.com/v1", "openai_chat")).toThrow("模型 Endpoint 必须使用 HTTPS");
+  it("允许远程 HTTP 模型端点（自建中转常见）", () => {
+    expect(createEndpointUrl("http://216.195.211.206:8317/v1", "openai_chat")).toBe(
+      "http://216.195.211.206:8317/v1/chat/completions",
+    );
+    expect(createEndpointUrl("http://api.example.com/v1", "openai_models")).toBe(
+      "http://api.example.com/v1/models",
+    );
+  });
+
+  it("拒绝非 HTTP(S) 协议", () => {
+    expect(() => createEndpointUrl("ftp://api.example.com/v1", "openai_chat")).toThrow("仅支持 HTTP 或 HTTPS");
   });
 });
