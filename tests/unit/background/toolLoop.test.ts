@@ -365,7 +365,7 @@ describe("通用模型工具循环", () => {
       expect.arrayContaining([
         expect.objectContaining({
           role: "user",
-          content: expect.stringContaining("已调用提示词：\n1. 检查清单\n先核对按钮状态，再核对错误提示。"),
+          content: expect.stringContaining("已选用任务策略：\n1. 检查清单\n先核对按钮状态，再核对错误提示。"),
         }),
         expect.objectContaining({
           role: "user",

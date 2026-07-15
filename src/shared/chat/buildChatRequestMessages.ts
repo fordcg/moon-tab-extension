@@ -77,7 +77,7 @@ export function buildPromptExpandedUserContent(message: Pick<ChatMessage, "conte
     [`${index + 1}. ${prompt.title}`, prompt.contentSnapshot].join("\n"),
   );
   const userContent = message.content.trim();
-  const sections = ["已调用提示词：", promptSections.join("\n\n")];
+  const sections = ["已选用任务策略：", promptSections.join("\n\n")];
 
   if (userContent) {
     sections.push("", "用户输入：", userContent);

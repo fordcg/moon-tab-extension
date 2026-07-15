@@ -302,7 +302,7 @@ function getGuidanceResultSummary(item: GuidanceItem): string {
     return content;
   }
   if (item.promptInvocations?.length) {
-    return "已调用提示词";
+    return "已选用任务策略";
   }
   if (item.attachments?.length) {
     return "图片消息";

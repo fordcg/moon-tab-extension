@@ -47,6 +47,7 @@ export interface ChatSendMessage {
   browserAutomationMaxToolIterations?: number;
   automationPlaybookSettings?: AutomationPlaybookSettings;
   importedSkillPlaybooks?: ImportedAutomationPlaybook[];
+  selectedPlaybookId?: string;
   extractionRules?: ExtractionRule[];
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
   debugContext?: ChatSendDebugContext;
@@ -235,15 +236,31 @@ async function maybeSelectAutomationPlaybook(
   if (!message.automationPlaybookSettings || message.structuredOutput || exposedTools.length === 0 || !exposedTools.some((tool) => isBrowserAutomationToolId(tool.id))) {
     return undefined;
   }
-  const userContent = getLatestUserContent(message.messages);
-  if (!shouldRunAutomationPlaybookSelection(userContent)) {
-    return undefined;
-  }
   const skillPlaybooks = Array.isArray(message.importedSkillPlaybooks)
     ? message.importedSkillPlaybooks
     : [];
   const playbooks = getEnabledAutomationPlaybooks(message.automationPlaybookSettings, skillPlaybooks);
   if (playbooks.length === 0) {
+    return undefined;
+  }
+
+  // Slash-selected strategy forces this playbook; skip model preselection.
+  const forcedId = typeof message.selectedPlaybookId === "string" ? message.selectedPlaybookId.trim() : "";
+  if (forcedId) {
+    const forced = playbooks.find((item) => item.id === forcedId);
+    if (forced) {
+      return {
+        playbookId: forced.id,
+        title: forced.title,
+        source: forced.source,
+        confidence: "high" as const,
+        reason: "用户通过 / 指定任务策略",
+      };
+    }
+  }
+
+  const userContent = getLatestUserContent(message.messages);
+  if (!shouldRunAutomationPlaybookSelection(userContent)) {
     return undefined;
   }
   return selectAutomationPlaybook({

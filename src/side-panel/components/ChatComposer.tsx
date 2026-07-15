@@ -2,7 +2,11 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent as ReactClipboardEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { hasTokenUsage, sumSessionTokenUsage } from "../../shared/chat/tokenUsage";
 import { isPngDataUrl, isTabCaptureImageAttachment, TAB_CAPTURE_VISIBLE_MESSAGE_TYPE, type TabCaptureVisibleResponse } from "../../shared/tabCapture";
-import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, PromptTemplate, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
+import {
+  getEnabledAutomationPlaybooks,
+  type AutomationPlaybook,
+} from "../../shared/automationPlaybooks";
+import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
@@ -126,7 +130,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
   const sendShortcut = useAppStore((state) => state.chatPreferences.sendShortcut);
   const followUpBehavior = useAppStore((state) => state.chatPreferences.followUpBehavior);
-  const promptTemplates = useAppStore((state) => state.promptTemplates);
+  const automationPlaybookSettings = useAppStore((state) => state.automationPlaybookSettings);
+  const importedSkillPlaybooks = useAppStore((state) => state.importedSkillPlaybooks);
   const streamMode = useAppStore((state) => state.streamMode);
   const browserControlEnabled = useAppStore((state) => state.browserControlEnabled);
   const browserAutomationMode = useAppStore((state) => state.browserAutomationMode);
@@ -362,9 +367,12 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setSlashMenuOpen(false);
     const sendingAttachments = attachments;
     const sendingPromptInvocations = promptInvocations;
+    const forcedPlaybookId = sendingPromptInvocations.length > 0
+      ? sendingPromptInvocations[sendingPromptInvocations.length - 1]?.promptId
+      : undefined;
     setAttachments([]);
     setAttachmentError("");
-    await sendChatMessage(content, sendingAttachments, sendingPromptInvocations);
+    await sendChatMessage(content, sendingAttachments, sendingPromptInvocations, forcedPlaybookId);
   };
   const createWorkflow = async (template: WorkflowTaskTemplate) => {
     const objective = input.trim();
@@ -414,18 +422,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
         setSlashMenuOpen(false);
         return;
       }
-      if (!isComposingInput && (event.key === "ArrowDown" || event.key === "ArrowUp") && filteredPromptTemplates.length > 0) {
+      if (!isComposingInput && (event.key === "ArrowDown" || event.key === "ArrowUp") && filteredSkillPlaybooks.length > 0) {
         event.preventDefault();
         setSlashActiveIndex((current) =>
           event.key === "ArrowDown"
-            ? (current + 1) % filteredPromptTemplates.length
-            : (current - 1 + filteredPromptTemplates.length) % filteredPromptTemplates.length,
+            ? (current + 1) % filteredSkillPlaybooks.length
+            : (current - 1 + filteredSkillPlaybooks.length) % filteredSkillPlaybooks.length,
         );
         return;
       }
-      if (!isComposingInput && (event.key === "Enter" || event.key === "Tab") && filteredPromptTemplates[slashActiveIndex]) {
+      if (!isComposingInput && (event.key === "Enter" || event.key === "Tab") && filteredSkillPlaybooks[slashActiveIndex]) {
         event.preventDefault();
-        handleSelectPrompt(filteredPromptTemplates[slashActiveIndex]);
+        handleSelectSkillPlaybook(filteredSkillPlaybooks[slashActiveIndex]);
         return;
       }
       if (isComposingInput && event.key === "Enter") {
@@ -491,13 +499,14 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setSlashStartIndex(slashInfo.startIndex);
   };
 
-  const handleSelectPrompt = (prompt: PromptTemplate) => {
+  const handleSelectSkillPlaybook = (playbook: AutomationPlaybook) => {
+    // Keep the last selected strategy as the forced playbook for this send.
     setPromptInvocations((current) => [
-      ...current,
+      ...current.filter((item) => item.promptId !== playbook.id),
       {
-        promptId: prompt.id,
-        title: prompt.title,
-        contentSnapshot: prompt.content,
+        promptId: playbook.id,
+        title: playbook.title,
+        contentSnapshot: playbook.description || playbook.title,
       },
     ]);
     setInput((current) => {
@@ -642,7 +651,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     : "浏览器控制已关闭。开启后扩展会通过 Chrome 调试协议连接当前普通网页，浏览器会显示正在调试提示。";
   const browserAutomationModeOption = BROWSER_AUTOMATION_MODE_OPTIONS.find((option) => option.mode === effectiveBrowserAutomationMode) ?? BROWSER_AUTOMATION_MODE_OPTIONS[0];
   const browserAutomationModeLabel = browserAutomationModeOption.label;
-  const filteredPromptTemplates = filterPromptTemplates(promptTemplates, slashQuery);
+  const enabledSkillPlaybooks = getEnabledAutomationPlaybooks(
+    automationPlaybookSettings,
+    importedSkillPlaybooks,
+  );
+  const filteredSkillPlaybooks = filterSkillPlaybooks(enabledSkillPlaybooks, slashQuery);
   const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
   const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
   // Syncing used to toggle `is-syncing-selection`, which hid non-current rows via
@@ -819,7 +832,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           ariaLabel="对话输入"
           value={input}
           promptInvocations={promptInvocations}
-          promptAriaLabelPrefix="已调用提示词"
+          promptAriaLabelPrefix="已选用任务策略"
           onChange={handleInputChange}
           onRemovePrompt={(index) => setPromptInvocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}
           onPaste={handlePaste}
@@ -831,24 +844,24 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           }}
         />
         {slashMenuOpen ? (
-          <div className="slash-command-menu" role="listbox" aria-label="提示词命令">
-            {filteredPromptTemplates.length > 0 ? (
-              filteredPromptTemplates.map((prompt, index) => (
+          <div className="slash-command-menu" role="listbox" aria-label="任务策略命令">
+            {filteredSkillPlaybooks.length > 0 ? (
+              filteredSkillPlaybooks.map((playbook, index) => (
                 <button
-                  key={prompt.id}
+                  key={playbook.id}
                   className={index === slashActiveIndex ? "slash-command-option slash-command-option-active" : "slash-command-option"}
                   type="button"
                   role="option"
                   aria-selected={index === slashActiveIndex}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSelectPrompt(prompt)}
+                  onClick={() => handleSelectSkillPlaybook(playbook)}
                 >
-                  <span className="slash-command-title">{prompt.title}</span>
-                  <span className="slash-command-content">{prompt.content}</span>
+                  <span className="slash-command-title">{playbook.title}</span>
+                  <span className="slash-command-content">{playbook.description}</span>
                 </button>
               ))
             ) : (
-              <p className="slash-command-empty">未找到匹配提示词</p>
+              <p className="slash-command-empty">未找到已启用的任务策略</p>
             )}
           </div>
         ) : null}
@@ -1333,14 +1346,20 @@ export function removeSlashCommandSegment(value: string, fallbackStartIndex?: nu
   return `${before}${after}`;
 }
 
-function filterPromptTemplates(promptTemplates: PromptTemplate[], query: string): PromptTemplate[] {
+function filterSkillPlaybooks(playbooks: AutomationPlaybook[], query: string): AutomationPlaybook[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
-    return promptTemplates;
+    return playbooks;
   }
 
-  return promptTemplates.filter((prompt) => {
-    const searchableText = `${prompt.title}\n${prompt.content}`.toLowerCase();
+  return playbooks.filter((playbook) => {
+    const searchableText = [
+      playbook.id,
+      playbook.title,
+      playbook.description,
+      playbook.tags.join(" "),
+      playbook.selectionHints.join(" "),
+    ].join("\n").toLowerCase();
     return searchableText.includes(normalizedQuery);
   });
 }

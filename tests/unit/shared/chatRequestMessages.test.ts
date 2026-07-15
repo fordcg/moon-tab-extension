@@ -150,7 +150,7 @@ describe("聊天请求消息构造", () => {
     expect(result[1]).toMatchObject({
       role: "user",
       content: [
-        "已调用提示词：",
+        "已选用任务策略：",
         "1. 风险审查",
         "从安全、隐私和可维护性三个角度审查。",
         "",

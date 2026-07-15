@@ -4055,7 +4055,16 @@ describe("App", () => {
     vi.stubGlobal("chrome", { runtime: { sendMessage } });
     await saveModelProvider(provider);
     await saveProviderModel(model);
-    await savePromptTemplate(createPromptTemplate());
+    await useAppStore.getState().importSkillPlaybooksFromJson(JSON.stringify({
+      id: "risk_review",
+      title: "风险审查",
+      description: "从安全、隐私和可维护性三个角度审查。",
+      tags: ["风险", "审查"],
+      risk: "medium",
+      recommendedCapabilities: ["observe_page"],
+      selectionHints: ["风险审查"],
+      prompt: "任务策略：风险审查\n从安全、隐私和可维护性三个角度审查。",
+    }));
 
     render(<App />);
 
@@ -4063,7 +4072,7 @@ describe("App", () => {
     await user.click(screen.getByRole("switch", { name: "流式响应" }));
     const input = screen.getByLabelText("对话输入");
     await user.type(input, "/风险{Enter}");
-    const composerPromptToken = screen.getByRole("button", { name: "已调用提示词：风险审查" });
+    const composerPromptToken = screen.getByRole("button", { name: "已选用任务策略：风险审查" });
     expect(composerPromptToken).toHaveClass("prompt-token-link");
     expect(composerPromptToken).not.toHaveTextContent("用");
     expect(input.closest(".prompt-inline-editor")).not.toBeNull();
@@ -4071,24 +4080,25 @@ describe("App", () => {
     expect(input.textContent).toBe("");
 
     fireEvent.keyDown(input, { key: "Backspace" });
-    expect(screen.queryByRole("button", { name: "已调用提示词：风险审查" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "已选用任务策略：风险审查" })).not.toBeInTheDocument();
 
     await user.type(input, "/风险");
     fireEvent.compositionStart(input);
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.queryByRole("button", { name: "已调用提示词：风险审查" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "已选用任务策略：风险审查" })).not.toBeInTheDocument();
     fireEvent.compositionEnd(input);
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.getByRole("button", { name: "已调用提示词：风险审查" }).closest(".prompt-inline-editor")).toBe(input.closest(".prompt-inline-editor"));
+    expect(screen.getByRole("button", { name: "已选用任务策略：风险审查" }).closest(".prompt-inline-editor")).toBe(input.closest(".prompt-inline-editor"));
 
     await user.type(input, "请结合页面输出建议");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
     await waitFor(() => expect(sendMessage.mock.calls.some(([message]) => (message as { type: string }).type === "chat.send")).toBe(true));
     const chatRequest = sendMessage.mock.calls
-      .map(([message]) => message as { type: string; messages?: ChatMessage[] })
+      .map(([message]) => message as { type: string; messages?: ChatMessage[]; selectedPlaybookId?: string })
       .find((message) => message.type === "chat.send");
-    expect(chatRequest?.messages?.at(-1)?.content).toContain("已调用提示词：");
+    expect(chatRequest?.selectedPlaybookId).toBe("risk_review");
+    expect(chatRequest?.messages?.at(-1)?.content).toContain("已选用任务策略：");
     expect(chatRequest?.messages?.at(-1)?.content).toContain("从安全、隐私和可维护性三个角度审查。");
     const messagePromptToken = await screen.findByLabelText("用户消息提示词：风险审查");
     expect(messagePromptToken).toHaveClass("prompt-token-link");
@@ -4103,16 +4113,36 @@ describe("App", () => {
     expect(editPromptToken.closest(".prompt-inline-editor")).toBe(editInput.closest(".prompt-inline-editor"));
   });
 
-  it("斜杠 Prompt 菜单支持上下键切换并用 Enter 或 Tab 选择", async () => {
+  it("斜杠任务策略菜单支持上下键切换并用 Enter 或 Tab 选择", async () => {
     const user = userEvent.setup();
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    await savePromptTemplate(createPromptTemplate({ id: "prompt-first", title: "第一条", content: "第一条内容", sortOrder: 10 }));
-    await savePromptTemplate(createPromptTemplate({ id: "prompt-second", title: "第二条", content: "第二条内容", sortOrder: 20 }));
+    await useAppStore.getState().importSkillPlaybooksFromJson(JSON.stringify([
+      {
+        id: "skill_first",
+        title: "第一条",
+        description: "第一条内容",
+        tags: [],
+        risk: "low",
+        recommendedCapabilities: ["observe_page"],
+        selectionHints: ["第一条"],
+        prompt: "任务策略：第一条",
+      },
+      {
+        id: "skill_second",
+        title: "第二条",
+        description: "第二条内容",
+        tags: [],
+        risk: "low",
+        recommendedCapabilities: ["observe_page"],
+        selectionHints: ["第二条"],
+        prompt: "任务策略：第二条",
+      },
+    ]));
 
     render(<App />);
 
     const input = screen.getByLabelText("对话输入");
-    await user.type(input, "/");
+    await user.type(input, "/第");
     const firstOption = screen.getByRole("option", { name: /第一条/ });
     const secondOption = screen.getByRole("option", { name: /第二条/ });
     expect(firstOption).toHaveAttribute("aria-selected", "true");
@@ -4122,12 +4152,12 @@ describe("App", () => {
     expect(firstOption).toHaveAttribute("aria-selected", "false");
     expect(secondOption).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.getByRole("button", { name: "已调用提示词：第二条" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已选用任务策略：第二条" })).toBeInTheDocument();
 
     fireEvent.keyDown(input, { key: "Backspace" });
-    await user.type(input, "/");
+    await user.type(input, "/第");
     fireEvent.keyDown(input, { key: "Tab" });
-    expect(screen.getByRole("button", { name: "已调用提示词：第一条" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已选用任务策略：第一条" })).toBeInTheDocument();
     expect(styles).toContain(".slash-command-option-active");
     expect(styles).toContain("box-shadow: inset 3px 0 0 var(--color-primary);");
   });

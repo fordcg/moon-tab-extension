@@ -389,7 +389,7 @@ export interface AppState {
   loadRemoteBackups: () => Promise<void>;
   backupNow: () => Promise<void>;
   restoreNow: (backupId: string) => Promise<void>;
-  sendChatMessage: (content: string, attachments?: ChatImageAttachment[], promptInvocations?: ChatPromptInvocation[]) => Promise<void>;
+  sendChatMessage: (content: string, attachments?: ChatImageAttachment[], promptInvocations?: ChatPromptInvocation[], selectedPlaybookId?: string) => Promise<void>;
   submitChatFollowUp: (
     content: string,
     attachments?: ChatImageAttachment[],
@@ -1415,8 +1415,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   backupNow: () => backupNowAction({ set }),
   loadRemoteBackups: () => loadRemoteBackupsAction({ set }),
   restoreNow: (backupId) => restoreNowAction({ backupId, get, set }),
-  sendChatMessage: async (content, attachments = [], promptInvocations = []) => {
-    await sendChatMessageWithState({ content, attachments, promptInvocations, get, set });
+  sendChatMessage: async (content, attachments = [], promptInvocations = [], selectedPlaybookId) => {
+    await sendChatMessageWithState({ content, attachments, promptInvocations, selectedPlaybookId, get, set });
   },
   sendWorkflowTaskMessage: async (taskId, content) => {
     const state = get();
@@ -1639,6 +1639,7 @@ export type AppChatSendMessage = {
   browserAutomationMaxToolIterations?: number;
   automationPlaybookSettings?: AutomationPlaybookSettings;
   importedSkillPlaybooks?: ImportedAutomationPlaybook[];
+  selectedPlaybookId?: string;
   extractionRules?: ExtractionRule[];
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
   debugContext?: ChatSendDebugContext;
@@ -1730,6 +1731,7 @@ interface SendChatMessageWithStateInput {
   content: string;
   attachments?: ChatImageAttachment[];
   promptInvocations?: ChatPromptInvocation[];
+  selectedPlaybookId?: string;
   targetSessionId?: string;
   workflowTaskId?: string;
   get: StoreGetter;
@@ -1773,6 +1775,7 @@ interface RunChatRequestInput {
   model: ProviderModel;
   provider: ModelProvider;
   workflowTaskId?: string;
+  selectedPlaybookId?: string;
   get: StoreGetter;
   set: StoreSetter;
 }
@@ -1865,6 +1868,7 @@ async function sendChatMessageWithState(input: SendChatMessageWithStateInput): P
     model,
     provider,
     workflowTaskId: input.workflowTaskId,
+    selectedPlaybookId: input.selectedPlaybookId,
     get: input.get,
     set: input.set,
   });
@@ -2164,6 +2168,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       browserAutomationMaxToolIterations: effectiveChatPreferences.browserAutomationMaxToolIterations,
       automationPlaybookSettings: input.state.automationPlaybookSettings,
       importedSkillPlaybooks: input.state.importedSkillPlaybooks,
+      ...(input.selectedPlaybookId ? { selectedPlaybookId: input.selectedPlaybookId } : {}),
       extractionRules: input.state.extractionRules,
       mcp: {
         ...input.state.mcpSettings,

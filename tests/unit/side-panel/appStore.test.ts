@@ -1475,7 +1475,7 @@ describe("appStore", () => {
     const chatRequest = sendMessage.mock.calls
       .map(([message]) => message as { type: string; messages?: ChatMessage[] })
       .find((message) => message.type === "chat.send");
-    expect(chatRequest?.messages?.at(-1)?.content).toContain("已调用提示词：");
+    expect(chatRequest?.messages?.at(-1)?.content).toContain("已选用任务策略：");
     expect(chatRequest?.messages?.at(-1)?.content).toContain("风险审查");
     expect(chatRequest?.messages?.at(-1)?.content).toContain("从安全、隐私和可维护性三个角度审查。");
     expect(chatRequest?.messages?.at(-1)?.content).toContain("用户输入：\n请结合页面输出建议");
