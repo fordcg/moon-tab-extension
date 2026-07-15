@@ -76,7 +76,7 @@ export function AutomationPlaybookSettings() {
       }
       setImportError("");
       addNotification({
-        tone: "success",
+        type: "success",
         title: "Skill 策略已导入",
         message: `已导入 ${result.importedCount} 条 Skill 策略`,
       });

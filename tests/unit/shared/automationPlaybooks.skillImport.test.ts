@@ -94,3 +94,17 @@ describe("skill playbook import helpers", () => {
     expect(settings.disabledPlaybookIds).toEqual(["shop_checkout_guard", "page_reading"]);
   });
 });
+
+describe("request-path candidate merge", () => {
+  it("includes enabled imported skills for selection candidates", () => {
+    const imported = normalizeImportedSkillPlaybooks({
+      playbooks: [{ ...sample, source: "skill", defaultEnabled: true, importedAt: 1, updatedAt: 1 }],
+    });
+    const candidates = getEnabledAutomationPlaybooks(
+      { disabledPlaybookIds: [] },
+      imported,
+    );
+    expect(candidates.some((item) => item.id === "shop_checkout_guard")).toBe(true);
+    expect(candidates.some((item) => item.source === "skill")).toBe(true);
+  });
+});
