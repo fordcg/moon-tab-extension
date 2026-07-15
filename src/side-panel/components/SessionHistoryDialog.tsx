@@ -89,7 +89,8 @@ export function SessionHistoryDialog({
   const drawerTransitionTarget = drawerTransitionTargetRef.current;
   const showHistoryPage = displayedPage === "history" || drawerTransitionTarget === "history";
   // Once warmed, keep settings mounted for the life of the open drawer so reverse
-  // slides and repeat opens don't remount SettingsPanel.
+  // slides and repeat opens don't remount SettingsPanel. Idle CSS still hides the
+  // inactive page via aria-hidden so both never paint side-by-side.
   const showSettingsPage =
     displayedPage === "settings" || drawerTransitionTarget === "settings" || (open && settingsMounted);
   const activePage = drawerTransitionTarget ?? displayedPage;
@@ -331,8 +332,9 @@ export function SessionHistoryDialog({
   ]
     .filter(Boolean)
     .join(" ");
-  const historyPageIsInert = drawerTransitionTarget === "settings";
-  const settingsPageIsInert = drawerTransitionTarget === "history";
+  // During a slide both pages stay interactive for animation; idle hides the inactive one.
+  const historyPageIsInert = !drawerTransition && activePage !== "history";
+  const settingsPageIsInert = !drawerTransition && activePage !== "settings";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>

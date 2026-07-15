@@ -5413,7 +5413,7 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 
 .sidepanel-drawer-pages {
   background: var(--sidepanel-surface);
-  display: flex;
+  display: block;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -5426,7 +5426,6 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 .sidepanel-drawer-page-settings,
 .settings-drawer-page {
   background: var(--sidepanel-surface);
-  flex: 0 0 100%;
   max-width: 100%;
   min-height: 0;
   min-width: 0;
@@ -5447,9 +5446,12 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   flex: 1 1 auto;
 }
 
-/* Keep both pages absolutely stacked during transition so mounting/taller
-   settings content cannot reflow the drawer mid-slide (that hitch is what made
-   settings feel slower than "更多"). */
+/* Settings may stay mounted after warm-up. Idle: only the active page paints. */
+.sidepanel-drawer-dialog:not(.is-page-transitioning) .sidepanel-drawer-page[aria-hidden="true"] {
+  display: none !important;
+}
+
+/* Transition: stack both pages so the slide cannot reflow the shell. */
 .sidepanel-drawer-dialog.is-page-transitioning {
   overflow: hidden;
 }
@@ -5464,6 +5466,8 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 
 .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-page {
   bottom: 0;
+  display: flex !important;
+  flex-direction: column;
   left: 0;
   overflow: hidden;
   pointer-events: none;
