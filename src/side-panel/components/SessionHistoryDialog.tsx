@@ -332,9 +332,10 @@ export function SessionHistoryDialog({
   ]
     .filter(Boolean)
     .join(" ");
-  // During a slide both pages stay interactive for animation; idle hides the inactive one.
-  const historyPageIsInert = !drawerTransition && activePage !== "history";
-  const settingsPageIsInert = !drawerTransition && activePage !== "settings";
+  // Active page is the transition target mid-slide, otherwise the idle page.
+  // Leaving/inactive pages stay aria-hidden so pre-mounted settings never paints beside history.
+  const historyPageIsInert = activePage !== "history";
+  const settingsPageIsInert = activePage !== "settings";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
