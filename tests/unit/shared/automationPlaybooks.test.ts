@@ -7,7 +7,7 @@ import {
 } from "../../../src/shared/automationPlaybooks";
 
 describe("浏览器自动化 Playbook 注册表", () => {
-  it("内置任务策略字段完整且默认启用", () => {
+  it("核心内置与 skill 包策略字段完整且默认启用", () => {
     const playbooks = getRegisteredAutomationPlaybooks();
 
     expect(playbooks.map((playbook) => playbook.id)).toEqual([
@@ -22,16 +22,17 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(new Set(playbooks.map((playbook) => playbook.id)).size).toBe(playbooks.length);
     for (const playbook of playbooks) {
       expect(playbook).toMatchObject({
-        source: "builtin",
         defaultEnabled: true,
         title: expect.any(String),
         description: expect.any(String),
         prompt: expect.stringContaining("任务策略"),
       });
+      expect(["builtin", "skill"]).toContain(playbook.source);
       expect(playbook.tags.length).toBeGreaterThan(0);
       expect(playbook.recommendedCapabilities.length).toBeGreaterThan(0);
       expect(playbook.selectionHints.length).toBeGreaterThan(0);
     }
+    expect(playbooks.find((item) => item.id === "register_relay_site")?.source).toBe("skill");
   });
 
   it("设置归一化会忽略未知 ID 和非法类型", () => {

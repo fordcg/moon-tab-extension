@@ -6,7 +6,7 @@ export const METAPI_OPS_PLAYBOOKS: AutomationPlaybook[] = [
     title: "收录中转站",
     description: "把当前打开的新中转站收录进本地 Metapi：建站点、取系统访问令牌/用户ID、验证并添加连接。已有站点直接返回。",
     tags: ["Metapi", "中转站", "收录", "New API", "签到准备"],
-    source: "builtin",
+    source: "skill",
     defaultEnabled: true,
     risk: "high",
     recommendedCapabilities: ["observe_page", "operate_page", "deliver_result"],

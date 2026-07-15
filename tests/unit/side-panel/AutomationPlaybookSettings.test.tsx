@@ -8,7 +8,9 @@ function setPlaybookStoreState(overrides: Record<string, unknown> = {}) {
   useAppStore.setState({
     automationPlaybookSettings: { disabledPlaybookIds: [] },
     importedSkillPlaybooks: [],
+    metapiAdminSettings: { baseUrl: "http://127.0.0.1:4000", authToken: "" },
     updateAutomationPlaybookSettings: vi.fn(async () => undefined),
+    updateMetapiAdminSettings: vi.fn(async () => undefined),
     importSkillPlaybooksFromJson: vi.fn(async () => ({ ok: true, importedCount: 0 })),
     removeImportedSkillPlaybook: vi.fn(async () => undefined),
     addNotification: vi.fn(() => "notification-1"),
@@ -28,8 +30,11 @@ describe("任务策略设置", () => {
     expect(screen.getByText("页面阅读")).toBeInTheDocument();
     expect(screen.getByText("Network/API 分析")).toBeInTheDocument();
     expect(screen.getByText("源码/运行时分析")).toBeInTheDocument();
+    expect(screen.getByText("收录中转站")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Skill 策略" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Metapi 管理令牌")).toBeInTheDocument();
     expect(screen.queryByText("克隆")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /删除任务策略/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /删除任务策略 收录中转站/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: "启用任务策略 页面阅读" }));
 

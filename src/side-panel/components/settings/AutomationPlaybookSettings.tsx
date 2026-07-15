@@ -2,12 +2,14 @@ import { useRef, useState, type ChangeEvent } from "react";
 import {
   getRegisteredAutomationPlaybooks,
 } from "../../../shared/automationPlaybooks";
+import { getSkillPackages, getSkillPlaybooks } from "../../../skills/loadSkills";
 import type {
   AutomationPlaybookRisk,
   AutomationPlaybookSource,
   ImportedAutomationPlaybook,
 } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
+import { MetapiAdminSettingsPanel } from "./MetapiAdminSettings";
 
 const sourceLabels: Record<AutomationPlaybookSource, string> = {
   builtin: "内置策略",
@@ -34,7 +36,18 @@ export function AutomationPlaybookSettings() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const disabledIds = new Set(settings.disabledPlaybookIds);
-  const builtinPlaybooks = getRegisteredAutomationPlaybooks().filter((playbook) => playbook.source === "builtin");
+
+  // Core builtins only — skill packages and imported JSON live under "Skill 策略".
+  const skillPackagePlaybooks = getSkillPlaybooks();
+  const skillPackageIds = new Set(skillPackagePlaybooks.map((playbook) => playbook.id));
+  const builtinPlaybooks = getRegisteredAutomationPlaybooks().filter(
+    (playbook) => playbook.source === "builtin" && !skillPackageIds.has(playbook.id),
+  );
+  const skillPlaybooks = [
+    ...skillPackagePlaybooks,
+    ...importedSkillPlaybooks.filter((playbook) => !skillPackageIds.has(playbook.id)),
+  ];
+  const hasMetapiSkillPackage = getSkillPackages().some((pkg) => pkg.id === "metapi-ops");
 
   const handleToggle = (playbookId: string, checked: boolean) => {
     const nextIds = checked
@@ -94,7 +107,7 @@ export function AutomationPlaybookSettings() {
         <div className="ui-panel grid gap-2 p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
             <span>内置策略</span>
-            <span className="ui-muted text-xs">第一版仅支持启用或禁用</span>
+            <span className="ui-muted text-xs">系统核心策略，仅支持启用或禁用</span>
           </div>
           <div className="grid gap-2">
             {builtinPlaybooks.map((playbook) => (
@@ -109,9 +122,15 @@ export function AutomationPlaybookSettings() {
             ))}
           </div>
         </div>
+
         <div className="ui-panel grid gap-2 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold">Skill 策略</h4>
+            <div className="grid gap-0.5">
+              <h4 className="text-sm font-semibold">Skill 策略</h4>
+              <p className="ui-muted text-xs">
+                包含扩展内 skill 包（如 Metapi 运维）和你导入的 JSON 策略
+              </p>
+            </div>
             <button
               type="button"
               className="rounded border border-slate-300 px-2 py-1 text-xs"
@@ -131,31 +150,47 @@ export function AutomationPlaybookSettings() {
               }}
             />
           </div>
+
+          {hasMetapiSkillPackage ? (
+            <div className="rounded border border-slate-200 p-3">
+              <MetapiAdminSettingsPanel />
+            </div>
+          ) : null}
+
           {importError ? (
             <p className="text-xs text-red-600" role="alert">
               {importError}
             </p>
           ) : null}
-          {importedSkillPlaybooks.length === 0 ? (
-            <p className="ui-muted text-xs">尚未导入 Skill 策略</p>
+
+          {skillPlaybooks.length === 0 ? (
+            <p className="ui-muted text-xs">暂无 Skill 策略。可导入 JSON，或安装 skill 包。</p>
           ) : (
             <div className="grid gap-2">
-              {importedSkillPlaybooks.map((playbook) => (
-                <PlaybookCard
-                  key={playbook.id}
-                  playbook={playbook}
-                  enabled={!disabledIds.has(playbook.id)}
-                  detailsExpanded={expandedPlaybookIds.has(playbook.id)}
-                  onToggle={(checked) => handleToggle(playbook.id, checked)}
-                  onToggleDetails={() => handleToggleDetails(playbook.id)}
-                  onDelete={() => {
-                    void removeImportedSkillPlaybook(playbook.id);
-                  }}
-                />
-              ))}
+              {skillPlaybooks.map((playbook) => {
+                const isImported = importedSkillPlaybooks.some((item) => item.id === playbook.id);
+                return (
+                  <PlaybookCard
+                    key={playbook.id}
+                    playbook={playbook}
+                    enabled={!disabledIds.has(playbook.id)}
+                    detailsExpanded={expandedPlaybookIds.has(playbook.id)}
+                    onToggle={(checked) => handleToggle(playbook.id, checked)}
+                    onToggleDetails={() => handleToggleDetails(playbook.id)}
+                    onDelete={
+                      isImported
+                        ? () => {
+                            void removeImportedSkillPlaybook(playbook.id);
+                          }
+                        : undefined
+                    }
+                  />
+                );
+              })}
             </div>
           )}
         </div>
+
         <div className="ui-panel grid gap-2 p-3">
           <h4 className="text-sm font-semibold">我的策略</h4>
           <p className="ui-muted text-xs">暂未开放。第一版不支持编辑、克隆或用户自建 Playbook。</p>
