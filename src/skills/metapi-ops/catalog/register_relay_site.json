@@ -1,0 +1,5 @@
+{
+  "id": "register_relay_site",
+  "title": "收录中转站",
+  "note": "Runtime source of truth is playbookCatalog.ts; this JSON is documentation/export snapshot."
+}

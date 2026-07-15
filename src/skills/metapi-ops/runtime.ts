@@ -8,7 +8,7 @@ import {
   parseRegisterRelaySiteArgs,
   redactMetapiAccount,
   type MetapiAdminSettings,
-} from "../shared/metapiAdmin";
+} from "../../shared/metapiAdmin";
 import {
   METAPI_CONFIGURE_TOOL_ID,
   METAPI_CONFIGURE_TOOL_NAME,
@@ -24,15 +24,9 @@ import {
   METAPI_PARSE_REGISTER_ARGS_TOOL_NAME,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_ID,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_NAME,
-} from "../shared/models/toolRegistry";
-import type { ModelToolCall, ModelToolResult } from "../shared/models/types";
-import { getAppSetting, saveAppSetting } from "../shared/storage/repositories";
-
-declare global {
-  var __metapiToolExecutor: ((toolCall: ModelToolCall, fetcher?: typeof fetch) => Promise<ModelToolResult>) | undefined;
-}
-
-globalThis.__metapiToolExecutor = executeMetapiTool;
+} from "./toolIds";
+import type { ModelToolCall, ModelToolResult } from "../../shared/models/types";
+import { getAppSetting, saveAppSetting } from "../../shared/storage/repositories";
 
 export async function executeMetapiTool(
   toolCall: ModelToolCall,

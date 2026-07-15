@@ -5,6 +5,7 @@ import type {
   AutomationPlaybookSource,
   ImportedAutomationPlaybook,
 } from "./types";
+import { getSkillBuiltinPlaybookIds, getSkillPlaybooks } from "../skills/loadSkills";
 
 export interface AutomationPlaybook {
   id: string;
@@ -27,7 +28,7 @@ const PLAYBOOK_SELECTION_REASON_LIMIT = 200;
 const PLAYBOOK_ID_PATTERN = /^[a-z][a-z0-9_]{1,63}$/;
 const VALID_RISKS = new Set<AutomationPlaybookRisk>(["low", "medium", "high", "critical"]);
 
-const BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
+const CORE_BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
   {
     id: "page_reading",
     title: "页面阅读",
@@ -130,42 +131,23 @@ const BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
       "运行时读取只用于分析线索，不得执行任意脚本或绕过现有完全访问授权边界。",
     ].join("\n"),
   },
-  {
-    id: "register_relay_site",
-    title: "收录中转站",
-    description: "把当前打开的新中转站收录进本地 Metapi：建站点、取系统访问令牌/用户ID、验证并添加连接。已有站点直接返回。",
-    tags: ["Metapi", "中转站", "收录", "New API", "签到准备"],
-    source: "builtin",
-    defaultEnabled: true,
-    risk: "high",
-    recommendedCapabilities: ["observe_page", "operate_page", "deliver_result"],
-    selectionHints: ["收录中转站", "收录站点", "添加中转站", "register relay", "metapi 收录"],
-    prompt: [
-      "任务策略：收录中转站（仅新站）",
-      "目标：把当前浏览器页面所属的新中转站收录到本地 Metapi 管理端，并绑定系统访问令牌连接。",
-      "工具边界（硬性）：",
-      "1. Metapi 管理 API 一律使用本地 API 工具 metapi_*（扩展后台 fetch）。禁止用浏览器打开/请求 127.0.0.1:4000 或 METAPI_ADMIN_BASE_URL。",
-      "2. 浏览器自动化只用于中转站页面取证：系统访问令牌、用户 ID、登录态；不用于发送 Metapi 管理请求。",
-      "业务规则：",
-      "1. 站点 URL 优先使用当前受控页面 URL（去掉 hash、尾斜杠、末尾 /v1）。",
-      "2. 若用户参数里出现“开启系统代理/启用系统代理”，创建站点时 useSystemProxy=true。",
-      "3. 站点名来自参数（如 gpt(name) 或 name=gpt）；缺省可用页面标题（简洁）。",
-      "4. 先 metapi_list_sites(url=当前URL)。已存在则立即停止并返回 SITE_EXISTS（siteId/name/url），不要 verify，不要 create account。",
-      "5. 新站顺序：",
-      "   a) metapi_detect_site(url)",
-      "   b) metapi_create_site(name,url,platform?,useSystemProxy?)",
-      "   c) 浏览器：个人资料→安全→访问令牌 读取系统访问令牌；头像旁读取用户 ID",
-      "   d) metapi_verify_account_token(siteId, accessToken, platformUserId?, credentialMode=session)",
-      "   e) 成功后 metapi_create_account → POST /api/accounts {siteId,accessToken,platformUserId?,credentialMode:session,skipModelFetch:false}",
-      "6. accessToken=系统访问令牌；不要用 sk- API Key 当可签到连接。platformUserId 是独立字段。",
-      "7. 未配置管理令牌时，先 metapi_configure(authToken, baseUrl?)。",
-      "8. 失败给出可操作原因；最终回复不回显令牌全文。",
-      "同目录脚本（调试同源 API，不经浏览器）：src/metapi-ops/scripts/*",
-    ].join("\n"),
-  },
 ];
 
-const BUILTIN_PLAYBOOK_IDS = new Set(BUILTIN_AUTOMATION_PLAYBOOKS.map((playbook) => playbook.id));
+function getCoreBuiltinPlaybooks(): AutomationPlaybook[] {
+  return CORE_BUILTIN_AUTOMATION_PLAYBOOKS.map(clonePlaybook);
+}
+
+function getAllBuiltinPlaybooks(): AutomationPlaybook[] {
+  // Skill packages contribute builtin playbooks without growing this file.
+  return [...getCoreBuiltinPlaybooks(), ...getSkillPlaybooks()];
+}
+
+function getBuiltinPlaybookIdSet(): Set<string> {
+  return new Set([
+    ...CORE_BUILTIN_AUTOMATION_PLAYBOOKS.map((playbook) => playbook.id),
+    ...getSkillBuiltinPlaybookIds(),
+  ]);
+}
 
 function clonePlaybook<T extends AutomationPlaybook>(playbook: T): T {
   return {
@@ -289,7 +271,7 @@ function coerceStoredSkillPlaybook(value: unknown): ImportedAutomationPlaybook |
 }
 
 export function getBuiltinAutomationPlaybooks(): AutomationPlaybook[] {
-  return BUILTIN_AUTOMATION_PLAYBOOKS.map(clonePlaybook);
+  return getAllBuiltinPlaybooks();
 }
 
 export function getRegisteredAutomationPlaybooks(
@@ -314,7 +296,7 @@ export function normalizeAutomationPlaybookSettings(
 ): AutomationPlaybookSettings {
   const allowed = knownIds
     ? new Set(Array.from(knownIds))
-    : new Set(BUILTIN_AUTOMATION_PLAYBOOKS.map((item) => item.id));
+    : getBuiltinPlaybookIdSet();
 
   if (!value || typeof value !== "object") {
     return { disabledPlaybookIds: [] };
@@ -391,7 +373,7 @@ export function normalizeImportedSkillPlaybooks(value: unknown): ImportedAutomat
   const seen = new Set<string>();
   for (const row of rows) {
     const playbook = coerceStoredSkillPlaybook(row);
-    if (!playbook || seen.has(playbook.id) || BUILTIN_PLAYBOOK_IDS.has(playbook.id)) {
+    if (!playbook || seen.has(playbook.id) || getBuiltinPlaybookIdSet().has(playbook.id)) {
       continue;
     }
     seen.add(playbook.id);
@@ -410,7 +392,7 @@ export function mergeImportedSkillPlaybooks(
 
   for (const item of incoming) {
     const id = item.id;
-    if (BUILTIN_PLAYBOOK_IDS.has(id)) {
+    if (getBuiltinPlaybookIdSet().has(id)) {
       return { ok: false, message: `与内置策略 ID 冲突：${id}` };
     }
     if (existingIds.has(id)) {

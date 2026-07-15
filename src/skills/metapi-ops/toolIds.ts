@@ -1,0 +1,14 @@
+export const METAPI_CONFIGURE_TOOL_ID = "metapi.configure";
+export const METAPI_CONFIGURE_TOOL_NAME = "metapi_configure";
+export const METAPI_PARSE_REGISTER_ARGS_TOOL_ID = "metapi.parse_register_args";
+export const METAPI_PARSE_REGISTER_ARGS_TOOL_NAME = "metapi_parse_register_args";
+export const METAPI_LIST_SITES_TOOL_ID = "metapi.list_sites";
+export const METAPI_LIST_SITES_TOOL_NAME = "metapi_list_sites";
+export const METAPI_DETECT_SITE_TOOL_ID = "metapi.detect_site";
+export const METAPI_DETECT_SITE_TOOL_NAME = "metapi_detect_site";
+export const METAPI_CREATE_SITE_TOOL_ID = "metapi.create_site";
+export const METAPI_CREATE_SITE_TOOL_NAME = "metapi_create_site";
+export const METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_ID = "metapi.verify_account_token";
+export const METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_NAME = "metapi_verify_account_token";
+export const METAPI_CREATE_ACCOUNT_TOOL_ID = "metapi.create_account";
+export const METAPI_CREATE_ACCOUNT_TOOL_NAME = "metapi_create_account";

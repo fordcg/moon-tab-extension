@@ -9,7 +9,7 @@
 ## 布局
 
 ```text
-src/metapi-ops/
+src/skills/metapi-ops/
   README.md
   playbooks/register_relay_site.json   # skill 剧本（与扩展 builtin playbook 同步）
   scripts/                             # 同接口 curl 脚本，便于本地调试
@@ -23,7 +23,7 @@ src/metapi-ops/
 
 扩展内实现：
 - 共享逻辑：`src/shared/metapiAdmin.ts`
-- 后台工具：`src/background/metapiToolRuntime.ts`（`metapi.*` tools）
+- 后台工具：`src/skills/metapi-ops/runtime.ts`（`metapi.*` tools）
 - 策略注册：`src/shared/automationPlaybooks.ts` → `register_relay_site`
 - 斜杠命令：`/收录中转站 ...`（ChatComposer）
 

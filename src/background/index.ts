@@ -1,5 +1,4 @@
 import "./imagefreeToolRuntime";
-import "./metapiToolRuntime";
 import { handleModelCatalogMessage, type ModelCatalogMessage } from "./modelCatalogMessageHandler";
 import { handleAgentToolsMessage, type AgentToolsMessage, type AgentToolsRuntimeMessage } from "./agentToolsMessageHandler";
 import {
