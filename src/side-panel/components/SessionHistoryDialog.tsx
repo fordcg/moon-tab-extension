@@ -206,8 +206,9 @@ export function SessionHistoryDialog({
       return;
     }
 
-    // Enter and return both flip shell height immediately via shellPage/activePage,
-    // and only the page content slides. No locked height and no post-slide settle.
+    // No pixel height lock. Enter flips to CSS settings-dialog height immediately.
+    // Return lets the in-flow history page size the shell (see styles) so absolute
+    // transition stacking cannot collapse the drawer to a padding-only pill.
     setDrawerTransitionHeight(null);
     drawerTransitionTargetRef.current = page;
     setDrawerTransition(visiblePage === "history" ? "history-to-settings" : "settings-to-history");

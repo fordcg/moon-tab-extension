@@ -1156,6 +1156,11 @@ describe("App", () => {
 
     await user.click(backButton);
     await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history"));
+    // Return keeps history in-flow (relative) so shell height is content-sized,
+    // not padding-only while both pages would otherwise be absolute.
+    expect(styles).toMatch(
+      /\.sidepanel-drawer-dialog\.is-settings-to-history \.sidepanel-drawer-page-history\s*\{[^}]*position:\s*relative;/s,
+    );
     const enteringHistory = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-history");
     fireEvent.animationEnd(enteringHistory as HTMLElement, { animationName: "sidepanel-slide-in-from-left" });
 
