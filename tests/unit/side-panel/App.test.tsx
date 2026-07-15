@@ -1241,7 +1241,10 @@ describe("App", () => {
     expect(styles).toMatch(/\.drawer-panel\.history-drawer\.is-history-expanded\s*\{[^}]*max-height:\s*var\(--sidepanel-history-expanded-height\);/s);
     expect(styles).toMatch(/\.sidepanel-history-more-action::before\s*\{[^}]*radial-gradient/s);
     expect(styles).toMatch(
-      /\.drawer-panel\.history-drawer\.is-history-expanded \.history-dialog-scroll\s*\{[^}]*scrollbar-width:\s*none;/s,
+      /\.history-drawer\.is-history-expanded \.session-list-scroll\s*\{[^}]*scrollbar-width:\s*none;/s,
+    );
+    expect(styles).toMatch(
+      /\.history-drawer\.is-history-expanded \.session-archive-bottom\s*\{[^}]*position:\s*relative;/s,
     );
 
     await user.click(within(historyDialog).getByRole("button", { name: "查看更多近期对话" }));
