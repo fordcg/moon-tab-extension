@@ -230,6 +230,49 @@ export function SessionHistoryDialog({
     setHistoryPageTransitionClassName(nextMode === "expanded" ? "is-history-page-out-left" : "is-history-page-out-right");
   };
 
+  const settleDrawerHeightToContent = (lockedFromHeight: number | null) => {
+    const drawer = drawerContentRef.current;
+    if (!drawer) {
+      setDrawerTransitionHeight(null);
+      return;
+    }
+
+    const fromHeight = lockedFromHeight && lockedFromHeight > 0
+      ? lockedFromHeight
+      : drawer.getBoundingClientRect().height;
+
+    // Measure the natural history height without the settings shell lock.
+    drawer.style.height = "auto";
+    drawer.style.maxHeight = "";
+    drawer.style.transition = "";
+    const toHeight = drawer.getBoundingClientRect().height;
+
+    if (!Number.isFinite(fromHeight) || !Number.isFinite(toHeight) || Math.abs(fromHeight - toHeight) < 1) {
+      drawer.style.height = "";
+      drawer.style.transition = "";
+      setDrawerTransitionHeight(null);
+      return;
+    }
+
+    drawer.style.height = `${fromHeight}px`;
+    void drawer.offsetHeight;
+    drawer.style.transition = "height 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+    drawer.style.height = `${toHeight}px`;
+
+    const finish = (event?: TransitionEvent) => {
+      if (event && event.propertyName && event.propertyName !== "height") {
+        return;
+      }
+      drawer.removeEventListener("transitionend", finish);
+      drawer.style.transition = "";
+      drawer.style.height = "";
+      setDrawerTransitionHeight(null);
+    };
+
+    drawer.addEventListener("transitionend", finish);
+    window.setTimeout(() => finish(), 280);
+  };
+
   const completeDrawerPageTransition = (completedPage: SidePanelDrawerPage) => {
     if (!drawerTransition) {
       return;
@@ -240,9 +283,25 @@ export function SessionHistoryDialog({
       return;
     }
 
+    const lockedHeight = drawerTransitionHeight;
+    const returningFromSettings = target === "history" && lockedHeight !== null;
+
     drawerTransitionTargetRef.current = null;
     setVisiblePage(target);
     setDrawerTransition("");
+
+    if (returningFromSettings) {
+      // Keep the shell at the settings height for one frame while history layout
+      // takes over, then ease down — clearing height immediately is the hitch.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          settleDrawerHeightToContent(lockedHeight);
+          queueDrawerPageFocus(target);
+        });
+      });
+      return;
+    }
+
     setDrawerTransitionHeight(null);
     queueDrawerPageFocus(target);
   };
