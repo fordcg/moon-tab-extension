@@ -6137,7 +6137,9 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-height: min(14rem, calc(100dvh - 8rem));
+  /* Outer shell stays non-scrolling; .model-select-option-list owns overflow.
+     SettingsSelect and ModelSelector both wrap options in that list. */
+  max-height: min(20rem, calc(100dvh - 1.5rem));
   overflow: hidden;
   padding: 0;
   position: fixed;
@@ -7275,14 +7277,23 @@ body:has(.context-dialog) .dialog-overlay {
   gap: 0.125rem;
   max-height: inherit;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0.375rem;
   scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .model-select-option-list::-webkit-scrollbar {
   display: none;
+}
+
+/* SettingsSelect menus can receive an inline max-height from viewport math;
+   keep the scroll container flexible so it actually uses that budget. */
+.settings-dialog .sidepanel-settings-select .model-select-option-list,
+.settings-dialog .sidepanel-channel-select .model-select-option-list {
+  max-height: none;
 }
 
 .model-select-group {
