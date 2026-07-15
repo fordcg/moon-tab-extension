@@ -12,6 +12,12 @@ import {
   normalizeImportedSkillPlaybooks,
   parseSkillPlaybookImportJson,
 } from "../../shared/automationPlaybooks";
+import {
+  createDefaultMetapiAdminSettings,
+  METAPI_ADMIN_SETTINGS_KEY,
+  normalizeMetapiAdminSettings,
+  type MetapiAdminSettings,
+} from "../../shared/metapiAdmin";
 import type { RemoteModelInfo } from "../../shared/models/modelCatalog";
 import {
   CURRENT_TIME_TOOL_ID,
@@ -270,6 +276,7 @@ export interface AppState {
   chatPreferences: ChatPreferenceValues;
   automationPlaybookSettings: AutomationPlaybookSettings;
   importedSkillPlaybooks: ImportedAutomationPlaybook[];
+  metapiAdminSettings: MetapiAdminSettings;
   browserControlEnabled: boolean;
   browserAutomationMode: BrowserAutomationMode;
   runtimeReadonlyEnabled: boolean;
@@ -315,6 +322,7 @@ export interface AppState {
   updateAutomationPlaybookSettings: (updates: Partial<AutomationPlaybookSettings>) => Promise<void>;
   importSkillPlaybooksFromJson: (fileText: string) => Promise<{ ok: true; importedCount: number } | { ok: false; message: string }>;
   removeImportedSkillPlaybook: (playbookId: string) => Promise<void>;
+  updateMetapiAdminSettings: (updates: Partial<MetapiAdminSettings>) => Promise<void>;
   updateActiveSessionChatPreferences: (updates: ChatSessionPreferenceOverrides) => Promise<void>;
   setBrowserControlEnabled: (enabled: boolean) => Promise<void>;
   setBrowserAutomationMode: (mode: BrowserAutomationMode) => Promise<void>;
@@ -463,6 +471,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   chatPreferences: createDefaultChatPreferences(),
   automationPlaybookSettings: normalizeAutomationPlaybookSettings(undefined),
   importedSkillPlaybooks: [],
+  metapiAdminSettings: createDefaultMetapiAdminSettings(),
   browserControlEnabled: false,
   browserAutomationMode: "normal_restricted",
   runtimeReadonlyEnabled: false,
@@ -733,6 +742,18 @@ export const useAppStore = create<AppState>()((set, get) => ({
       automationPlaybookSettings,
     });
   },
+  updateMetapiAdminSettings: async (updates) => {
+    const next = normalizeMetapiAdminSettings({
+      ...get().metapiAdminSettings,
+      ...updates,
+    });
+    await saveAppSetting({
+      key: METAPI_ADMIN_SETTINGS_KEY,
+      value: next,
+      updatedAt: Date.now(),
+    });
+    set({ metapiAdminSettings: next });
+  },
   updateActiveSessionChatPreferences: async (updates) => {
     const state = get();
     const now = Date.now();
@@ -980,13 +1001,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   loadChannelConfig: async () => {
     const revisionAtStart = modelCatalogRevision;
-    const [providers, models, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, savedSkillPlaybooks, webSearchSettings, mcpSettings] = await Promise.all([
+    const [providers, models, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, savedSkillPlaybooks, savedMetapiAdminSettings, webSearchSettings, mcpSettings] = await Promise.all([
       getModelProviders(),
       getProviderModels(),
       getAppSetting<string>("defaultChatModelId"),
       getAppSetting<Partial<ChatPreferenceValues>>("chatPreferences"),
       getAppSetting<Partial<AutomationPlaybookSettings>>(AUTOMATION_PLAYBOOK_SETTINGS_KEY),
       getAppSetting<unknown>(AUTOMATION_SKILL_PLAYBOOKS_KEY),
+      getAppSetting<unknown>(METAPI_ADMIN_SETTINGS_KEY),
       getWebSearchSettings(),
       getMcpSettings(),
     ]);
@@ -1009,6 +1031,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const importedSkillPlaybooks = normalizeImportedSkillPlaybooks(savedSkillPlaybooks);
     const knownIds = getRegisteredAutomationPlaybooks(importedSkillPlaybooks).map((item) => item.id);
     const automationPlaybookSettings = normalizeAutomationPlaybookSettings(savedAutomationPlaybookSettings, knownIds);
+    const metapiAdminSettings = normalizeMetapiAdminSettings(savedMetapiAdminSettings);
 
     set({
       providers: resolvedProviders,
@@ -1017,6 +1040,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       chatPreferences,
       automationPlaybookSettings,
       importedSkillPlaybooks,
+      metapiAdminSettings,
       webSearchSettings,
       mcpSettings,
       mcpBearerTokens,
@@ -1549,6 +1573,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       chatPreferences: createDefaultChatPreferences(),
       automationPlaybookSettings: normalizeAutomationPlaybookSettings(undefined),
       importedSkillPlaybooks: [],
+      metapiAdminSettings: createDefaultMetapiAdminSettings(),
       browserControlEnabled: false,
       browserAutomationMode: "normal_restricted",
       runtimeReadonlyEnabled: false,

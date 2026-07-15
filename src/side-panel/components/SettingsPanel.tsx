@@ -7,8 +7,9 @@ import { AutomationDiagnostics } from "./settings/AutomationDiagnostics";
 import { PromptTemplateSettings } from "./settings/PromptTemplateSettings";
 import { SyncSettings } from "./settings/SyncSettings";
 import { McpToolSettings } from "./settings/McpToolSettings";
+import { MetapiAdminSettingsPanel } from "./settings/MetapiAdminSettings";
 
-export type SettingsTab = "channels" | "rules" | "chat" | "mcp" | "playbooks" | "prompts" | "sync";
+export type SettingsTab = "channels" | "rules" | "chat" | "mcp" | "playbooks" | "prompts" | "metapi" | "sync";
 
 const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
   { id: "channels", label: "渠道管理" },
@@ -17,6 +18,7 @@ const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
   { id: "mcp", label: "工具和 MCP" },
   { id: "playbooks", label: "任务策略" },
   { id: "prompts", label: "提示词" },
+  { id: "metapi", label: "Metapi" },
   { id: "sync", label: "同步设置" },
 ];
 
@@ -114,6 +116,7 @@ export function SettingsPanel({
           {activeTab === "mcp" ? <McpToolSettings /> : null}
           {activeTab === "playbooks" ? <AutomationPlaybookSettings /> : null}
           {activeTab === "prompts" ? <PromptTemplateSettings /> : null}
+          {activeTab === "metapi" ? <MetapiAdminSettingsPanel /> : null}
           {activeTab === "sync" ? <SyncSettings /> : null}
         </div>
       </div>
