@@ -30,11 +30,16 @@ describe("任务策略设置", () => {
     expect(screen.getByText("页面阅读")).toBeInTheDocument();
     expect(screen.getByText("Network/API 分析")).toBeInTheDocument();
     expect(screen.getByText("源码/运行时分析")).toBeInTheDocument();
-    expect(screen.getByText("收录中转站")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Skill 策略" })).toBeInTheDocument();
-    // Metapi 配置折叠在“收录中转站”详细信息内
+    // Skill 策略整块默认折叠
+    expect(screen.queryByText("收录中转站")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Metapi 管理令牌")).not.toBeInTheDocument();
-    expect(screen.getByText("Metapi 未配置")).toBeInTheDocument();
+    expect(screen.getAllByText("Metapi 未配置").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "展开" }));
+    expect(screen.getByText("收录中转站")).toBeInTheDocument();
+    // Metapi 配置再折叠在“收录中转站”详细信息内
+    expect(screen.queryByLabelText("Metapi 管理令牌")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看任务策略 收录中转站 详细信息" }));
     expect(screen.getByLabelText("Metapi 管理令牌")).toBeInTheDocument();
     expect(screen.queryByText("克隆")).not.toBeInTheDocument();
@@ -75,6 +80,7 @@ describe("任务策略设置", () => {
     render(<AutomationPlaybookSettings />);
     expect(screen.getByRole("heading", { name: "Skill 策略" })).toBeInTheDocument();
     expect(screen.queryByText("暂未接入")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "展开" }));
 
     const input = screen.getByLabelText("导入 Skill 策略 JSON 文件") as HTMLInputElement;
     const file = new File([
@@ -119,6 +125,7 @@ describe("任务策略设置", () => {
     });
 
     render(<AutomationPlaybookSettings />);
+    await user.click(screen.getByRole("button", { name: "展开" }));
     expect(screen.getByText("结账前检查")).toBeInTheDocument();
     const input = screen.getByLabelText("导入 Skill 策略 JSON 文件");
     const file = new File(["{}"], "skill.json", { type: "application/json" });
@@ -150,6 +157,7 @@ describe("任务策略设置", () => {
     });
 
     render(<AutomationPlaybookSettings />);
+    await user.click(screen.getByRole("button", { name: "展开" }));
     await user.click(screen.getByRole("button", { name: "删除任务策略 结账前检查" }));
     await waitFor(() => expect(removeImportedSkillPlaybook).toHaveBeenCalledWith("shop_checkout_guard"));
   });

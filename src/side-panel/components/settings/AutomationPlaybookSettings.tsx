@@ -33,6 +33,7 @@ export function AutomationPlaybookSettings() {
   const removeImportedSkillPlaybook = useAppStore((state) => state.removeImportedSkillPlaybook);
   const addNotification = useAppStore((state) => state.addNotification);
   const [expandedPlaybookIds, setExpandedPlaybookIds] = useState<Set<string>>(() => new Set());
+  const [skillSectionOpen, setSkillSectionOpen] = useState(false);
   const [importError, setImportError] = useState("");
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,21 +126,46 @@ export function AutomationPlaybookSettings() {
         </div>
 
         <div className="ui-panel grid gap-2 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="grid gap-0.5">
-              <h4 className="text-sm font-semibold">Skill 策略</h4>
-              <p className="ui-muted text-xs">
-                包含扩展内 skill 包（如 Metapi 运维）和你导入的 JSON 策略
-              </p>
-            </div>
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <button
               type="button"
-              className="rounded border border-slate-300 px-2 py-1 text-xs"
-              onClick={handleImportClick}
-              disabled={importing}
+              className="grid min-w-0 flex-1 gap-0.5 rounded text-left"
+              aria-expanded={skillSectionOpen}
+              aria-controls="skill-strategy-panel"
+              onClick={() => setSkillSectionOpen((open) => !open)}
             >
-              导入 JSON
+              <span className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-semibold">Skill 策略</h4>
+                <span className="rounded border border-slate-200 px-2 py-0.5 text-xs">
+                  {skillPlaybooks.length} 项
+                </span>
+                <span className="rounded border border-slate-200 px-2 py-0.5 text-xs">
+                  {metapiConfigured ? "Metapi 已配置" : "Metapi 未配置"}
+                </span>
+              </span>
+              <span className="ui-muted text-xs">
+                Metapi 运维与导入的 JSON 策略；点击{skillSectionOpen ? "收起" : "展开"}
+              </span>
             </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-1 text-xs"
+                onClick={handleImportClick}
+                disabled={importing}
+              >
+                导入 JSON
+              </button>
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-1 text-xs"
+                aria-expanded={skillSectionOpen}
+                aria-controls="skill-strategy-panel"
+                onClick={() => setSkillSectionOpen((open) => !open)}
+              >
+                {skillSectionOpen ? "收起" : "展开"}
+              </button>
+            </div>
             <input
               ref={fileInputRef}
               className="sr-only"
@@ -152,53 +178,57 @@ export function AutomationPlaybookSettings() {
             />
           </div>
 
-          {importError ? (
-            <p className="text-xs text-red-600" role="alert">
-              {importError}
-            </p>
-          ) : null}
+          {skillSectionOpen ? (
+            <div id="skill-strategy-panel" className="grid gap-2">
+              {importError ? (
+                <p className="text-xs text-red-600" role="alert">
+                  {importError}
+                </p>
+              ) : null}
 
-          {skillPlaybooks.length === 0 ? (
-            <p className="ui-muted text-xs">暂无 Skill 策略。可导入 JSON，或安装 skill 包。</p>
-          ) : (
-            <div className="grid gap-2">
-              {skillPlaybooks.map((playbook) => {
-                const isImported = importedSkillPlaybooks.some((item) => item.id === playbook.id);
-                const showMetapiConfig = playbook.id === "register_relay_site";
-                return (
-                  <PlaybookCard
-                    key={playbook.id}
-                    playbook={playbook}
-                    enabled={!disabledIds.has(playbook.id)}
-                    detailsExpanded={expandedPlaybookIds.has(playbook.id)}
-                    onToggle={(checked) => handleToggle(playbook.id, checked)}
-                    onToggleDetails={() => handleToggleDetails(playbook.id)}
-                    onDelete={
-                      isImported
-                        ? () => {
-                            void removeImportedSkillPlaybook(playbook.id);
-                          }
-                        : undefined
-                    }
-                    footerBadge={
-                      showMetapiConfig
-                        ? metapiConfigured
-                          ? "Metapi 已配置"
-                          : "Metapi 未配置"
-                        : undefined
-                    }
-                    extraDetails={
-                      showMetapiConfig ? (
-                        <div className="grid gap-2 border-t border-slate-200 pt-3">
-                          <MetapiAdminSettingsPanel compact />
-                        </div>
-                      ) : null
-                    }
-                  />
-                );
-              })}
+              {skillPlaybooks.length === 0 ? (
+                <p className="ui-muted text-xs">暂无 Skill 策略。可导入 JSON，或安装 skill 包。</p>
+              ) : (
+                <div className="grid gap-2">
+                  {skillPlaybooks.map((playbook) => {
+                    const isImported = importedSkillPlaybooks.some((item) => item.id === playbook.id);
+                    const showMetapiConfig = playbook.id === "register_relay_site";
+                    return (
+                      <PlaybookCard
+                        key={playbook.id}
+                        playbook={playbook}
+                        enabled={!disabledIds.has(playbook.id)}
+                        detailsExpanded={expandedPlaybookIds.has(playbook.id)}
+                        onToggle={(checked) => handleToggle(playbook.id, checked)}
+                        onToggleDetails={() => handleToggleDetails(playbook.id)}
+                        onDelete={
+                          isImported
+                            ? () => {
+                                void removeImportedSkillPlaybook(playbook.id);
+                              }
+                            : undefined
+                        }
+                        footerBadge={
+                          showMetapiConfig
+                            ? metapiConfigured
+                              ? "Metapi 已配置"
+                              : "Metapi 未配置"
+                            : undefined
+                        }
+                        extraDetails={
+                          showMetapiConfig ? (
+                            <div className="grid gap-2 border-t border-slate-200 pt-3">
+                              <MetapiAdminSettingsPanel compact />
+                            </div>
+                          ) : null
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="ui-panel grid gap-2 p-3">
