@@ -5447,16 +5447,29 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   flex: 1 1 auto;
 }
 
-.sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages {
-  display: grid;
+/* Keep both pages absolutely stacked during transition so mounting/taller
+   settings content cannot reflow the drawer mid-slide (that hitch is what made
+   settings feel slower than "更多"). */
+.sidepanel-drawer-dialog.is-page-transitioning {
   overflow: hidden;
 }
 
+.sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
 .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-page {
-  grid-area: 1 / 1;
-  min-height: 100%;
+  bottom: 0;
+  left: 0;
   overflow: hidden;
   pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
   width: 100%;
   will-change: transform, opacity;
 }
@@ -5465,7 +5478,7 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   pointer-events: none;
 }
 
-/* Align settings page transition with the smoother "更多" slide timing/easing. */
+/* Same timing/easing as "更多" content slide. */
 .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history {
   animation: sidepanel-slide-out-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 1;
@@ -5539,16 +5552,17 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   display: none;
 }
 
+/* Session list scrolls; archive footer stays pinned and never paints under the list. */
 .history-drawer.is-history-expanded .session-list-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.history-drawer.is-history-expanded .session-list-scroll::-webkit-scrollbar,
-.history-drawer.is-history-expanded .session-folder-stack-scroll::-webkit-scrollbar {
+.history-drawer.is-history-expanded .session-list-scroll::-webkit-scrollbar {
   display: none;
 }
 
@@ -5557,18 +5571,21 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   overflow: visible;
 }
 
-/* Archive lives under session-list-compact; pin it under the scrolling list. */
 .history-drawer.is-history-expanded .session-archive-bottom {
+  background: var(--sidepanel-surface, #f3f6fb);
   border-top: 1px solid #d7dee8;
   display: block;
   flex: 0 0 auto;
-  margin-top: 0.25rem;
-  padding: 0.25rem 0 0;
+  margin-top: 0;
+  padding: 0.125rem 0 0;
+  position: relative;
+  z-index: 2;
 }
 
 /* The global history rule hides every folder row; restore the archive toggle. */
 .history-drawer.is-history-expanded .session-archive-bottom .session-folder-row {
   align-items: center;
+  background: transparent;
   color: #24272d;
   display: flex;
   gap: 0.5rem;
@@ -6354,8 +6371,7 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
   overflow: hidden;
 }
 
-/* Outer scroll host only sizes the list; the session list itself scrolls so
-   the archive footer can stay pinned under it. */
+/* Outer host sizes the list+archive column; only .session-list-scroll scrolls. */
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll {
   display: flex;
   flex: 1 1 auto;
@@ -6364,8 +6380,6 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
   min-height: 0;
   overflow: hidden;
   padding-right: 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll::-webkit-scrollbar {
@@ -6373,13 +6387,11 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
 }
 
 .history-drawer.is-history-expanded .session-list-compact {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
-}
-
-.history-drawer.is-history-expanded .session-list-scroll,
-.history-drawer.is-history-expanded .session-folder-stack-scroll {
-  overflow: visible;
+  overflow: hidden;
 }
 
 .history-drawer .session-menu.sidepanel-menu-floating {

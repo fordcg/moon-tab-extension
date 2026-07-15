@@ -63,6 +63,9 @@ export function SessionHistoryDialog({
   const [visiblePage, setVisiblePage] = useState<SidePanelDrawerPage>(page);
   const [drawerTransition, setDrawerTransition] = useState<DrawerPageTransition>("");
   const [drawerTransitionHeight, setDrawerTransitionHeight] = useState<number | null>(null);
+  // Keep settings mounted after first open so later history↔settings slides
+  // don't pay SettingsPanel mount cost mid-animation.
+  const [settingsMounted, setSettingsMounted] = useState(page === "settings");
   const wasOpenRef = useRef(false);
   const drawerTransitionTargetRef = useRef<SidePanelDrawerPage | null>(null);
   const historyTransitionTargetRef = useRef<HistoryDrawerMode | null>(null);
@@ -85,7 +88,10 @@ export function SessionHistoryDialog({
   const displayedPage = open && !wasOpenRef.current ? page : visiblePage;
   const drawerTransitionTarget = drawerTransitionTargetRef.current;
   const showHistoryPage = displayedPage === "history" || drawerTransitionTarget === "history";
-  const showSettingsPage = displayedPage === "settings" || drawerTransitionTarget === "settings";
+  // Once warmed, keep settings mounted for the life of the open drawer so reverse
+  // slides and repeat opens don't remount SettingsPanel.
+  const showSettingsPage =
+    displayedPage === "settings" || drawerTransitionTarget === "settings" || (open && settingsMounted);
   const activePage = drawerTransitionTarget ?? displayedPage;
   const shellPage = visiblePage;
 
@@ -147,6 +153,7 @@ export function SessionHistoryDialog({
       setDrawerTransitionHeight(null);
       setHistoryPageTransitionClassName("");
       setHistoryMode("compact");
+      setSettingsMounted(page === "settings");
       return;
     }
 
@@ -155,6 +162,14 @@ export function SessionHistoryDialog({
       setVisiblePage(page);
       setDrawerTransition("");
       setDrawerTransitionHeight(null);
+      if (page === "settings") {
+        setSettingsMounted(true);
+      } else {
+        // Warm settings after the drawer is already open so the first click on
+        // 设置 only animates, instead of mounting a heavy tree mid-slide.
+        const warmId = window.setTimeout(() => setSettingsMounted(true), 0);
+        return () => window.clearTimeout(warmId);
+      }
       return;
     }
 
@@ -173,6 +188,10 @@ export function SessionHistoryDialog({
       return;
     }
 
+    if (page === "settings") {
+      setSettingsMounted(true);
+    }
+
     if (reducedMotion) {
       setVisiblePage(page);
       setDrawerTransitionHeight(null);
@@ -180,9 +199,9 @@ export function SessionHistoryDialog({
       return;
     }
 
-    // Don't freeze drawer height during page switches — the fixed height made
-    // settings transitions feel snappier/jankier than the "更多" content slide.
-    setDrawerTransitionHeight(null);
+    // Lock current shell height and slide pages inside it — same feel as "更多".
+    const currentHeight = drawerContentRef.current?.getBoundingClientRect().height;
+    setDrawerTransitionHeight(currentHeight && currentHeight > 0 ? currentHeight : null);
     drawerTransitionTargetRef.current = page;
     setDrawerTransition(visiblePage === "history" ? "history-to-settings" : "settings-to-history");
   }, [drawerTransition, open, page, reducedMotion, visiblePage]);
