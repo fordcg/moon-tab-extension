@@ -5521,6 +5521,7 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   border-radius: 0;
   box-shadow: none;
   display: flex;
+  flex-direction: column;
   min-height: 0;
   opacity: 1;
   padding: 0;
@@ -5529,9 +5530,26 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 }
 
 .history-drawer .session-list-header,
-.history-drawer .session-folder-row,
-.history-drawer .session-archive-bottom {
+.history-drawer .session-folder-row {
   display: none;
+}
+
+/* Compact recent menu hides archive; expanded "更多对话" shows it. */
+.history-drawer:not(.is-history-expanded) .session-archive-bottom {
+  display: none;
+}
+
+.history-drawer.is-history-expanded .session-list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom {
+  border-top: 1px solid #d7dee8;
+  display: block;
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0 0;
 }
 
 .history-drawer .session-list-scroll,
@@ -5682,6 +5700,18 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 .history-drawer .session-item-active .session-item-menu-wrap,
 .history-drawer .session-item-menu-wrap:has(.session-menu) {
   opacity: 1;
+}
+
+/* Open menu creates a higher stacking context so sibling ⋯ buttons cannot paint
+   through the fixed session menu (fixed still inherits ancestor stacking). */
+.history-drawer .session-item:has(.session-menu) {
+  position: relative;
+  z-index: 20;
+}
+
+.history-drawer .session-item-menu-wrap:has(.session-menu),
+.history-drawer .session-item-menu-wrap:has(.session-menu-button[aria-expanded="true"]) {
+  z-index: 40;
 }
 
 .history-drawer .session-menu-button {
@@ -6293,7 +6323,7 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
   position: fixed;
   right: auto;
   top: var(--sidepanel-session-menu-top, 0);
-  z-index: 120;
+  z-index: 130;
 }
 
 .history-drawer .session-menu-delete-confirm {
