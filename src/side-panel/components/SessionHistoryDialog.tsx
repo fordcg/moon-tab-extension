@@ -94,7 +94,9 @@ export function SessionHistoryDialog({
   const showSettingsPage =
     displayedPage === "settings" || drawerTransitionTarget === "settings" || (open && settingsMounted);
   const activePage = drawerTransitionTarget ?? displayedPage;
-  const shellPage = visiblePage;
+  // Drive shell chrome/height from the active (target) page so settings gets its
+  // fixed height at transition start — waiting until animation end caused a hitch.
+  const shellPage = activePage;
 
   const queueDrawerPageFocus = (nextPage: SidePanelDrawerPage) => {
     pendingDrawerFocusPageRef.current = nextPage;
@@ -200,9 +202,15 @@ export function SessionHistoryDialog({
       return;
     }
 
-    // Lock current shell height and slide pages inside it — same feel as "更多".
-    const currentHeight = drawerContentRef.current?.getBoundingClientRect().height;
-    setDrawerTransitionHeight(currentHeight && currentHeight > 0 ? currentHeight : null);
+    // Entering settings: let CSS settings-dialog height apply immediately (shellPage
+    // follows activePage). Leaving settings: freeze the current pixel height so the
+    // shell doesn't collapse mid-slide back to the compact history size.
+    if (page === "history") {
+      const currentHeight = drawerContentRef.current?.getBoundingClientRect().height;
+      setDrawerTransitionHeight(currentHeight && currentHeight > 0 ? currentHeight : null);
+    } else {
+      setDrawerTransitionHeight(null);
+    }
     drawerTransitionTargetRef.current = page;
     setDrawerTransition(visiblePage === "history" ? "history-to-settings" : "settings-to-history");
   }, [drawerTransition, open, page, reducedMotion, visiblePage]);

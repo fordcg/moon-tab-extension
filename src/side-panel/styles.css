@@ -5413,8 +5413,9 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 
 .sidepanel-drawer-pages {
   background: var(--sidepanel-surface);
-  display: block;
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
   position: relative;
@@ -5437,18 +5438,32 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 .sidepanel-drawer-page-settings,
 .settings-drawer-page {
   display: flex;
-  flex-direction: column;
-}
-
-.sidepanel-drawer-page-history,
-.sidepanel-drawer-page-settings,
-.settings-drawer-page {
   flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Settings may stay mounted after warm-up. Idle: only the active page paints. */
 .sidepanel-drawer-dialog:not(.is-page-transitioning) .sidepanel-drawer-page[aria-hidden="true"] {
   display: none !important;
+}
+
+/* Restore settings scroll: shell height → pages → page → panel → content. */
+.history-drawer.settings-dialog .sidepanel-drawer-pages,
+.history-drawer.settings-dialog .sidepanel-drawer-page-settings,
+.history-drawer.settings-dialog .settings-drawer-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.history-drawer.settings-dialog .settings-dialog-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Transition: stack both pages so the slide cannot reflow the shell. */
