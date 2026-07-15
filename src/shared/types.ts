@@ -54,6 +54,25 @@ export interface AutomationPlaybookSettings {
   disabledPlaybookIds: string[];
 }
 
+export interface ImportedAutomationPlaybook {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  source: "skill";
+  defaultEnabled: true;
+  risk: AutomationPlaybookRisk;
+  recommendedCapabilities: string[];
+  selectionHints: string[];
+  prompt: string;
+  importedAt: number;
+  updatedAt: number;
+}
+
+export interface AutomationSkillPlaybookStore {
+  playbooks: ImportedAutomationPlaybook[];
+}
+
 export interface ModelProvider {
   id: string;
   name: string;

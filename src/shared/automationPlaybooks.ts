@@ -3,6 +3,7 @@ import type {
   AutomationPlaybookSelection,
   AutomationPlaybookSettings,
   AutomationPlaybookSource,
+  ImportedAutomationPlaybook,
 } from "./types";
 
 export interface AutomationPlaybook {
@@ -18,8 +19,13 @@ export interface AutomationPlaybook {
   prompt: string;
 }
 
+export type SkillPlaybookImportDraft = Omit<ImportedAutomationPlaybook, "importedAt" | "updatedAt">;
+
 export const AUTOMATION_PLAYBOOK_SETTINGS_KEY = "automationPlaybookSettings";
+export const AUTOMATION_SKILL_PLAYBOOKS_KEY = "automationSkillPlaybooks";
 const PLAYBOOK_SELECTION_REASON_LIMIT = 200;
+const PLAYBOOK_ID_PATTERN = /^[a-z][a-z0-9_]{1,63}$/;
+const VALID_RISKS = new Set<AutomationPlaybookRisk>(["low", "medium", "high", "critical"]);
 
 const BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
   {
@@ -126,17 +132,157 @@ const BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
   },
 ];
 
-const PLAYBOOK_IDS = new Set(BUILTIN_AUTOMATION_PLAYBOOKS.map((playbook) => playbook.id));
+const BUILTIN_PLAYBOOK_IDS = new Set(BUILTIN_AUTOMATION_PLAYBOOKS.map((playbook) => playbook.id));
 
-export function getRegisteredAutomationPlaybooks(): AutomationPlaybook[] {
-  return BUILTIN_AUTOMATION_PLAYBOOKS.map((playbook) => ({ ...playbook, tags: [...playbook.tags], recommendedCapabilities: [...playbook.recommendedCapabilities], selectionHints: [...playbook.selectionHints] }));
+function clonePlaybook<T extends AutomationPlaybook>(playbook: T): T {
+  return {
+    ...playbook,
+    tags: [...playbook.tags],
+    recommendedCapabilities: [...playbook.recommendedCapabilities],
+    selectionHints: [...playbook.selectionHints],
+  };
 }
 
-export function getAutomationPlaybookById(playbookId: string): AutomationPlaybook | undefined {
-  return getRegisteredAutomationPlaybooks().find((playbook) => playbook.id === playbookId);
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
-export function normalizeAutomationPlaybookSettings(value: unknown): AutomationPlaybookSettings {
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function readTrimmedStringField(
+  source: Record<string, unknown>,
+  field: string,
+): { ok: true; value: string } | { ok: false; message: string } {
+  const raw = source[field];
+  if (!isNonEmptyString(raw)) {
+    return { ok: false, message: `策略字段无效：${field}` };
+  }
+  return { ok: true, value: raw.trim() };
+}
+
+function readStringArrayField(
+  source: Record<string, unknown>,
+  field: string,
+): { ok: true; value: string[] } | { ok: false; message: string } {
+  const raw = source[field];
+  if (raw === undefined) {
+    return { ok: true, value: [] };
+  }
+  if (!isStringArray(raw)) {
+    return { ok: false, message: `策略字段无效：${field}` };
+  }
+  return { ok: true, value: [...raw] };
+}
+
+function validateImportDraft(
+  value: unknown,
+): { ok: true; playbook: SkillPlaybookImportDraft } | { ok: false; message: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, message: "策略字段无效：id" };
+  }
+  const source = value as Record<string, unknown>;
+
+  const idResult = readTrimmedStringField(source, "id");
+  if (!idResult.ok) {
+    return idResult;
+  }
+  if (!PLAYBOOK_ID_PATTERN.test(idResult.value)) {
+    return { ok: false, message: `策略 ID 非法：${idResult.value}` };
+  }
+
+  const titleResult = readTrimmedStringField(source, "title");
+  if (!titleResult.ok) {
+    return titleResult;
+  }
+  const descriptionResult = readTrimmedStringField(source, "description");
+  if (!descriptionResult.ok) {
+    return descriptionResult;
+  }
+  const promptResult = readTrimmedStringField(source, "prompt");
+  if (!promptResult.ok) {
+    return promptResult;
+  }
+
+  const tagsResult = readStringArrayField(source, "tags");
+  if (!tagsResult.ok) {
+    return tagsResult;
+  }
+  const capabilitiesResult = readStringArrayField(source, "recommendedCapabilities");
+  if (!capabilitiesResult.ok) {
+    return capabilitiesResult;
+  }
+  const hintsResult = readStringArrayField(source, "selectionHints");
+  if (!hintsResult.ok) {
+    return hintsResult;
+  }
+
+  const risk = source.risk;
+  if (typeof risk !== "string" || !VALID_RISKS.has(risk as AutomationPlaybookRisk)) {
+    return { ok: false, message: `风险等级非法：${String(risk ?? "")}` };
+  }
+
+  return {
+    ok: true,
+    playbook: {
+      id: idResult.value,
+      title: titleResult.value,
+      description: descriptionResult.value,
+      tags: tagsResult.value,
+      source: "skill",
+      defaultEnabled: true,
+      risk: risk as AutomationPlaybookRisk,
+      recommendedCapabilities: capabilitiesResult.value,
+      selectionHints: hintsResult.value,
+      prompt: promptResult.value,
+    },
+  };
+}
+
+function coerceStoredSkillPlaybook(value: unknown): ImportedAutomationPlaybook | undefined {
+  const draft = validateImportDraft(value);
+  if (!draft.ok) {
+    return undefined;
+  }
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const importedAt = typeof source.importedAt === "number" && Number.isFinite(source.importedAt) ? source.importedAt : 0;
+  const updatedAt = typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt) ? source.updatedAt : importedAt;
+  return {
+    ...draft.playbook,
+    importedAt,
+    updatedAt,
+  };
+}
+
+export function getBuiltinAutomationPlaybooks(): AutomationPlaybook[] {
+  return BUILTIN_AUTOMATION_PLAYBOOKS.map(clonePlaybook);
+}
+
+export function getRegisteredAutomationPlaybooks(
+  skillPlaybooks: readonly AutomationPlaybook[] = [],
+): AutomationPlaybook[] {
+  return [
+    ...getBuiltinAutomationPlaybooks(),
+    ...skillPlaybooks.map((playbook) => clonePlaybook({ ...playbook, source: "skill" as const })),
+  ];
+}
+
+export function getAutomationPlaybookById(
+  playbookId: string,
+  skillPlaybooks: readonly AutomationPlaybook[] = [],
+): AutomationPlaybook | undefined {
+  return getRegisteredAutomationPlaybooks(skillPlaybooks).find((item) => item.id === playbookId);
+}
+
+export function normalizeAutomationPlaybookSettings(
+  value: unknown,
+  knownIds?: ReadonlySet<string> | readonly string[],
+): AutomationPlaybookSettings {
+  const allowed = knownIds
+    ? new Set(Array.from(knownIds))
+    : new Set(BUILTIN_AUTOMATION_PLAYBOOKS.map((item) => item.id));
+
   if (!value || typeof value !== "object") {
     return { disabledPlaybookIds: [] };
   }
@@ -145,14 +291,127 @@ export function normalizeAutomationPlaybookSettings(value: unknown): AutomationP
     return { disabledPlaybookIds: [] };
   }
   return {
-    disabledPlaybookIds: Array.from(new Set(rawIds.filter((id): id is string => typeof id === "string" && PLAYBOOK_IDS.has(id)))),
+    disabledPlaybookIds: Array.from(
+      new Set(rawIds.filter((id): id is string => typeof id === "string" && allowed.has(id))),
+    ),
   };
 }
 
-export function getEnabledAutomationPlaybooks(settings: unknown): AutomationPlaybook[] {
-  const normalized = normalizeAutomationPlaybookSettings(settings);
-  const disabledIds = new Set(normalized.disabledPlaybookIds);
-  return getRegisteredAutomationPlaybooks().filter((playbook) => playbook.defaultEnabled && !disabledIds.has(playbook.id));
+export function getEnabledAutomationPlaybooks(
+  settings: unknown,
+  skillPlaybooks: readonly AutomationPlaybook[] = [],
+): AutomationPlaybook[] {
+  const registered = getRegisteredAutomationPlaybooks(skillPlaybooks);
+  const knownIds = registered.map((item) => item.id);
+  const normalized = normalizeAutomationPlaybookSettings(settings, knownIds);
+  const disabled = new Set(normalized.disabledPlaybookIds);
+  return registered.filter((item) => item.defaultEnabled && !disabled.has(item.id));
+}
+
+export function parseSkillPlaybookImportJson(
+  text: string,
+): { ok: true; playbooks: SkillPlaybookImportDraft[] } | { ok: false; message: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, message: "JSON 格式无效" };
+  }
+
+  if (parsed === null || (typeof parsed !== "object")) {
+    return { ok: false, message: "导入内容必须是策略对象或策略数组" };
+  }
+
+  const items = Array.isArray(parsed) ? parsed : [parsed];
+  if (items.length === 0) {
+    return { ok: false, message: "未找到可导入的策略" };
+  }
+
+  const playbooks: SkillPlaybookImportDraft[] = [];
+  const seenIds = new Set<string>();
+  for (const item of items) {
+    const validated = validateImportDraft(item);
+    if (!validated.ok) {
+      return validated;
+    }
+    if (seenIds.has(validated.playbook.id)) {
+      return { ok: false, message: `与已导入策略 ID 冲突：${validated.playbook.id}` };
+    }
+    seenIds.add(validated.playbook.id);
+    playbooks.push(validated.playbook);
+  }
+  return { ok: true, playbooks };
+}
+
+export function normalizeImportedSkillPlaybooks(value: unknown): ImportedAutomationPlaybook[] {
+  let rows: unknown[] = [];
+  if (Array.isArray(value)) {
+    rows = value;
+  } else if (value && typeof value === "object") {
+    const playbooks = (value as { playbooks?: unknown }).playbooks;
+    if (Array.isArray(playbooks)) {
+      rows = playbooks;
+    }
+  }
+
+  const normalized: ImportedAutomationPlaybook[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const playbook = coerceStoredSkillPlaybook(row);
+    if (!playbook || seen.has(playbook.id) || BUILTIN_PLAYBOOK_IDS.has(playbook.id)) {
+      continue;
+    }
+    seen.add(playbook.id);
+    normalized.push(playbook);
+  }
+  return normalized;
+}
+
+export function mergeImportedSkillPlaybooks(
+  existing: ImportedAutomationPlaybook[],
+  incoming: SkillPlaybookImportDraft[],
+  now: number = Date.now(),
+): { ok: true; playbooks: ImportedAutomationPlaybook[] } | { ok: false; message: string } {
+  const existingIds = new Set(existing.map((item) => item.id));
+  const batchIds = new Set<string>();
+
+  for (const item of incoming) {
+    const id = item.id;
+    if (BUILTIN_PLAYBOOK_IDS.has(id)) {
+      return { ok: false, message: `与内置策略 ID 冲突：${id}` };
+    }
+    if (existingIds.has(id)) {
+      return { ok: false, message: `与已导入策略 ID 冲突：${id}` };
+    }
+    if (batchIds.has(id)) {
+      return { ok: false, message: `与已导入策略 ID 冲突：${id}` };
+    }
+    batchIds.add(id);
+  }
+
+  const appended = incoming.map((item) => ({
+    ...item,
+    source: "skill" as const,
+    defaultEnabled: true as const,
+    tags: [...item.tags],
+    recommendedCapabilities: [...item.recommendedCapabilities],
+    selectionHints: [...item.selectionHints],
+    importedAt: now,
+    updatedAt: now,
+  }));
+
+  return {
+    ok: true,
+    playbooks: [
+      ...existing.map((item) => ({
+        ...item,
+        tags: [...item.tags],
+        recommendedCapabilities: [...item.recommendedCapabilities],
+        selectionHints: [...item.selectionHints],
+      })),
+      ...appended,
+    ],
+  };
 }
 
 export function shouldRunAutomationPlaybookSelection(userContent: string): boolean {
