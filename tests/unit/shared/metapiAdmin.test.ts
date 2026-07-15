@@ -25,18 +25,21 @@ describe("metapiAdmin helpers", () => {
     });
   });
 
-  it("normalizes site urls for existence checks", () => {
+  it("normalizes site urls to origin only (no page path)", () => {
     expect(normalizeSiteUrl("https://a.example.com/v1/")).toBe("https://a.example.com");
-    expect(normalizeSiteUrl("https://a.example.com/path/")).toBe("https://a.example.com/path");
+    expect(normalizeSiteUrl("https://a.example.com/path/")).toBe("https://a.example.com");
+    expect(normalizeSiteUrl("https://xn--7dvn26a8jy.com/profile")).toBe("https://xn--7dvn26a8jy.com");
+    expect(normalizeSiteUrl("https://xn--7dvn26a8jy.com/console?x=1#y")).toBe("https://xn--7dvn26a8jy.com");
+    expect(normalizeSiteUrl("http://127.0.0.1:8317/v1/models")).toBe("http://127.0.0.1:8317");
   });
 
-  it("finds existing site by normalized url", () => {
+  it("finds existing site by normalized origin", () => {
     const existing = findExistingSiteByUrl(
       [
         { id: 1, url: "https://a.example.com/v1", name: "A", platform: "new-api" },
         { id: 2, url: "https://b.example.com", name: "B", platform: "new-api" },
       ],
-      "https://a.example.com/",
+      "https://a.example.com/profile",
     );
     expect(existing).toMatchObject({ id: 1, name: "A" });
   });

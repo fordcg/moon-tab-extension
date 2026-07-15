@@ -6,7 +6,7 @@ import {
   getEnabledAutomationPlaybooks,
   type AutomationPlaybook,
 } from "../../shared/automationPlaybooks";
-import { parseRegisterRelaySiteArgs } from "../../shared/metapiAdmin";
+import { normalizeSiteUrl, parseRegisterRelaySiteArgs } from "../../shared/metapiAdmin";
 import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
@@ -1421,7 +1421,8 @@ function buildRegisterRelaySiteInput(input: {
     .trim();
   const parsed = parseRegisterRelaySiteArgs(argsText || input.remainingText);
   const name = parsed.name || (input.pageTitle ? String(input.pageTitle).trim().slice(0, 40) : undefined);
-  const pageUrl = typeof input.pageUrl === "string" ? input.pageUrl.trim() : "";
+  // Always store only the site origin (e.g. https://example.com), never /profile or other paths.
+  const pageUrl = typeof input.pageUrl === "string" ? normalizeSiteUrl(input.pageUrl) : "";
   const parts: string[] = [];
   if (name) {
     parts.push(`name=${name}`);

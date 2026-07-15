@@ -93,7 +93,7 @@ export const METAPI_OPS_TOOLS: SkillToolDefinition[] = [
       properties: {
         url: {
           type: "string",
-          description: "站点根 URL，不要带 /v1。",
+          description: "站点根 URL（仅 origin，不要带 /profile、/console、/v1 等路径）。",
         },
       },
       required: ["url"],

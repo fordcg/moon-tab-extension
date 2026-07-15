@@ -18,7 +18,7 @@ export const METAPI_OPS_PLAYBOOKS: AutomationPlaybook[] = [
       "1. Metapi 管理 API 一律使用本地 API 工具 metapi_*（扩展后台 fetch / src/skills/metapi-ops/scripts）。禁止用浏览器打开/请求 127.0.0.1:4000 或 METAPI_ADMIN_BASE_URL。",
       "2. 浏览器自动化只用于中转站页面取证：系统访问令牌、用户 ID、登录态；不用于发送 Metapi 管理请求。",
       "业务规则：",
-      "1. 站点 URL 优先使用当前受控页面 URL（去掉 hash、尾斜杠、末尾 /v1）。",
+      "1. 站点 URL 优先取当前受控页面 URL，但必须规范为站点源站（origin）：只保留 scheme+host(+port)，去掉 /profile、/console、/v1 等路径、query 和 hash。例如 https://example.com/profile → https://example.com。",
       "2. 若用户参数里出现“开启系统代理/启用系统代理”，创建站点时 useSystemProxy=true。",
       "3. 站点名来自参数（如 gpt(name) 或 name=gpt）；缺省可用页面标题（简洁）。",
       "4. 先 metapi_list_sites(url=当前URL)。已存在则立即停止并返回 SITE_EXISTS（siteId/name/url），不要 verify，不要 create account。",

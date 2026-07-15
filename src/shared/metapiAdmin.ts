@@ -78,6 +78,12 @@ export function parseRegisterRelaySiteArgs(text: string): RegisterRelaySiteArgs 
   };
 }
 
+/**
+ * Normalize a relay site URL for Metapi create/list matching.
+ * Always keep only the site origin (scheme + host + port), never page paths
+ * like /profile, /console, /v1, query, or hash.
+ * Example: https://example.com/profile → https://example.com
+ */
 export function normalizeSiteUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) {
@@ -85,17 +91,15 @@ export function normalizeSiteUrl(url: string): string {
   }
   try {
     const parsed = new URL(trimmed);
-    parsed.hash = "";
-    // Strip trailing slash for comparison, keep origin+pathname essentials.
-    let normalized = parsed.toString();
-    if (normalized.endsWith("/")) {
-      normalized = normalized.slice(0, -1);
-    }
-    // Common New API mistake: storing /v1 as site root for panel sites.
-    normalized = normalized.replace(/\/v1$/i, "");
-    return normalized;
+    // Origin already excludes path/query/hash. Lowercase host for stable matching
+    // while keeping the scheme as provided by URL.
+    return parsed.origin.replace(/\/+$/, "");
   } catch {
-    return trimmed.replace(/\/+$/, "");
+    // Best-effort fallback: strip path/query/hash without a full URL parser.
+    return trimmed
+      .replace(/[?#].*$/, "")
+      .replace(/\/+$/, "")
+      .replace(/^(https?:\/\/[^/]+).*/i, "$1");
   }
 }
 
