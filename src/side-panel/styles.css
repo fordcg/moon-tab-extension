@@ -95,6 +95,11 @@ body {
     transition: border-color 420ms ease;
   }
 
+  .model-connectivity-status {
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
   .prompt-template-preview {
     display: -webkit-box;
     overflow: hidden;

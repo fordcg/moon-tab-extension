@@ -376,6 +376,13 @@ export function ChannelManagement() {
         <div className="grid gap-2">
           {providerModels.map((model) => {
             const connectivity = modelConnectivity[model.id];
+            const statusText = connectivity?.loading
+              ? "正在测试连通性…"
+              : connectivity?.success
+                ? "测试成功"
+                : connectivity?.error
+                  ? `测试失败：${connectivity.error}`
+                  : "";
 
             return (
               <article
@@ -383,9 +390,10 @@ export function ChannelManagement() {
                 className={[
                   "ui-card",
                   "model-connectivity-card",
-                  connectivity?.success ? "border-[var(--color-success)]" : "",
-                  connectivity?.error ? "border-[var(--color-error)]" : "",
-                ].join(" ")}
+                  connectivity?.loading ? "is-model-connectivity-loading" : "",
+                  connectivity?.success ? "border-[var(--color-success)] is-model-connectivity-success" : "",
+                  connectivity?.error ? "border-[var(--color-error)] is-model-connectivity-error" : "",
+                ].filter(Boolean).join(" ")}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="model-list-name">
@@ -408,8 +416,9 @@ export function ChannelManagement() {
                         type="button"
                         onClick={() => handleTestModel(model.id)}
                         disabled={connectivity?.loading}
+                        aria-busy={connectivity?.loading ? true : undefined}
                       >
-                        {connectivity?.loading ? "测试中" : "测试"}
+                        {connectivity?.loading ? "测试中…" : "测试"}
                       </button>
                       <button
                         aria-label={`删除 ${model.modelId}`}
@@ -422,6 +431,20 @@ export function ChannelManagement() {
                     </div>
                   ) : null}
                 </div>
+                {statusText ? (
+                  <p
+                    className={[
+                      "model-connectivity-status mt-2 text-xs",
+                      connectivity?.loading ? "text-[var(--color-muted)]" : "",
+                      connectivity?.success ? "text-[var(--color-success)]" : "",
+                      connectivity?.error ? "text-[var(--color-error)]" : "",
+                    ].filter(Boolean).join(" ")}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {statusText}
+                  </p>
+                ) : null}
               </article>
             );
           })}

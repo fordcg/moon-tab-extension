@@ -5399,7 +5399,8 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1" }));
 
-    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1" })).toHaveTextContent("测试中");
+    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1" })).toHaveTextContent("测试中…");
+    expect(screen.getByText("正在测试连通性…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toHaveTextContent("测试");
     expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toBeEnabled();
 
@@ -5407,6 +5408,7 @@ describe("App", () => {
 
     expect(sendMessage).toHaveBeenCalledTimes(4);
     resolveFirstTest({ ok: true, message: "模型测试通过" });
+    await waitFor(() => expect(screen.getByText("测试成功")).toBeInTheDocument());
   });
 
   it("可以删除当前渠道并清理渠道下模型", async () => {
