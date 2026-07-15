@@ -4713,10 +4713,9 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
 }
 
 /* Animate open/close with grid 0fr→1fr. display:none kills transitions.
-   Row-count height animates delete shrink while open, but never exceeds the cap. */
+   Open height follows real content up to a hard cap — do not estimate by row count
+   (title/subtitle/gap make fixed row-height too short and clips the last item). */
 .sidepanel-shared-drawer {
-  --shared-row-height: 2.5rem;
-  --shared-row-count: 0;
   --shared-drawer-max-height: 12.5rem;
   border-top: 0 solid transparent;
   display: grid;
@@ -4766,10 +4765,8 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
 }
 
 .sidepanel-page-banner.is-open .sidepanel-shared-drawer-inner {
-  max-height: min(
-    calc(var(--shared-row-count) * var(--shared-row-height) + 0.5rem),
-    var(--shared-drawer-max-height)
-  );
+  /* Cap only — under the cap, height is content size so no fake scroll. */
+  max-height: var(--shared-drawer-max-height);
   padding: 0.375rem 0 0.125rem;
   transform: translateY(0);
 }
@@ -4783,7 +4780,7 @@ body:has(.workflow-skill-dialog) .dialog-overlay {
   flex: 0 0 auto;
   gap: 0.5rem;
   grid-template-columns: 1rem minmax(0, 1fr) 1.25rem;
-  min-height: var(--shared-row-height, 2.5rem);
+  min-height: 2.5rem;
   padding: 0.375rem 0.25rem 0.375rem 0.375rem;
 }
 
