@@ -13,7 +13,7 @@ const sample = {
   title: "结账前检查",
   description: "提交订单前核对金额与地址",
   tags: ["购物", "表单"],
-  risk: "high",
+  risk: "high" as const,
   recommendedCapabilities: ["observe_page", "operate_page", "confirm_boundary"],
   selectionHints: ["结账", "下单前检查"],
   prompt: "任务策略：结账前检查\n先观察结算页。",
