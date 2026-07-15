@@ -25,6 +25,7 @@ import type { AutomationPlaybookSelection, ExtractionRule, McpServerSecretMap, M
 import { createWebSearchToolAttachment } from "../shared/toolArtifacts";
 import { createTavilySearchContextPrompt } from "../shared/webSearch/tavily";
 import type { TavilySearchOptions } from "../shared/webSearch/tavily";
+import { executeSkillTool } from "../skills/loadSkills";
 import { browserControlManager } from "./browserControlMessageHandler";
 import { executeTavilySearchFromSettings } from "./webSearchMessageHandler";
 import { callMcpTool } from "../shared/mcp/httpClient";
@@ -122,7 +123,8 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
     }
 
     // Skill packages register their own executors via loadSkills.
-    const skillResult = await executeSkillToolCall(toolCall, withAbortSignal(fetcher, context?.signal));
+    // Pass registry tool.id — toolCall.id is a random call id from the model.
+    const skillResult = await executeSkillToolCall(toolCall, tool, withAbortSignal(fetcher, context?.signal));
     if (skillResult) {
       return skillResult;
     }
@@ -458,13 +460,23 @@ async function executeImagefreeGenerateTool(toolCall: ModelToolCall, fetcher: Fe
 
 async function executeSkillToolCall(
   toolCall: ModelToolCall,
+  tool: ModelToolRegistryEntry,
   fetcher: Fetcher,
 ): Promise<Awaited<ReturnType<ModelToolExecutor>> | undefined> {
   try {
-    const { executeSkillTool } = await import("../skills/loadSkills");
-    return await executeSkillTool(toolCall, fetcher);
-  } catch {
-    return undefined;
+    return await executeSkillTool(toolCall, fetcher, tool.id);
+  } catch (error) {
+    console.warn("[skills] executeSkillTool failed", {
+      toolId: tool.id,
+      toolName: toolCall.name,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      toolCallId: toolCall.id,
+      name: toolCall.name,
+      content: `Skill 工具 ${tool.name || tool.id} 执行失败：${error instanceof Error ? error.message : String(error)}`,
+      isError: true,
+    };
   }
 }
 

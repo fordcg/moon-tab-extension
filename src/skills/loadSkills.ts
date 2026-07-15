@@ -64,26 +64,42 @@ function ensureExecutorMap(): Map<string, SkillToolExecutor> {
       continue;
     }
     for (const tool of pkg.tools ?? []) {
+      // Index by registry id AND function name. Model tool calls use a random
+      // toolCall.id (e.g. call_abc) with toolCall.name = metapi_list_sites.
       executorMap.set(tool.id, pkg.executeTool);
+      executorMap.set(tool.name, pkg.executeTool);
     }
   }
   return executorMap;
 }
 
-export function getSkillToolExecutor(toolId: string): SkillToolExecutor | undefined {
-  return ensureExecutorMap().get(toolId);
+export function getSkillToolExecutor(toolIdOrName: string): SkillToolExecutor | undefined {
+  if (!toolIdOrName) {
+    return undefined;
+  }
+  return ensureExecutorMap().get(toolIdOrName);
 }
 
+/**
+ * Resolve and run a skill tool.
+ * Lookup order: registryToolId → toolCall.name → toolCall.id
+ */
 export async function executeSkillTool(
   toolCall: ModelToolCall,
   fetcher?: typeof fetch,
+  registryToolId?: string,
 ): Promise<ModelToolResult | undefined> {
-  const toolId = typeof toolCall.id === "string" ? toolCall.id : "";
-  const executor = toolId ? getSkillToolExecutor(toolId) : undefined;
-  if (!executor) {
-    return undefined;
+  const keys = [registryToolId, toolCall.name, toolCall.id]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+
+  for (const key of keys) {
+    const executor = getSkillToolExecutor(key);
+    if (executor) {
+      return executor(toolCall, fetcher);
+    }
   }
-  return executor(toolCall, fetcher);
+  return undefined;
 }
 
 /** Test helper: clear caches after hot package swaps. */
