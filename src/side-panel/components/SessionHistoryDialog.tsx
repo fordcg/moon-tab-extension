@@ -180,10 +180,9 @@ export function SessionHistoryDialog({
       return;
     }
 
-    const currentHeight = drawerContentRef.current?.getBoundingClientRect().height;
-    if (currentHeight) {
-      setDrawerTransitionHeight(currentHeight);
-    }
+    // Don't freeze drawer height during page switches — the fixed height made
+    // settings transitions feel snappier/jankier than the "更多" content slide.
+    setDrawerTransitionHeight(null);
     drawerTransitionTargetRef.current = page;
     setDrawerTransition(visiblePage === "history" ? "history-to-settings" : "settings-to-history");
   }, [drawerTransition, open, page, reducedMotion, visiblePage]);

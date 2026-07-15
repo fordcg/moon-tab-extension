@@ -5465,24 +5465,24 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
   pointer-events: none;
 }
 
-/* Match the smoother "更多" page transition: fade + capped horizontal slide. */
+/* Align settings page transition with the smoother "更多" slide timing/easing. */
 .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history {
-  animation: sidepanel-slide-out-left 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: sidepanel-slide-out-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 1;
 }
 
 .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-settings {
-  animation: sidepanel-slide-in-from-right 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: sidepanel-slide-in-from-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 2;
 }
 
 .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings {
-  animation: sidepanel-slide-out-right 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: sidepanel-slide-out-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 1;
 }
 
 .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history {
-  animation: sidepanel-slide-in-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: sidepanel-slide-in-from-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   z-index: 2;
 }
 
@@ -5542,14 +5542,65 @@ body:has(.sidepanel-drawer-dialog) .dialog-overlay {
 .history-drawer.is-history-expanded .session-list-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
+.history-drawer.is-history-expanded .session-list-scroll::-webkit-scrollbar,
+.history-drawer.is-history-expanded .session-folder-stack-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.history-drawer.is-history-expanded .session-folder-stack-scroll {
+  min-height: 0;
+  overflow: visible;
+}
+
+/* Archive lives under session-list-compact; pin it under the scrolling list. */
 .history-drawer.is-history-expanded .session-archive-bottom {
   border-top: 1px solid #d7dee8;
   display: block;
   flex: 0 0 auto;
   margin-top: 0.25rem;
   padding: 0.25rem 0 0;
+}
+
+/* The global history rule hides every folder row; restore the archive toggle. */
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-row {
+  align-items: center;
+  color: #24272d;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-toggle:hover,
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-toggle:focus-visible {
+  color: var(--sidepanel-ink-strong);
+  outline: 0;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom .session-count {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
 }
 
 .history-drawer .session-list-scroll,
@@ -6296,13 +6347,22 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
 }
 
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-body {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
+/* Outer scroll host only sizes the list; the session list itself scrolls so
+   the archive footer can stay pinned under it. */
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   max-height: calc(var(--sidepanel-history-expanded-height) - 3.25rem);
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
   padding-right: 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -6310,6 +6370,11 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
 
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.history-drawer.is-history-expanded .session-list-compact {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .history-drawer.is-history-expanded .session-list-scroll,
@@ -7529,19 +7594,19 @@ body.sidepanel-stop-requested .composer-abort-button {
 }
 
 .sidepanel-history-content.is-history-page-out-left {
-  animation: sidepanel-slide-out-left 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: sidepanel-slide-out-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .sidepanel-history-content.is-history-page-in-right {
-  animation: sidepanel-slide-in-from-right 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: sidepanel-slide-in-from-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .sidepanel-history-content.is-history-page-out-right {
-  animation: sidepanel-slide-out-right 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: sidepanel-slide-out-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .sidepanel-history-content.is-history-page-in-left {
-  animation: sidepanel-slide-in-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: sidepanel-slide-in-from-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
