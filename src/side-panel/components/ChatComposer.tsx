@@ -1136,11 +1136,16 @@ function SharedContextBanner({
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      <div className="sidepanel-shared-drawer">
+      <div
+        className="sidepanel-shared-drawer"
+        style={{ ["--shared-row-count" as string]: String(tabs.length) }}
+      >
         <div className="sidepanel-shared-drawer-inner">
           {tabs.map((tab) => (
             <div key={`${tab.tabId ?? tab.url}-${tab.title}`} className={tab.active ? "sidepanel-shared-row is-current" : "sidepanel-shared-row"}>
-              <BannerFavicon src={tab.favIconUrl} className="sidepanel-shared-row-favicon" />
+              <span className="sidepanel-shared-row-leading" aria-hidden="true">
+                <BannerFavicon src={tab.favIconUrl} className="sidepanel-shared-row-favicon" />
+              </span>
               <span className="sidepanel-shared-row-text">
                 <span className="sidepanel-shared-row-title">{tab.title}</span>
                 {formatSharedTabSubtitle(tab.url, tab.title) ? (
