@@ -373,11 +373,6 @@ export function SessionHistoryDialog({
                   <div className="sidepanel-drawer-footer" data-variant="recent-menu">
                     <DrawerAction buttonRef={settingsActionRef} chevron iconPaths={SETTINGS_ICON_PATHS} label="设置" onClick={() => onOpenSettings("channels")} />
                   </div>
-                  {expanded ? (
-                    <div className="sidepanel-history-scrollbar" aria-hidden="true">
-                      <div className="sidepanel-history-scrollbar-thumb" />
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : null}

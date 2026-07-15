@@ -1239,7 +1239,9 @@ describe("App", () => {
     expect(historyDialog.querySelectorAll(".session-item.sidepanel-history-hidden-compact")).toHaveLength(2);
     expect(styles).toMatch(/\.drawer-panel\.history-drawer\.is-history-expanded\s*\{[^}]*max-height:\s*var\(--sidepanel-history-expanded-height\);/s);
     expect(styles).toMatch(/\.sidepanel-history-more-action::before\s*\{[^}]*radial-gradient/s);
-    expect(styles).toMatch(/\.sidepanel-history-scrollbar-thumb\s*\{[^}]*min-height:\s*1\.875rem;/s);
+    expect(styles).toMatch(
+      /\.drawer-panel\.history-drawer\.is-history-expanded \.history-dialog-scroll\s*\{[^}]*scrollbar-width:\s*none;/s,
+    );
 
     await user.click(within(historyDialog).getByRole("button", { name: "查看更多近期对话" }));
 
@@ -1251,7 +1253,7 @@ describe("App", () => {
     expect(historyContent).toHaveClass("is-history-page-in-right");
     expect(within(historyDialog).getByRole("button", { name: "返回近期对话菜单" })).toHaveClass("sidepanel-history-back");
     expect(historyDialog.querySelectorAll(".session-item.sidepanel-history-hidden-compact")).toHaveLength(0);
-    expect(historyDialog.querySelector(".sidepanel-history-scrollbar")).toBeInTheDocument();
+    expect(historyDialog.querySelector(".sidepanel-history-scrollbar")).not.toBeInTheDocument();
     fireEvent.animationEnd(historyContent, { animationName: "sidepanel-slide-in-from-right" });
 
     await user.click(within(historyDialog).getByRole("button", { name: "返回近期对话菜单" }));

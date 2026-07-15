@@ -6274,7 +6274,13 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
 .drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll {
   max-height: calc(var(--sidepanel-history-expanded-height) - 3.25rem);
   overflow: auto;
-  padding-right: 0.875rem;
+  padding-right: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .history-drawer.is-history-expanded .session-list-scroll,
@@ -6399,45 +6405,10 @@ body:has(.boundary-choice-dialog) .dialog-overlay {
   display: none;
 }
 
-.sidepanel-history-scrollbar {
-  bottom: 0.75rem;
-  position: absolute;
-  right: 0.25rem;
-  top: 3.25rem;
-  width: 0.8125rem;
-  z-index: 3;
-}
-
-.sidepanel-history-scrollbar::before {
-  background: #dfe6f0;
-  border-radius: 999px;
-  bottom: 0.25rem;
-  content: "";
-  left: 50%;
-  position: absolute;
-  top: 0.25rem;
-  transform: translateX(-50%) rotate(0.35deg);
-  width: 0.5625rem;
-}
-
+/* History expanded list scrolls without a visible custom track/thumb. */
+.sidepanel-history-scrollbar,
 .sidepanel-history-scrollbar-thumb {
-  background: #c4cedd;
-  border-radius: 999px;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 55%),
-    0 1px 2px rgb(31 41 55 / 10%);
-  cursor: grab;
-  left: 50%;
-  min-height: 1.875rem;
-  position: absolute;
-  top: 0.25rem;
-  transform: translateX(-50%) rotate(-0.5deg);
-  width: 0.5625rem;
-}
-
-.sidepanel-history-scrollbar-thumb.is-dragging {
-  background: #aeb9c9;
-  cursor: grabbing;
+  display: none !important;
 }
 
 .settings-dialog {
