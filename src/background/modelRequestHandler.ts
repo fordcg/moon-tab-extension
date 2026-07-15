@@ -16,6 +16,7 @@ import type {
   ChatToolAttachment,
   ChatToolCallRecord,
   ExtractionRule,
+  ImportedAutomationPlaybook,
   McpServerSecretMap,
   McpSettings,
   ModelConfig,
@@ -45,6 +46,7 @@ export interface ChatSendMessage {
   tokenUsageSource?: ChatTokenUsageSource;
   browserAutomationMaxToolIterations?: number;
   automationPlaybookSettings?: AutomationPlaybookSettings;
+  importedSkillPlaybooks?: ImportedAutomationPlaybook[];
   extractionRules?: ExtractionRule[];
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
   debugContext?: ChatSendDebugContext;
@@ -143,8 +145,16 @@ export async function handleChatSendMessage(
       .filter(exposeTool)
       .filter((tool) => tool.id !== TAVILY_SEARCH_TOOL_ID || tavilyConfigured);
   const toolExecutor = executeTool ?? createBackgroundToolExecutor(message, fetcher);
+  const skillPlaybooks = Array.isArray(message.importedSkillPlaybooks)
+    ? message.importedSkillPlaybooks
+    : [];
   const automationPlaybookSelection = await maybeSelectAutomationPlaybook(message, exposedTools, fetcher);
-  const initialMessages = appendBrowserControlPromptIfNeeded(message.messages, exposedTools, automationPlaybookSelection);
+  const initialMessages = appendBrowserControlPromptIfNeeded(
+    message.messages,
+    exposedTools,
+    automationPlaybookSelection,
+    skillPlaybooks,
+  );
   const exposedToolIds = exposedTools.map((tool) => tool.id);
   const toolOptions = exposedTools.length > 0
     ? {
@@ -229,8 +239,10 @@ async function maybeSelectAutomationPlaybook(
   if (!shouldRunAutomationPlaybookSelection(userContent)) {
     return undefined;
   }
-  const settings = normalizeAutomationPlaybookSettings(message.automationPlaybookSettings);
-  const playbooks = getEnabledAutomationPlaybooks(settings);
+  const skillPlaybooks = Array.isArray(message.importedSkillPlaybooks)
+    ? message.importedSkillPlaybooks
+    : [];
+  const playbooks = getEnabledAutomationPlaybooks(message.automationPlaybookSettings, skillPlaybooks);
   if (playbooks.length === 0) {
     return undefined;
   }

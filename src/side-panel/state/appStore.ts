@@ -5,7 +5,12 @@ import { createPageContextPrompt } from "../../shared/chat/pageContextPrompt";
 import { mergeTokenUsageEntries } from "../../shared/chat/tokenUsage";
 import {
   AUTOMATION_PLAYBOOK_SETTINGS_KEY,
+  AUTOMATION_SKILL_PLAYBOOKS_KEY,
+  getRegisteredAutomationPlaybooks,
+  mergeImportedSkillPlaybooks,
   normalizeAutomationPlaybookSettings,
+  normalizeImportedSkillPlaybooks,
+  parseSkillPlaybookImportJson,
 } from "../../shared/automationPlaybooks";
 import type { RemoteModelInfo } from "../../shared/models/modelCatalog";
 import {
@@ -66,6 +71,7 @@ import type {
   ChatToolCallRecord,
   EndpointType,
   ExtractionRule,
+  ImportedAutomationPlaybook,
   ModelProvider,
   McpServerConfig,
   McpServerSecretMap,
@@ -263,6 +269,7 @@ export interface AppState {
   defaultChatModelId: string;
   chatPreferences: ChatPreferenceValues;
   automationPlaybookSettings: AutomationPlaybookSettings;
+  importedSkillPlaybooks: ImportedAutomationPlaybook[];
   browserControlEnabled: boolean;
   browserAutomationMode: BrowserAutomationMode;
   runtimeReadonlyEnabled: boolean;
@@ -306,6 +313,8 @@ export interface AppState {
   setDefaultChatModel: (modelId: string) => Promise<void>;
   updateChatPreferences: (updates: Partial<ChatPreferenceValues>) => Promise<void>;
   updateAutomationPlaybookSettings: (updates: Partial<AutomationPlaybookSettings>) => Promise<void>;
+  importSkillPlaybooksFromJson: (fileText: string) => Promise<{ ok: true; importedCount: number } | { ok: false; message: string }>;
+  removeImportedSkillPlaybook: (playbookId: string) => Promise<void>;
   updateActiveSessionChatPreferences: (updates: ChatSessionPreferenceOverrides) => Promise<void>;
   setBrowserControlEnabled: (enabled: boolean) => Promise<void>;
   setBrowserAutomationMode: (mode: BrowserAutomationMode) => Promise<void>;
@@ -453,6 +462,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   defaultChatModelId: "",
   chatPreferences: createDefaultChatPreferences(),
   automationPlaybookSettings: normalizeAutomationPlaybookSettings(undefined),
+  importedSkillPlaybooks: [],
   browserControlEnabled: false,
   browserAutomationMode: "normal_restricted",
   runtimeReadonlyEnabled: false,
@@ -668,16 +678,60 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
   updateAutomationPlaybookSettings: async (updates) => {
+    const knownIds = getRegisteredAutomationPlaybooks(get().importedSkillPlaybooks).map((item) => item.id);
     const settings = normalizeAutomationPlaybookSettings({
       ...get().automationPlaybookSettings,
       ...updates,
-    });
+    }, knownIds);
     await saveAppSetting({
       key: AUTOMATION_PLAYBOOK_SETTINGS_KEY,
       value: settings,
       updatedAt: Date.now(),
     });
     set({ automationPlaybookSettings: settings });
+  },
+  importSkillPlaybooksFromJson: async (fileText) => {
+    const parsed = parseSkillPlaybookImportJson(fileText);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    const now = Date.now();
+    const merged = mergeImportedSkillPlaybooks(get().importedSkillPlaybooks, parsed.playbooks, now);
+    if (!merged.ok) {
+      return merged;
+    }
+    await saveAppSetting({
+      key: AUTOMATION_SKILL_PLAYBOOKS_KEY,
+      value: { playbooks: merged.playbooks },
+      updatedAt: now,
+    });
+    set({ importedSkillPlaybooks: merged.playbooks });
+    return { ok: true, importedCount: parsed.playbooks.length };
+  },
+  removeImportedSkillPlaybook: async (playbookId) => {
+    const nextPlaybooks = get().importedSkillPlaybooks.filter((item) => item.id !== playbookId);
+    const now = Date.now();
+    await saveAppSetting({
+      key: AUTOMATION_SKILL_PLAYBOOKS_KEY,
+      value: { playbooks: nextPlaybooks },
+      updatedAt: now,
+    });
+    const knownIds = getRegisteredAutomationPlaybooks(nextPlaybooks).map((item) => item.id);
+    const automationPlaybookSettings = normalizeAutomationPlaybookSettings(
+      {
+        disabledPlaybookIds: get().automationPlaybookSettings.disabledPlaybookIds.filter((id) => id !== playbookId),
+      },
+      knownIds,
+    );
+    await saveAppSetting({
+      key: AUTOMATION_PLAYBOOK_SETTINGS_KEY,
+      value: automationPlaybookSettings,
+      updatedAt: now,
+    });
+    set({
+      importedSkillPlaybooks: nextPlaybooks,
+      automationPlaybookSettings,
+    });
   },
   updateActiveSessionChatPreferences: async (updates) => {
     const state = get();
@@ -926,12 +980,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   loadChannelConfig: async () => {
     const revisionAtStart = modelCatalogRevision;
-    const [providers, models, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, webSearchSettings, mcpSettings] = await Promise.all([
+    const [providers, models, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, savedSkillPlaybooks, webSearchSettings, mcpSettings] = await Promise.all([
       getModelProviders(),
       getProviderModels(),
       getAppSetting<string>("defaultChatModelId"),
       getAppSetting<Partial<ChatPreferenceValues>>("chatPreferences"),
       getAppSetting<Partial<AutomationPlaybookSettings>>(AUTOMATION_PLAYBOOK_SETTINGS_KEY),
+      getAppSetting<unknown>(AUTOMATION_SKILL_PLAYBOOKS_KEY),
       getWebSearchSettings(),
       getMcpSettings(),
     ]);
@@ -951,7 +1006,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       ? resolveAvailableModelId(activeSession.selectedModelId, resolvedModels, resolvedProviders)
       : "";
     const chatPreferences = normalizeChatPreferences(savedChatPreferences);
-    const automationPlaybookSettings = normalizeAutomationPlaybookSettings(savedAutomationPlaybookSettings);
+    const importedSkillPlaybooks = normalizeImportedSkillPlaybooks(savedSkillPlaybooks);
+    const knownIds = getRegisteredAutomationPlaybooks(importedSkillPlaybooks).map((item) => item.id);
+    const automationPlaybookSettings = normalizeAutomationPlaybookSettings(savedAutomationPlaybookSettings, knownIds);
 
     set({
       providers: resolvedProviders,
@@ -959,6 +1016,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       defaultChatModelId,
       chatPreferences,
       automationPlaybookSettings,
+      importedSkillPlaybooks,
       webSearchSettings,
       mcpSettings,
       mcpBearerTokens,
@@ -1490,6 +1548,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       defaultChatModelId: "",
       chatPreferences: createDefaultChatPreferences(),
       automationPlaybookSettings: normalizeAutomationPlaybookSettings(undefined),
+      importedSkillPlaybooks: [],
       browserControlEnabled: false,
       browserAutomationMode: "normal_restricted",
       runtimeReadonlyEnabled: false,
@@ -1579,6 +1638,7 @@ export type AppChatSendMessage = {
   tokenUsageSource?: ChatTokenUsageSource;
   browserAutomationMaxToolIterations?: number;
   automationPlaybookSettings?: AutomationPlaybookSettings;
+  importedSkillPlaybooks?: ImportedAutomationPlaybook[];
   extractionRules?: ExtractionRule[];
   mcp?: McpSettings & { bearerTokens?: McpServerSecretMap };
   debugContext?: ChatSendDebugContext;
@@ -2103,6 +2163,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       retryCount: effectiveChatPreferences.aiRequestRetryCount,
       browserAutomationMaxToolIterations: effectiveChatPreferences.browserAutomationMaxToolIterations,
       automationPlaybookSettings: input.state.automationPlaybookSettings,
+      importedSkillPlaybooks: input.state.importedSkillPlaybooks,
       extractionRules: input.state.extractionRules,
       mcp: {
         ...input.state.mcpSettings,

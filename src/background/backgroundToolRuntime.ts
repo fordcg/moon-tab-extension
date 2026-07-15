@@ -20,7 +20,7 @@ import {
   TAVILY_SEARCH_TOOL_NAME,
 } from "../shared/models/toolRegistry";
 import type { ModelRequestMessage, ModelSystemMessage, ModelToolCall, ModelToolDefinition, ModelToolExecutor, ModelToolRegistryEntry, ModelToolResult } from "../shared/models/types";
-import { getAutomationPlaybookById } from "../shared/automationPlaybooks";
+import { getAutomationPlaybookById, type AutomationPlaybook } from "../shared/automationPlaybooks";
 import type { AutomationPlaybookSelection, ExtractionRule, McpServerSecretMap, McpSettings, ModelConfig } from "../shared/types";
 import { createWebSearchToolAttachment } from "../shared/toolArtifacts";
 import { createTavilySearchContextPrompt } from "../shared/webSearch/tavily";
@@ -236,6 +236,7 @@ export function appendBrowserControlPromptIfNeeded(
   messages: ModelRequestMessage[],
   enabledTools: ModelToolRegistryEntry[],
   automationPlaybookSelection?: AutomationPlaybookSelection,
+  skillPlaybooks: readonly AutomationPlaybook[] = [],
 ): ModelRequestMessage[] {
   if (!enabledTools.some((tool) => isBrowserAutomationToolId(tool.id))) {
     return messages;
@@ -299,7 +300,7 @@ export function appendBrowserControlPromptIfNeeded(
         ]
       : []),
   ].join("\n");
-  const playbookPrompt = createSelectedAutomationPlaybookPrompt(automationPlaybookSelection);
+  const playbookPrompt = createSelectedAutomationPlaybookPrompt(automationPlaybookSelection, skillPlaybooks);
   const finalPrompt = playbookPrompt ? `${browserPrompt}\n\n${playbookPrompt}` : browserPrompt;
   const systemIndex = messages.findIndex((message) => message.role === "system");
   if (systemIndex >= 0) {
@@ -317,11 +318,14 @@ export function appendBrowserControlPromptIfNeeded(
   return [systemMessage, ...messages];
 }
 
-function createSelectedAutomationPlaybookPrompt(selection: AutomationPlaybookSelection | undefined): string | undefined {
+function createSelectedAutomationPlaybookPrompt(
+  selection: AutomationPlaybookSelection | undefined,
+  skillPlaybooks: readonly AutomationPlaybook[] = [],
+): string | undefined {
   if (!selection) {
     return undefined;
   }
-  const playbook = getAutomationPlaybookById(selection.playbookId);
+  const playbook = getAutomationPlaybookById(selection.playbookId, skillPlaybooks);
   if (!playbook) {
     return undefined;
   }
