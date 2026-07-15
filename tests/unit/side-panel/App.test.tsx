@@ -1135,15 +1135,16 @@ describe("App", () => {
     const settingsAction = within(drawer).getByRole("button", { name: "设置" });
     await user.click(settingsAction);
 
-    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "history-to-settings"));
-    const enteringSettingsPage = drawer.querySelector<HTMLElement>('[data-drawer-page="settings"]');
+    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "history-to-settings-out"));
     const leavingHistoryPage = drawer.querySelector<HTMLElement>('[data-drawer-page="history"]');
-    expect(enteringSettingsPage).not.toHaveAttribute("inert");
-    expect(leavingHistoryPage).toHaveAttribute("aria-hidden", "true");
-    expect(leavingHistoryPage).toHaveAttribute("inert");
+    expect(leavingHistoryPage).toBeTruthy();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(document.querySelector(".sidepanel-drawer-overlay")).toBe(overlay);
 
+    fireEvent.animationEnd(leavingHistoryPage as HTMLElement, { animationName: "sidepanel-slide-out-left" });
+
+    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "history-to-settings-in"));
+    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-page", "settings"));
     const enteringSettings = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-settings");
     fireEvent.animationEnd(enteringSettings as HTMLElement, { animationName: "sidepanel-slide-in-from-right" });
 
@@ -1154,7 +1155,11 @@ describe("App", () => {
     await waitFor(() => expect(backButton).toHaveFocus());
 
     await user.click(backButton);
-    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history"));
+    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history-out"));
+    const leavingSettings = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-settings");
+    fireEvent.animationEnd(leavingSettings as HTMLElement, { animationName: "sidepanel-slide-out-right" });
+
+    await waitFor(() => expect(drawer).toHaveAttribute("data-sidepanel-drawer-transition", "settings-to-history-in"));
     const enteringHistory = drawer.querySelector<HTMLElement>(".sidepanel-drawer-page-history");
     fireEvent.animationEnd(enteringHistory as HTMLElement, { animationName: "sidepanel-slide-in-from-left" });
 
@@ -1162,8 +1167,10 @@ describe("App", () => {
     await waitFor(() => expect(drawer).not.toHaveAttribute("data-sidepanel-drawer-transition"));
     await waitFor(() => expect(within(drawer).getByRole("button", { name: "设置" })).toHaveFocus());
     expect(styles).toContain(".sidepanel-drawer-overlay");
-    expect(styles).toContain(".sidepanel-drawer-dialog.is-history-to-settings");
-    expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history");
+    expect(styles).toContain(".sidepanel-drawer-dialog.is-history-to-settings-out");
+    expect(styles).toContain(".sidepanel-drawer-dialog.is-history-to-settings-in");
+    expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history-out");
+    expect(styles).toContain(".sidepanel-drawer-dialog.is-settings-to-history-in");
     expect(styles).toContain("sidepanel-slide-in-from-right");
     expect(styles).toContain("sidepanel-slide-out-left");
     expect(styles).toContain("sidepanel-slide-in-from-left");
