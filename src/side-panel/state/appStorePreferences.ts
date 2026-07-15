@@ -163,7 +163,12 @@ export function resolveEffectiveChatPreferences(
 }
 
 function normalizeUserEditableToolIds(value: unknown): string[] {
-  return normalizeEnabledToolIds(value);
+  const normalized = normalizeEnabledToolIds(value);
+  // Newly added local Metapi tools should stay available for existing profiles.
+  const metapiToolIds = getRegisteredModelTools()
+    .map((tool) => tool.id)
+    .filter((id) => id.startsWith("metapi."));
+  return Array.from(new Set([...normalized, ...metapiToolIds]));
 }
 
 export function resolveRuntimeEnabledToolIds(enabledToolIds: string[], browserControlEnabled: boolean, browserAutomationMode: BrowserAutomationMode = "normal_restricted"): string[] {

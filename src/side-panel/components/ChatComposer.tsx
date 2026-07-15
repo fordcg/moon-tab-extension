@@ -6,6 +6,7 @@ import {
   getEnabledAutomationPlaybooks,
   type AutomationPlaybook,
 } from "../../shared/automationPlaybooks";
+import { parseRegisterRelaySiteArgs } from "../../shared/metapiAdmin";
 import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
@@ -357,8 +358,28 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [workflowMenuOpen]);
 
   const submit = async () => {
-    const content = input.trim();
-    if (!content && attachments.length === 0 && promptInvocations.length === 0) {
+    let content = input.trim();
+    let sendingPromptInvocations = promptInvocations;
+    let forcedPlaybookId = sendingPromptInvocations.length > 0
+      ? sendingPromptInvocations[sendingPromptInvocations.length - 1]?.promptId
+      : undefined;
+
+    // Allow typing full command line without opening menu selection:
+    // "/收录中转站 gpt(name) 开启系统代理"
+    const inlineCommand = parseInlineRegisterRelayCommand(content, pageContext.url, pageContext.title);
+    if (inlineCommand) {
+      content = inlineCommand.content;
+      forcedPlaybookId = "register_relay_site";
+      sendingPromptInvocations = [
+        {
+          promptId: "register_relay_site",
+          title: "收录中转站",
+          contentSnapshot: "把当前打开的新中转站收录进本地 Metapi：建站点、取系统访问令牌/用户ID、验证并添加连接。已有站点直接返回。",
+        },
+      ];
+    }
+
+    if (!content && attachments.length === 0 && sendingPromptInvocations.length === 0) {
       return;
     }
 
@@ -366,10 +387,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setPromptInvocations([]);
     setSlashMenuOpen(false);
     const sendingAttachments = attachments;
-    const sendingPromptInvocations = promptInvocations;
-    const forcedPlaybookId = sendingPromptInvocations.length > 0
-      ? sendingPromptInvocations[sendingPromptInvocations.length - 1]?.promptId
-      : undefined;
     setAttachments([]);
     setAttachmentError("");
     await sendChatMessage(content, sendingAttachments, sendingPromptInvocations, forcedPlaybookId);
@@ -510,7 +527,16 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       },
     ]);
     setInput((current) => {
-      return removeSlashCommandSegment(current, slashStartIndex);
+      const remaining = removeSlashCommandSegment(current, slashStartIndex);
+      if (playbook.id !== "register_relay_site") {
+        return remaining;
+      }
+      return buildRegisterRelaySiteInput({
+        remainingText: remaining,
+        slashQuery,
+        pageUrl: pageContext.url,
+        pageTitle: pageContext.title,
+      });
     });
     setSlashMenuOpen(false);
     setSlashQuery("");
@@ -1312,8 +1338,21 @@ function findSlashCommand(value: string): { startIndex: number; query: string } 
   if (startIndex < 0) {
     return undefined;
   }
+  if (startIndex > 0 && !/\s/.test(value.charAt(startIndex - 1))) {
+    return undefined;
+  }
 
   const query = value.slice(startIndex + 1);
+  if (!query) {
+    return { startIndex, query: "" };
+  }
+
+  // Known multi-arg commands may contain spaces after the title.
+  if (/^(收录中转站|register_relay_site)(?:\s|$)/iu.test(query)) {
+    return { startIndex, query };
+  }
+
+  // Default slash commands: no whitespace inside the query token.
   if (/\s/.test(query)) {
     return undefined;
   }
@@ -1360,8 +1399,66 @@ function filterSkillPlaybooks(playbooks: AutomationPlaybook[], query: string): A
       playbook.tags.join(" "),
       playbook.selectionHints.join(" "),
     ].join("\n").toLowerCase();
+    // Allow matching only the command prefix: "/收录中转站 gpt(name)..."
+    if (normalizedQuery.startsWith(playbook.title.toLowerCase()) || normalizedQuery.startsWith(playbook.id.toLowerCase())) {
+      return true;
+    }
     return searchableText.includes(normalizedQuery);
   });
+}
+
+function buildRegisterRelaySiteInput(input: {
+  remainingText: string;
+  slashQuery: string;
+  pageUrl?: string;
+  pageTitle?: string;
+}): string {
+  const query = input.slashQuery.trim();
+  // Strip command title/id prefix from slash query to keep only args.
+  let argsText = query
+    .replace(/^收录中转站\s*/u, "")
+    .replace(/^register_relay_site\s*/i, "")
+    .trim();
+  const parsed = parseRegisterRelaySiteArgs(argsText || input.remainingText);
+  const name = parsed.name || (input.pageTitle ? String(input.pageTitle).trim().slice(0, 40) : undefined);
+  const pageUrl = typeof input.pageUrl === "string" ? input.pageUrl.trim() : "";
+  const parts: string[] = [];
+  if (name) {
+    parts.push(`name=${name}`);
+  }
+  if (parsed.useSystemProxy) {
+    parts.push("开启系统代理");
+  }
+  if (pageUrl) {
+    parts.push(`url=${pageUrl}`);
+  }
+  // Keep residual free text that is not pure command noise.
+  const residual = input.remainingText.trim();
+  if (residual && !parts.join(" ").includes(residual)) {
+    parts.unshift(residual);
+  }
+  return parts.join(" ").trim();
+}
+
+function parseInlineRegisterRelayCommand(
+  content: string,
+  pageUrl?: string,
+  pageTitle?: string,
+): { content: string } | undefined {
+  const trimmed = content.trim();
+  const matched = trimmed.match(/^\/\s*(收录中转站|register_relay_site)(?:\s+(.+))?$/iu);
+  if (!matched) {
+    return undefined;
+  }
+  const argsText = (matched[2] ?? "").trim();
+  return {
+    content: buildRegisterRelaySiteInput({
+      remainingText: "",
+      slashQuery: `收录中转站 ${argsText}`.trim(),
+      pageUrl,
+      pageTitle,
+    }),
+  };
 }
 
 function sendRuntimeMessage<T>(message: { type: string }): Promise<T | undefined> {

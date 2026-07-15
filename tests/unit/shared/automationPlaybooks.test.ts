@@ -7,7 +7,7 @@ import {
 } from "../../../src/shared/automationPlaybooks";
 
 describe("浏览器自动化 Playbook 注册表", () => {
-  it("内置六类任务策略字段完整且默认启用", () => {
+  it("内置任务策略字段完整且默认启用", () => {
     const playbooks = getRegisteredAutomationPlaybooks();
 
     expect(playbooks.map((playbook) => playbook.id)).toEqual([
@@ -17,6 +17,7 @@ describe("浏览器自动化 Playbook 注册表", () => {
       "site_diagnostics",
       "network_api_analysis",
       "source_runtime_analysis",
+      "register_relay_site",
     ]);
     expect(new Set(playbooks.map((playbook) => playbook.id)).size).toBe(playbooks.length);
     for (const playbook of playbooks) {

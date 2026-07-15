@@ -121,6 +121,10 @@ export function createBackgroundToolExecutor(message: BackgroundToolExecutorMess
       return executeImagefreeGenerateTool(toolCall, withAbortSignal(fetcher, context?.signal));
     }
 
+    if (tool.id.startsWith("metapi.")) {
+      return executeMetapiToolCall(toolCall, withAbortSignal(fetcher, context?.signal));
+    }
+
     if (tool.id.startsWith("browser.")) {
       return runWithAbortSignal(() => browserControlManager.executeBrowserTool(toolCall, signal), signal);
     }
@@ -448,6 +452,23 @@ async function executeImagefreeGenerateTool(toolCall: ModelToolCall, fetcher: Fe
   }
 
   return imagefreeGenerateTool(toolCall, fetcher);
+}
+
+async function executeMetapiToolCall(toolCall: ModelToolCall, fetcher: Fetcher): Promise<Awaited<ReturnType<ModelToolExecutor>>> {
+  const metapiToolExecutor = (globalThis as typeof globalThis & {
+    __metapiToolExecutor?: (toolCall: ModelToolCall, fetcher: Fetcher) => Awaited<ReturnType<ModelToolExecutor>> | Promise<Awaited<ReturnType<ModelToolExecutor>>>;
+  }).__metapiToolExecutor;
+
+  if (typeof metapiToolExecutor !== "function") {
+    return {
+      toolCallId: toolCall.id,
+      name: toolCall.name,
+      content: "Metapi 管理工具运行时暂不可用，已拒绝执行。",
+      isError: true,
+    };
+  }
+
+  return metapiToolExecutor(toolCall, fetcher);
 }
 
 async function executeMcpRemoteTool(
