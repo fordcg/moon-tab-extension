@@ -358,8 +358,9 @@ describe("App", () => {
     expect(screen.getByLabelText("消息列表")).toHaveTextContent("今天需要我做些什么？");
     expect(screen.getByText("你好")).toHaveClass("sidepanel-empty-hello");
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
-    expect(styles).toMatch(/\.sidepanel-empty-state\s*\{[^}]*margin:\s*auto 0 0;/s);
-    expect(styles).toMatch(/\.sidebar-shell \.sidepanel-empty-state\s*\{[^}]*align-self:\s*flex-start;/s);
+    expect(styles).toMatch(/\.sidepanel-empty-state\s*\{[^}]*display:\s*flex;/s);
+    expect(styles).toMatch(/\.sidepanel-empty-copy\s*\{[^}]*margin-top:\s*auto;/s);
+    expect(styles).toMatch(/\.sidebar-shell \.sidepanel-empty-state\s*\{[^}]*align-self:\s*stretch;/s);
     expect(screen.queryByLabelText("历史会话")).not.toBeInTheDocument();
   });
 
