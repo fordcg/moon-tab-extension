@@ -972,6 +972,7 @@ export class BrowserControlManager {
       this.clearAutomationModeState();
     } else if (this.connection.attachedTabId) {
       this.startNetworkAnalysis(this.connection.attachedTabId);
+      await this.preserveSidePanelForTab(this.connection.attachedTabId);
     }
 
     return attachResult;

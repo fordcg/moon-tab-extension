@@ -10,9 +10,13 @@ import {
 } from "../shared/sidePanelRuntime";
 
 const RECENTLY_CREATED_TAB_TTL_MS = 60000;
+const CONTROL_WINDOW_STORAGE_KEY = "sidePanel.controlWindowId.v1";
+const CONTROL_WINDOW_WIDTH = 420;
+const CONTROL_WINDOW_HEIGHT = 760;
 
 const recentlyCreatedTabs = new Set<number>();
 let initialized = false;
+let controlWindowId: number | undefined;
 
 export type SidePanelRuntimeResponse = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -23,11 +27,13 @@ export function initializeSidePanelController(): void {
   initialized = true;
 
   void bootstrapTabScopedSidePanel();
+  void restoreControlWindowId();
   chrome.runtime.onInstalled.addListener(() => {
     void bootstrapTabScopedSidePanel();
   });
   chrome.runtime.onStartup.addListener(() => {
     void bootstrapTabScopedSidePanel();
+    void restoreControlWindowId();
   });
 
   chrome.action?.onClicked?.addListener((tab) => {
@@ -67,6 +73,13 @@ export function initializeSidePanelController(): void {
     recentlyCreatedTabs.delete(tabId);
     void forgetOpenedSidePanelTab(tabId);
   });
+
+  chrome.windows?.onRemoved?.addListener((windowId) => {
+    if (controlWindowId === windowId) {
+      controlWindowId = undefined;
+      void chrome.storage?.session?.remove?.(CONTROL_WINDOW_STORAGE_KEY);
+    }
+  });
 }
 
 export function handleSidePanelRuntimeMessage(message: SidePanelRuntimeMessage): Promise<SidePanelRuntimeResponse> | undefined {
@@ -80,10 +93,21 @@ export function handleSidePanelRuntimeMessage(message: SidePanelRuntimeMessage):
 }
 
 /**
- * Keep the AI side panel available when browser automation creates/switches tabs.
- * Chrome side panels are tab-scoped; without this, new_page often makes the panel disappear.
+ * Keep the AI assistant visible while browser automation creates/switches tabs.
+ * Primary strategy: dedicated always-on-top control popup window.
+ * Fallback: tab/window-scoped side panel inheritance.
  */
 export async function ensureSidePanelForControlledTab(tabId: number | undefined): Promise<boolean> {
+  const controlWindowReady = await ensureAutomationControlWindow(tabId);
+  if (controlWindowReady) {
+    if (typeof tabId === "number") {
+      markRecentlyCreatedTab(tabId);
+      await rememberOpenedSidePanelTab(tabId);
+      enableTabScopedSidePanel(tabId);
+    }
+    return true;
+  }
+
   if (typeof tabId !== "number") {
     return false;
   }
@@ -121,6 +145,76 @@ export async function ensureSidePanelForControlledTab(tabId: number | undefined)
     } catch {
       return false;
     }
+  }
+}
+
+/**
+ * Open/focus a dedicated popup window hosting the assistant UI.
+ * This survives page tab switches during browser automation.
+ */
+export async function ensureAutomationControlWindow(anchorTabId?: number): Promise<boolean> {
+  try {
+    if (typeof controlWindowId === "number") {
+      try {
+        const existing = await chrome.windows.get(controlWindowId);
+        if (existing?.id) {
+          await chrome.windows.update(controlWindowId, { focused: true, drawAttention: true });
+          return true;
+        }
+      } catch {
+        controlWindowId = undefined;
+      }
+    }
+
+    let left: number | undefined;
+    let top: number | undefined;
+    try {
+      const current = await chrome.windows.getCurrent();
+      if (typeof current.left === "number" && typeof current.width === "number") {
+        left = Math.max(0, current.left + Math.max(0, current.width - CONTROL_WINDOW_WIDTH - 24));
+      }
+      if (typeof current.top === "number") {
+        top = Math.max(0, current.top + 24);
+      }
+    } catch {
+      // ignore placement failures
+    }
+
+    const query = new URLSearchParams({ floating: "1", controlWindow: "1" });
+    if (typeof anchorTabId === "number") {
+      query.set("tabId", String(anchorTabId));
+    }
+    const finalUrl = chrome.runtime.getURL(`index.html?${query.toString()}`);
+
+    const created = await chrome.windows.create({
+      url: finalUrl,
+      type: "popup",
+      focused: true,
+      width: CONTROL_WINDOW_WIDTH,
+      height: CONTROL_WINDOW_HEIGHT,
+      ...(typeof left === "number" ? { left } : {}),
+      ...(typeof top === "number" ? { top } : {}),
+    });
+    if (typeof created?.id !== "number") {
+      return false;
+    }
+    controlWindowId = created.id;
+    await chrome.storage?.session?.set?.({ [CONTROL_WINDOW_STORAGE_KEY]: created.id });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function restoreControlWindowId(): Promise<void> {
+  try {
+    const items = await chrome.storage?.session?.get?.(CONTROL_WINDOW_STORAGE_KEY);
+    const value = items?.[CONTROL_WINDOW_STORAGE_KEY];
+    if (typeof value === "number") {
+      controlWindowId = value;
+    }
+  } catch {
+    // ignore
   }
 }
 
