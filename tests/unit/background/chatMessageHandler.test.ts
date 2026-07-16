@@ -1601,11 +1601,14 @@ describe("聊天模型请求处理", () => {
 
     const result = await handleChatSendMessage(request, fetcher);
 
-    expect(result).toEqual({ ok: false, message: "工具调用超过最大轮次，已停止本次请求。" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).toMatch(/工具调用轮次已达上限|已停止|最终/);
+    }
     expect(browserControlManagerMock.executeBrowserTool).toHaveBeenCalledTimes(2);
   });
 
-  it("浏览器自动化最大工具轮次默认使用 32 轮保护", async () => {
+  it("浏览器自动化最大工具轮次默认使用 48 轮保护", async () => {
     registeredModelToolsMock.tools = [
       {
         id: "browser.click",
@@ -1659,9 +1662,13 @@ describe("聊天模型请求处理", () => {
       fetcher,
     );
 
-    expect(result).toEqual({ ok: false, message: "工具调用超过最大轮次，已停止本次请求。" });
-    expect(browserControlManagerMock.executeBrowserTool).toHaveBeenCalledTimes(32);
-    expect(fetcher).toHaveBeenCalledTimes(32);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).toMatch(/工具调用轮次已达上限|已停止|最终/);
+    }
+    // 48 tool rounds + 1 final synthesis request when the model keeps requesting tools.
+    expect(browserControlManagerMock.executeBrowserTool).toHaveBeenCalledTimes(48);
+    expect(fetcher).toHaveBeenCalledTimes(49);
   });
 
   it("默认 background 执行器会把阶段四浏览器导航工具转发给浏览器控制管理器", async () => {

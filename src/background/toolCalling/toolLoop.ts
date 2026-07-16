@@ -18,6 +18,12 @@ const FINAL_RESPONSE_INSTRUCTION = [
   "上一轮工具决策阶段的自然语言正文只作为过程参考，不要把其中的待办话术当作还会继续执行的计划。",
   "不要再声称将继续调用、测试或等待工具；如果信息不足，请明确说明已完成的部分和无法继续验证的原因。",
 ].join("\n");
+const MAX_ITERATIONS_REACHED_INSTRUCTION = [
+  "工具调用轮次已达上限，系统不会再执行任何工具。",
+  "请立刻给出最终中文答复：总结已经完成的结果、失败/未完成的站点，以及还需要用户处理的事项。",
+  "如果打开了临时网页，应说明已尽量关闭；若未能关闭，提醒用户手动关闭。",
+  "不要再规划新的工具调用。",
+].join("\n");
 
 const GUIDANCE_PREFIX = "用户在当前任务运行中补充了以下引导：";
 const GUIDANCE_SUFFIX = "请在不丢弃已完成结果的前提下，优先依据该引导调整后续工具调用和最终回答。若引导与原目标冲突，说明采用了新的用户引导。";
@@ -208,7 +214,59 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     };
   }
 
-  return lastResponse ?? { ok: false, message: "工具调用超过最大轮次，已停止本次请求。" };
+  // Tool loop exhausted while model still wanted more tools, or no final response was produced.
+  // Prefer a final natural-language answer over a hard failure when possible.
+  if (input.requestFinalModel) {
+    if (input.signal?.aborted) {
+      return createAbortResponse();
+    }
+    messages = appendGuidanceMessages(messages, input);
+    const exhaustionMessages = [
+      ...messages,
+      {
+        role: "system" as const,
+        content: MAX_ITERATIONS_REACHED_INSTRUCTION,
+      },
+    ];
+    const finalResponse = await input.requestFinalModel(createFinalRequestMessages(exhaustionMessages));
+    if (input.signal?.aborted) {
+      return createAbortResponse();
+    }
+    if (finalResponse.ok) {
+      tokenUsageEntries.push(...(finalResponse.tokenUsageEntries ?? []));
+      const content = finalResponse.content?.trim()
+        ? finalResponse.content
+        : "工具调用轮次已达上限，已停止继续操作。请根据上文已完成结果继续处理未完成项。";
+      return {
+        ok: true,
+        content,
+        thinking: finalResponse.thinking,
+        ...(finalResponse.reasoningContent ? { reasoningContent: finalResponse.reasoningContent } : {}),
+        ...(toolAttachments.length ? { toolAttachments } : {}),
+        ...(toolTurnMessages.length ? { toolTurnMessages } : {}),
+        ...(tokenUsageEntries.length ? { tokenUsageEntries: [...tokenUsageEntries] } : {}),
+      };
+    }
+  }
+
+  if (lastResponse?.ok) {
+    return {
+      ...lastResponse,
+      content: lastResponse.content?.trim()
+        ? `${lastResponse.content}
+
+（提示：工具调用轮次已达上限，已停止继续操作。）`
+        : "工具调用轮次已达上限，已停止继续操作。请根据上文已完成结果处理未完成项；若打开了临时网页请手动关闭。",
+    };
+  }
+
+  return {
+    ok: true,
+    content: "工具调用轮次已达上限，已停止继续操作。请根据上文已完成结果处理未完成项；若打开了临时网页请手动关闭，或提高“浏览器自动化最大工具轮次”后重试。",
+    ...(toolAttachments.length ? { toolAttachments } : {}),
+    ...(toolTurnMessages.length ? { toolTurnMessages } : {}),
+    ...(tokenUsageEntries.length ? { tokenUsageEntries: [...tokenUsageEntries] } : {}),
+  };
 }
 
 function appendGuidanceMessages(messages: ModelRequestMessage[], input: RunModelToolLoopInput): ModelRequestMessage[] {

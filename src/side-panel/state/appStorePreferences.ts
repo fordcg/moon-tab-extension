@@ -13,7 +13,7 @@ export function createDefaultChatPreferences(): ChatPreferenceValues {
   return {
     systemPrompt: "你是网页助手",
     aiRequestRetryCount: DEFAULT_MODEL_REQUEST_RETRY_COUNT,
-    browserAutomationMaxToolIterations: 32,
+    browserAutomationMaxToolIterations: 48,
     toolCallingEnabled: true,
     enabledToolIds: getRegisteredModelTools().map((tool) => tool.id),
     toolCallDisplayMode: "assistant_grouped",

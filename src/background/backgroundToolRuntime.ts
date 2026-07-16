@@ -38,7 +38,7 @@ type NetworkCompatibilityExecutor = (
   signal?: AbortSignal,
 ) => ModelToolResult | undefined | Promise<ModelToolResult | undefined>;
 
-const DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS = 32;
+const DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS = 48;
 
 export interface BackgroundToolExecutorMessage {
   model: ModelConfig;

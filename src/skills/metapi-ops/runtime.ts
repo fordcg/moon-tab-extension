@@ -375,19 +375,23 @@ async function loadSettings(): Promise<MetapiAdminSettings> {
 }
 
 function extractLogArray(data: unknown): Array<Record<string, unknown>> {
+  const rows: unknown[] = [];
   if (Array.isArray(data)) {
-    return data.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
-  }
-  if (data && typeof data === "object") {
+    rows.push(...data);
+  } else if (data && typeof data === "object") {
     const source = data as Record<string, unknown>;
     for (const key of ["logs", "data", "items", "results", "records"]) {
       const value = source[key];
       if (Array.isArray(value)) {
-        return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+        rows.push(...value);
+        break;
       }
     }
   }
-  return [];
+
+  return rows
+    .map((item) => flattenCheckinLogRow(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
 }
 
 function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
@@ -434,12 +438,79 @@ function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
   };
 }
 
+function flattenCheckinLogRow(item: unknown): Record<string, unknown> | undefined {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return undefined;
+  }
+  const row = item as Record<string, unknown>;
+  // Metapi returns nested rows:
+  // { checkin_logs, accounts, sites, failureReason }
+  const log = asRecord(row.checkin_logs) ?? asRecord(row.checkinLog) ?? asRecord(row.log);
+  const account = asRecord(row.accounts) ?? asRecord(row.account);
+  const site = asRecord(row.sites) ?? asRecord(row.site);
+  const failureReason = asRecord(row.failureReason) ?? asRecord(row.failure_reason);
+
+  if (!log && !account && !site) {
+    // Already flat-ish row
+    return row;
+  }
+
+  const flat: Record<string, unknown> = {
+    ...row,
+    ...(log ?? {}),
+  };
+  if (account) {
+    flat.accountId = account.id ?? flat.accountId;
+    flat.username = account.username ?? flat.username;
+    flat.siteId = account.siteId ?? flat.siteId;
+    flat.accountStatus = account.status;
+  }
+  if (site) {
+    flat.siteId = site.id ?? flat.siteId;
+    flat.siteName = site.name ?? flat.siteName;
+    flat.siteUrl = site.url ?? flat.siteUrl;
+    flat.platform = site.platform;
+    flat.site = site;
+  }
+  if (failureReason) {
+    flat.failureReason = failureReason;
+    flat.message = flat.message
+      ?? failureReason.title
+      ?? failureReason.detailHint
+      ?? failureReason.actionHint
+      ?? failureReason.code;
+  }
+  // Prefer nested checkin log status over site/account status.
+  if (log?.status !== undefined) {
+    flat.status = log.status;
+  }
+  if (log?.message !== undefined) {
+    flat.message = log.message ?? flat.message;
+  }
+  return flat;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 function summarizeCheckinEntry(raw: Record<string, unknown>) {
   const status = String(raw.status ?? raw.result ?? raw.state ?? raw.outcome ?? "").toLowerCase();
-  const message = String(raw.message ?? raw.error ?? raw.reason ?? raw.detail ?? "");
-  const site = raw.site && typeof raw.site === "object" && !Array.isArray(raw.site)
-    ? (raw.site as Record<string, unknown>)
-    : {};
+  const failureReason = asRecord(raw.failureReason);
+  const message = firstString(
+    raw.message,
+    raw.error,
+    raw.reason,
+    raw.detail,
+    failureReason?.title,
+    failureReason?.detailHint,
+    failureReason?.actionHint,
+    failureReason?.code,
+  );
+  const site = asRecord(raw.site) ?? {};
   const siteUrl = firstString(
     raw.siteUrl,
     raw.url,
@@ -462,22 +533,35 @@ function summarizeCheckinEntry(raw: Record<string, unknown>) {
     username: username || null,
     jobId: firstString(raw.jobId, raw.job_id, raw.runId) || null,
     checkedAt: firstString(raw.checkedAt, raw.createdAt, raw.updatedAt, raw.time, raw.timestamp) || null,
+    reward: raw.reward ?? null,
   };
 }
 
 function classifyStatus(status: string, message: string): "success" | "failed" | "skipped" | "other" {
-  const text = `${status} ${message}`.toLowerCase();
-  if (/success|ok|succeeded|已签到|签到成功|完成/.test(text) && !/失败|failed|error/.test(text)) {
+  const normalizedStatus = status.trim().toLowerCase();
+  // Prefer explicit status tokens from Metapi checkin_logs.status.
+  if (["success", "ok", "succeeded"].includes(normalizedStatus)) {
     return "success";
   }
-  if (/skip|skipped|ignore|ignored|跳过|无需|already/.test(text)) {
+  if (["skip", "skipped", "ignored", "ignore"].includes(normalizedStatus)) {
     return "skipped";
   }
-  if (/fail|failed|error|timeout|invalid|失败|错误|超时|异常/.test(text)) {
+  if (["fail", "failed", "error", "timeout", "invalid"].includes(normalizedStatus)) {
     return "failed";
   }
-  if (status === "pending" || status === "running" || status === "queued") {
+  if (["pending", "running", "queued"].includes(normalizedStatus)) {
     return "other";
+  }
+
+  const text = `${normalizedStatus} ${message}`.toLowerCase();
+  if (/(已签到|签到成功|成功)/.test(text) && !/(失败|failed|error)/.test(text)) {
+    return "success";
+  }
+  if (/(跳过|无需|already|skipped)/.test(text)) {
+    return "skipped";
+  }
+  if (/(失败|错误|超时|异常|failed|error|timeout)/.test(text)) {
+    return "failed";
   }
   return "other";
 }

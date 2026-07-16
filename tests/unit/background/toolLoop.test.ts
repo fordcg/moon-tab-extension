@@ -904,6 +904,9 @@ describe("通用模型工具循环", () => {
       maxIterations: 1,
     });
 
-    expect(result).toEqual({ ok: false, message: "工具调用超过最大轮次，已停止本次请求。" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).toMatch(/工具调用轮次已达上限|已停止|最终/);
+    }
   });
 });
