@@ -24,7 +24,9 @@
     "mcp:grok-search:start-bg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start_grok_search_mcp_bridge.ps1",
     "mcp:grok-search:install-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install_grok_search_mcp_bridge_task.ps1",
     "mcp:grok-search:uninstall-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall_grok_search_mcp_bridge_task.ps1",
-    "model-diagnostics": "node scripts/model_diagnostics_sink.mjs"
+    "model-diagnostics": "node scripts/model_diagnostics_sink.mjs",
+    "model-diagnostics:ensure": "node scripts/ensure_model_diagnostics_sink.mjs",
+    "model-diagnostics:install-autostart": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install_log_sink_protocol.ps1"
   },
   "engines": {
     "node": ">=20"

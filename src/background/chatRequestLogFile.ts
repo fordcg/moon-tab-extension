@@ -1,4 +1,85 @@
 export const CHAT_REQUEST_LOG_ENDPOINT = "http://127.0.0.1:17334/chat-request-logs";
+export const CHAT_REQUEST_LOG_HEALTH_ENDPOINT = "http://127.0.0.1:17334/health";
+export const CHAT_REQUEST_LOG_SINK_PROTOCOL = "moon-tab-log-sink://ensure";
+
+export type ChatRequestLogSinkStatus =
+  | "unknown"
+  | "running"
+  | "starting"
+  | "unavailable";
+
+export async function probeChatRequestLogSink(
+  fetcher: typeof fetch = globalThis.fetch?.bind(globalThis),
+): Promise<"running" | "unavailable"> {
+  if (typeof fetcher !== "function") {
+    return "unavailable";
+  }
+  try {
+    const response = await fetcher(CHAT_REQUEST_LOG_HEALTH_ENDPOINT, {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return "unavailable";
+    }
+    const payload = (await response.json().catch(() => null)) as { ok?: unknown } | null;
+    return payload && payload.ok ? "running" : "unavailable";
+  } catch {
+    return "unavailable";
+  }
+}
+
+/**
+ * Best-effort auto-start for the local log sink.
+ * Chrome extensions cannot spawn Node directly, so we:
+ * 1) probe /health
+ * 2) if down, open a local custom protocol registered by
+ *    `npm run model-diagnostics:install-autostart`
+ * 3) poll /health briefly
+ */
+export async function ensureChatRequestLogSink(input: {
+  fetcher?: typeof fetch;
+  openExternal?: (url: string) => void;
+  pollAttempts?: number;
+  pollIntervalMs?: number;
+} = {}): Promise<ChatRequestLogSinkStatus> {
+  const fetcher = input.fetcher ?? globalThis.fetch?.bind(globalThis);
+  if (typeof fetcher !== "function") {
+    return "unavailable";
+  }
+
+  if ((await probeChatRequestLogSink(fetcher)) === "running") {
+    return "running";
+  }
+
+  const openExternal =
+    input.openExternal ??
+    ((url: string) => {
+      try {
+        // Side panel / extension pages can open custom protocol URLs.
+        globalThis.open?.(url, "_blank", "noopener,noreferrer");
+      } catch {
+        // ignore
+      }
+    });
+
+  try {
+    openExternal(CHAT_REQUEST_LOG_SINK_PROTOCOL);
+  } catch {
+    // Protocol may be unregistered; fall through to polling/unavailable.
+  }
+
+  const attempts = Math.max(1, input.pollAttempts ?? 12);
+  const intervalMs = Math.max(50, input.pollIntervalMs ?? 250);
+  for (let index = 0; index < attempts; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    if ((await probeChatRequestLogSink(fetcher)) === "running") {
+      return "running";
+    }
+  }
+
+  return "unavailable";
+}
 
 const REDACTED = "[已脱敏]";
 const SENSITIVE_KEY = /(?:token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)/i;

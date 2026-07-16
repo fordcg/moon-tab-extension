@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   MODEL_TOOL_CAPABILITY_VALUES,
   MODEL_TOOL_RISK_VALUES,
@@ -9,6 +9,10 @@ import {
 } from "../../../shared/models/toolRegistry";
 import type { ModelToolCapability, ModelToolRisk, ModelToolRuntimeRequirement } from "../../../shared/models/types";
 import type { ChatPreferenceValues, SendShortcut } from "../../../shared/types";
+import {
+  ensureChatRequestLogSink,
+  type ChatRequestLogSinkStatus,
+} from "../../../background/chatRequestLogFile";
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
 import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
@@ -57,9 +61,35 @@ export function ChatPreferenceSettings() {
   const [runtimeFilter, setRuntimeFilter] = useState<ModelToolRuntimeRequirement | "">("");
   const [capabilityFilter, setCapabilityFilter] = useState<ModelToolCapability | "">("");
   const [riskFilter, setRiskFilter] = useState<ModelToolRisk | "">("");
+  const [logSinkStatus, setLogSinkStatus] = useState<ChatRequestLogSinkStatus>("unknown");
   const chatPreferences = useAppStore((state) => state.chatPreferences);
   const mcpSettings = useAppStore((state) => state.mcpSettings);
   const updateChatPreferences = useAppStore((state) => state.updateChatPreferences);
+  const addNotification = useAppStore((state) => state.addNotification);
+
+  useEffect(() => {
+    if (!chatPreferences.workspaceRequestLoggingEnabled) {
+      setLogSinkStatus("unknown");
+      return;
+    }
+    let cancelled = false;
+    setLogSinkStatus("starting");
+    void ensureChatRequestLogSink()
+      .then((status) => {
+        if (!cancelled) {
+          setLogSinkStatus(status);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLogSinkStatus("unavailable");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatPreferences.workspaceRequestLoggingEnabled]);
+
   const registeredTools = getRegisteredModelTools(mcpSettings);
   const filteredTools = filterModelToolsByClassification(registeredTools, {
     ...(runtimeFilter ? { runtime: runtimeFilter } : {}),
@@ -83,6 +113,29 @@ export function ChatPreferenceSettings() {
   const handleDisableFilteredTools = () => {
     const filteredIds = new Set(filteredTools.map((tool) => tool.id));
     void updateChatPreferences({ enabledToolIds: chatPreferences.enabledToolIds.filter((toolId) => !filteredIds.has(toolId)) });
+  };
+  const handleWorkspaceLoggingToggle = async (checked: boolean) => {
+    await updateChatPreferences({ workspaceRequestLoggingEnabled: checked });
+    if (!checked) {
+      setLogSinkStatus("unknown");
+      return;
+    }
+    setLogSinkStatus("starting");
+    const status = await ensureChatRequestLogSink();
+    setLogSinkStatus(status);
+    if (status === "running") {
+      addNotification({
+        type: "success",
+        title: "请求日志服务已就绪",
+        message: "本机 127.0.0.1:17334 可写 .tmp/chat-request-logs/",
+      });
+      return;
+    }
+    addNotification({
+      type: "warning",
+      title: "请求日志服务未运行",
+      message: "请先执行 npm run model-diagnostics:install-autostart，或手动运行 npm run model-diagnostics:ensure",
+    });
   };
 
   return (
@@ -246,7 +299,9 @@ export function ChatPreferenceSettings() {
           className="chat-preference-switch-input"
           type="checkbox"
           checked={chatPreferences.workspaceRequestLoggingEnabled}
-          onChange={(event) => void updateChatPreferences({ workspaceRequestLoggingEnabled: event.target.checked })}
+          onChange={(event) => {
+            void handleWorkspaceLoggingToggle(event.target.checked);
+          }}
         />
         <span className="chat-preference-switch-control" aria-hidden="true">
           <span className="chat-preference-switch-thumb" />
@@ -254,9 +309,44 @@ export function ChatPreferenceSettings() {
         <span className="chat-preference-switch-label">工作区请求日志</span>
       </label>
       <p className="ui-muted text-xs">
-        开启后，完整请求过程（侧栏状态、提示词上下文、模型回答、工具/MCP）写入本机日志服务
-        （需先运行 npm run model-diagnostics；输出 .tmp/chat-request-logs/）。默认关闭，不记录 API Key。
+        开启后，完整请求过程写入本机日志服务（`127.0.0.1:17334` → `.tmp/chat-request-logs/`）。
+        打开开关会自动检测服务；若未运行，会尝试通过本机协议自启。
       </p>
+      {chatPreferences.workspaceRequestLoggingEnabled ? (
+        <div className="rounded-lg border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] p-2 text-xs text-[var(--color-body)]">
+          <div>
+            服务状态：
+            {logSinkStatus === "running"
+              ? "已运行"
+              : logSinkStatus === "starting"
+                ? "正在启动…"
+                : logSinkStatus === "unavailable"
+                  ? "未运行"
+                  : "检测中…"}
+          </div>
+          {logSinkStatus === "unavailable" ? (
+            <div className="mt-1 grid gap-1">
+              <span>一次性安装自动启动：</span>
+              <code className="break-all">npm run model-diagnostics:install-autostart</code>
+              <span>或手动启动：</span>
+              <code className="break-all">npm run model-diagnostics:ensure</code>
+              <button
+                type="button"
+                className="ui-button-secondary mt-1 w-fit rounded px-2 py-1 text-xs"
+                onClick={() => {
+                  void (async () => {
+                    setLogSinkStatus("starting");
+                    const status = await ensureChatRequestLogSink();
+                    setLogSinkStatus(status);
+                  })();
+                }}
+              >
+                重新检测/尝试启动
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <label className="chat-preference-field">
         发送快捷键
         <SettingsSelect

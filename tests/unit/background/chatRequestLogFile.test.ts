@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createChatRequestLogClient, redactForChatRequestLog } from "../../../src/background/chatRequestLogFile";
+import {
+  createChatRequestLogClient,
+  ensureChatRequestLogSink,
+  probeChatRequestLogSink,
+  redactForChatRequestLog,
+} from "../../../src/background/chatRequestLogFile";
 
 describe("chatRequestLog client", () => {
   it("does not post when disabled", () => {
@@ -69,5 +74,37 @@ describe("chatRequestLog client", () => {
     expect(firstBody).not.toContain("sk-secret");
     expect((firstInit as RequestInit).headers).toMatchObject({ "X-Chat-Log-Session": expect.any(String) });
     expect((firstInit as RequestInit).headers).not.toEqual((secondInit as RequestInit).headers);
+  });
+
+  it("probeChatRequestLogSink returns running for healthy sink", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+    await expect(probeChatRequestLogSink(fetcher as typeof fetch)).resolves.toBe("running");
+  });
+
+  it("ensureChatRequestLogSink opens protocol and becomes running after start", async () => {
+    let healthy = false;
+    const openExternal = vi.fn(() => {
+      healthy = true;
+    });
+    const fetcher = vi.fn().mockImplementation(async () => {
+      if (!healthy) {
+        throw new Error("down");
+      }
+      return {
+        ok: true,
+        json: async () => ({ ok: true }),
+      };
+    });
+    const status = await ensureChatRequestLogSink({
+      fetcher: fetcher as typeof fetch,
+      openExternal,
+      pollAttempts: 3,
+      pollIntervalMs: 1,
+    });
+    expect(openExternal).toHaveBeenCalledWith("moon-tab-log-sink://ensure");
+    expect(status).toBe("running");
   });
 });
