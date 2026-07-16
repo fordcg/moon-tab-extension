@@ -104,3 +104,22 @@ describe("metapi checkin log summarization", () => {
     expect(body.counts.repairCandidates).toBe(0);
     expect(body.counts.browserRepairedToday).toBe(1);
   });
+
+  it("marks captcha/shield messages as needs_human and keeps unopened sites out of failed records", async () => {
+    const result = await executeSkillTool(
+      {
+        id: "shield-1",
+        name: "metapi_record_browser_checkin",
+        arguments: {
+          siteUrl: "https://windhub.cc",
+          status: "failed",
+          message: "安全验证 SHIELD 挡住签到按钮",
+        },
+      },
+      fetch,
+      "metapi.record_browser_checkin",
+    );
+    const body = JSON.parse(String(result?.content ?? "{}"));
+    expect(body.result.status).toBe("needs_human");
+    expect(body.barrier).toBe("shield");
+  });

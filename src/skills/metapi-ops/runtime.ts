@@ -382,38 +382,75 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
     ? logs.filter((item) => String(item.jobId ?? item.job_id ?? item.runId ?? "") === jobId)
     : logs;
   const browserResults = normalizeBrowserCheckinResults(await getAppSetting(METAPI_BROWSER_CHECKIN_RESULTS_KEY));
+  const todayBrowser = browserResults.filter((item) => isSameUtcDay(item.repairedAt));
   const todayBrowserSuccess = new Set(
-    browserResults
-      .filter((item) => item.status === "success" && isSameUtcDay(item.repairedAt))
+    todayBrowser
+      .filter((item) => item.status === "success" || item.status === "skipped")
+      .map((item) => normalizeSiteUrl(item.siteUrl).toLowerCase()),
+  );
+  const todayBrowserNeedsHuman = new Set(
+    todayBrowser
+      .filter((item) => item.status === "needs_human")
       .map((item) => normalizeSiteUrl(item.siteUrl).toLowerCase()),
   );
   const summary = classifyCheckinLogs(filtered);
-  const repairCandidates = (summary.repairCandidates as Array<Record<string, unknown>>).filter((item) => {
-    const url = typeof item.siteUrl === "string" ? normalizeSiteUrl(item.siteUrl).toLowerCase() : "";
-    return !url || !todayBrowserSuccess.has(url);
+  const enrichedCandidates = (summary.repairCandidates as Array<Record<string, unknown>>).map((item) => {
+    const message = typeof item.message === "string" ? item.message : "";
+    const barrier = detectCheckinBarrier(message);
+    return {
+      ...item,
+      barrier,
+      autoRepairable: barrier === "none",
+    };
   });
+  const repairCandidates = enrichedCandidates.filter((item) => {
+    const url = typeof item.siteUrl === "string" ? normalizeSiteUrl(item.siteUrl).toLowerCase() : "";
+    if (!url) {
+      return false;
+    }
+    if (todayBrowserSuccess.has(url) || todayBrowserNeedsHuman.has(url)) {
+      return false;
+    }
+    // Prefer auto-repairable first; captcha/shield still can appear if not yet recorded locally.
+    return true;
+  });
+  const autoCandidates = repairCandidates.filter((item) => item.barrier === "none");
+  const blockedCandidates = repairCandidates.filter((item) => item.barrier !== "none");
   return metapiOk(toolCall, {
     ...summary,
     counts: {
       ...summary.counts,
       repairCandidates: repairCandidates.length,
+      autoCandidates: autoCandidates.length,
+      blockedCandidates: blockedCandidates.length,
       browserRepairedToday: todayBrowserSuccess.size,
+      browserNeedsHumanToday: todayBrowserNeedsHuman.size,
     },
     repairCandidates,
-    browserRepairedToday: browserResults.filter((item) => item.status === "success" && isSameUtcDay(item.repairedAt)),
-    note: "浏览器补签不会自动改写 Metapi 官方签到日志；成功补签会记入本地 browserRepairedToday，并从 repairCandidates 排除。",
+    autoCandidates,
+    blockedCandidates,
+    browserRepairedToday: todayBrowser.filter((item) => item.status === "success" || item.status === "skipped"),
+    browserNeedsHumanToday: todayBrowser.filter((item) => item.status === "needs_human"),
+    note: "浏览器补签不会自动改写 Metapi 官方签到日志。本地 browserRepairedToday/browserNeedsHumanToday 会从 repairCandidates 排除。未打开的站不要标记 failed。",
   });
 }
 
 async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolResult> {
   const args = asObject(toolCall.arguments);
   const siteUrl = typeof args.siteUrl === "string" ? normalizeSiteUrl(args.siteUrl) : "";
-  const status = args.status;
+  let status = args.status;
+  let message = typeof args.message === "string" ? args.message.trim() : undefined;
   if (!siteUrl) {
     return metapiError(toolCall, "siteUrl 不能为空");
   }
+  // Auto-upgrade obvious captcha/shield messages to needs_human.
+  const barrier = detectCheckinBarrier(`${status ?? ""} ${message ?? ""}`);
+  if ((status === "failed" || status === undefined || status === null || status === "") && barrier !== "none") {
+    status = "needs_human";
+    message = message || (barrier === "shield" ? "SHIELD/人机验证，需人工" : "图形验证码/验证墙，需人工");
+  }
   if (status !== "success" && status !== "failed" && status !== "skipped" && status !== "needs_human") {
-    return metapiError(toolCall, "status 必须是 success/failed/skipped/needs_human");
+    return metapiError(toolCall, "status 必须是 success/failed/skipped/needs_human，且只能记录本轮已打开并实际处理过的站点");
   }
   const existing = normalizeBrowserCheckinResults(await getAppSetting(METAPI_BROWSER_CHECKIN_RESULTS_KEY));
   const next: MetapiBrowserCheckinResult = {
@@ -422,7 +459,7 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
     siteName: typeof args.siteName === "string" ? args.siteName.trim() : undefined,
     username: typeof args.username === "string" ? args.username.trim() : undefined,
     status,
-    message: typeof args.message === "string" ? args.message.trim() : undefined,
+    message,
     repairedAt: Date.now(),
     source: "browser_repair",
   };
@@ -435,7 +472,8 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
   return metapiOk(toolCall, {
     recorded: true,
     result: next,
-    note: "已写入本地补签记录。Metapi 官方 /api/checkin/logs 不会因此自动更新。",
+    barrier,
+    note: "已写入本地补签记录。仅应记录本轮实际打开处理过的站点；Metapi 官方日志不会自动更新。",
   });
 }
 
@@ -492,15 +530,21 @@ function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
 
   const repairCandidates = [...failed, ...skipped]
     .filter((item) => typeof item.siteUrl === "string" && item.siteUrl)
-    .map((item) => ({
-      siteId: item.siteId,
-      siteName: item.siteName,
-      siteUrl: item.siteUrl,
-      username: item.username,
-      status: item.status,
-      message: item.message,
-      bucket: item.bucket,
-    }));
+    .map((item) => {
+      const message = typeof item.message === "string" ? item.message : "";
+      const barrier = detectCheckinBarrier(message);
+      return {
+        siteId: item.siteId,
+        siteName: item.siteName,
+        siteUrl: item.siteUrl,
+        username: item.username,
+        status: item.status,
+        message: item.message,
+        bucket: item.bucket,
+        barrier,
+        autoRepairable: barrier === "none",
+      };
+    });
 
   return {
     total: logs.length,
@@ -645,6 +689,26 @@ function classifyStatus(status: string, message: string): "success" | "failed" |
     return "failed";
   }
   return "other";
+}
+
+function detectCheckinBarrier(message: string): "none" | "shield" | "captcha" | "cloudflare" | "login" {
+  const text = message.toLowerCase();
+  if (!text.trim()) {
+    return "none";
+  }
+  if (/(shield|我不是机器人|人机验证|turnstile|cf-challenge|security check)/i.test(message) || /shield|turnstile/.test(text)) {
+    return "shield";
+  }
+  if (/(验证码|captcha|\/checkin\/captcha|图形验证)/i.test(message) || /captcha/.test(text)) {
+    return "captcha";
+  }
+  if (/(cloudflare|cf-ray|just a moment|attention required|403)/i.test(message)) {
+    return "cloudflare";
+  }
+  if (/(登录|login|sign in|未登录|auth)/i.test(message)) {
+    return "login";
+  }
+  return "none";
 }
 
 function firstString(...values: unknown[]): string {
