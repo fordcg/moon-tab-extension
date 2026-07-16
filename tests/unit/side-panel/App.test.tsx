@@ -2919,7 +2919,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
   });
 
-  it("统一通知固定在右上角并在五秒后自动关闭", async () => {
+  it("统一通知固定在顶部居中并在五秒后自动关闭", async () => {
     vi.useFakeTimers();
     useAppStore.getState().addNotification({ type: "warning", title: "测试通知", message: "五秒后关闭" });
     const styles = readFileSync(resolve(process.cwd(), "src/side-panel/styles.css"), "utf8");
@@ -2928,12 +2928,13 @@ describe("App", () => {
 
     expect(screen.getByText("五秒后关闭").closest(".notification")).toHaveTextContent("五秒后关闭");
     expect(styles).toContain(".notification-host");
-    expect(styles).toContain("right-4");
-    expect(styles).toContain("top-4");
+    expect(styles).toContain("left: 50%");
+    expect(styles).toContain("top: 0.75rem");
+    expect(styles).toContain("transform: translateX(-50%)");
     expect(styles).toContain("@keyframes notification-slide-in");
     expect(styles).toContain("@keyframes notification-slide-out");
     expect(styles).toContain(".notification-closing");
-    expect(styles).toContain("transform: translateX(28px);");
+    expect(styles).toContain("border-left-width: 3px");
     expect(styles).not.toContain(".chat-failure");
 
     act(() => {
