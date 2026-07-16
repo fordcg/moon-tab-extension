@@ -1,8 +1,20 @@
 export const METAPI_ADMIN_SETTINGS_KEY = "metapiAdminSettings";
+export const METAPI_BROWSER_CHECKIN_RESULTS_KEY = "metapiBrowserCheckinResults";
 
 export interface MetapiAdminSettings {
   baseUrl: string;
   authToken: string;
+}
+
+export interface MetapiBrowserCheckinResult {
+  siteUrl: string;
+  siteId?: number;
+  siteName?: string;
+  username?: string;
+  status: "success" | "failed" | "skipped" | "needs_human";
+  message?: string;
+  repairedAt: number;
+  source: "browser_repair";
 }
 
 export interface RegisterRelaySiteArgs {
@@ -212,6 +224,54 @@ export function extractMetapiErrorMessage(data: unknown): string {
     }
   }
   return "";
+}
+
+export function normalizeBrowserCheckinResults(value: unknown): MetapiBrowserCheckinResult[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const results: MetapiBrowserCheckinResult[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+    const row = item as Record<string, unknown>;
+    const siteUrl = typeof row.siteUrl === "string" ? normalizeSiteUrl(row.siteUrl) : "";
+    const status = row.status;
+    if (!siteUrl || (status !== "success" && status !== "failed" && status !== "skipped" && status !== "needs_human")) {
+      continue;
+    }
+    results.push({
+      siteUrl,
+      siteId: typeof row.siteId === "number" && Number.isFinite(row.siteId) ? row.siteId : undefined,
+      siteName: typeof row.siteName === "string" ? row.siteName : undefined,
+      username: typeof row.username === "string" ? row.username : undefined,
+      status,
+      message: typeof row.message === "string" ? row.message : undefined,
+      repairedAt: typeof row.repairedAt === "number" && Number.isFinite(row.repairedAt) ? row.repairedAt : Date.now(),
+      source: "browser_repair",
+    });
+  }
+  return results;
+}
+
+export function upsertBrowserCheckinResult(
+  existing: MetapiBrowserCheckinResult[],
+  next: MetapiBrowserCheckinResult,
+): MetapiBrowserCheckinResult[] {
+  const normalizedUrl = normalizeSiteUrl(next.siteUrl).toLowerCase();
+  const filtered = existing.filter((item) => normalizeSiteUrl(item.siteUrl).toLowerCase() !== normalizedUrl);
+  return [next, ...filtered].slice(0, 300);
+}
+
+export function isSameUtcDay(timestamp: number, now = Date.now()): boolean {
+  const left = new Date(timestamp);
+  const right = new Date(now);
+  return (
+    left.getUTCFullYear() === right.getUTCFullYear()
+    && left.getUTCMonth() === right.getUTCMonth()
+    && left.getUTCDate() === right.getUTCDate()
+  );
 }
 
 export function redactMetapiAccount<T extends Record<string, unknown>>(account: T): T {

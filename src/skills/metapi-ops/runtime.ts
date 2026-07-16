@@ -1,13 +1,18 @@
 import {
   extractMetapiErrorMessage,
   findExistingSiteByUrl,
+  isSameUtcDay,
   metapiAdminFetch,
   METAPI_ADMIN_SETTINGS_KEY,
+  METAPI_BROWSER_CHECKIN_RESULTS_KEY,
+  normalizeBrowserCheckinResults,
   normalizeMetapiAdminSettings,
   normalizeSiteUrl,
   parseRegisterRelaySiteArgs,
   redactMetapiAccount,
+  upsertBrowserCheckinResult,
   type MetapiAdminSettings,
+  type MetapiBrowserCheckinResult,
 } from "../../shared/metapiAdmin";
 import {
   METAPI_CONFIGURE_TOOL_ID,
@@ -20,10 +25,14 @@ import {
   METAPI_DETECT_SITE_TOOL_NAME,
   METAPI_GET_CHECKIN_LOGS_TOOL_ID,
   METAPI_GET_CHECKIN_LOGS_TOOL_NAME,
+  METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID,
+  METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME,
   METAPI_LIST_SITES_TOOL_ID,
   METAPI_LIST_SITES_TOOL_NAME,
   METAPI_PARSE_REGISTER_ARGS_TOOL_ID,
   METAPI_PARSE_REGISTER_ARGS_TOOL_NAME,
+  METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID,
+  METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME,
   METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_ID,
   METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_NAME,
   METAPI_TRIGGER_CHECKIN_TOOL_ID,
@@ -69,6 +78,12 @@ export async function executeMetapiTool(
     }
     if (toolCall.id === METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_ID || toolName === METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_NAME) {
       return summarizeCheckinLogs(toolCall, fetcher);
+    }
+    if (toolCall.id === METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID || toolName === METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME) {
+      return recordBrowserCheckin(toolCall);
+    }
+    if (toolCall.id === METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID || toolName === METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME) {
+      return listBrowserCheckinResults(toolCall);
     }
     return metapiError(toolCall, `未知 Metapi 工具：${toolCall.id || toolName}`);
   } catch (error) {
@@ -366,8 +381,74 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
   const filtered = jobId
     ? logs.filter((item) => String(item.jobId ?? item.job_id ?? item.runId ?? "") === jobId)
     : logs;
+  const browserResults = normalizeBrowserCheckinResults(await getAppSetting(METAPI_BROWSER_CHECKIN_RESULTS_KEY));
+  const todayBrowserSuccess = new Set(
+    browserResults
+      .filter((item) => item.status === "success" && isSameUtcDay(item.repairedAt))
+      .map((item) => normalizeSiteUrl(item.siteUrl).toLowerCase()),
+  );
   const summary = classifyCheckinLogs(filtered);
-  return metapiOk(toolCall, summary);
+  const repairCandidates = (summary.repairCandidates as Array<Record<string, unknown>>).filter((item) => {
+    const url = typeof item.siteUrl === "string" ? normalizeSiteUrl(item.siteUrl).toLowerCase() : "";
+    return !url || !todayBrowserSuccess.has(url);
+  });
+  return metapiOk(toolCall, {
+    ...summary,
+    counts: {
+      ...summary.counts,
+      repairCandidates: repairCandidates.length,
+      browserRepairedToday: todayBrowserSuccess.size,
+    },
+    repairCandidates,
+    browserRepairedToday: browserResults.filter((item) => item.status === "success" && isSameUtcDay(item.repairedAt)),
+    note: "浏览器补签不会自动改写 Metapi 官方签到日志；成功补签会记入本地 browserRepairedToday，并从 repairCandidates 排除。",
+  });
+}
+
+async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  const siteUrl = typeof args.siteUrl === "string" ? normalizeSiteUrl(args.siteUrl) : "";
+  const status = args.status;
+  if (!siteUrl) {
+    return metapiError(toolCall, "siteUrl 不能为空");
+  }
+  if (status !== "success" && status !== "failed" && status !== "skipped" && status !== "needs_human") {
+    return metapiError(toolCall, "status 必须是 success/failed/skipped/needs_human");
+  }
+  const existing = normalizeBrowserCheckinResults(await getAppSetting(METAPI_BROWSER_CHECKIN_RESULTS_KEY));
+  const next: MetapiBrowserCheckinResult = {
+    siteUrl,
+    siteId: toPositiveInt(args.siteId),
+    siteName: typeof args.siteName === "string" ? args.siteName.trim() : undefined,
+    username: typeof args.username === "string" ? args.username.trim() : undefined,
+    status,
+    message: typeof args.message === "string" ? args.message.trim() : undefined,
+    repairedAt: Date.now(),
+    source: "browser_repair",
+  };
+  const saved = upsertBrowserCheckinResult(existing, next);
+  await saveAppSetting({
+    key: METAPI_BROWSER_CHECKIN_RESULTS_KEY,
+    value: saved,
+    updatedAt: Date.now(),
+  });
+  return metapiOk(toolCall, {
+    recorded: true,
+    result: next,
+    note: "已写入本地补签记录。Metapi 官方 /api/checkin/logs 不会因此自动更新。",
+  });
+}
+
+async function listBrowserCheckinResults(toolCall: ModelToolCall): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  const todayOnly = args.todayOnly !== false;
+  const existing = normalizeBrowserCheckinResults(await getAppSetting(METAPI_BROWSER_CHECKIN_RESULTS_KEY));
+  const results = todayOnly ? existing.filter((item) => isSameUtcDay(item.repairedAt)) : existing;
+  return metapiOk(toolCall, {
+    todayOnly,
+    count: results.length,
+    results,
+  });
 }
 
 async function loadSettings(): Promise<MetapiAdminSettings> {

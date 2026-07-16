@@ -62,3 +62,45 @@ describe("metapi checkin log summarization", () => {
     ]);
   });
 });
+
+  it("records browser repair results and excludes them from repairCandidates", async () => {
+    const payload = [
+      {
+        checkin_logs: { id: 2, accountId: 11, status: "failed", message: "HTTP 404:", createdAt: "2026-07-15 22:39:13" },
+        accounts: { id: 11, siteId: 101, username: "u2", status: "active" },
+        sites: { id: 101, name: "fail-site", url: "https://fail.example.com/profile", platform: "new-api" },
+        failureReason: { code: "unknown_error", title: "未知错误" },
+      },
+    ];
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify(payload),
+    });
+    await executeSkillTool(
+      { id: "c1", name: "metapi_configure", arguments: { baseUrl: "http://127.0.0.1:4000", authToken: "test-token" } },
+      fetcher as unknown as typeof fetch,
+      "metapi.configure",
+    );
+    await executeSkillTool(
+      {
+        id: "c2",
+        name: "metapi_record_browser_checkin",
+        arguments: {
+          siteUrl: "https://fail.example.com/profile",
+          status: "success",
+          message: "浏览器补签成功",
+        },
+      },
+      fetcher as unknown as typeof fetch,
+      "metapi.record_browser_checkin",
+    );
+    const result = await executeSkillTool(
+      { id: "c3", name: "metapi_summarize_checkin_logs", arguments: { limit: 20 } },
+      fetcher as unknown as typeof fetch,
+      "metapi.summarize_checkin_logs",
+    );
+    const body = JSON.parse(String(result?.content ?? "{}"));
+    expect(body.counts.failed).toBe(1);
+    expect(body.counts.repairCandidates).toBe(0);
+    expect(body.counts.browserRepairedToday).toBe(1);
+  });

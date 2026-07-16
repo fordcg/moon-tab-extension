@@ -20,6 +20,10 @@ import {
   METAPI_TRIGGER_CHECKIN_TOOL_NAME,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_ID,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_NAME,
+  METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID,
+  METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME,
+  METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID,
+  METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME,
 } from "./toolIds";
 
 // Keep group id literal to avoid skill package <-> toolRegistry circular import.
@@ -241,6 +245,50 @@ export const METAPI_OPS_TOOLS: SkillToolDefinition[] = [
         jobId: {
           type: "string",
           description: "可选，优先匹配该 jobId",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID,
+    name: METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME,
+    groupId: SYSTEM_GROUP_ID,
+    displayName: "记录浏览器补签结果",
+    description: "浏览器补签完成后写入本地结果。Metapi 官方日志不会自动更新；该记录用于避免重复补签，并在汇总时标记已浏览器补签。",
+    toolClassification: { runtime: "local", capabilities: ["deliver_result"], risk: "low" },
+    parameters: {
+      type: "object",
+      properties: {
+        siteUrl: { type: "string", description: "站点源站 URL" },
+        siteId: { type: "integer", minimum: 1, description: "可选站点 ID" },
+        siteName: { type: "string", description: "可选站点名" },
+        username: { type: "string", description: "可选用户名" },
+        status: {
+          type: "string",
+          enum: ["success", "failed", "skipped", "needs_human"],
+          description: "浏览器补签结果",
+        },
+        message: { type: "string", description: "可选说明，如已签到/验证码" },
+      },
+      required: ["siteUrl", "status"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID,
+    name: METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME,
+    groupId: SYSTEM_GROUP_ID,
+    displayName: "查看浏览器补签记录",
+    description: "列出本地记录的浏览器补签结果（默认仅今天）。",
+    toolClassification: { runtime: "local", capabilities: ["deliver_result"], risk: "low" },
+    parameters: {
+      type: "object",
+      properties: {
+        todayOnly: {
+          type: "boolean",
+          description: "是否仅返回今天记录，默认 true",
         },
       },
       required: [],

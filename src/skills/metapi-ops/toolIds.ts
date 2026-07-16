@@ -18,3 +18,7 @@ export const METAPI_GET_CHECKIN_LOGS_TOOL_ID = "metapi.get_checkin_logs";
 export const METAPI_GET_CHECKIN_LOGS_TOOL_NAME = "metapi_get_checkin_logs";
 export const METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_ID = "metapi.summarize_checkin_logs";
 export const METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_NAME = "metapi_summarize_checkin_logs";
+export const METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID = "metapi.record_browser_checkin";
+export const METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME = "metapi_record_browser_checkin";
+export const METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID = "metapi.list_browser_checkin_results";
+export const METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME = "metapi_list_browser_checkin_results";

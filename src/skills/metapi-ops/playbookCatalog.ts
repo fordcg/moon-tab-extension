@@ -85,9 +85,11 @@ export const METAPI_OPS_PLAYBOOKS: AutomationPlaybook[] = [
       "   c) 找到签到按钮则 click；若显示已签到则记 skipped/already。",
       "   d) 需要登录/验证码/人机验证时标记 needs_human，不要死循环。",
       "   e) 每站结束后立刻 list_pages + close_page 关闭本站临时页（保留用户原页面）。",
+      "   f) 无论成功/失败/跳过/需人工，都调用 metapi_record_browser_checkin 写入本地补签结果（siteUrl/status/message）。",
       "5) 全部完成后再次 list_pages，确保补签过程打开的临时页都已 close_page。",
       "6) 输出补签汇总：成功/失败/需人工/跳过；若还有剩余候选，提示用户再次 /补签。",
-      "7) 不要回显任何 token。",
+      "7) 重要：浏览器补签不会自动更新 Metapi 官方签到日志；以 metapi_record_browser_checkin 本地记录为准，避免重复补签。",
+      "8) 不要回显任何 token。",
     ].join("\n"),
   },
 ];
