@@ -64,6 +64,9 @@ function ensureExecutorMap(): Map<string, SkillToolExecutor> {
       continue;
     }
     for (const tool of pkg.tools ?? []) {
+      if (!tool?.id || !tool?.name || !pkg.executeTool) {
+        continue;
+      }
       // Index by registry id AND function name. Model tool calls use a random
       // toolCall.id (e.g. call_abc) with toolCall.name = metapi_list_sites.
       executorMap.set(tool.id, pkg.executeTool);
