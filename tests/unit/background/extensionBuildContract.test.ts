@@ -112,6 +112,7 @@ describe("扩展构建产物合约", () => {
       "src/pages/game/lang",
       "src/pages/game/audio",
       "src/pages/game/img",
+      "src/pages/game/expansion",
       "src/pages/game/favicon.ico",
       "src/pages/game/LICENSE.md",
       "src/pages/game/UPSTREAM.md",

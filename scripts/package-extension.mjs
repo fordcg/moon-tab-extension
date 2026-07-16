@@ -30,6 +30,7 @@ export const requiredDistDirectories = [
   "src/pages/game/lang",
   "src/pages/game/audio",
   "src/pages/game/img",
+  "src/pages/game/expansion",
 ];
 
 /**

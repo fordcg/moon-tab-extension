@@ -30,6 +30,7 @@ export const RELEASE_REQUIRED_ARTIFACT_DIRECTORIES = [
   "src/pages/game/lang",
   "src/pages/game/audio",
   "src/pages/game/img",
+  "src/pages/game/expansion",
 ];
 
 const forbiddenArtifactPatterns = [

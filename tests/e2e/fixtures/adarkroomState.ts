@@ -1,0 +1,45 @@
+export const ADARKROOM_STORAGE_KEY = "airp:game:adarkroom:state";
+
+export function createWastelandUnlockedState() {
+  return {
+    version: 1.3,
+    features: { location: { room: true, outside: true } },
+    stores: {
+      wood: 2_000,
+      compass: 1,
+      fur: 1_000,
+      meat: 300,
+      "cured meat": 200,
+      medicine: 20,
+      iron: 200,
+      coal: 100,
+      steel: 100,
+      leather: 100,
+      cloth: 100,
+      scales: 200,
+      teeth: 200,
+      sulphur: 100,
+      torch: 100,
+      bait: 20,
+      bullets: 100,
+      bolas: 10,
+      grenade: 5,
+      "energy cell": 10,
+    },
+    character: {},
+    income: {},
+    timers: {},
+    game: {
+      builder: { level: 4 },
+      buildings: { hut: 4, "trading post": 1, workshop: 1 },
+      population: 20,
+      workers: {},
+    },
+    playStats: {},
+    previous: {},
+    outfit: {},
+    config: { soundOn: false },
+    wait: {},
+    cooldown: {},
+  };
+}

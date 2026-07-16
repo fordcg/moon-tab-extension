@@ -137,4 +137,23 @@ describe("A Dark Room MV3 运行时", () => {
     expect(engine).not.toContain("localStorage.clear(");
     expect(engine).not.toMatch(/localStorage\.(?:getItem|setItem|removeItem)\(['"]gameState['"]/);
   });
+
+  it("荒原势力扩展按固定顺序加载，且不再引用已删除的推广事件池", async () => {
+    const [html, engine, events] = await Promise.all([
+      readFile(resolve(gameRoot, "index.html"), "utf8"),
+      readFile(resolve(gameRoot, "script/engine.js"), "utf8"),
+      readFile(resolve(gameRoot, "script/events.js"), "utf8"),
+    ]);
+
+    const coreIndex = html.indexOf("./expansion/wasteland-core.js");
+    const dataIndex = html.indexOf("./expansion/wasteland-data.js");
+    const runtimeIndex = html.indexOf("./expansion/wasteland-factions.js");
+    expect(coreIndex).toBeGreaterThan(0);
+    expect(dataIndex).toBeGreaterThan(coreIndex);
+    expect(runtimeIndex).toBeGreaterThan(dataIndex);
+    expect(engine).toContain("WastelandFactions.prepare()");
+    expect(engine).toContain("WastelandFactions.mount()");
+    expect(events).toContain("Events.Wasteland || []");
+    expect(events).not.toContain("Events.Marketing");
+  });
 });

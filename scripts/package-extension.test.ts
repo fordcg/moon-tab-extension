@@ -155,6 +155,7 @@ describe("本地扩展打包脚本", () => {
       "src/pages/game/lang",
       "src/pages/game/audio",
       "src/pages/game/img",
+      "src/pages/game/expansion",
     ]);
     expect(scriptSource).not.toContain("matter.min.js");
     expect(scriptSource).toContain("ensureHtmlAssetReferences(packageDir, collectManifestHtmlEntries(manifest))");

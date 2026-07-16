@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { ADARKROOM_STORAGE_KEY, createWastelandUnlockedState } from "./fixtures/adarkroomState";
 
 test("侧边栏页面可以渲染首次使用提示和设置入口", async ({ page }) => {
   await page.goto("/");
@@ -50,4 +51,126 @@ test("构建后的游戏页面可以渲染游戏入口", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "暗室" })).toBeVisible();
   await expect(page.locator("#lightButton")).toContainText("生火");
+});
+
+test("荒原势力扩展可从村庄打开并显示三方声望", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(({ key, state }) => {
+    localStorage.setItem(key, JSON.stringify(state));
+  }, { key: ADARKROOM_STORAGE_KEY, state: createWastelandUnlockedState() });
+
+  await page.goto("/src/pages/game/index.html");
+
+  await expect(page.getByRole("region", { name: "荒原来客" })).toBeVisible();
+  await page.getByRole("button", { name: "荒原来客" }).click();
+  await expect(page.getByText("三面旗帜停在林外，没有一面肯先靠近。")).toBeVisible();
+  await page.getByRole("button", { name: "听听三面旗帜" }).click();
+  await expect(page.getByRole("button", { name: /守火人：陌生/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /铁誓商队：陌生/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /灰径旅团：陌生/ })).toBeVisible();
+  await page.getByRole("button", { name: /守火人：陌生/ }).click();
+  await page.getByRole("button", { name: /分出一口锅/ }).dblclick();
+  await expect(page.locator("#event")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "荒原来客" }).click();
+  await page.getByRole("button", { name: "查看村庄路线" }).click();
+  await page.getByRole("button", { name: /共灶/ }).dblclick();
+  await expect(page.locator("#event")).toHaveCount(0);
+
+  const savedState = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) || "{}"), ADARKROOM_STORAGE_KEY);
+  expect(savedState.game.wasteland).toMatchObject({
+    route: "hearth",
+    quests: { embers: 1 },
+    reputations: { embers: 22, iron: -3, trail: -5 },
+    receipts: {
+      "quest:embers:0:share-pot": true,
+      "route:hearth": true,
+    },
+  });
+  expect(savedState.stores).toMatchObject({
+    "cured meat": 170,
+    medicine: 17,
+  });
+  expect(savedState.stores.wood).toBeGreaterThanOrEqual(1_700);
+  expect(savedState.stores.wood).toBeLessThan(1_800);
+  await expect.poll(() => page.evaluate(() => (window as any).Outside.getMaxPopulation())).toBe(26);
+
+  const revealedBossTiles = await page.evaluate(() => {
+    const runtime = (window as any).WastelandFactions;
+    const state = runtime.getState();
+    state.quests.embers = 2;
+    state.reputations.embers = 30;
+    runtime.commitState(state);
+    runtime.armBoss("embers");
+    (window as any).World.init();
+    runtime.ensureBossLandmarks();
+    const map = (window as any).$SM.get("game.world.map");
+    return map.flat().filter((tile: string) => tile === "Q").length;
+  });
+  expect(revealedBossTiles).toBe(1);
+
+  const bossLifecycle = await page.evaluate(() => {
+    const runtime = (window as any).WastelandFactions;
+    const world = (window as any).World;
+    const stateManager = (window as any).$SM;
+    const path = (window as any).Path;
+    const jquery = (window as any).$;
+    const findTile = (map: string[][], tile: string) => {
+      for (let x = 0; x < map.length; x += 1) {
+        const y = map[x].indexOf(tile);
+        if (y >= 0) return [x, y];
+      }
+      throw new Error(`Missing boss tile ${tile}`);
+    };
+    const countTile = (map: string[][], tile: string) => map.flat().filter((value) => value === tile).length;
+
+    const embersMap = stateManager.get("game.world.map") as string[][];
+    world.state = jquery.extend(true, {}, stateManager.get("game.world"));
+    world.curPos = findTile(embersMap, "Q");
+    world.dead = false;
+    world.usedOutposts = {};
+    path.outfit = { "cured meat": 1 };
+    world.state.wastelandApproaches = { embers: { id: "nest", reputation: { embers: 20, iron: 4 } } };
+    runtime.recordBossVictory("embers");
+    world.goHome();
+
+    const returnedState = runtime.getState();
+    const returnedMap = stateManager.get("game.world.map") as string[][];
+
+    const nextState = runtime.getState();
+    nextState.quests.iron = 2;
+    nextState.reputations.iron = 30;
+    runtime.commitState(nextState);
+    runtime.armBoss("iron");
+    const ironMap = stateManager.get("game.world.map") as string[][];
+    world.state = jquery.extend(true, {}, stateManager.get("game.world"));
+    world.curPos = findTile(ironMap, "R");
+    world.dead = false;
+    world.usedOutposts = {};
+    path.outfit = { "cured meat": 1 };
+    world.state.wastelandApproaches = { iron: { id: "burn", reputation: { iron: 20, trail: 5 } } };
+    runtime.recordBossVictory("iron");
+    world.die();
+
+    const deathState = runtime.getState();
+    const deathMap = stateManager.get("game.world.map") as string[][];
+    return {
+      returnedBoss: returnedState.bosses.embers,
+      returnedQuest: returnedState.quests.embers,
+      returnedTiles: countTile(returnedMap, "Q"),
+      deathBoss: deathState.bosses.iron,
+      deathQuest: deathState.quests.iron,
+      deathTiles: countTile(deathMap, "R"),
+    };
+  });
+  expect(bossLifecycle).toEqual({
+    returnedBoss: true,
+    returnedQuest: 3,
+    returnedTiles: 0,
+    deathBoss: false,
+    deathQuest: 2,
+    deathTiles: 1,
+  });
+  expect(pageErrors).toEqual([]);
 });

@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures/extension";
+import { ADARKROOM_STORAGE_KEY, createWastelandUnlockedState } from "./fixtures/adarkroomState";
 
 test("构建产物可以作为 Chrome 扩展加载并渲染侧边栏页面", async ({ extensionContext, extensionId }) => {
   const page = await extensionContext.newPage();
@@ -72,4 +73,20 @@ test("构建产物可以作为 Chrome 扩展加载并渲染游戏页面", async 
 
   await expect(page.getByRole("heading", { name: "暗室" })).toBeVisible();
   await expect(page.locator("#lightButton")).toContainText("生火");
+});
+
+test("真实扩展中的荒原势力入口可读取旧周目兼容存档", async ({ extensionContext, extensionId }) => {
+  const page = await extensionContext.newPage();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(({ key, state }) => {
+    localStorage.setItem(key, JSON.stringify(state));
+  }, { key: ADARKROOM_STORAGE_KEY, state: createWastelandUnlockedState() });
+
+  await page.goto(`chrome-extension://${extensionId}/src/pages/game/index.html`);
+
+  await expect(page.getByRole("region", { name: "荒原来客" })).toBeVisible();
+  await page.getByRole("button", { name: "荒原来客" }).click();
+  await expect(page.getByText("荒原走向：尚未定局。")).toBeVisible();
+  expect(pageErrors).toEqual([]);
 });

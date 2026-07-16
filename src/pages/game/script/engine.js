@@ -198,6 +198,7 @@
       $.Dispatch('stateUpdate').subscribe(Engine.handleStateUpdates);
 
       $SM.init();
+      if(window.WastelandFactions) WastelandFactions.prepare();
       AudioEngine.init();
       Notifications.init();
       Events.init();
@@ -216,6 +217,7 @@
       if($SM.get('features.location.spaceShip')) {
         Ship.init();
       }
+      if(window.WastelandFactions) WastelandFactions.mount();
 
       if($SM.get('config.lightsOff', true)){
         Engine.turnLightsOff();

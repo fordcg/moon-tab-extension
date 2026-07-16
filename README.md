@@ -162,6 +162,7 @@ Phase 6 当时仍不迁入 `network.wait_for_requests`、无 requestIds 的全�
 - `src/shared/`: 跨页面共享的纯逻辑、协议和状态工具。
 - `src/pages/newtab/`: 新标签页功能。UI 控制器放在根层，纯逻辑放在 `helpers/` 或独立 service 模块。
 - `src/pages/game/`: 《暗室》游戏页面、纯前端运行时、简体中文翻译、音频素材及上游许可说明。
+- `src/pages/game/expansion/`: 原创“荒原势力”扩展层，包含三方声望、村庄路线、区域首领、结局影响和周目词缀。
 - `src/side-panel/`: Browser AI Assistant React 侧栏源码，包含聊天、工具设置、MCP、历史和运行态 UI。
 - `src/devtools/`: DevTools Network 兼容页源码，通过 `chrome.devtools.network` 采集脱敏请求并发给后台 bridge。
 - `src/background/imagefreeToolRuntime.ts`: Imagefree 图片生成工具的 source-owned 后台 runtime hook。

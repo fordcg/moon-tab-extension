@@ -27,7 +27,7 @@
 |---|---|---|
 | AI 侧栏 | `tests/e2e/extension-runtime.spec.ts`、`tests/unit/side-panel/App.test.tsx` | 真实扩展可打开 `index.html`，显示聊天、设置和工具入口 |
 | Moon Tab 新标签页 | `tests/e2e/extension-runtime.spec.ts`、`tests/e2e/extension-smoke.spec.ts` | 构建后 `src/pages/newtab/index.html` 渲染搜索、AI 增强和页面管理入口 |
-| A Dark Room | `tests/e2e/extension-runtime.spec.ts`、`tests/e2e/extension-smoke.spec.ts` | 构建后 `src/pages/game/index.html` 显示“暗室”和“生火”，完整静态运行时可离线加载 |
+| A Dark Room | `tests/e2e/extension-runtime.spec.ts`、`tests/e2e/extension-smoke.spec.ts` | 构建后 `src/pages/game/index.html` 显示“暗室”和“生火”，完整静态运行时与“荒原势力”扩展可离线加载 |
 | 悬浮助手 | `tests/unit/content/index.test.ts`、`tests/unit/side-panel/App.test.tsx`、真实扩展侧栏 smoke | 侧栏暴露打开悬浮助手入口，content script 保持 iframe URL 和关闭边界 |
 | Grok/MCP Bridge | `tests/unit/background/agentToolsMessageHandler.test.ts`、`tests/unit/side-panel/App.test.tsx` | Grok 预设、MCP Server 配置、工具刷新、调用审计和本地密钥边界保持可用 |
 | Debugger 浏览器自动化 | `tests/unit/background/browserControlMessageHandler.test.ts`、`tests/unit/background/backgroundToolRuntime.test.ts`、真实扩展侧栏 smoke | manifest 声明 `debugger`，浏览器控制默认关闭，用户显式开启后普通网页可 attach，关闭或外部 detach 后状态清理 |
