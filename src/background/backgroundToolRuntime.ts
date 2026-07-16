@@ -285,9 +285,9 @@ export function appendBrowserControlPromptIfNeeded(
     "- 需要排查表单无法提交、按钮禁用、必填项缺失或错误文案时，调用 analyze_form；如已知道表单或字段 UID，可传 uid 限定范围。该工具只读诊断，不会读取字段原文值或提交表单。",
     "- 需要排查页面加载慢、资源耗时或主线程长任务时，调用 get_performance_summary；该工具只返回脱敏性能元数据，不读取 Header、Cookie、响应体或资源内容。",
     "- 需要一次性汇总页面状态、Console、性能和 Network 错误/慢请求现场时，调用 collect_diagnostics；该工具只返回脱敏聚合摘要，不读取响应体、Header、Cookie 或敏感原文。",
-    "- 图形验证码：take_snapshot 找验证码图片 UID，再 screenshot(target=element)；根据自动回传截图识读后 fill+确认。
-    - SHIELD/我不是机器人：click 复选框本体，不要只点外层卡片。
-    - 需要截取元素图片时，先使用 take_snapshot 获取 UID，再调用 screenshot 且 target=element；不要传 CSS 选择器或自定义脚本。",
+    "- 图形验证码：take_snapshot 找验证码图片 UID，再 screenshot(target=element)；根据自动回传截图识读后 fill+确认。",
+    "- SHIELD/我不是机器人：click 复选框本体，不要只点外层卡片。",
+    "- 需要截取元素图片时，先使用 take_snapshot 获取 UID，再调用 screenshot 且 target=element；不要传 CSS 选择器或自定义脚本。",
     "- 不要猜测 UID；只能使用 take_snapshot 返回的 UID。",
     "- 长页面、虚拟列表或懒加载内容需要继续观察时，可调用 scroll 滚动当前视口；滚动指定元素时必须先使用 take_snapshot 获取 UID。",
     "- 需要展开悬停菜单、提示层或触发 hover 状态时，先使用 take_snapshot 获取 UID，再调用 hover；不要传 CSS 选择器或自定义脚本。",

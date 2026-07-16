@@ -72,6 +72,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
   const toolTurnMessages: ChatMessage[] = [];
   const tokenUsageEntries: ChatTokenUsageEntry[] = [];
   let lastResponse: ModelToolLoopResponse | undefined;
+  let exhaustedByMaxIterations = false;
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     if (input.signal?.aborted) {
@@ -97,6 +98,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
         ...(toolTurnMessages.length ? { toolTurnMessages } : {}),
         ...(tokenUsageEntries.length ? { tokenUsageEntries: [...tokenUsageEntries] } : {}),
       };
+      exhaustedByMaxIterations = false;
       break;
     }
 
@@ -199,6 +201,12 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     ];
   }
 
+  // If the loop finished because maxIterations was hit while tools were still requested,
+  // lastResponse remains undefined and exhaustedByMaxIterations should be true.
+  if (!lastResponse && !unlimited) {
+    exhaustedByMaxIterations = true;
+  }
+
   if (input.requestFinalModel && lastResponse?.ok) {
     if (input.signal?.aborted) {
       return createAbortResponse();
@@ -260,6 +268,9 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
   }
 
   if (lastResponse?.ok) {
+    if (!exhaustedByMaxIterations) {
+      return lastResponse;
+    }
     return {
       ...lastResponse,
       content: lastResponse.content?.trim()
