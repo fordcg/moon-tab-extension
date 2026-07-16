@@ -74,14 +74,14 @@ export function ChatPreferenceDrawer({ open, onOpenChange }: ChatPreferenceDrawe
                 onChange={(value) => void updateActiveSessionChatPreferences({ aiRequestRetryCount: value })}
               />
               <PreferenceNumberInput
-                label="浏览器自动化最大工具轮次"
+                label="普通模式最大工具轮次"
                 value={overrides.browserAutomationMaxToolIterations}
                 placeholder={chatPreferences.browserAutomationMaxToolIterations}
                 step={1}
                 onChange={(value) => void updateActiveSessionChatPreferences({ browserAutomationMaxToolIterations: value })}
               />
             </div>
-            <p className="ui-muted text-xs">留空时使用全局聊天偏好；当前设置只作用于本次会话。</p>
+            <p className="ui-muted text-xs">留空时使用全局聊天偏好；当前设置只作用于本次会话。完全访问模式的轮次在全局设置中单独配置（0=不限制）。</p>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

@@ -39,6 +39,8 @@ type NetworkCompatibilityExecutor = (
 ) => ModelToolResult | undefined | Promise<ModelToolResult | undefined>;
 
 const DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS = 48;
+/** 0 means unlimited tool rounds (full_access). */
+export const UNLIMITED_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS = 0;
 
 export interface BackgroundToolExecutorMessage {
   model: ModelConfig;
@@ -53,7 +55,14 @@ export interface BackgroundToolExecutorOptions {
 
 export function normalizeBrowserAutomationMaxToolIterations(value: unknown): number {
   const numberValue = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numberValue) ? Math.round(numberValue) : DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS;
+  if (!Number.isFinite(numberValue)) {
+    return DEFAULT_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS;
+  }
+  // Allow 0 as unlimited for full_access; negative values fall back to default.
+  if (numberValue === 0) {
+    return UNLIMITED_BROWSER_AUTOMATION_MAX_TOOL_ITERATIONS;
+  }
+  return Math.max(1, Math.round(numberValue));
 }
 
 export function shouldExposeTool(tool: ModelToolRegistryEntry): boolean {

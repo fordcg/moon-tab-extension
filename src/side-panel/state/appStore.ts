@@ -151,6 +151,7 @@ import {
   normalizeChatPreferences,
   resolveDefaultContextMode,
   resolveEffectiveChatPreferences,
+  resolveBrowserAutomationMaxToolIterationsForMode,
   resolveRuntimeEnabledToolIds,
 } from "./appStorePreferences";
 import { upsertSession } from "./appStoreSessionUtils";
@@ -2174,6 +2175,10 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
     const enabledToolIds = enabledTools.map((tool) => tool.id);
     const requestStreamMode = input.state.streamMode;
     const selectedContextTabId = resolveSelectedContextTabId(input.state.contextTabs);
+    const effectiveMaxToolIterations = resolveBrowserAutomationMaxToolIterationsForMode(
+      effectiveChatPreferences,
+      input.state.browserAutomationMode ?? "normal_restricted",
+    );
     const requestMessages = buildChatRequestMessages({
       model: modelConfig,
       pageContext: input.pageContextPrompt,
@@ -2190,7 +2195,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       messages: requestMessages,
       stream: requestStreamMode,
       retryCount: effectiveChatPreferences.aiRequestRetryCount,
-      browserAutomationMaxToolIterations: effectiveChatPreferences.browserAutomationMaxToolIterations,
+      browserAutomationMaxToolIterations: effectiveMaxToolIterations,
       automationPlaybookSettings: input.state.automationPlaybookSettings,
       importedSkillPlaybooks: input.state.importedSkillPlaybooks,
       ...(input.selectedPlaybookId ? { selectedPlaybookId: input.selectedPlaybookId } : {}),
@@ -2221,7 +2226,7 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
                 enabledToolIds,
                 toolCallDisplayMode: input.state.chatPreferences.toolCallDisplayMode,
                 showToolCallProcessInAssistantMode: input.state.chatPreferences.showToolCallProcessInAssistantMode,
-                browserAutomationMaxToolIterations: effectiveChatPreferences.browserAutomationMaxToolIterations,
+                browserAutomationMaxToolIterations: effectiveMaxToolIterations,
                 followUpBehavior: input.state.chatPreferences.followUpBehavior,
                 systemPrompt: effectiveChatPreferences.systemPrompt,
                 pageContext: {

@@ -159,10 +159,25 @@ export function ChatPreferenceSettings() {
           onChange={(value) => void updateChatPreferences({ aiRequestRetryCount: value })}
         />
         <GlobalPreferenceNumberInput
-          label="浏览器自动化最大工具轮次"
+          label="普通模式最大工具轮次"
           value={chatPreferences.browserAutomationMaxToolIterations}
+          min={1}
           step={1}
           onChange={(value) => void updateChatPreferences({ browserAutomationMaxToolIterations: value })}
+        />
+        <GlobalPreferenceNumberInput
+          label="受控增强最大工具轮次"
+          value={chatPreferences.browserAutomationMaxToolIterationsControlledEnhanced}
+          min={1}
+          step={1}
+          onChange={(value) => void updateChatPreferences({ browserAutomationMaxToolIterationsControlledEnhanced: value })}
+        />
+        <GlobalPreferenceNumberInput
+          label="完全访问最大工具轮次（0=不限制）"
+          value={chatPreferences.browserAutomationMaxToolIterationsFullAccess}
+          min={0}
+          step={1}
+          onChange={(value) => void updateChatPreferences({ browserAutomationMaxToolIterationsFullAccess: value })}
         />
         <GlobalPreferenceNumberInput
           label="temperature"
@@ -187,6 +202,9 @@ export function ChatPreferenceSettings() {
           onChange={(value) => void updateChatPreferences({ topK: value })}
         />
       </div>
+      <p className="ui-muted text-xs">
+        工具轮次按浏览器自动化模式生效：普通 / 受控增强有上限；完全访问默认 0 表示不限制（仍可手动停止）。
+      </p>
       <fieldset className="chat-preference-network-types">
         <legend className="text-sm">工具调用</legend>
         <label className="chat-preference-switch">

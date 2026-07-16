@@ -14,6 +14,8 @@ export function createDefaultChatPreferences(): ChatPreferenceValues {
     systemPrompt: "你是网页助手",
     aiRequestRetryCount: DEFAULT_MODEL_REQUEST_RETRY_COUNT,
     browserAutomationMaxToolIterations: 48,
+    browserAutomationMaxToolIterationsControlledEnhanced: 80,
+    browserAutomationMaxToolIterationsFullAccess: 0,
     toolCallingEnabled: true,
     enabledToolIds: getRegisteredModelTools().map((tool) => tool.id),
     toolCallDisplayMode: "assistant_grouped",
@@ -38,6 +40,8 @@ export type EffectiveChatPreferences = Required<
     | "systemPrompt"
     | "aiRequestRetryCount"
     | "browserAutomationMaxToolIterations"
+    | "browserAutomationMaxToolIterationsControlledEnhanced"
+    | "browserAutomationMaxToolIterationsFullAccess"
     | "toolCallingEnabled"
     | "enabledToolIds"
     | "temperature"
@@ -58,6 +62,14 @@ export function normalizeChatPreferences(value?: Partial<ChatPreferenceValues>):
     browserAutomationMaxToolIterations: normalizeIntegerWithoutRange(
       value?.browserAutomationMaxToolIterations,
       defaults.browserAutomationMaxToolIterations,
+    ),
+    browserAutomationMaxToolIterationsControlledEnhanced: normalizeIntegerWithoutRange(
+      value?.browserAutomationMaxToolIterationsControlledEnhanced,
+      defaults.browserAutomationMaxToolIterationsControlledEnhanced,
+    ),
+    browserAutomationMaxToolIterationsFullAccess: normalizeIntegerWithoutRange(
+      value?.browserAutomationMaxToolIterationsFullAccess,
+      defaults.browserAutomationMaxToolIterationsFullAccess,
     ),
     toolCallingEnabled: normalizeBoolean(value?.toolCallingEnabled, defaults.toolCallingEnabled),
     enabledToolIds: hasEnabledToolIds ? normalizeUserEditableToolIds(value?.enabledToolIds) : defaults.enabledToolIds,
@@ -116,6 +128,18 @@ export function normalizeChatPreferenceOverrides(value?: ChatSessionPreferenceOv
       DEFAULT_CHAT_PREFERENCES.browserAutomationMaxToolIterations,
     );
   }
+  if (value?.browserAutomationMaxToolIterationsControlledEnhanced !== undefined) {
+    overrides.browserAutomationMaxToolIterationsControlledEnhanced = normalizeIntegerWithoutRange(
+      value.browserAutomationMaxToolIterationsControlledEnhanced,
+      DEFAULT_CHAT_PREFERENCES.browserAutomationMaxToolIterationsControlledEnhanced,
+    );
+  }
+  if (value?.browserAutomationMaxToolIterationsFullAccess !== undefined) {
+    overrides.browserAutomationMaxToolIterationsFullAccess = normalizeIntegerWithoutRange(
+      value.browserAutomationMaxToolIterationsFullAccess,
+      DEFAULT_CHAT_PREFERENCES.browserAutomationMaxToolIterationsFullAccess,
+    );
+  }
   if (value?.toolCallingEnabled !== undefined) {
     overrides.toolCallingEnabled = normalizeBoolean(value.toolCallingEnabled, DEFAULT_CHAT_PREFERENCES.toolCallingEnabled);
   }
@@ -143,6 +167,12 @@ export function resolveEffectiveChatPreferences(
     systemPrompt: overrides?.systemPrompt ?? preferences.systemPrompt,
     aiRequestRetryCount: overrides?.aiRequestRetryCount ?? preferences.aiRequestRetryCount,
     browserAutomationMaxToolIterations: overrides?.browserAutomationMaxToolIterations ?? preferences.browserAutomationMaxToolIterations,
+    browserAutomationMaxToolIterationsControlledEnhanced:
+      overrides?.browserAutomationMaxToolIterationsControlledEnhanced
+      ?? preferences.browserAutomationMaxToolIterationsControlledEnhanced,
+    browserAutomationMaxToolIterationsFullAccess:
+      overrides?.browserAutomationMaxToolIterationsFullAccess
+      ?? preferences.browserAutomationMaxToolIterationsFullAccess,
     toolCallingEnabled: overrides?.toolCallingEnabled ?? preferences.toolCallingEnabled,
     enabledToolIds: overrides?.enabledToolIds ?? preferences.enabledToolIds,
     temperature: overrides?.temperature ?? preferences.temperature,
@@ -154,12 +184,40 @@ export function resolveEffectiveChatPreferences(
     systemPrompt: normalizedOverrides.systemPrompt ?? preferences.systemPrompt,
     aiRequestRetryCount: normalizedOverrides.aiRequestRetryCount ?? preferences.aiRequestRetryCount,
     browserAutomationMaxToolIterations: normalizedOverrides.browserAutomationMaxToolIterations ?? preferences.browserAutomationMaxToolIterations,
+    browserAutomationMaxToolIterationsControlledEnhanced:
+      normalizedOverrides.browserAutomationMaxToolIterationsControlledEnhanced
+      ?? preferences.browserAutomationMaxToolIterationsControlledEnhanced,
+    browserAutomationMaxToolIterationsFullAccess:
+      normalizedOverrides.browserAutomationMaxToolIterationsFullAccess
+      ?? preferences.browserAutomationMaxToolIterationsFullAccess,
     toolCallingEnabled: normalizedOverrides.toolCallingEnabled ?? preferences.toolCallingEnabled,
     enabledToolIds: normalizedOverrides.enabledToolIds ?? preferences.enabledToolIds,
     temperature: normalizedOverrides.temperature ?? preferences.temperature,
     maxTokens: normalizedOverrides.maxTokens ?? preferences.maxTokens,
     topK: normalizedOverrides.topK,
   };
+}
+
+/**
+ * Resolve tool-loop max iterations for the current browser automation mode.
+ * full_access: 0 means unlimited.
+ */
+export function resolveBrowserAutomationMaxToolIterationsForMode(
+  preferences: Pick<
+    ChatPreferenceValues,
+    | "browserAutomationMaxToolIterations"
+    | "browserAutomationMaxToolIterationsControlledEnhanced"
+    | "browserAutomationMaxToolIterationsFullAccess"
+  >,
+  mode: BrowserAutomationMode,
+): number {
+  if (mode === "full_access") {
+    return preferences.browserAutomationMaxToolIterationsFullAccess;
+  }
+  if (mode === "controlled_enhanced") {
+    return preferences.browserAutomationMaxToolIterationsControlledEnhanced;
+  }
+  return preferences.browserAutomationMaxToolIterations;
 }
 
 function normalizeUserEditableToolIds(value: unknown): string[] {

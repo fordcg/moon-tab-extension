@@ -61,7 +61,10 @@ export type ModelToolLoopResponse =
     };
 
 export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<ModelToolLoopResponse> {
-  const maxIterations = Math.max(1, Math.floor(input.maxIterations ?? DEFAULT_MAX_TOOL_ITERATIONS));
+  // maxIterations <= 0 means unlimited (used by full_access mode).
+  const configuredMax = input.maxIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
+  const unlimited = typeof configuredMax === "number" && configuredMax <= 0;
+  const maxIterations = unlimited ? Number.POSITIVE_INFINITY : Math.max(1, Math.floor(configuredMax));
   const enabledToolIds = new Set(input.enabledToolIds);
   let messages = [...input.initialMessages];
   const toolCallRecords: ChatToolCallRecord[] = [];

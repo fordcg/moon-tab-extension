@@ -111,7 +111,15 @@ export interface ModelConfig extends ProviderModel {
 export interface ChatPreferenceValues {
   systemPrompt: string;
   aiRequestRetryCount: number;
+  /** 普通模式（normal_restricted）最大工具轮次 */
   browserAutomationMaxToolIterations: number;
+  /** 受控增强模式最大工具轮次 */
+  browserAutomationMaxToolIterationsControlledEnhanced: number;
+  /**
+   * 完全访问模式最大工具轮次。
+   * 0 或负数表示不限制（仅受安全中止/用户停止约束）。
+   */
+  browserAutomationMaxToolIterationsFullAccess: number;
   toolCallingEnabled: boolean;
   enabledToolIds: string[];
   toolCallDisplayMode: ToolCallDisplayMode;
@@ -131,6 +139,8 @@ export interface ChatSessionPreferenceOverrides {
   systemPrompt?: string;
   aiRequestRetryCount?: number;
   browserAutomationMaxToolIterations?: number;
+  browserAutomationMaxToolIterationsControlledEnhanced?: number;
+  browserAutomationMaxToolIterationsFullAccess?: number;
   toolCallingEnabled?: boolean;
   enabledToolIds?: string[];
   temperature?: number;

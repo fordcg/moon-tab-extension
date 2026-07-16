@@ -426,6 +426,12 @@ function normalizeChatPreferenceOverrides(value: unknown): ChatSessionPreference
   if (typeof source.browserAutomationMaxToolIterations === "number" && Number.isFinite(source.browserAutomationMaxToolIterations)) {
     overrides.browserAutomationMaxToolIterations = source.browserAutomationMaxToolIterations;
   }
+  if (typeof source.browserAutomationMaxToolIterationsControlledEnhanced === "number" && Number.isFinite(source.browserAutomationMaxToolIterationsControlledEnhanced)) {
+    overrides.browserAutomationMaxToolIterationsControlledEnhanced = source.browserAutomationMaxToolIterationsControlledEnhanced;
+  }
+  if (typeof source.browserAutomationMaxToolIterationsFullAccess === "number" && Number.isFinite(source.browserAutomationMaxToolIterationsFullAccess)) {
+    overrides.browserAutomationMaxToolIterationsFullAccess = source.browserAutomationMaxToolIterationsFullAccess;
+  }
   if (typeof source.toolCallingEnabled === "boolean") {
     overrides.toolCallingEnabled = source.toolCallingEnabled;
   }
