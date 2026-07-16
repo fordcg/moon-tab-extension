@@ -1479,13 +1479,15 @@ function parseInlineSkillCommand(
     return {
       playbookId: "repair_failed_checkin",
       title: "补签",
-      description: "根据签到日志找出失败/跳过站点，用浏览器打开页面并自行寻找签到入口完成补签。",
+      description: "根据签到日志找出失败/跳过站点，优先打开外部签到URL或控制台/个人资料完成签到。",
       content: [
         "执行补签：必须打开站点自己找签到入口。",
-        "1) metapi_summarize_checkin_logs 拿 mustOpenThisRound",
-        "2) 对 mustOpenThisRound 每个站都 browser.new_page，禁止只读日志就结束",
-        "3) 官方 HTTP404/fetch failed/签到未启用 不能作为跳过理由",
-        "4) 每站 close_page + metapi_record_browser_checkin(status必填)",
+        "1) metapi_summarize_checkin_logs 拿 mustOpenThisRound（含 openUrl/externalCheckinUrl）",
+        "2) 每个站 browser.new_page(openUrl)；有外部签到站就开外部站",
+        "3) 未登录优先 LinuxDO 登录，其次 GitHub，登录后继续",
+        "4) 签到入口在 控制台/个人资料/每日签到，不要优先钱包",
+        "5) 官方 404/fetch failed/未启用 不能作为不打开的理由",
+        "6) 每站 close_page + metapi_record_browser_checkin(status必填)",
       ].join("\n"),
     };
   }

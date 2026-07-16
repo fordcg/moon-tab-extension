@@ -445,10 +445,13 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
     browserNeedsHumanToday: todayBrowser.filter((item) => item.status === "needs_human"),
     instructions: [
       "必须对本轮 mustOpenThisRound 中的每一个站点执行 browser.new_page 并实际寻找签到入口。",
+      "打开 URL 优先用 openUrl（有 externalCheckinUrl 就用外部签到站，否则用 siteUrl）。",
+      "签到入口优先：控制台 / 个人中心 / 个人资料 / 每日签到；不要优先去钱包。",
+      "未登录时优先点 LinuxDO 登录，其次 GitHub 登录，登录成功后继续找签到。",
       "禁止因为官方日志写着 HTTP 404 / fetch failed / 签到功能未启用 / Cloudflare 403 就跳过不打开。",
       "这些只是 Metapi 自动签到失败原因，浏览器页面仍可能有签到按钮。",
       "未打开的站点只能放进 pendingNextBatch，不能记 failed/skipped。",
-      "每站：new_page → take_snapshot → 找签到/立即签到 → click →（验证码/SHIELD 自动处理）→ close_page → metapi_record_browser_checkin(status必填)。",
+      "每站：new_page(openUrl) → take_snapshot → 登录(如需) → 控制台/个人资料找签到 → click →（验证码/SHIELD/hCaptcha）→ close_page → metapi_record_browser_checkin(status必填)。",
     ],
     note: "浏览器补签不会自动改写 Metapi 官方签到日志。本地 browserRepairedToday/browserNeedsHumanToday 会从候选排除。",
   });
@@ -593,10 +596,15 @@ function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
     .map((item) => {
       const message = typeof item.message === "string" ? item.message : "";
       const barrier = isOfficialAutoCheckinErrorOnly(message) ? "none" : detectCheckinBarrier(message);
+      const siteUrl = typeof item.siteUrl === "string" ? item.siteUrl : "";
+      const externalCheckinUrl = typeof item.externalCheckinUrl === "string" ? item.externalCheckinUrl : "";
+      const openUrl = externalCheckinUrl || siteUrl;
       return {
         siteId: item.siteId,
         siteName: item.siteName,
-        siteUrl: item.siteUrl,
+        siteUrl,
+        externalCheckinUrl: externalCheckinUrl || null,
+        openUrl,
         username: item.username,
         status: item.status,
         message: item.message,
@@ -657,6 +665,7 @@ function flattenCheckinLogRow(item: unknown): Record<string, unknown> | undefine
     flat.siteName = site.name ?? flat.siteName;
     flat.siteUrl = site.url ?? flat.siteUrl;
     flat.platform = site.platform;
+    flat.externalCheckinUrl = site.externalCheckinUrl ?? site.external_checkin_url ?? flat.externalCheckinUrl;
     flat.site = site;
   }
   if (failureReason) {
@@ -708,6 +717,8 @@ function summarizeCheckinEntry(raw: Record<string, unknown>) {
   const siteName = firstString(raw.siteName, raw.name, site.name, raw.site_name);
   const username = firstString(raw.username, raw.userName, raw.accountName);
   const siteId = toPositiveInt(raw.siteId ?? raw.site_id ?? site.id);
+  const externalCheckinUrl = firstString(raw.externalCheckinUrl, raw.external_checkin_url, site.externalCheckinUrl, site.external_checkin_url);
+  const openUrl = externalCheckinUrl || siteUrl || "";
   const bucket = classifyStatus(status, message);
 
   return {
@@ -717,6 +728,8 @@ function summarizeCheckinEntry(raw: Record<string, unknown>) {
     siteId: siteId ?? null,
     siteName: siteName || null,
     siteUrl: siteUrl ? normalizeSiteUrl(String(siteUrl)) : null,
+    externalCheckinUrl: externalCheckinUrl ? String(externalCheckinUrl).trim() : null,
+    openUrl: openUrl ? String(openUrl).trim() : null,
     username: username || null,
     jobId: firstString(raw.jobId, raw.job_id, raw.runId) || null,
     checkedAt: firstString(raw.checkedAt, raw.createdAt, raw.updatedAt, raw.time, raw.timestamp) || null,
