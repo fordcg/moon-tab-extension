@@ -9,7 +9,7 @@ import {
   type SidePanelRuntimeMessage,
 } from "../shared/sidePanelRuntime";
 
-const RECENTLY_CREATED_TAB_TTL_MS = 10000;
+const RECENTLY_CREATED_TAB_TTL_MS = 60000;
 
 const recentlyCreatedTabs = new Set<number>();
 let initialized = false;
@@ -92,6 +92,25 @@ export async function ensureSidePanelForControlledTab(tabId: number | undefined)
   if (!enableTabScopedSidePanel(tabId)) {
     return false;
   }
+
+  // Prefer window-scoped open first so the panel stays attached while automation switches tabs.
+  let windowId: number | undefined;
+  try {
+    const tab = await chrome.tabs?.get?.(tabId);
+    windowId = typeof tab?.windowId === "number" ? tab.windowId : undefined;
+  } catch {
+    windowId = undefined;
+  }
+
+  try {
+    if (typeof windowId === "number") {
+      await chrome.sidePanel?.open?.({ windowId });
+      return true;
+    }
+  } catch {
+    // Fall through to tab-scoped open.
+  }
+
   try {
     await chrome.sidePanel?.open?.({ tabId });
     return true;
@@ -177,21 +196,24 @@ async function syncActiveTabSidePanel(tabId: number | undefined, windowId: numbe
   }
 
   let opened = await getOpenedSidePanelTabs();
-  // Inherit for any newly created tab in a window that already has the panel open,
-  // not only when the Set still contains the tab id (race with onCreated).
+  // If this window already has the side panel on any tab, inherit it to the active tab.
+  // Never auto-close during tab switches — that is what makes browser automation "lose" the panel.
   if (!opened.has(tabId) && await windowHasOpenedSidePanel(windowId, opened)) {
-    if (recentlyCreatedTabs.has(tabId) || opened.size > 0) {
-      await rememberOpenedSidePanelTab(tabId);
-      opened = await getOpenedSidePanelTabs();
-    }
+    await rememberOpenedSidePanelTab(tabId);
+    opened = await getOpenedSidePanelTabs();
   }
 
-  const openedInTab = opened.has(tabId);
   await syncTabSidePanelOptions(tabId, opened);
-  // Only close the window panel when switching to a tab that never inherited the panel.
-  // Do not close while inheritance for a just-created automation tab is still settling.
-  if (!openedInTab && typeof windowId === "number" && !recentlyCreatedTabs.has(tabId)) {
-    await closeSidePanelTargets([{ windowId }]);
+  if (opened.has(tabId) || recentlyCreatedTabs.has(tabId)) {
+    try {
+      if (typeof windowId === "number") {
+        await chrome.sidePanel?.open?.({ windowId });
+      } else {
+        await chrome.sidePanel?.open?.({ tabId });
+      }
+    } catch {
+      // Best effort only.
+    }
   }
 }
 

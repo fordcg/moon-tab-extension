@@ -462,21 +462,29 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
   if (!siteUrl) {
     return metapiError(toolCall, "siteUrl 不能为空");
   }
-  // Auto-upgrade obvious captcha/shield messages to needs_human only when status is failed/empty.
-  // If the model already says success/skipped, keep it even if message mentions SHIELD/captcha
-  // (e.g. "SHIELD 通过后签到成功").
+
+  // Infer status when model forgets required status field.
+  status = inferBrowserCheckinStatus(status, message);
+
   const barrier = detectCheckinBarrier(`${status ?? ""} ${message ?? ""}`);
-  if ((status === "failed" || status === undefined || status === null || status === "") && barrier !== "none") {
+  if (status === "failed" && barrier !== "none") {
+    // Captcha/SHIELD failures are human-needed, not generic failed.
     status = "needs_human";
     message = message || (barrier === "shield" ? "SHIELD/人机验证，需人工" : "图形验证码/验证墙，需人工");
   }
-  // If message clearly indicates success, don't leave status empty.
-  if ((status === undefined || status === null || status === "") && message && /(签到成功|已签到|补签成功|success)/i.test(message)) {
-    status = "success";
-  }
+
   if (status !== "success" && status !== "failed" && status !== "skipped" && status !== "needs_human") {
-    return metapiError(toolCall, "status 必须是 success/failed/skipped/needs_human，且只能记录本轮已打开并实际处理过的站点");
+    // Last-resort default: message-only calls with no clear status still get recorded as failed.
+    if (message) {
+      status = "failed";
+    } else {
+      return metapiError(
+        toolCall,
+        "status 必填且必须是 success/failed/skipped/needs_human。例如：status=failed message=整站404无法签到",
+      );
+    }
   }
+
   const existing = normalizeBrowserCheckinResults(await getAppSetting(METAPI_BROWSER_CHECKIN_RESULTS_KEY));
   const next: MetapiBrowserCheckinResult = {
     siteUrl,
@@ -498,8 +506,35 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
     recorded: true,
     result: next,
     barrier,
-    note: "已写入本地补签记录。仅应记录本轮实际打开处理过的站点；Metapi 官方日志不会自动更新。",
+    inferredStatus: args.status !== status,
+    note: "已写入本地补签记录。若未传 status，已根据 message 自动推断。Metapi 官方日志不会自动更新。",
   });
+}
+
+function inferBrowserCheckinStatus(status: unknown, message?: string): unknown {
+  if (status === "success" || status === "failed" || status === "skipped" || status === "needs_human") {
+    return status;
+  }
+  const text = (message || "").trim();
+  if (!text) {
+    return status;
+  }
+  // Success first (including "SHIELD 通过后签到成功")
+  if (/(签到成功|补签成功|今日已签到|已签到|success)/i.test(text) && !/(无法签到|签到失败|未成功)/i.test(text)) {
+    return "success";
+  }
+  if (/(跳过|无需签到|already|skipped)/i.test(text)) {
+    return "skipped";
+  }
+  if (/(shield|我不是机器人|验证码|captcha|turnstile|需人工|needs_human|人机验证)/i.test(text)
+    && !/(通过后|已通过|验证码通过后签到成功|shield 通过后)/i.test(text)) {
+    return "needs_human";
+  }
+  if (/(404|403|页面不存在|无法签到|失败|failed|error|timeout|打不开|无法访问|未启用)/i.test(text)) {
+    return "failed";
+  }
+  // Any other free-form message without status: treat as failed so recording still succeeds.
+  return "failed";
 }
 
 async function listBrowserCheckinResults(toolCall: ModelToolCall): Promise<ModelToolResult> {

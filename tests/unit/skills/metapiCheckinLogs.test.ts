@@ -175,3 +175,24 @@ describe("metapi checkin log summarization", () => {
     const urls = body.mustOpenThisRound.map((item: { siteUrl: string }) => item.siteUrl);
     expect(urls.some((url: string) => url.includes("fail.example.com") || url.includes("fetch.example.com") || url.includes("disabled.example.com"))).toBe(true);
   });
+
+
+  it("infers status=failed from message when status is omitted", async () => {
+    const result = await executeSkillTool(
+      {
+        id: "no-status",
+        name: "metapi_record_browser_checkin",
+        arguments: {
+          siteUrl: "https://chybenzun.top",
+          message: "浏览器打开后整站 HTTP 404，页面不存在，无法签到",
+        },
+      },
+      fetch,
+      "metapi.record_browser_checkin",
+    );
+    expect(result?.isError).not.toBe(true);
+    const body = JSON.parse(String(result?.content ?? "{}"));
+    expect(body.recorded).toBe(true);
+    expect(body.result.status).toBe("failed");
+    expect(body.inferredStatus).toBe(true);
+  });
