@@ -1479,8 +1479,14 @@ function parseInlineSkillCommand(
     return {
       playbookId: "repair_failed_checkin",
       title: "补签",
-      description: "根据签到日志找出失败/跳过站点，用浏览器打开并点击签到/立即签到进行补签。",
-      content: "对签到失败和跳过的站点进行浏览器补签",
+      description: "根据签到日志找出失败/跳过站点，用浏览器打开页面并自行寻找签到入口完成补签。",
+      content: [
+        "执行补签：必须打开站点自己找签到入口。",
+        "1) metapi_summarize_checkin_logs 拿 mustOpenThisRound",
+        "2) 对 mustOpenThisRound 每个站都 browser.new_page，禁止只读日志就结束",
+        "3) 官方 HTTP404/fetch failed/签到未启用 不能作为跳过理由",
+        "4) 每站 close_page + metapi_record_browser_checkin(status必填)",
+      ].join("\n"),
     };
   }
 

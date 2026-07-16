@@ -123,3 +123,52 @@ describe("metapi checkin log summarization", () => {
     expect(body.result.status).toBe("needs_human");
     expect(body.barrier).toBe("shield");
   });
+
+
+  it("forces mustOpenThisRound for official API failures like 404/fetch failed", async () => {
+    const payload = [
+      {
+        checkin_logs: { id: 2, accountId: 11, status: "failed", message: "HTTP 404:", createdAt: "2026-07-15 22:39:13" },
+        accounts: { id: 11, siteId: 101, username: "u2", status: "active" },
+        sites: { id: 101, name: "fail-site", url: "https://fail.example.com", platform: "new-api" },
+        failureReason: { code: "unknown_error", title: "未知错误" },
+      },
+      {
+        checkin_logs: { id: 3, accountId: 12, status: "failed", message: "fetch failed", createdAt: "2026-07-15 22:39:13" },
+        accounts: { id: 12, siteId: 102, username: "u3", status: "active" },
+        sites: { id: 102, name: "fetch-site", url: "https://fetch.example.com", platform: "new-api" },
+        failureReason: null,
+      },
+      {
+        checkin_logs: { id: 4, accountId: 13, status: "failed", message: "签到功能未启用", createdAt: "2026-07-15 22:39:13" },
+        accounts: { id: 13, siteId: 103, username: "u4", status: "active" },
+        sites: { id: 103, name: "disabled-site", url: "https://disabled.example.com", platform: "new-api" },
+        failureReason: null,
+      },
+    ];
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify(payload),
+    });
+    await executeSkillTool(
+      { id: "c1", name: "metapi_configure", arguments: { baseUrl: "http://127.0.0.1:4000", authToken: "test-token" } },
+      fetcher as unknown as typeof fetch,
+      "metapi.configure",
+    );
+    const result = await executeSkillTool(
+      { id: "c2", name: "metapi_summarize_checkin_logs", arguments: { limit: 20 } },
+      fetcher as unknown as typeof fetch,
+      "metapi.summarize_checkin_logs",
+    );
+    const body = JSON.parse(String(result?.content ?? "{}"));
+    expect(body.counts.failed).toBe(3);
+    expect(body.counts.mustOpenThisRound).toBe(3);
+    expect(body.mustOpenThisRound).toHaveLength(3);
+    for (const item of body.mustOpenThisRound) {
+      expect(item.mustOpen).toBe(true);
+      expect(item.autoRepairable).toBe(true);
+      expect(item.barrier).toBe("none");
+      expect(item.officialErrorOnly).toBe(true);
+    }
+    expect(body.instructions.join(" ")).toMatch(/必须对本轮 mustOpenThisRound/);
+  });

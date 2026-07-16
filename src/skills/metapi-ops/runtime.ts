@@ -396,11 +396,16 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
   const summary = classifyCheckinLogs(filtered);
   const enrichedCandidates = (summary.repairCandidates as Array<Record<string, unknown>>).map((item) => {
     const message = typeof item.message === "string" ? item.message : "";
-    const barrier = detectCheckinBarrier(message);
+    // Official Metapi auto-checkin errors (404/fetch failed/未启用) are NOT browser barriers.
+    // They only mean Metapi's own API path failed; browser UI may still have check-in.
+    const barrier = isOfficialAutoCheckinErrorOnly(message) ? "none" : detectCheckinBarrier(message);
     return {
       ...item,
       barrier,
-      autoRepairable: barrier === "none",
+      // Always try opening in browser unless already handled locally today.
+      autoRepairable: true,
+      officialErrorOnly: isOfficialAutoCheckinErrorOnly(message),
+      mustOpen: true,
     };
   });
   const repairCandidates = enrichedCandidates.filter((item) => {
@@ -411,27 +416,41 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
     if (todayBrowserSuccess.has(url) || todayBrowserNeedsHuman.has(url)) {
       return false;
     }
-    // Prefer auto-repairable first; captcha/shield still can appear if not yet recorded locally.
     return true;
   });
-  const autoCandidates = repairCandidates.filter((item) => item.barrier === "none");
-  const blockedCandidates = repairCandidates.filter((item) => item.barrier !== "none");
+  // Prefer failed first, then skipped; keep stable unique siteUrl order.
+  const ordered = prioritizeRepairCandidates(repairCandidates);
+  const mustOpenThisRound = ordered.slice(0, 5);
+  const pendingNextBatch = ordered.slice(5);
+  const autoCandidates = ordered.filter((item) => item.barrier === "none");
+  const blockedCandidates = ordered.filter((item) => item.barrier !== "none");
   return metapiOk(toolCall, {
     ...summary,
     counts: {
       ...summary.counts,
-      repairCandidates: repairCandidates.length,
+      repairCandidates: ordered.length,
+      mustOpenThisRound: mustOpenThisRound.length,
+      pendingNextBatch: pendingNextBatch.length,
       autoCandidates: autoCandidates.length,
       blockedCandidates: blockedCandidates.length,
       browserRepairedToday: todayBrowserSuccess.size,
       browserNeedsHumanToday: todayBrowserNeedsHuman.size,
     },
-    repairCandidates,
+    repairCandidates: ordered,
+    mustOpenThisRound,
+    pendingNextBatch,
     autoCandidates,
     blockedCandidates,
     browserRepairedToday: todayBrowser.filter((item) => item.status === "success" || item.status === "skipped"),
     browserNeedsHumanToday: todayBrowser.filter((item) => item.status === "needs_human"),
-    note: "浏览器补签不会自动改写 Metapi 官方签到日志。本地 browserRepairedToday/browserNeedsHumanToday 会从 repairCandidates 排除。未打开的站不要标记 failed。",
+    instructions: [
+      "必须对本轮 mustOpenThisRound 中的每一个站点执行 browser.new_page 并实际寻找签到入口。",
+      "禁止因为官方日志写着 HTTP 404 / fetch failed / 签到功能未启用 / Cloudflare 403 就跳过不打开。",
+      "这些只是 Metapi 自动签到失败原因，浏览器页面仍可能有签到按钮。",
+      "未打开的站点只能放进 pendingNextBatch，不能记 failed/skipped。",
+      "每站：new_page → take_snapshot → 找签到/立即签到 → click →（验证码/SHIELD 自动处理）→ close_page → metapi_record_browser_checkin(status必填)。",
+    ],
+    note: "浏览器补签不会自动改写 Metapi 官方签到日志。本地 browserRepairedToday/browserNeedsHumanToday 会从候选排除。",
   });
 }
 
@@ -538,7 +557,7 @@ function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
     .filter((item) => typeof item.siteUrl === "string" && item.siteUrl)
     .map((item) => {
       const message = typeof item.message === "string" ? item.message : "";
-      const barrier = detectCheckinBarrier(message);
+      const barrier = isOfficialAutoCheckinErrorOnly(message) ? "none" : detectCheckinBarrier(message);
       return {
         siteId: item.siteId,
         siteName: item.siteName,
@@ -548,7 +567,9 @@ function classifyCheckinLogs(logs: Array<Record<string, unknown>>) {
         message: item.message,
         bucket: item.bucket,
         barrier,
-        autoRepairable: barrier === "none",
+        autoRepairable: true,
+        officialErrorOnly: isOfficialAutoCheckinErrorOnly(message),
+        mustOpen: true,
       };
     });
 
@@ -708,13 +729,37 @@ function detectCheckinBarrier(message: string): "none" | "shield" | "captcha" | 
   if (/(验证码|captcha|\/checkin\/captcha|图形验证)/i.test(message) || /captcha/.test(text)) {
     return "captcha";
   }
-  if (/(cloudflare|cf-ray|just a moment|attention required|403)/i.test(message)) {
+  if (/(cloudflare|cf-ray|just a moment|attention required)/i.test(message)) {
     return "cloudflare";
   }
-  if (/(登录|login|sign in|未登录|auth)/i.test(message)) {
+  if (/(登录|login|sign in|未登录|auth)/i.test(message) && !/oauth|authorization bearer/i.test(message)) {
     return "login";
   }
   return "none";
+}
+
+/** Metapi auto-checkin backend errors — still require browser open to find UI check-in. */
+function isOfficialAutoCheckinErrorOnly(message: string): boolean {
+  const text = message || "";
+  return /(http\s*404|http\s*403|fetch failed|签到功能未启用|timeout|econnreset|econnrefused|network error|networkerror|enotfound|socket|tls|certificate|5\d\d)/i.test(text);
+}
+
+function prioritizeRepairCandidates(candidates: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const failed = candidates.filter((item) => item.bucket === "failed" || item.status === "failed");
+  const skipped = candidates.filter((item) => item.bucket === "skipped" || item.status === "skipped");
+  const rest = candidates.filter((item) => !failed.includes(item) && !skipped.includes(item));
+  const merged = [...failed, ...skipped, ...rest];
+  const seen = new Set<string>();
+  const unique: Array<Record<string, unknown>> = [];
+  for (const item of merged) {
+    const url = typeof item.siteUrl === "string" ? normalizeSiteUrl(item.siteUrl).toLowerCase() : "";
+    if (!url || seen.has(url)) {
+      continue;
+    }
+    seen.add(url);
+    unique.push(item);
+  }
+  return unique;
 }
 
 function firstString(...values: unknown[]): string {
