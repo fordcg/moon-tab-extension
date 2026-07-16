@@ -443,11 +443,17 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
   if (!siteUrl) {
     return metapiError(toolCall, "siteUrl 不能为空");
   }
-  // Auto-upgrade obvious captcha/shield messages to needs_human.
+  // Auto-upgrade obvious captcha/shield messages to needs_human only when status is failed/empty.
+  // If the model already says success/skipped, keep it even if message mentions SHIELD/captcha
+  // (e.g. "SHIELD 通过后签到成功").
   const barrier = detectCheckinBarrier(`${status ?? ""} ${message ?? ""}`);
   if ((status === "failed" || status === undefined || status === null || status === "") && barrier !== "none") {
     status = "needs_human";
     message = message || (barrier === "shield" ? "SHIELD/人机验证，需人工" : "图形验证码/验证墙，需人工");
+  }
+  // If message clearly indicates success, don't leave status empty.
+  if ((status === undefined || status === null || status === "") && message && /(签到成功|已签到|补签成功|success)/i.test(message)) {
+    status = "success";
   }
   if (status !== "success" && status !== "failed" && status !== "skipped" && status !== "needs_human") {
     return metapiError(toolCall, "status 必须是 success/failed/skipped/needs_human，且只能记录本轮已打开并实际处理过的站点");

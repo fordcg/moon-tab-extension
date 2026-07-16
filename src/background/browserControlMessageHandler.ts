@@ -64,6 +64,7 @@ import { ReplayToolExecutor } from "./browserControl/replayToolExecutor";
 import { FullAccessToolExecutor } from "./browserControl/fullAccessToolExecutor";
 import { BrowserConsoleRecorder } from "./browserControl/consoleRecorder";
 import { handlePageContextMessage, type PageContextExtractResponse } from "./pageContextMessageHandler";
+import { ensureSidePanelForControlledTab } from "./sidePanelController";
 
 const FULL_ACCESS_GRANT_TTL_MS = 5 * 60 * 1000;
 
@@ -1748,10 +1749,11 @@ export class BrowserControlManager {
     }
 
     const currentTab = await this.getCurrentControlledTab();
-    const active = args.background !== true;
+    const openInBackgroundOnly = args.background === true;
+    // Create inactive first so side-panel inheritance can register before activation.
     const createdTab = await this.chromeApi?.tabs.create?.({
       url: urlResult.url,
-      active,
+      active: false,
       ...(typeof currentTab?.windowId === "number" ? { windowId: currentTab.windowId } : {}),
     });
     if (!createdTab?.id) {
@@ -1759,14 +1761,28 @@ export class BrowserControlManager {
     }
 
     this.controlledTabIds.add(createdTab.id);
-    if (!active) {
-      return `已在后台新建页面：${urlResult.url}。如需切换，请先调用 list_pages 获取页面 index。`;
+    await this.preserveSidePanelForTab(createdTab.id);
+
+    if (openInBackgroundOnly) {
+      return `已在后台新建页面：${urlResult.url}。如需切换，请先调用 list_pages 获取页面 index。侧栏已尝试保持打开。`;
     }
 
     await this.switchToTab(createdTab.id);
-    let content = `已新建并切换到新页面：${urlResult.url}。`;
+    await this.preserveSidePanelForTab(createdTab.id);
+    let content = `已新建并切换到新页面：${urlResult.url}。侧栏已尝试保持打开。`;
     content = await this.waitAfterPageChange(content);
     return args.includeSnapshot === true ? this.appendSnapshot(content) : content;
+  }
+
+  private async preserveSidePanelForTab(tabId: number | undefined): Promise<void> {
+    if (typeof tabId !== "number") {
+      return;
+    }
+    try {
+      await ensureSidePanelForControlledTab(tabId);
+    } catch {
+      // Side panel inheritance is best-effort; automation must continue even if UI cannot stay open.
+    }
   }
 
   private async listPages(): Promise<string> {
@@ -1788,7 +1804,8 @@ export class BrowserControlManager {
   private async selectPage(index: number, includeSnapshot: boolean): Promise<string> {
     const page = await this.getControlledPageByIndex(index);
     await this.switchToTab(page.id);
-    let content = `已切换到页面 ${index}：${page.title || "无标题"}。`;
+    await this.preserveSidePanelForTab(page.id);
+    let content = `已切换到页面 ${index}：${page.title || "无标题"}。侧栏已尝试保持打开。`;
     content = await this.waitAfterPageChange(content);
     return includeSnapshot ? this.appendSnapshot(content) : content;
   }

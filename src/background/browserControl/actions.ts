@@ -135,6 +135,13 @@ export class BrowserControlActionExecutor {
     const objectId = await this.getObjectIdFromUid(uid);
     const backendNodeId = this.snapshot.getBackendNodeId(uid);
 
+    // SHIELD / "I'm not a robot" checkboxes often need direct checked-state toggling
+    // rather than a simple geometric mouse click on an overlayed label.
+    const shieldResult = await this.tryClickShieldLikeControl(objectId, uid);
+    if (shieldResult) {
+      return shieldResult;
+    }
+
     try {
       const { x, y } = await this.getElementCenter(objectId, backendNodeId);
       const hitTest = await this.connection.callFunctionOn({
@@ -185,6 +192,66 @@ export class BrowserControlActionExecutor {
     }
 
     return `已点击元素 ${uid}。`;
+  }
+
+  private async tryClickShieldLikeControl(objectId: string, uid: string): Promise<string | undefined> {
+    try {
+      const probe = await this.connection.callFunctionOn({
+        objectId,
+        functionDeclaration: `function() {
+          const text = ((this.innerText || this.textContent || this.getAttribute?.("aria-label") || this.getAttribute?.("title") || "") + "").trim();
+          const lower = text.toLowerCase();
+          const looksLikeShield =
+            /我不是机器人|i['’]?m not a robot|not a robot|shield|turnstile|人机验证|安全验证/.test(text) ||
+            /shield|turnstile|cf-turnstile|recaptcha/.test(lower) ||
+            (this.tagName === "INPUT" && this.type === "checkbox") ||
+            this.getAttribute?.("role") === "checkbox";
+          if (!looksLikeShield) {
+            return { handled: false };
+          }
+
+          this.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+          let checkbox = null;
+          if (this.tagName === "INPUT" && this.type === "checkbox") {
+            checkbox = this;
+          } else if (this.tagName === "LABEL") {
+            checkbox = this.control || (this.htmlFor ? document.getElementById(this.htmlFor) : null) || this.querySelector('input[type="checkbox"]');
+          } else {
+            checkbox = this.querySelector?.('input[type="checkbox"]') || this.closest?.('label')?.control || null;
+          }
+
+          const target = checkbox || this;
+          const before = !!(checkbox && checkbox.checked);
+          if (checkbox && typeof checkbox.click === "function") {
+            checkbox.click();
+          } else if (typeof target.click === "function") {
+            target.click();
+          } else {
+            target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true, view: window }));
+          }
+          const after = !!(checkbox && checkbox.checked);
+          return {
+            handled: true,
+            before,
+            after,
+            tag: (target.tagName || "").toLowerCase(),
+            text: text.slice(0, 80),
+          };
+        }`,
+        returnByValue: true,
+        userGesture: true,
+      });
+      const value = getResultValue(probe) as { handled?: boolean; before?: boolean; after?: boolean; tag?: string; text?: string } | undefined;
+      if (!value || value.handled !== true) {
+        return undefined;
+      }
+      if (value.after === true && value.before === false) {
+        return `已勾选 SHIELD/人机验证控件 ${uid}${value.text ? `（${value.text}）` : ""}。`;
+      }
+      return `已点击 SHIELD/人机验证相关控件 ${uid}${value.text ? `（${value.text}）` : ""}。`;
+    } catch {
+      return undefined;
+    }
   }
 
   private async hover(uid: string): Promise<string> {
