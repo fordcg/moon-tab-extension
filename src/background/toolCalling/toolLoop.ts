@@ -3,7 +3,7 @@ import type { AutomationPlaybookSelection, ChatImageAttachment, ChatMessage, Cha
 import type { ModelRequestMessage, ModelResponseData, ModelToolCall, ModelToolExecutor, ModelToolRegistryEntry, ModelToolResultMessage } from "../../shared/models/types";
 import { isBrowserAutomationToolId } from "../../shared/models/toolRegistry";
 import { redactSensitiveText } from "../../shared/security/redaction";
-import { createAutomationReportToolAttachment } from "../../shared/toolArtifacts";
+import { createAutomationReportToolAttachment, isBrowserScreenshotToolAttachment } from "../../shared/toolArtifacts";
 import { truncateText } from "../../shared/utils/text";
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 8;
@@ -180,6 +180,12 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     });
     toolTurnMessages.push(toolTurnMessage);
 
+    const visionFollowUp = createScreenshotVisionFollowUpMessage({
+      toolCallId: response.toolCalls[0]?.id,
+      attachments: currentTurnAttachments,
+      modelMeta: getModelMetaFromMessages(input.initialMessages),
+    });
+
     messages = [
       ...messages,
       {
@@ -189,6 +195,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
         ...(response.reasoningContent ? { reasoningContent: response.reasoningContent } : {}),
       },
       ...toolResultMessages,
+      ...(visionFollowUp ? [visionFollowUp] : []),
     ];
   }
 
@@ -532,6 +539,73 @@ function appendUniqueToolAttachments(target: ChatToolAttachment[], attachments: 
       target.push(attachment);
     }
   }
+}
+
+function createScreenshotVisionFollowUpMessage(input: {
+  toolCallId?: string;
+  attachments: ChatToolAttachment[];
+  modelMeta: Pick<ChatMessage, "modelId" | "endpointType" | "streamMode" | "systemPrompt" | "contextPrompt" | "contextMode">;
+}): ChatMessage | undefined {
+  const images = input.attachments
+    .filter(isBrowserScreenshotToolAttachment)
+    .filter((attachment) => typeof attachment.dataUrl === "string" && attachment.dataUrl.startsWith("data:image/"))
+    .slice(0, 3)
+    .map((attachment, index) => ({
+      id: attachment.id || `screenshot-vision-${Date.now()}-${index}`,
+      name: attachment.uid ? `element-${attachment.uid}.png` : `viewport-${index + 1}.png`,
+      mediaType: attachment.mediaType || "image/png",
+      dataUrl: attachment.dataUrl,
+    }));
+
+  if (!images.length) {
+    return undefined;
+  }
+
+  return {
+    id: `vision-followup-${input.toolCallId || Date.now()}`,
+    role: "user",
+    content: [
+      "以下图片来自上一轮 screenshot 工具附件，请直接识读。",
+      "若是图形验证码：只输出验证码字符（忽略干扰线），然后 fill 输入框并 click 确认。",
+      "若是 SHIELD/我不是机器人复选框：click 复选框本身，不要只点外层卡片。",
+      "若看不清：先对验证码图片元素再 screenshot(target=element)，不要猜测后直接放弃。",
+    ].join("\n"),
+    createdAt: Date.now(),
+    modelId: input.modelMeta.modelId,
+    endpointType: input.modelMeta.endpointType,
+    streamMode: input.modelMeta.streamMode,
+    systemPrompt: input.modelMeta.systemPrompt,
+    contextPrompt: input.modelMeta.contextPrompt,
+    contextMode: input.modelMeta.contextMode,
+    attachments: images,
+  };
+}
+
+function getModelMetaFromMessages(
+  messages: ModelRequestMessage[],
+): Pick<ChatMessage, "modelId" | "endpointType" | "streamMode" | "systemPrompt" | "contextPrompt" | "contextMode"> {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message && typeof message === "object" && "modelId" in message && "endpointType" in message) {
+      const chatMessage = message as ChatMessage;
+      return {
+        modelId: chatMessage.modelId,
+        endpointType: chatMessage.endpointType,
+        streamMode: chatMessage.streamMode,
+        systemPrompt: chatMessage.systemPrompt,
+        contextPrompt: chatMessage.contextPrompt,
+        contextMode: chatMessage.contextMode,
+      };
+    }
+  }
+  return {
+    modelId: "",
+    endpointType: "openai_chat",
+    streamMode: true,
+    systemPrompt: "",
+    contextPrompt: "",
+    contextMode: "text",
+  };
 }
 
 function sanitizeToolArguments(args: Record<string, unknown>): Record<string, unknown> {
