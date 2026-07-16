@@ -15,9 +15,21 @@ export const RELEASE_REQUIRED_ARTIFACT_PATHS = [
   "src/devtools/network.html",
   "src/pages/newtab/index.html",
   "src/pages/game/index.html",
-  "src/pages/game/vendor/matter.min.js",
+  "src/pages/game/bootstrap.js",
+  "src/pages/game/favicon.ico",
+  "src/pages/game/LICENSE.md",
+  "src/pages/game/UPSTREAM.md",
   "background/index.js",
   "content/index.js",
+];
+
+export const RELEASE_REQUIRED_ARTIFACT_DIRECTORIES = [
+  "src/pages/game/script",
+  "src/pages/game/lib",
+  "src/pages/game/css",
+  "src/pages/game/lang",
+  "src/pages/game/audio",
+  "src/pages/game/img",
 ];
 
 const forbiddenArtifactPatterns = [
@@ -93,6 +105,13 @@ function collectManifestIssues(manifest, label) {
   if (!contentScripts.some((entry) => Array.isArray(entry.js) && entry.js.includes("content/index.js"))) {
     issues.push(`${label} must include content/index.js as a content script.`);
   }
+  const webAccessibleResources = Array.isArray(manifest.web_accessible_resources) ? manifest.web_accessible_resources : [];
+  const exposedResources = webAccessibleResources.flatMap((entry) => Array.isArray(entry?.resources) ? entry.resources : []);
+  for (const exposedResource of exposedResources) {
+    if (typeof exposedResource === "string" && exposedResource.startsWith("src/pages/game/")) {
+      issues.push(`${label} must not expose extension-only A Dark Room resource ${exposedResource}.`);
+    }
+  }
   return issues;
 }
 
@@ -136,6 +155,15 @@ export async function collectReleaseReadinessIssues(rootDir = defaultRootDir) {
       issues.push(`Missing packaged artifact: artifacts/chrome-extension/${relativePath}`);
     } else if (!artifactStats.isFile()) {
       issues.push(`Packaged artifact must be a file: artifacts/chrome-extension/${relativePath}`);
+    }
+  }
+
+  for (const relativePath of RELEASE_REQUIRED_ARTIFACT_DIRECTORIES) {
+    const artifactStats = await getPathStats(path.join(packageRoot, relativePath));
+    if (!artifactStats) {
+      issues.push(`Missing packaged artifact directory: artifacts/chrome-extension/${relativePath}`);
+    } else if (!artifactStats.isDirectory()) {
+      issues.push(`Packaged artifact must be a directory: artifacts/chrome-extension/${relativePath}`);
     }
   }
 

@@ -10,6 +10,8 @@ import {
   createPackagedManifest,
   ensureHtmlAssetReferences,
   removeJunkFiles,
+  requiredDistDirectories,
+  requiredDistPaths,
   shouldExcludeFromPackage,
 } from "./package-extension.mjs";
 
@@ -118,7 +120,7 @@ describe("本地扩展打包脚本", () => {
       devtools_page: "src/devtools/network.html",
       chrome_url_overrides: { newtab: "src/pages/newtab/index.html" },
       web_accessible_resources: [
-        { resources: ["src/pages/game/index.html", "assets/*", "src/pages/game/vendor/matter.min.js"] },
+        { resources: ["index.html", "assets/*"] },
       ],
     })).toEqual([
       "index.html",
@@ -128,12 +130,33 @@ describe("本地扩展打包脚本", () => {
     ]);
   });
 
-  it("打包脚本要求 Phase 2 的 newtab 和 game 构建产物", async () => {
+  it("即使游戏不对普通网页开放，也校验扩展内部游戏页的静态引用", () => {
+    expect(collectManifestHtmlEntries({
+      side_panel: { default_path: "index.html" },
+      web_accessible_resources: [{ resources: ["index.html", "assets/*"] }],
+    })).toEqual(["index.html", "src/pages/game/index.html"]);
+  });
+
+  it("打包脚本要求 newtab 和 A Dark Room 完整静态运行时", async () => {
     const scriptSource = await readFile(join(projectRoot, "scripts", "package-extension.mjs"), "utf8");
 
-    expect(scriptSource).toContain('"src/pages/newtab/index.html"');
-    expect(scriptSource).toContain('"src/pages/game/index.html"');
-    expect(scriptSource).toContain('"src/pages/game/vendor/matter.min.js"');
+    expect(requiredDistPaths).toEqual(expect.arrayContaining([
+      "src/pages/newtab/index.html",
+      "src/pages/game/index.html",
+      "src/pages/game/bootstrap.js",
+      "src/pages/game/favicon.ico",
+      "src/pages/game/LICENSE.md",
+      "src/pages/game/UPSTREAM.md",
+    ]));
+    expect(requiredDistDirectories).toEqual([
+      "src/pages/game/script",
+      "src/pages/game/lib",
+      "src/pages/game/css",
+      "src/pages/game/lang",
+      "src/pages/game/audio",
+      "src/pages/game/img",
+    ]);
+    expect(scriptSource).not.toContain("matter.min.js");
     expect(scriptSource).toContain("ensureHtmlAssetReferences(packageDir, collectManifestHtmlEntries(manifest))");
   });
 

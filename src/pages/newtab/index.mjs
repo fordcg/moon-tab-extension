@@ -364,19 +364,19 @@ ai.openSidebarButton?.addEventListener("click", () => {
   openAiSidebar();
 });
 
-const openGameDeckButton = document.getElementById("open-game-deck");
-openGameDeckButton?.addEventListener("click", () => {
-  const gameDeckUrl = extensionApi?.runtime?.getURL
+const openDarkRoomButton = document.getElementById("open-dark-room");
+openDarkRoomButton?.addEventListener("click", () => {
+  const darkRoomUrl = extensionApi?.runtime?.getURL
     ? extensionApi.runtime.getURL("src/pages/game/index.html")
     : "./../game/index.html";
 
   void runPageTransition({
     documentRef: document,
     windowRef: window,
-    label: "INITIALIZING GAME DECK",
+    label: "正在进入暗室",
     mode: "enter-game",
     onComplete: () => {
-      window.location.href = gameDeckUrl;
+      window.location.href = darkRoomUrl;
     },
   });
 });

@@ -15,7 +15,7 @@ describe("Phase 7 发布验收合约", () => {
     const requiredAreas = [
       "AI 侧栏",
       "Moon Tab 新标签页",
-      "小游戏",
+      "A Dark Room",
       "悬浮助手",
       "Grok/MCP Bridge",
       "Debugger 浏览器自动化",

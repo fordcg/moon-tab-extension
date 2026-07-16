@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "月标签",
   "version": "0.3.0",
-  "description": "Moon Tab 新标签页、小游戏和 Browser AI Assistant 侧边栏。",
+  "description": "Moon Tab 新标签页、文字冒险游戏和 Browser AI Assistant 侧边栏。",
   "permissions": ["sidePanel", "storage", "contextMenus", "activeTab", "scripting", "alarms", "tabs", "debugger", "downloads", "windows"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -37,7 +37,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["index.html", "src/pages/game/index.html", "src/pages/game/vendor/matter.min.js", "assets/*"],
+      "resources": ["index.html", "assets/*"],
       "matches": ["<all_urls>"]
     }
   ]

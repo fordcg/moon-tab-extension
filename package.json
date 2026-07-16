@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Moon Tab Chrome MV3 extension with new tab search, game page, and Browser AI Assistant side panel.",
+  "description": "Moon Tab Chrome MV3 extension with new tab search, the A Dark Room text adventure, and Browser AI Assistant side panel.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",

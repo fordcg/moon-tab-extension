@@ -1,19 +1,30 @@
-import { copyFile, mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { cp, mkdir } from "node:fs/promises";
+import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { build, defineConfig, type PluginOption } from "vite";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 
-function copyLegacyPageStaticAssetsPlugin(): PluginOption {
+function copyGameRuntimeStaticAssetsPlugin(): PluginOption {
   return {
-    name: "copy-legacy-page-static-assets",
+    name: "copy-game-runtime-static-assets",
     apply: "build",
     closeBundle: async () => {
-      const matterOutput = resolve(rootDir, "dist/src/pages/game/vendor/matter.min.js");
-      await mkdir(dirname(matterOutput), { recursive: true });
-      await copyFile(resolve(rootDir, "src/pages/game/vendor/matter.min.js"), matterOutput);
+      const gameSource = resolve(rootDir, "src/pages/game");
+      const gameOutput = resolve(rootDir, "dist/src/pages/game");
+      await mkdir(gameOutput, { recursive: true });
+      await cp(gameSource, gameOutput, {
+        recursive: true,
+        force: true,
+        filter: (sourcePath) => {
+          const relativePath = relative(gameSource, sourcePath).split(sep).join("/");
+          if (!relativePath) return true;
+          if (relativePath === "index.html") return false;
+          return !/(?:^|\/)(?:tests?|__tests__)(?:\/|$)/.test(relativePath)
+            && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(relativePath);
+        },
+      });
     },
   };
 }
@@ -48,7 +59,7 @@ function buildContentScriptPlugin(): PluginOption {
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), copyLegacyPageStaticAssetsPlugin(), buildContentScriptPlugin()],
+  plugins: [react(), copyGameRuntimeStaticAssetsPlugin(), buildContentScriptPlugin()],
   resolve: {
     alias: {
       "@": resolve(rootDir, "src"),

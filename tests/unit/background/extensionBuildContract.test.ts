@@ -34,18 +34,22 @@ describe("扩展构建产物合约", () => {
     expect(manifest.devtools_page).toBe("src/devtools/network.html");
     expect(manifest.content_scripts).toHaveLength(1);
     expect(manifest.content_scripts[0].js).toEqual(["content/index.js"]);
-    expect(manifest.web_accessible_resources.flatMap((entry) => entry.resources)).toEqual(expect.arrayContaining([
+    const webAccessibleResources = manifest.web_accessible_resources.flatMap((entry) => entry.resources);
+    expect(webAccessibleResources).toEqual(expect.arrayContaining([
       "index.html",
       "assets/*",
     ]));
+    expect(webAccessibleResources.filter((resource) => resource.startsWith("src/pages/game/"))).toEqual([]);
 
     expect(viteConfig).toContain('"background/index": resolve(rootDir, "src/background/index.ts")');
     expect(viteConfig).toContain('devtools: resolve(rootDir, "src/devtools/network.html")');
     expect(viteConfig).toContain('sidePanel: resolve(rootDir, "index.html")');
     expect(viteConfig).toContain('newtab: resolve(rootDir, "src/pages/newtab/index.html")');
     expect(viteConfig).toContain('game: resolve(rootDir, "src/pages/game/index.html")');
-    expect(viteConfig).toContain("copy-legacy-page-static-assets");
-    expect(viteConfig).toContain('copyFile(resolve(rootDir, "src/pages/game/vendor/matter.min.js")');
+    expect(viteConfig).toContain("copy-game-runtime-static-assets");
+    expect(viteConfig).toContain("await cp(gameSource, gameOutput");
+    expect(viteConfig).toContain('if (relativePath === "index.html") return false');
+    expect(viteConfig).not.toContain("matter.min.js");
     expect(viteConfig).toContain('outDir: resolve(rootDir, "dist/content")');
     expect(viteConfig).toContain('entry: resolve(rootDir, "src/content/index.ts")');
     expect(viteConfig).toContain('formats: ["iife"]');
@@ -83,11 +87,36 @@ describe("扩展构建产物合约", () => {
     await expect(projectFileExists(legacyPath("src", "ai-assistant", "assets", ["imagefree", "tool", "runtime.js"].join("-")))).resolves.toBe(false);
   });
 
+  it("旧 GAME DECK 物理、工人和精灵运行时不再作为源码或构建依赖存在", async () => {
+    await expect(projectFileExists("src/pages/game/vendor/matter.min.js")).resolves.toBe(false);
+    await expect(projectFileExists("src/pages/game/index.mjs")).resolves.toBe(false);
+    await expect(projectFileExists("src/pages/game/rock-physics.mjs")).resolves.toBe(false);
+    await expect(projectFileExists("src/pages/game/workers.mjs")).resolves.toBe(false);
+    await expect(projectFileExists("src/pages/game/sprite-runtime.mjs")).resolves.toBe(false);
+  });
+
   it("Moon Tab 页面间导航应继续指向构建后的稳定扩展路径", async () => {
     const newtabEntry = await readProjectFile("src/pages/newtab/index.mjs");
-    const gameEntry = await readProjectFile("src/pages/game/index.mjs");
+    const gameEntry = await readProjectFile("src/pages/game/index.html");
 
     expect(newtabEntry).toContain('runtime.getURL("src/pages/game/index.html")');
-    expect(gameEntry).toContain('runtime.getURL("src/pages/newtab/index.html")');
+    expect(gameEntry).toContain('href="../newtab/index.html"');
+  });
+
+  it("A Dark Room 的脚本、样式、语言、音频和许可证均由源码拥有", async () => {
+    for (const path of [
+      "src/pages/game/bootstrap.js",
+      "src/pages/game/script",
+      "src/pages/game/lib",
+      "src/pages/game/css",
+      "src/pages/game/lang",
+      "src/pages/game/audio",
+      "src/pages/game/img",
+      "src/pages/game/favicon.ico",
+      "src/pages/game/LICENSE.md",
+      "src/pages/game/UPSTREAM.md",
+    ]) {
+      await expect(projectFileExists(path), path).resolves.toBe(true);
+    }
   });
 });

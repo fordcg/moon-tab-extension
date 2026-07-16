@@ -50,14 +50,19 @@ test("真实扩展侧边栏暴露发布验收所需的工具、MCP、同步和�
   await expect(page.getByText("备份当前插件域本地存储的全部内容，密钥和远程凭据除外")).toBeVisible();
 });
 
-test("构建产物可以作为 Chrome 扩展加载并渲染 Moon Tab 新标签页", async ({ extensionContext, extensionId }) => {
+test("构建产物可以作为 Chrome 扩展加载新标签页并进入暗室", async ({ extensionContext, extensionId }) => {
   const page = await extensionContext.newPage();
 
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`chrome-extension://${extensionId}/src/pages/newtab/index.html`);
 
   await expect(page.getByRole("searchbox", { name: "输入内容并搜索或打开" })).toBeVisible();
   await expect(page.getByRole("button", { name: "切换AI增强搜索" })).toBeVisible();
-  await expect(page.locator('#homepage-manage-trigger[aria-label="打开页面管理菜单"]')).toBeVisible();
+  await page.locator('#homepage-manage-trigger[aria-label="打开页面管理菜单"]').click();
+  await page.getByRole("button", { name: "打开暗室" }).click();
+
+  await page.waitForURL(`chrome-extension://${extensionId}/src/pages/game/index.html`);
+  await expect(page.getByRole("heading", { name: "暗室" })).toBeVisible();
 });
 
 test("构建产物可以作为 Chrome 扩展加载并渲染游戏页面", async ({ extensionContext, extensionId }) => {
@@ -65,7 +70,6 @@ test("构建产物可以作为 Chrome 扩展加载并渲染游戏页面", async 
 
   await page.goto(`chrome-extension://${extensionId}/src/pages/game/index.html`);
 
-  await expect(page.getByRole("heading", { name: "GAME DECK" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "START" })).toBeVisible();
-  await expect(page.getByRole("searchbox", { name: "搜索" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "暗室" })).toBeVisible();
+  await expect(page.locator("#lightButton")).toContainText("生火");
 });

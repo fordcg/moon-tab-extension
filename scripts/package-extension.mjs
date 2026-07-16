@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const packageDir = path.join(rootDir, "artifacts", "chrome-extension");
+const internalHtmlEntries = ["src/pages/game/index.html"];
 
 export const requiredDistPaths = [
   "manifest.json",
@@ -14,9 +15,21 @@ export const requiredDistPaths = [
   "src/devtools/network.html",
   "src/pages/newtab/index.html",
   "src/pages/game/index.html",
-  "src/pages/game/vendor/matter.min.js",
+  "src/pages/game/bootstrap.js",
+  "src/pages/game/favicon.ico",
+  "src/pages/game/LICENSE.md",
+  "src/pages/game/UPSTREAM.md",
   "background/index.js",
   "content/index.js",
+];
+
+export const requiredDistDirectories = [
+  "src/pages/game/script",
+  "src/pages/game/lib",
+  "src/pages/game/css",
+  "src/pages/game/lang",
+  "src/pages/game/audio",
+  "src/pages/game/img",
 ];
 
 /**
@@ -43,7 +56,7 @@ export function createPackagedManifest(manifest) {
  * @returns {string[]}
  */
 export function collectManifestHtmlEntries(manifest) {
-  const entries = new Set();
+  const entries = new Set(internalHtmlEntries);
   const sidePanel = manifest.side_panel;
   if (sidePanel && typeof sidePanel === "object" && typeof sidePanel.default_path === "string") {
     entries.add(sidePanel.default_path);
@@ -166,12 +179,19 @@ export function createBuildInfo(packageJson, builtAt = new Date()) {
 
 /**
  * @param {string} relativePath
+ * @param {"file" | "directory"} expectedKind
  */
-async function ensureDistPathExists(relativePath) {
+async function ensureDistPathExists(relativePath, expectedKind) {
   try {
-    await stat(path.join(rootDir, "dist", relativePath));
+    const pathStats = await stat(path.join(rootDir, "dist", relativePath));
+    if (expectedKind === "file" && !pathStats.isFile()) {
+      throw new Error(`扩展构建产物必须是文件：dist/${relativePath}`);
+    }
+    if (expectedKind === "directory" && !pathStats.isDirectory()) {
+      throw new Error(`扩展构建产物必须是目录：dist/${relativePath}`);
+    }
   } catch {
-    throw new Error(`缺少扩展构建产物：dist/${relativePath}。请先运行 npm run build:extension。`);
+    throw new Error(`缺少或无效的扩展构建产物：dist/${relativePath}。请先运行 npm run build:extension。`);
   }
 }
 
@@ -207,7 +227,10 @@ async function main() {
   const manifest = JSON.parse(await readFile(path.join(rootDir, "dist", "manifest.json"), "utf8"));
 
   for (const relativePath of requiredDistPaths) {
-    await ensureDistPathExists(relativePath);
+    await ensureDistPathExists(relativePath, "file");
+  }
+  for (const relativePath of requiredDistDirectories) {
+    await ensureDistPathExists(relativePath, "directory");
   }
 
   await rm(packageDir, { recursive: true, force: true });

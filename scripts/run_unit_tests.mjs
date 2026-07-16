@@ -16,7 +16,6 @@ const testCommands = [
   ["node", ["scripts/test_background_agent_tools_wiring.mjs"]],
   ["node", ["scripts/test_ai_preview_service.mjs"]],
   ["node", ["scripts/test_model_diagnostics_sink.mjs"]],
-  ["node", ["--test", "src/pages/game/workers.test.mjs", "src/pages/game/sprite-runtime.test.mjs"]],
 ];
 
 for (const [command, args] of testCommands) {

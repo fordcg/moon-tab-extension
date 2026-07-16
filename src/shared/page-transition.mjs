@@ -3,13 +3,13 @@ const REDUCED_MOTION_DURATION_MS = 120;
 const COMMAND_REVEAL_START_MS = 160;
 const COMMAND_REVEAL_INTERVAL_MS = 300;
 const DEFAULT_COMMANDS = Object.freeze([
-  { level: "info", text: "[INFO] Mounting GAME DECK runtime..." },
-  { level: "success", text: "> Loading sprite atlas: pets.arc" },
-  { level: "success", text: "> Checking controller input map..." },
-  { level: "info", text: "[INFO] Save slot sync: profile.local" },
-  { level: "success", text: "> Loading asset bundle: cozy_stage.pak" },
-  { level: "alert", text: "[ALERT] Boss arena cache cold..." },
-  { level: "success", text: "> GAME DECK ready" },
+  { level: "info", text: "[记录] 风从门缝里灌进来……" },
+  { level: "success", text: "> 找到一小堆干木头" },
+  { level: "success", text: "> 检查火种" },
+  { level: "info", text: "[记录] 旅程存档：本地" },
+  { level: "success", text: "> 推开沉重的木门" },
+  { level: "alert", text: "[警告] 屋里冷得像冰" },
+  { level: "success", text: "> 暗室已就绪" },
 ]);
 
 const getDocument = (documentRef) => documentRef ?? document;

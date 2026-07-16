@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  RELEASE_REQUIRED_ARTIFACT_DIRECTORIES,
   RELEASE_REQUIRED_ARTIFACT_PATHS,
   collectReleaseReadinessIssues,
   verifyReleaseReadiness,
@@ -40,6 +41,10 @@ async function createReadyRoot(): Promise<string> {
     devtools_page: "src/devtools/network.html",
     chrome_url_overrides: { newtab: "src/pages/newtab/index.html" },
     content_scripts: [{ matches: ["<all_urls>"], js: ["content/index.js"], run_at: "document_idle" }],
+    web_accessible_resources: [{
+      resources: ["index.html", "assets/*"],
+      matches: ["<all_urls>"],
+    }],
   };
 
   await writeJson(join(root, "package.json"), {
@@ -62,6 +67,9 @@ async function createReadyRoot(): Promise<string> {
   for (const relativePath of RELEASE_REQUIRED_ARTIFACT_PATHS) {
     if (relativePath.endsWith(".json")) continue;
     await writeFileWithParents(join(root, "artifacts", "chrome-extension"), relativePath, "release artifact");
+  }
+  for (const relativePath of RELEASE_REQUIRED_ARTIFACT_DIRECTORIES) {
+    await mkdir(join(root, "artifacts", "chrome-extension", relativePath), { recursive: true });
   }
 
   return root;
@@ -153,6 +161,29 @@ describe("release readiness verifier", () => {
 
     await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
       "Packaged artifact must be a file: artifacts/chrome-extension/content/index.js",
+    );
+  });
+
+  it("requires every packaged A Dark Room runtime directory", async () => {
+    const root = await createReadyRoot();
+    const runtimeDirectory = join(root, "artifacts", "chrome-extension", "src", "pages", "game", "lang");
+    await rm(runtimeDirectory, { recursive: true, force: true });
+    await writeFileWithParents(join(root, "artifacts", "chrome-extension"), "src/pages/game/lang", "not a directory");
+
+    await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
+      "Packaged artifact must be a directory: artifacts/chrome-extension/src/pages/game/lang",
+    );
+  });
+
+  it("rejects exposing extension-only A Dark Room files to arbitrary websites", async () => {
+    const root = await createReadyRoot();
+    const manifestPath = join(root, "artifacts", "chrome-extension", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.web_accessible_resources[0].resources.push("src/pages/game/audio/*");
+    await writeJson(manifestPath, manifest);
+
+    await expect(collectReleaseReadinessIssues(root)).resolves.toContain(
+      "artifacts/chrome-extension/manifest.json must not expose extension-only A Dark Room resource src/pages/game/audio/*.",
     );
   });
 

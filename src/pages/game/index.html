@@ -1,148 +1,69 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
-    <title>GAME DECK</title>
-    <link rel="stylesheet" href="./index.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="一款极简文字冒险游戏">
+    <title>暗室</title>
+    <link rel="icon" href="./favicon.ico">
+
+    <link rel="stylesheet" href="./css/main.css">
+    <link rel="stylesheet" href="./css/room.css">
+    <link rel="stylesheet" href="./css/outside.css">
+    <link rel="stylesheet" href="./css/path.css">
+    <link rel="stylesheet" href="./css/world.css">
+    <link rel="stylesheet" href="./css/ship.css">
+    <link rel="stylesheet" href="./css/space.css">
+    <link rel="stylesheet" href="./css/fabricator.css">
+    <link rel="stylesheet" href="./lang/zh_cn/main.css">
+
+    <script src="./lib/jquery.min.js"></script>
+    <script src="./lib/jquery.color-2.1.2.min.js"></script>
+    <script src="./lib/jquery.event.move.js"></script>
+    <script src="./lib/jquery.event.swipe.js"></script>
+    <script src="./lib/base64.js"></script>
+    <script src="./lib/translate.js"></script>
+    <script src="./bootstrap.js"></script>
+    <script src="./lang/zh_cn/strings.js"></script>
+    <script src="./lang/zh_cn/extra.js"></script>
+
+    <script src="./script/Button.js"></script>
+    <script src="./script/audioLibrary.js"></script>
+    <script src="./script/audio.js"></script>
+    <script src="./script/engine.js"></script>
+    <script src="./script/state_manager.js"></script>
+    <script src="./script/header.js"></script>
+    <script src="./script/notifications.js"></script>
+    <script src="./script/events.js"></script>
+    <script src="./script/room.js"></script>
+    <script src="./script/outside.js"></script>
+    <script src="./script/world.js"></script>
+    <script src="./script/path.js"></script>
+    <script src="./script/ship.js"></script>
+    <script src="./script/space.js"></script>
+    <script src="./script/fabricator.js"></script>
+    <script src="./script/prestige.js"></script>
+    <script src="./script/scoring.js"></script>
+    <script src="./script/events/global.js"></script>
+    <script src="./script/events/room.js"></script>
+    <script src="./script/events/outside.js"></script>
+    <script src="./script/events/encounters.js"></script>
+    <script src="./script/events/setpieces.js"></script>
+    <script src="./script/events/executioner.js"></script>
+    <script src="./script/localization.js"></script>
   </head>
-  <body data-game-state="paused">
-    <main class="game-deck-shell" aria-label="游戏空间">
-      <header class="game-deck-topbar">
-        <button id="return-pet-page" class="game-deck-back" type="button" aria-label="返回宠物页">
-          <svg
-            class="game-deck-back__icon"
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            focusable="false"
-          >
-            <path d="M15 6L9 12L15 18" />
-            <path d="M10 12H21" />
-          </svg>
-        </button>
-
-        <form id="game-search-form" class="game-search" autocomplete="off">
-          <label class="game-search__label" for="game-search-input">搜索</label>
-          <input
-            id="game-search-input"
-            class="game-search__input"
-            name="q"
-            type="search"
-            placeholder="SEARCH WEB"
-          />
-          <button class="game-search__button" type="submit">RUN</button>
-        </form>
-
-        <div class="game-deck-status" aria-live="polite">
-          <time id="game-clock" class="game-deck-clock">00:00:00</time>
-          <span class="game-deck-state">PAUSED</span>
-        </div>
-      </header>
-
-      <section class="game-deck-title" aria-labelledby="game-deck-title">
-        <p class="game-deck-kicker">GAME SPACE</p>
-        <h1 id="game-deck-title">GAME DECK</h1>
-        <svg
-          class="game-pause-mountain"
-          viewBox="0 0 640 260"
-          role="img"
-          aria-label="黑白线条山装饰"
-        >
-          <path
-            class="game-mountain__outline"
-            d="M38 224L146 118L198 158L304 36L414 154L476 98L602 224Z"
-          />
-          <path class="game-mountain__ridge" d="M304 36L276 134L318 116L344 182" />
-          <path class="game-mountain__ridge" d="M146 118L168 178L198 158L226 224" />
-          <path class="game-mountain__ridge" d="M476 98L458 168L414 154L382 224" />
-          <path class="game-mountain__ridge" d="M38 224H602" />
-          <path class="game-mountain__snow" d="M274 70L304 36L337 72L319 64L304 84L291 62Z" />
-        </svg>
-        <button id="start-game" class="game-start-button" type="button">START</button>
-      </section>
-
-      <section class="game-scene" aria-label="游戏场景">
-        <div class="game-world">
-          <div class="game-ground-line" aria-hidden="true"></div>
-          <div
-            class="game-ore-pile"
-            aria-live="polite"
-            data-miner-anchor-offset-x="-22"
-            data-hauler-anchor-offset-x="16"
-          >
-            <span class="game-resource__label">GROUND</span>
-            <strong id="ground-ore-count" class="game-resource__value">0</strong>
+  <body>
+    <h1 class="visually-hidden">暗室</h1>
+    <a class="back-link" href="../newtab/index.html" aria-label="返回新标签页">返回</a>
+    <div id="wrapper">
+      <div id="saveNotify" role="status" aria-live="polite">已保存</div>
+      <div id="content">
+        <div id="outerSlider">
+          <div id="main">
+            <div id="header"></div>
           </div>
-          <div
-            class="game-storage"
-            aria-live="polite"
-            data-wait-anchor-offset-x="-26"
-            data-unload-anchor-offset-x="0"
-          >
-            <span class="game-resource__label">STORED</span>
-            <strong id="stored-ore-count" class="game-resource__value">0</strong>
-          </div>
-          <div class="game-worker-layer" aria-hidden="true"></div>
-          <div class="ore-rock-layer" aria-hidden="true"></div>
-          <button
-            class="ore-mountain"
-            type="button"
-            data-ore="100"
-            data-stage="5"
-            data-mine-stand-ratio="0.6"
-            data-mine-effect-x-ratio="0.63"
-            data-mine-effect-y-ratio="0.56"
-            aria-label="采集石山，剩余 100"
-          >
-            <span class="ore-mountain__tooltip" aria-hidden="true">100</span>
-            <svg class="ore-mountain__art" viewBox="0 0 680 360" aria-hidden="true">
-              <path
-                class="ore-mountain__hitbox ore-mountain__hitbox--5"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
-              />
-              <path
-                class="ore-mountain__hitbox ore-mountain__hitbox--4"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
-              />
-              <path
-                class="ore-mountain__hitbox ore-mountain__hitbox--3"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
-              />
-              <path
-                class="ore-mountain__hitbox ore-mountain__hitbox--2"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
-              />
-              <path
-                class="ore-mountain__hitbox ore-mountain__hitbox--1"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358L670 358L18 358Z"
-              />
-              <path
-                class="ore-mountain__shape ore-mountain__shape--5"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
-              />
-              <path
-                class="ore-mountain__shape ore-mountain__shape--4"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
-              />
-              <path
-                class="ore-mountain__shape ore-mountain__shape--3"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
-              />
-              <path
-                class="ore-mountain__shape ore-mountain__shape--2"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
-              />
-              <path
-                class="ore-mountain__shape ore-mountain__shape--1"
-                d="M18 358C84 338 147 302 208 254C271 204 325 146 374 92C397 67 421 53 446 52C471 51 495 64 518 89C568 142 626 210 670 358"
-              />
-            </svg>
-          </button>
         </div>
-      </section>
-    </main>
-    <script src="./vendor/matter.min.js"></script>
-    <script type="module" src="./index.mjs"></script>
+      </div>
+    </div>
   </body>
 </html>

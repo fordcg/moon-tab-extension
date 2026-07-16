@@ -32,18 +32,22 @@ test("构建后的侧边栏页面应包含 Tailwind 工具类样式", async ({ p
   expect(shellLayout).toEqual({ display: "flex", flexDirection: "column" });
 });
 
-test("构建后的 Moon Tab 新标签页可以渲染搜索入口", async ({ page }) => {
+test("构建后的 Moon Tab 新标签页可以渲染搜索入口并进入暗室", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/src/pages/newtab/index.html");
 
   await expect(page.getByRole("searchbox", { name: "输入内容并搜索或打开" })).toBeVisible();
   await expect(page.getByRole("button", { name: "切换AI增强搜索" })).toBeVisible();
-  await expect(page.locator('#homepage-manage-trigger[aria-label="打开页面管理菜单"]')).toBeVisible();
+  await page.locator('#homepage-manage-trigger[aria-label="打开页面管理菜单"]').click();
+  await page.getByRole("button", { name: "打开暗室" }).click();
+
+  await page.waitForURL(/\/src\/pages\/game\/index\.html$/);
+  await expect(page.getByRole("heading", { name: "暗室" })).toBeVisible();
 });
 
 test("构建后的游戏页面可以渲染游戏入口", async ({ page }) => {
   await page.goto("/src/pages/game/index.html");
 
-  await expect(page.getByRole("heading", { name: "GAME DECK" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "START" })).toBeVisible();
-  await expect(page.getByRole("searchbox", { name: "搜索" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "暗室" })).toBeVisible();
+  await expect(page.locator("#lightButton")).toContainText("生火");
 });
