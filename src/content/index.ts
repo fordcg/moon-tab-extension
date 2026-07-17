@@ -118,17 +118,20 @@ function attachFloatingAssistantFrame(url: string): { ok: true } | { ok: false; 
 
 function applyFloatingFrameLayout(frame: HTMLIFrameElement, isBeacon: boolean): void {
   if (isBeacon) {
-    frame.style.right = "18px";
-    frame.style.bottom = "18px";
+    // Pure floating orb: transparent box large enough for tip/trail, orb sits bottom-right.
+    frame.style.right = "10px";
+    frame.style.bottom = "10px";
     frame.style.left = "auto";
     frame.style.top = "auto";
-    frame.style.width = "248px";
-    frame.style.height = "318px";
-    frame.style.maxWidth = "min(248px, calc(100vw - 24px))";
-    frame.style.maxHeight = "min(318px, calc(100vh - 24px))";
-    frame.style.borderRadius = "24px";
-    frame.style.boxShadow = "0 18px 50px rgba(7, 16, 24, 0.42), 0 0 0 1px rgba(255, 180, 84, 0.12)";
-    frame.style.overflow = "hidden";
+    frame.style.width = "176px";
+    frame.style.height = "176px";
+    frame.style.maxWidth = "min(176px, calc(100vw - 12px))";
+    frame.style.maxHeight = "min(176px, calc(100vh - 12px))";
+    frame.style.borderRadius = "0";
+    frame.style.boxShadow = "none";
+    frame.style.overflow = "visible";
+    frame.style.pointerEvents = "auto";
+    frame.style.background = "transparent";
     return;
   }
 
@@ -140,6 +143,7 @@ function applyFloatingFrameLayout(frame: HTMLIFrameElement, isBeacon: boolean): 
   frame.style.maxHeight = "calc(100vh - 40px)";
   frame.style.borderRadius = "8px";
   frame.style.boxShadow = "0 24px 80px rgba(15, 23, 42, 0.28)";
+  frame.style.overflow = "hidden";
 }
 
 function closeFloatingAssistantFrame(): void {

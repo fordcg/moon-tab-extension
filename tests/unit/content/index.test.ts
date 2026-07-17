@@ -213,8 +213,11 @@ describe("content 脚本消息", () => {
     const frames = document.querySelectorAll("iframe[data-moon-tab-ai-control-beacon]");
     expect(frames).toHaveLength(1);
     expect(frames[0]).toMatchObject({ src: message.url });
-    expect((frames[0] as HTMLIFrameElement).style.width).toBe("248px");
-    expect((frames[0] as HTMLIFrameElement).style.height).toBe("318px");
+    expect((frames[0] as HTMLIFrameElement).style.width).toBe("176px");
+    expect((frames[0] as HTMLIFrameElement).style.height).toBe("176px");
+    expect((frames[0] as HTMLIFrameElement).style.borderRadius).toBe("0px");
+    expect((frames[0] as HTMLIFrameElement).style.boxShadow).toBe("none");
+    expect((frames[0] as HTMLIFrameElement).style.background).toBe("transparent");
     expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
   });
 

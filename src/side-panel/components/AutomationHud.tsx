@@ -11,7 +11,7 @@ function statusLabel(status: ChatToolCallRecord["status"] | "unknown"): string {
   return String(status);
 }
 
-function collectRecentToolRecords(messages: ChatMessage[], limit = 10): ChatToolCallRecord[] {
+function collectRecentToolRecords(messages: ChatMessage[], limit = 8): ChatToolCallRecord[] {
   const records: ChatToolCallRecord[] = [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -36,7 +36,7 @@ function mergeLiveRecord(current: ChatToolCallRecord[], record: ChatToolCallReco
   } else {
     next.push(record);
   }
-  return next.slice(-16);
+  return next.slice(-12);
 }
 
 function shortName(record?: ChatToolCallRecord): string {
@@ -44,7 +44,7 @@ function shortName(record?: ChatToolCallRecord): string {
     return "";
   }
   const label = (record.displayName || record.name || "").trim();
-  return label.length > 22 ? `${label.slice(0, 21)}…` : label;
+  return label.length > 18 ? `${label.slice(0, 17)}…` : label;
 }
 
 export function AutomationHud() {
@@ -119,10 +119,10 @@ export function AutomationHud() {
 
   const task = activeSessionId ? chatTasksBySessionId[activeSessionId] : undefined;
   const storeRecords = useMemo(
-    () => collectRecentToolRecords(activeSession?.messages ?? [], 10),
+    () => collectRecentToolRecords(activeSession?.messages ?? [], 8),
     [activeSession?.messages, now],
   );
-  const records = liveRecords.length > 0 ? liveRecords.slice(-10) : storeRecords;
+  const records = liveRecords.length > 0 ? liveRecords.slice(-8) : storeRecords;
   const runningCount = records.filter((item) => item.status === "running").length;
   const latest = records[records.length - 1];
   const isBusy = sending || task?.status === "running" || liveStatus === "running" || runningCount > 0;
@@ -134,92 +134,68 @@ export function AutomationHud() {
         ? "done"
         : "idle";
 
-  const headline = latest
-    ? shortName(latest)
+  const tooltip = latest
+    ? `${shortName(latest)} · ${statusLabel(latest.status)}`
     : isBusy
       ? "模型思考中"
       : browserControlEnabled
-        ? "信标待命"
-        : "控制未开";
+        ? "浏览器控制已开"
+        : "先在侧栏开启浏览器控制";
 
-  const detail = latest?.resultSummary
-    || latest?.errorMessage
-    || (latest ? statusLabel(latest.status) : browserControlEnabled ? "等待下一步" : "先在侧栏开启浏览器控制");
-
-  const sparkRecords = records.slice(-6);
+  const sparkRecords = records.slice(-5);
 
   return (
     <div
-      className={`signal-beacon phase-${phase}${expanded ? " is-expanded" : ""}${browserControlEnabled ? " control-on" : ""}`}
+      className={`orb-beacon phase-${phase}${expanded ? " is-expanded" : ""}${browserControlEnabled ? " control-on" : ""}`}
       data-browser-control={browserControlEnabled ? "on" : "off"}
       data-phase={phase}
     >
-      <div className="signal-beacon-sky" aria-hidden="true">
-        <span className="signal-beacon-aurora signal-beacon-aurora-a" />
-        <span className="signal-beacon-aurora signal-beacon-aurora-b" />
-        <span className="signal-beacon-grain" />
-      </div>
-
       <button
         type="button"
-        className="signal-beacon-core-button"
+        className="orb-beacon-button"
         aria-expanded={expanded}
-        aria-label={expanded ? "收起步骤轨迹" : "展开步骤轨迹"}
+        aria-label={tooltip}
+        title={tooltip}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span className="signal-beacon-orbit signal-beacon-orbit-outer" aria-hidden="true" />
-        <span className="signal-beacon-orbit signal-beacon-orbit-mid" aria-hidden="true" />
-        <span className="signal-beacon-orbit signal-beacon-orbit-inner" aria-hidden="true" />
-        <span className="signal-beacon-wave signal-beacon-wave-a" aria-hidden="true" />
-        <span className="signal-beacon-wave signal-beacon-wave-b" aria-hidden="true" />
-        <span className="signal-beacon-core" aria-hidden="true">
-          <span className="signal-beacon-core-glow" />
-          <span className="signal-beacon-core-blob" />
-          <span className="signal-beacon-core-eye" />
+        <span className="orb-beacon-ring orb-beacon-ring-a" aria-hidden="true" />
+        <span className="orb-beacon-ring orb-beacon-ring-b" aria-hidden="true" />
+        <span className="orb-beacon-wave orb-beacon-wave-a" aria-hidden="true" />
+        <span className="orb-beacon-wave orb-beacon-wave-b" aria-hidden="true" />
+        <span className="orb-beacon-core" aria-hidden="true">
+          <span className="orb-beacon-glow" />
+          <span className="orb-beacon-sphere" />
+          <span className="orb-beacon-highlight" />
+          <span className="orb-beacon-pupil" />
         </span>
         {sparkRecords.map((record, index) => (
           <span
             key={`${record.id}-${index}`}
-            className={`signal-beacon-spark is-${record.status}`}
-            style={{ "--spark-index": index, "--spark-count": sparkRecords.length } as CSSProperties}
-            title={shortName(record)}
+            className={`orb-beacon-spark is-${record.status}`}
+            style={{ "--spark-index": index, "--spark-count": Math.max(sparkRecords.length, 1) } as CSSProperties}
           />
         ))}
-        <span key={burstKey} className="signal-beacon-burst" aria-hidden="true" />
+        <span key={burstKey} className="orb-beacon-burst" aria-hidden="true" />
       </button>
 
-      <div className="signal-beacon-readout" aria-live="polite">
-        <div className="signal-beacon-kicker">
-          <span className="signal-beacon-pulse-dot" />
-          {phase === "running" ? "LIVE" : phase === "error" ? "ALERT" : phase === "done" ? "DONE" : "STANDBY"}
-          <span className="signal-beacon-sep">·</span>
-          {records.length} 步
-          {runningCount > 0 ? ` · ${runningCount} 执行中` : ""}
-        </div>
-        <div className="signal-beacon-headline">{headline}</div>
-        <div className="signal-beacon-detail">{detail}</div>
+      <div className="orb-beacon-tip" aria-live="polite">
+        {tooltip}
       </div>
 
       {expanded ? (
-        <div className="signal-beacon-trail" aria-label="最近步骤">
+        <div className="orb-beacon-trail" aria-label="最近步骤">
           {sparkRecords.length === 0 ? (
-            <div className="signal-beacon-trail-empty">开始自动化后，火花会绕着信标飞出。</div>
+            <div className="orb-beacon-chip is-empty">等待工具调用</div>
           ) : (
-            sparkRecords.map((record, index) => (
-              <div
-                key={record.id}
-                className={`signal-beacon-chip is-${record.status}`}
-                style={{ "--chip-index": index } as CSSProperties}
-              >
-                <span className="signal-beacon-chip-name">{shortName(record)}</span>
-                <span className="signal-beacon-chip-status">{statusLabel(record.status)}</span>
+            sparkRecords.map((record) => (
+              <div key={record.id} className={`orb-beacon-chip is-${record.status}`}>
+                <span>{shortName(record)}</span>
+                <span>{statusLabel(record.status)}</span>
               </div>
             ))
           )}
         </div>
       ) : null}
-
-      <p className="signal-beacon-hint">点信标展开轨迹 · LinuxDO 请点「允许」</p>
     </div>
   );
 }

@@ -7798,102 +7798,46 @@ body.sidepanel-stop-requested .composer-abort-button {
 }
 
 
-/* Living signal-beacon control window (controlWindow=1) — not a panel UI */
+/* Pure floating control orb (controlWindow=1) — no panel chrome */
 html.automation-hud-root,
 body.automation-hud-root,
 .automation-hud-shell {
   width: 100%;
   height: 100%;
   margin: 0;
-  overflow: hidden;
-  background: transparent;
+  overflow: visible;
+  background: transparent !important;
   color: #f4efe6;
   font-family: "Bahnschrift", "Segoe UI Variable Display", "DIN Alternate", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .automation-hud-shell {
   display: grid;
-  place-items: stretch;
+  place-items: end end;
   box-sizing: border-box;
-  padding: 0;
-  background: transparent;
+  padding: 8px;
+  background: transparent !important;
 }
 
-.signal-beacon {
-  --beacon-ink: #071018;
-  --beacon-sand: #f4efe6;
-  --beacon-amber: #ffb454;
-  --beacon-coral: #ff6b4a;
-  --beacon-cyan: #42e8d0;
-  --beacon-mint: #8dffb0;
-  --beacon-danger: #ff5d73;
+.orb-beacon {
+  --orb-amber: #ffb454;
+  --orb-coral: #ff6b4a;
+  --orb-cyan: #42e8d0;
+  --orb-mint: #8dffb0;
+  --orb-danger: #ff5d73;
   position: relative;
-  isolation: isolate;
+  width: 96px;
+  height: 96px;
   display: grid;
-  grid-template-rows: minmax(150px, 1fr) auto auto auto;
-  align-content: start;
-  gap: 10px;
-  min-height: 100%;
-  height: 100%;
-  padding: 16px 14px 12px;
-  box-sizing: border-box;
-  overflow: hidden;
-  border-radius: 24px;
-  background:
-    radial-gradient(120% 90% at 50% 18%, rgba(255, 180, 84, 0.16), transparent 48%),
-    radial-gradient(90% 70% at 12% 88%, rgba(66, 232, 208, 0.12), transparent 45%),
-    radial-gradient(80% 60% at 92% 78%, rgba(255, 107, 74, 0.12), transparent 42%),
-    linear-gradient(165deg, rgba(10, 22, 32, 0.96) 0%, rgba(7, 16, 24, 0.97) 48%, rgba(16, 24, 32, 0.96) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  place-items: center;
+  background: transparent;
+  overflow: visible;
 }
 
-.signal-beacon-sky {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.signal-beacon-aurora {
-  position: absolute;
-  width: 160%;
-  height: 70%;
-  left: -30%;
-  filter: blur(28px);
-  opacity: 0.55;
-  mix-blend-mode: screen;
-}
-
-.signal-beacon-aurora-a {
-  top: -18%;
-  background: radial-gradient(closest-side, rgba(255, 180, 84, 0.45), transparent 70%);
-  animation: beacon-aurora-drift 9s ease-in-out infinite alternate;
-}
-
-.signal-beacon-aurora-b {
-  bottom: -24%;
-  background: radial-gradient(closest-side, rgba(66, 232, 208, 0.34), transparent 72%);
-  animation: beacon-aurora-drift 12s ease-in-out infinite alternate-reverse;
-}
-
-.signal-beacon-grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.18;
-  background-image:
-    radial-gradient(rgba(244, 239, 230, 0.35) 0.6px, transparent 0.7px);
-  background-size: 3px 3px;
-  mask-image: radial-gradient(circle at 50% 35%, black 20%, transparent 78%);
-}
-
-.signal-beacon-core-button {
+.orb-beacon-button {
   position: relative;
-  z-index: 1;
-  justify-self: center;
-  width: 168px;
-  height: 168px;
-  margin-top: 4px;
+  width: 96px;
+  height: 96px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -7901,399 +7845,324 @@ body.automation-hud-root,
   color: inherit;
 }
 
-.signal-beacon-orbit {
+.orb-beacon-ring {
   position: absolute;
   inset: 0;
   margin: auto;
   border-radius: 50%;
-  border: 1px solid rgba(244, 239, 230, 0.14);
-  box-shadow: inset 0 0 18px rgba(255, 180, 84, 0.06);
+  border: 1px solid rgba(255, 180, 84, 0.28);
+  pointer-events: none;
 }
 
-.signal-beacon-orbit-outer {
-  width: 168px;
-  height: 168px;
+.orb-beacon-ring-a {
+  width: 88px;
+  height: 88px;
   border-style: dashed;
-  border-color: rgba(66, 232, 208, 0.28);
-  animation: beacon-spin 18s linear infinite;
+  border-color: rgba(66, 232, 208, 0.34);
+  animation: orb-spin 14s linear infinite;
 }
 
-.signal-beacon-orbit-mid {
-  width: 128px;
-  height: 128px;
-  border-color: rgba(255, 180, 84, 0.3);
-  animation: beacon-spin 11s linear infinite reverse;
-}
-
-.signal-beacon-orbit-inner {
-  width: 96px;
-  height: 96px;
-  border-color: rgba(255, 107, 74, 0.28);
-  animation: beacon-spin 7s linear infinite;
-}
-
-.signal-beacon-wave {
-  position: absolute;
-  inset: 0;
-  margin: auto;
+.orb-beacon-ring-b {
   width: 72px;
   height: 72px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 180, 84, 0.35);
-  opacity: 0;
+  border-color: rgba(255, 180, 84, 0.28);
+  animation: orb-spin 9s linear infinite reverse;
 }
 
-.signal-beacon.phase-running .signal-beacon-wave-a {
-  animation: beacon-ripple 2s ease-out infinite;
-}
-
-.signal-beacon.phase-running .signal-beacon-wave-b {
-  animation: beacon-ripple 2s ease-out infinite 1s;
-}
-
-.signal-beacon-core {
+.orb-beacon-wave {
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 70px;
-  height: 70px;
-}
-
-.signal-beacon-core-glow {
-  position: absolute;
-  inset: -18px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 180, 84, 0.5), transparent 68%);
-  filter: blur(6px);
-  animation: beacon-breathe 3.2s ease-in-out infinite;
+  border: 1px solid rgba(255, 180, 84, 0.4);
+  opacity: 0;
+  pointer-events: none;
 }
 
-.signal-beacon-core-blob {
+.orb-beacon.phase-running .orb-beacon-wave-a {
+  animation: orb-ripple 1.8s ease-out infinite;
+}
+
+.orb-beacon.phase-running .orb-beacon-wave-b {
+  animation: orb-ripple 1.8s ease-out infinite 0.9s;
+}
+
+.orb-beacon-core {
   position: absolute;
   inset: 0;
-  border-radius: 58% 42% 60% 40% / 48% 56% 44% 52%;
+  margin: auto;
+  width: 52px;
+  height: 52px;
+}
+
+.orb-beacon-glow {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 180, 84, 0.55), transparent 68%);
+  filter: blur(6px);
+  animation: orb-breathe 2.8s ease-in-out infinite;
+}
+
+.orb-beacon-sphere {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
   background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), transparent 28%),
-    radial-gradient(circle at 70% 70%, rgba(255, 107, 74, 0.9), transparent 46%),
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.78), transparent 28%),
+    radial-gradient(circle at 68% 72%, rgba(255, 107, 74, 0.92), transparent 48%),
     linear-gradient(145deg, #ffd089 0%, #ff7a4d 48%, #2ad5c2 100%);
   box-shadow:
-    0 0 28px rgba(255, 180, 84, 0.45),
-    inset 0 -10px 20px rgba(7, 16, 24, 0.25);
-  animation: beacon-morph 5s ease-in-out infinite;
+    0 8px 22px rgba(7, 16, 24, 0.35),
+    0 0 24px rgba(255, 180, 84, 0.45);
+  animation: orb-morph 4.8s ease-in-out infinite;
 }
 
-.signal-beacon-core-eye {
+.orb-beacon-highlight {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  width: 14px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  filter: blur(1px);
+  transform: rotate(-18deg);
+  pointer-events: none;
+}
+
+.orb-beacon-pupil {
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #071018;
   box-shadow:
-    0 0 0 3px rgba(244, 239, 230, 0.35),
-    0 0 16px rgba(66, 232, 208, 0.7);
-  animation: beacon-eye 2.6s ease-in-out infinite;
+    0 0 0 2px rgba(244, 239, 230, 0.28),
+    0 0 12px rgba(66, 232, 208, 0.7);
+  animation: orb-eye 2.4s ease-in-out infinite;
 }
 
-.signal-beacon.phase-running .signal-beacon-core-blob {
-  animation-duration: 2.2s;
-}
-
-.signal-beacon.phase-running .signal-beacon-core-glow {
-  animation-duration: 1.4s;
+.orb-beacon.phase-running .orb-beacon-glow {
+  animation-duration: 1.2s;
   background: radial-gradient(circle, rgba(66, 232, 208, 0.55), transparent 68%);
 }
 
-.signal-beacon.phase-error .signal-beacon-core-blob {
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.65), transparent 28%),
-    linear-gradient(145deg, #ff9aa8 0%, #ff5d73 52%, #ff8f4a 100%);
-  animation: beacon-shake 0.45s ease-in-out infinite;
+.orb-beacon.phase-running .orb-beacon-sphere {
+  animation-duration: 2s;
 }
 
-.signal-beacon.phase-done .signal-beacon-core-blob {
+.orb-beacon.phase-error .orb-beacon-sphere {
   background:
     radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7), transparent 28%),
+    linear-gradient(145deg, #ff9aa8 0%, #ff5d73 52%, #ff8f4a 100%);
+  animation: orb-shake 0.4s ease-in-out infinite;
+}
+
+.orb-beacon.phase-done .orb-beacon-sphere {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), transparent 28%),
     linear-gradient(145deg, #c8ffd8 0%, #8dffb0 45%, #42e8d0 100%);
 }
 
-.signal-beacon.control-on .signal-beacon-core-eye {
+.orb-beacon.control-on .orb-beacon-pupil {
   box-shadow:
-    0 0 0 3px rgba(141, 255, 176, 0.4),
-    0 0 18px rgba(66, 232, 208, 0.85);
+    0 0 0 2px rgba(141, 255, 176, 0.4),
+    0 0 14px rgba(66, 232, 208, 0.85);
 }
 
-.signal-beacon-spark {
+.orb-beacon-spark {
   --spark-index: 0;
   --spark-count: 1;
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 8px;
-  height: 8px;
-  margin: -4px 0 0 -4px;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
   border-radius: 50%;
-  background: var(--beacon-amber);
-  box-shadow: 0 0 10px rgba(255, 180, 84, 0.8);
-  transform:
-    rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1))))
-    translateY(-74px);
-  animation: beacon-spark-twinkle 1.8s ease-in-out infinite;
-  animation-delay: calc(var(--spark-index) * 0.12s);
-}
-
-.signal-beacon-spark.is-running {
-  background: var(--beacon-cyan);
-  box-shadow: 0 0 12px rgba(66, 232, 208, 0.9);
-}
-
-.signal-beacon-spark.is-success {
-  background: var(--beacon-mint);
-  box-shadow: 0 0 10px rgba(141, 255, 176, 0.85);
-}
-
-.signal-beacon-spark.is-error {
-  background: var(--beacon-danger);
-  box-shadow: 0 0 10px rgba(255, 93, 115, 0.9);
-}
-
-.signal-beacon-burst {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 180, 84, 0.7);
-  opacity: 0;
-  animation: beacon-burst 0.7s ease-out 1;
+  background: var(--orb-amber);
+  box-shadow: 0 0 8px rgba(255, 180, 84, 0.85);
+  transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-42px);
+  animation: orb-spark 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--spark-index) * 0.1s);
   pointer-events: none;
 }
 
-.signal-beacon-readout {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  text-align: center;
-  padding: 0 6px;
+.orb-beacon-spark.is-running {
+  background: var(--orb-cyan);
+  box-shadow: 0 0 10px rgba(66, 232, 208, 0.9);
 }
 
-.signal-beacon-kicker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(244, 239, 230, 0.12);
-  background: rgba(7, 16, 24, 0.45);
-  color: rgba(244, 239, 230, 0.72);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.orb-beacon-spark.is-success {
+  background: var(--orb-mint);
+  box-shadow: 0 0 8px rgba(141, 255, 176, 0.85);
 }
 
-.signal-beacon-pulse-dot {
-  width: 7px;
-  height: 7px;
+.orb-beacon-spark.is-error {
+  background: var(--orb-danger);
+  box-shadow: 0 0 8px rgba(255, 93, 115, 0.9);
+}
+
+.orb-beacon-burst {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--beacon-amber);
-  box-shadow: 0 0 0 0 rgba(255, 180, 84, 0.45);
-  animation: beacon-dot-pulse 1.8s ease-out infinite;
+  border: 2px solid rgba(255, 180, 84, 0.7);
+  opacity: 0;
+  animation: orb-burst 0.65s ease-out 1;
+  pointer-events: none;
 }
 
-.signal-beacon.phase-running .signal-beacon-pulse-dot {
-  background: var(--beacon-cyan);
-  animation-duration: 1s;
-}
-
-.signal-beacon.phase-error .signal-beacon-pulse-dot {
-  background: var(--beacon-danger);
-}
-
-.signal-beacon.phase-done .signal-beacon-pulse-dot {
-  background: var(--beacon-mint);
-}
-
-.signal-beacon-sep {
-  opacity: 0.45;
-}
-
-.signal-beacon-headline {
-  margin-top: 10px;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  line-height: 1.25;
-  color: var(--beacon-sand);
-  text-wrap: balance;
-}
-
-.signal-beacon-detail {
-  margin-top: 6px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: rgba(244, 239, 230, 0.62);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.orb-beacon-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  max-width: 180px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 16, 24, 0.72);
+  color: rgba(244, 239, 230, 0.88);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+  backdrop-filter: blur(8px);
 }
 
-.signal-beacon-trail {
-  position: relative;
-  z-index: 1;
+.orb-beacon-button:hover + .orb-beacon-tip,
+.orb-beacon-button:focus-visible + .orb-beacon-tip,
+.orb-beacon.is-expanded .orb-beacon-tip {
+  opacity: 1;
+}
+
+.orb-beacon-trail {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 34px);
   display: grid;
-  gap: 6px;
-  max-height: 112px;
+  gap: 5px;
+  width: 168px;
+  max-height: 140px;
   overflow: auto;
-  padding: 0 2px;
-  mask-image: linear-gradient(180deg, black 80%, transparent);
+  padding: 2px;
+  pointer-events: auto;
 }
 
-.signal-beacon-trail-empty {
-  padding: 10px;
-  text-align: center;
-  font-size: 11px;
-  color: rgba(244, 239, 230, 0.5);
-  border: 1px dashed rgba(244, 239, 230, 0.14);
-  border-radius: 14px;
-}
-
-.signal-beacon-chip {
-  --chip-index: 0;
+.orb-beacon-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 6px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(244, 239, 230, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(8px);
-  animation: beacon-chip-in 0.35s ease both;
-  animation-delay: calc(var(--chip-index) * 45ms);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 16, 24, 0.78);
+  color: rgba(244, 239, 230, 0.9);
+  font-size: 10px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 18px rgba(7, 16, 24, 0.28);
 }
 
-.signal-beacon-chip.is-running {
-  border-color: rgba(66, 232, 208, 0.35);
-  box-shadow: 0 0 0 1px rgba(66, 232, 208, 0.08);
-}
-
-.signal-beacon-chip.is-success {
-  border-color: rgba(141, 255, 176, 0.28);
-}
-
-.signal-beacon-chip.is-error {
-  border-color: rgba(255, 93, 115, 0.35);
-}
-
-.signal-beacon-chip-name {
+.orb-beacon-chip > span:first-child {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
   font-weight: 650;
-  color: rgba(244, 239, 230, 0.92);
 }
 
-.signal-beacon-chip-status {
+.orb-beacon-chip > span:last-child {
   flex: 0 0 auto;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: rgba(244, 239, 230, 0.55);
+  opacity: 0.72;
 }
 
-.signal-beacon-chip.is-running .signal-beacon-chip-status { color: var(--beacon-cyan); }
-.signal-beacon-chip.is-success .signal-beacon-chip-status { color: var(--beacon-mint); }
-.signal-beacon-chip.is-error .signal-beacon-chip-status { color: var(--beacon-danger); }
-
-.signal-beacon-hint {
-  position: relative;
-  z-index: 1;
-  margin: 0;
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: rgba(244, 239, 230, 0.38);
+.orb-beacon-chip.is-running {
+  border-color: rgba(66, 232, 208, 0.35);
 }
 
-.signal-beacon.is-expanded {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+.orb-beacon-chip.is-success {
+  border-color: rgba(141, 255, 176, 0.28);
 }
 
-@keyframes beacon-spin {
+.orb-beacon-chip.is-error {
+  border-color: rgba(255, 93, 115, 0.35);
+}
+
+.orb-beacon-chip.is-empty {
+  justify-content: center;
+  opacity: 0.78;
+}
+
+.orb-beacon.is-expanded {
+  width: 168px;
+  height: 112px;
+  place-items: end center;
+}
+
+@keyframes orb-spin {
   to { transform: rotate(360deg); }
 }
 
-@keyframes beacon-morph {
-  0%, 100% { border-radius: 58% 42% 60% 40% / 48% 56% 44% 52%; transform: scale(1) rotate(0deg); }
-  33% { border-radius: 42% 58% 46% 54% / 60% 40% 58% 42%; transform: scale(1.04) rotate(4deg); }
-  66% { border-radius: 54% 46% 52% 48% / 42% 58% 40% 60%; transform: scale(0.98) rotate(-3deg); }
+@keyframes orb-morph {
+  0%, 100% { border-radius: 50%; transform: scale(1); }
+  40% { border-radius: 46% 54% 48% 52% / 52% 46% 54% 48%; transform: scale(1.05); }
+  70% { border-radius: 54% 46% 52% 48% / 48% 54% 46% 52%; transform: scale(0.97); }
 }
 
-@keyframes beacon-breathe {
-  0%, 100% { opacity: 0.55; transform: scale(0.92); }
-  50% { opacity: 0.95; transform: scale(1.08); }
+@keyframes orb-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 0.95; transform: scale(1.12); }
 }
 
-@keyframes beacon-eye {
+@keyframes orb-eye {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(0.82); }
+  50% { transform: scale(0.8); }
 }
 
-@keyframes beacon-ripple {
+@keyframes orb-ripple {
   0% { transform: scale(1); opacity: 0.55; }
-  100% { transform: scale(2.35); opacity: 0; }
+  100% { transform: scale(2.1); opacity: 0; }
 }
 
-@keyframes beacon-spark-twinkle {
-  0%, 100% { opacity: 0.55; transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-74px) scale(0.85); }
-  50% { opacity: 1; transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-78px) scale(1.15); }
+@keyframes orb-spark {
+  0%, 100% { opacity: 0.5; transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-42px) scale(0.85); }
+  50% { opacity: 1; transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-46px) scale(1.15); }
 }
 
-@keyframes beacon-burst {
-  0% { transform: scale(0.4); opacity: 0.8; }
-  100% { transform: scale(4.2); opacity: 0; }
+@keyframes orb-burst {
+  0% { transform: scale(0.4); opacity: 0.75; }
+  100% { transform: scale(3.6); opacity: 0; }
 }
 
-@keyframes beacon-dot-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(255, 180, 84, 0.45); }
-  70% { box-shadow: 0 0 0 8px rgba(255, 180, 84, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 180, 84, 0); }
-}
-
-@keyframes beacon-chip-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes beacon-aurora-drift {
-  from { transform: translate3d(-4%, 0, 0) rotate(-2deg); }
-  to { transform: translate3d(4%, 2%, 0) rotate(3deg); }
-}
-
-@keyframes beacon-shake {
+@keyframes orb-shake {
   0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-1.5px); }
-  75% { transform: translateX(1.5px); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .signal-beacon-orbit,
-  .signal-beacon-wave,
-  .signal-beacon-core-blob,
-  .signal-beacon-core-glow,
-  .signal-beacon-core-eye,
-  .signal-beacon-spark,
-  .signal-beacon-burst,
-  .signal-beacon-pulse-dot,
-  .signal-beacon-aurora,
-  .signal-beacon-chip {
+  .orb-beacon-ring,
+  .orb-beacon-wave,
+  .orb-beacon-sphere,
+  .orb-beacon-glow,
+  .orb-beacon-pupil,
+  .orb-beacon-spark,
+  .orb-beacon-burst {
     animation: none !important;
   }
 }
