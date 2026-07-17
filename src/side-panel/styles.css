@@ -7841,8 +7841,15 @@ body.automation-hud-root,
   border: 0;
   padding: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   color: inherit;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.orb-beacon.is-dragging .orb-beacon-button {
+  cursor: grabbing;
 }
 
 .orb-beacon-ring {

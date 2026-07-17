@@ -1,8 +1,14 @@
 import type { ExtractionRule, ExtractionSelectorType, PageContextExtractMode } from "../shared/types";
 import {
+  CONTROL_BEACON_DRAG_END_TYPE,
+  CONTROL_BEACON_DRAG_MOVE_TYPE,
+  CONTROL_BEACON_FRAME_SOURCE,
+  CONTROL_BEACON_LAYOUT_TYPE,
+  CONTROL_BEACON_POSITION_STORAGE_KEY,
   LEGACY_SIDE_PANEL_FLOATING_ATTACH_TYPE,
   SIDE_PANEL_FLOATING_ATTACH_TYPE,
   SIDE_PANEL_FLOATING_CLOSE_TYPE,
+  isControlBeaconFrameMessage,
   type SidePanelContentMessage,
 } from "../shared/sidePanelRuntime";
 import { extractPageText } from "./extractPageText";
@@ -26,6 +32,15 @@ export interface PageContextExtractResponse {
   matchedRuleId?: string;
 }
 
+const BEACON_FRAME_SELECTOR = "iframe[data-moon-tab-ai-control-beacon]";
+const BEACON_COMPACT_SIZE = 176;
+const BEACON_EXPANDED_WIDTH = 196;
+const BEACON_EXPANDED_HEIGHT = 280;
+
+let controlBeaconDragBridgeInstalled = false;
+let controlBeaconExpanded = false;
+let savedBeaconPosition: { left: number; top: number } | undefined;
+
 function isPageContextExtractMessage(message: unknown): message is PageContextExtractMessage {
   return Boolean(
     message &&
@@ -44,6 +59,9 @@ function isSidePanelContentMessage(message: unknown): message is SidePanelConten
     message.type === SIDE_PANEL_FLOATING_CLOSE_TYPE
   ));
 }
+
+ensureControlBeaconDragBridge();
+void restoreControlBeaconPosition();
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (isSidePanelContentMessage(message)) {
@@ -89,7 +107,7 @@ function attachFloatingAssistantFrame(url: string): { ok: true } | { ok: false; 
   const isBeacon = isControlBeaconUrl(url);
   const frameKey = isBeacon ? "moonTabAiControlBeacon" : "moonTabAiFloatingFrame";
   const selector = isBeacon
-    ? "iframe[data-moon-tab-ai-control-beacon]"
+    ? BEACON_FRAME_SELECTOR
     : "iframe[data-moon-tab-ai-floating-frame]";
 
   let frame = document.querySelector<HTMLIFrameElement>(selector);
@@ -112,31 +130,34 @@ function attachFloatingAssistantFrame(url: string): { ok: true } | { ok: false; 
     applyFloatingFrameLayout(frame, isBeacon);
   }
   frame.dataset[frameKey] = "true";
-  frame.src = url;
+  if (frame.src !== url) {
+    frame.src = url;
+  }
   return { ok: true };
 }
 
 function applyFloatingFrameLayout(frame: HTMLIFrameElement, isBeacon: boolean): void {
   if (isBeacon) {
     // Pure floating orb: transparent box large enough for tip/trail, orb sits bottom-right.
-    frame.style.right = "10px";
-    frame.style.bottom = "10px";
-    frame.style.left = "auto";
-    frame.style.top = "auto";
-    frame.style.width = "176px";
-    frame.style.height = "176px";
-    frame.style.maxWidth = "min(176px, calc(100vw - 12px))";
-    frame.style.maxHeight = "min(176px, calc(100vh - 12px))";
+    const width = controlBeaconExpanded ? BEACON_EXPANDED_WIDTH : BEACON_COMPACT_SIZE;
+    const height = controlBeaconExpanded ? BEACON_EXPANDED_HEIGHT : BEACON_COMPACT_SIZE;
+    frame.style.width = `${width}px`;
+    frame.style.height = `${height}px`;
+    frame.style.maxWidth = `min(${width}px, calc(100vw - 12px))`;
+    frame.style.maxHeight = `min(${height}px, calc(100vh - 12px))`;
     frame.style.borderRadius = "0";
     frame.style.boxShadow = "none";
     frame.style.overflow = "visible";
     frame.style.pointerEvents = "auto";
     frame.style.background = "transparent";
+    applyControlBeaconPosition(frame, savedBeaconPosition);
     return;
   }
 
   frame.style.right = "20px";
   frame.style.bottom = "20px";
+  frame.style.left = "auto";
+  frame.style.top = "auto";
   frame.style.width = "420px";
   frame.style.height = "680px";
   frame.style.maxWidth = "calc(100vw - 40px)";
@@ -146,9 +167,164 @@ function applyFloatingFrameLayout(frame: HTMLIFrameElement, isBeacon: boolean): 
   frame.style.overflow = "hidden";
 }
 
+function applyControlBeaconPosition(frame: HTMLIFrameElement, position?: { left: number; top: number }): void {
+  if (position && Number.isFinite(position.left) && Number.isFinite(position.top)) {
+    const clamped = clampBeaconPosition(position.left, position.top, frame);
+    frame.style.left = `${clamped.left}px`;
+    frame.style.top = `${clamped.top}px`;
+    frame.style.right = "auto";
+    frame.style.bottom = "auto";
+    return;
+  }
+
+  frame.style.right = "10px";
+  frame.style.bottom = "10px";
+  frame.style.left = "auto";
+  frame.style.top = "auto";
+}
+
+function clampBeaconPosition(left: number, top: number, frame?: HTMLIFrameElement): { left: number; top: number } {
+  const width = frame?.offsetWidth || (controlBeaconExpanded ? BEACON_EXPANDED_WIDTH : BEACON_COMPACT_SIZE);
+  const height = frame?.offsetHeight || (controlBeaconExpanded ? BEACON_EXPANDED_HEIGHT : BEACON_COMPACT_SIZE);
+  const maxLeft = Math.max(0, window.innerWidth - width);
+  const maxTop = Math.max(0, window.innerHeight - height);
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop),
+  };
+}
+
+function moveControlBeaconFrame(dx: number, dy: number): void {
+  const frame = document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR);
+  if (!frame || !Number.isFinite(dx) || !Number.isFinite(dy)) {
+    return;
+  }
+  const rect = frame.getBoundingClientRect();
+  const next = clampBeaconPosition(rect.left + dx, rect.top + dy, frame);
+  frame.style.left = `${next.left}px`;
+  frame.style.top = `${next.top}px`;
+  frame.style.right = "auto";
+  frame.style.bottom = "auto";
+  savedBeaconPosition = next;
+}
+
+function persistControlBeaconPosition(): void {
+  const frame = document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR);
+  if (!frame) {
+    return;
+  }
+  const current = savedBeaconPosition
+    ? savedBeaconPosition
+    : (() => {
+        const rect = frame.getBoundingClientRect();
+        return { left: rect.left, top: rect.top };
+      })();
+  const position = clampBeaconPosition(current.left, current.top, frame);
+  savedBeaconPosition = position;
+  try {
+    void chrome.storage?.session?.set?.({ [CONTROL_BEACON_POSITION_STORAGE_KEY]: position });
+  } catch {
+    // storage is best-effort
+  }
+}
+
+async function restoreControlBeaconPosition(): Promise<void> {
+  try {
+    const items = await chrome.storage?.session?.get?.(CONTROL_BEACON_POSITION_STORAGE_KEY);
+    const value = items?.[CONTROL_BEACON_POSITION_STORAGE_KEY];
+    if (
+      value &&
+      typeof value === "object" &&
+      typeof (value as { left?: unknown }).left === "number" &&
+      typeof (value as { top?: unknown }).top === "number"
+    ) {
+      savedBeaconPosition = {
+        left: (value as { left: number }).left,
+        top: (value as { top: number }).top,
+      };
+      const frame = document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR);
+      if (frame) {
+        applyControlBeaconPosition(frame, savedBeaconPosition);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function setControlBeaconExpanded(expanded: boolean): void {
+  controlBeaconExpanded = Boolean(expanded);
+  const frame = document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR);
+  if (!frame) {
+    return;
+  }
+  applyFloatingFrameLayout(frame, true);
+}
+
+export function handleControlBeaconHostMessage(
+  data: unknown,
+  meta: { origin?: string; source?: MessageEventSource | null } = {},
+): boolean {
+  if (!isControlBeaconFrameMessage(data)) {
+    return false;
+  }
+
+  const frame = document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR);
+  if (!frame) {
+    return false;
+  }
+  if (meta.source != null && meta.source !== frame.contentWindow) {
+    return false;
+  }
+
+  try {
+    const extensionUrl = new URL(chrome.runtime.getURL("index.html"));
+    // Node/jsdom reports chrome-extension origin as "null"; real Chrome provides the extension origin.
+    if (
+      meta.origin &&
+      meta.origin !== "null" &&
+      extensionUrl.origin &&
+      extensionUrl.origin !== "null" &&
+      meta.origin !== extensionUrl.origin
+    ) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  if (data.type === CONTROL_BEACON_DRAG_MOVE_TYPE) {
+    moveControlBeaconFrame(Number(data.dx) || 0, Number(data.dy) || 0);
+    return true;
+  }
+  if (data.type === CONTROL_BEACON_DRAG_END_TYPE) {
+    persistControlBeaconPosition();
+    return true;
+  }
+  if (data.type === CONTROL_BEACON_LAYOUT_TYPE) {
+    setControlBeaconExpanded(Boolean(data.expanded));
+    return true;
+  }
+  return false;
+}
+
+function ensureControlBeaconDragBridge(): void {
+  if (controlBeaconDragBridgeInstalled) {
+    return;
+  }
+  controlBeaconDragBridgeInstalled = true;
+
+  window.addEventListener("message", (event: MessageEvent) => {
+    handleControlBeaconHostMessage(event.data, {
+      origin: event.origin,
+      source: event.source,
+    });
+  });
+}
+
 function closeFloatingAssistantFrame(): void {
   document.querySelector<HTMLIFrameElement>("iframe[data-moon-tab-ai-floating-frame]")?.remove();
-  document.querySelector<HTMLIFrameElement>("iframe[data-moon-tab-ai-control-beacon]")?.remove();
+  document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR)?.remove();
 }
 
 function isControlBeaconUrl(url: string): boolean {

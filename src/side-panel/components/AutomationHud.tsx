@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  CONTROL_BEACON_DRAG_END_TYPE,
+  CONTROL_BEACON_DRAG_MOVE_TYPE,
+  CONTROL_BEACON_FRAME_SOURCE,
+  CONTROL_BEACON_LAYOUT_TYPE,
+} from "../../shared/sidePanelRuntime";
 import { useAppStore } from "../state/appStore";
 import type { ChatMessage, ChatToolCallRecord } from "../../shared/types";
 
 type LivePhase = "idle" | "running" | "done" | "error";
+
+const DRAG_THRESHOLD_PX = 4;
 
 function statusLabel(status: ChatToolCallRecord["status"] | "unknown"): string {
   if (status === "running") return "进行中";
@@ -47,6 +55,25 @@ function shortName(record?: ChatToolCallRecord): string {
   return label.length > 18 ? `${label.slice(0, 17)}…` : label;
 }
 
+function postBeaconFrameMessage(message: {
+  type: typeof CONTROL_BEACON_DRAG_MOVE_TYPE | typeof CONTROL_BEACON_DRAG_END_TYPE | typeof CONTROL_BEACON_LAYOUT_TYPE;
+  dx?: number;
+  dy?: number;
+  expanded?: boolean;
+}): void {
+  try {
+    window.parent?.postMessage(
+      {
+        source: CONTROL_BEACON_FRAME_SOURCE,
+        ...message,
+      },
+      "*",
+    );
+  } catch {
+    // Host page may reject postMessage in rare sandbox cases.
+  }
+}
+
 export function AutomationHud() {
   const activeSessionId = useAppStore((state) => state.activeSessionId);
   const chatSessions = useAppStore((state) => state.chatSessions);
@@ -60,11 +87,23 @@ export function AutomationHud() {
   const [now, setNow] = useState(Date.now());
   const [expanded, setExpanded] = useState(false);
   const [burstKey, setBurstKey] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStateRef = useRef({
+    pointerId: null as number | null,
+    active: false,
+    moved: false,
+    lastX: 0,
+    lastY: 0,
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    postBeaconFrameMessage({ type: CONTROL_BEACON_LAYOUT_TYPE, expanded });
+  }, [expanded]);
 
   useEffect(() => {
     const runtime = globalThis.chrome?.runtime;
@@ -139,14 +178,69 @@ export function AutomationHud() {
     : isBusy
       ? "模型思考中"
       : browserControlEnabled
-        ? "浏览器控制已开"
+        ? "浏览器控制已开 · 可拖动"
         : "先在侧栏开启浏览器控制";
 
   const sparkRecords = records.slice(-5);
 
+  const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      active: true,
+      moved: false,
+      lastX: event.screenX,
+      lastY: event.screenY,
+    };
+    setDragging(false);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    const dx = event.screenX - drag.lastX;
+    const dy = event.screenY - drag.lastY;
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+      return;
+    }
+    drag.moved = true;
+    drag.lastX = event.screenX;
+    drag.lastY = event.screenY;
+    if (!dragging) {
+      setDragging(true);
+    }
+    postBeaconFrameMessage({ type: CONTROL_BEACON_DRAG_MOVE_TYPE, dx, dy });
+  };
+
+  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    drag.active = false;
+    drag.pointerId = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // capture may already be released
+    }
+    if (drag.moved) {
+      postBeaconFrameMessage({ type: CONTROL_BEACON_DRAG_END_TYPE });
+      setDragging(false);
+      return;
+    }
+    setDragging(false);
+    setExpanded((value) => !value);
+  };
+
   return (
     <div
-      className={`orb-beacon phase-${phase}${expanded ? " is-expanded" : ""}${browserControlEnabled ? " control-on" : ""}`}
+      className={`orb-beacon phase-${phase}${expanded ? " is-expanded" : ""}${browserControlEnabled ? " control-on" : ""}${dragging ? " is-dragging" : ""}`}
       data-browser-control={browserControlEnabled ? "on" : "off"}
       data-phase={phase}
     >
@@ -156,7 +250,10 @@ export function AutomationHud() {
         aria-expanded={expanded}
         aria-label={tooltip}
         title={tooltip}
-        onClick={() => setExpanded((value) => !value)}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
       >
         <span className="orb-beacon-ring orb-beacon-ring-a" aria-hidden="true" />
         <span className="orb-beacon-ring orb-beacon-ring-b" aria-hidden="true" />

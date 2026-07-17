@@ -23,6 +23,25 @@ describe("content 脚本消息", () => {
     });
   });
 
+  function stubChrome(extra: Record<string, unknown> = {}) {
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn(),
+        },
+        ...(extra.runtime as object | undefined),
+      },
+      storage: {
+        session: {
+          get: vi.fn(async () => ({})),
+          set: vi.fn(async () => undefined),
+        },
+      },
+      ...extra,
+    });
+  }
+
   it("收到提取消息后返回当前页提取结果", async () => {
     let registeredListener:
       | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
@@ -30,10 +49,17 @@ describe("content 脚本消息", () => {
 
     vi.stubGlobal("chrome", {
       runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
         onMessage: {
           addListener: vi.fn((listener) => {
             registeredListener = listener;
           }),
+        },
+      },
+      storage: {
+        session: {
+          get: vi.fn(async () => ({})),
+          set: vi.fn(async () => undefined),
         },
       },
     });
@@ -198,6 +224,12 @@ describe("content 脚本消息", () => {
           }),
         },
       },
+      storage: {
+        session: {
+          get: vi.fn(async () => ({})),
+          set: vi.fn(async () => undefined),
+        },
+      },
     });
 
     await import("../../../src/content/index");
@@ -219,6 +251,91 @@ describe("content 脚本消息", () => {
     expect((frames[0] as HTMLIFrameElement).style.boxShadow).toBe("none");
     expect((frames[0] as HTMLIFrameElement).style.background).toBe("transparent");
     expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
+  });
+
+  it("控制信标拖动消息会移动 iframe 位置并在结束时持久化", async () => {
+    let registeredListener:
+      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
+      | undefined;
+    const storageSet = vi.fn(async () => undefined);
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn((listener) => {
+            registeredListener = listener;
+          }),
+        },
+      },
+      storage: {
+        session: {
+          get: vi.fn(async () => ({})),
+          set: storageSet,
+        },
+      },
+    });
+
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+
+    const content = await import("../../../src/content/index");
+
+    const sendResponse = vi.fn();
+    registeredListener?.(
+      {
+        type: "sidePanel.floating.attach",
+        url: "chrome-extension://moon-tab/index.html?floating=1&controlWindow=1",
+      },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    const frame = document.querySelector<HTMLIFrameElement>("iframe[data-moon-tab-ai-control-beacon]");
+    expect(frame).toBeTruthy();
+    Object.defineProperty(frame!, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ left: 1000, top: 600, width: 176, height: 176, right: 1176, bottom: 776, x: 1000, y: 600, toJSON: () => ({}) }),
+    });
+    Object.defineProperty(frame!, "offsetWidth", { configurable: true, value: 176 });
+    Object.defineProperty(frame!, "offsetHeight", { configurable: true, value: 176 });
+    const fakeWindow = { id: "beacon-window" } as unknown as Window;
+    Object.defineProperty(frame!, "contentWindow", { configurable: true, value: fakeWindow });
+
+    expect(
+      content.handleControlBeaconHostMessage(
+        {
+          source: "moon-tab-control-beacon",
+          type: "control-beacon-drag-move",
+          dx: -40,
+          dy: -30,
+        },
+        {
+          origin: "chrome-extension://moon-tab",
+        },
+      ),
+    ).toBe(true);
+
+    expect(frame!.style.left).toBe("960px");
+    expect(frame!.style.top).toBe("570px");
+    expect(frame!.style.right).toBe("auto");
+    expect(frame!.style.bottom).toBe("auto");
+
+    expect(
+      content.handleControlBeaconHostMessage(
+        {
+          source: "moon-tab-control-beacon",
+          type: "control-beacon-drag-end",
+        },
+        {
+          origin: "chrome-extension://moon-tab",
+        },
+      ),
+    ).toBe(true);
+
+    expect(storageSet).toHaveBeenCalledWith({
+      "sidePanel.controlBeaconPosition.v1": { left: 960, top: 570 },
+    });
   });
 
   it("floating 悬浮助手拒绝非当前扩展 index floating 地址", async () => {
