@@ -5,19 +5,17 @@ import {
   SIDE_PANEL_FLOATING_ATTACH_TYPE,
   SIDE_PANEL_OPEN_FLOATING_TYPE,
   SIDE_PANEL_PATH,
+  createFloatingControlBeaconPath,
   createFloatingSidePanelPath,
   type SidePanelRuntimeMessage,
 } from "../shared/sidePanelRuntime";
 
 const RECENTLY_CREATED_TAB_TTL_MS = 60000;
-const CONTROL_WINDOW_STORAGE_KEY = "sidePanel.controlWindowId.v1";
-// Compact signal-beacon popup: not a full assistant panel.
-const CONTROL_WINDOW_WIDTH = 280;
-const CONTROL_WINDOW_HEIGHT = 360;
+const CONTROL_BEACON_TAB_STORAGE_KEY = "sidePanel.controlBeaconTabId.v1";
 
 const recentlyCreatedTabs = new Set<number>();
 let initialized = false;
-let controlWindowId: number | undefined;
+let controlBeaconTabId: number | undefined;
 
 export type SidePanelRuntimeResponse = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -28,13 +26,13 @@ export function initializeSidePanelController(): void {
   initialized = true;
 
   void bootstrapTabScopedSidePanel();
-  void restoreControlWindowId();
+  void restoreControlBeaconTabId();
   chrome.runtime.onInstalled.addListener(() => {
     void bootstrapTabScopedSidePanel();
   });
   chrome.runtime.onStartup.addListener(() => {
     void bootstrapTabScopedSidePanel();
-    void restoreControlWindowId();
+    void restoreControlBeaconTabId();
   });
 
   chrome.action?.onClicked?.addListener((tab) => {
@@ -63,6 +61,9 @@ export function initializeSidePanelController(): void {
 
   chrome.tabs?.onActivated?.addListener((activeInfo) => {
     void syncActiveTabSidePanel(activeInfo.tabId, activeInfo.windowId);
+    if (typeof controlBeaconTabId === "number") {
+      void ensureAutomationControlWindow(activeInfo.tabId);
+    }
   });
 
   chrome.tabs?.onCreated?.addListener((tab) => {
@@ -73,12 +74,9 @@ export function initializeSidePanelController(): void {
   chrome.tabs?.onRemoved?.addListener((tabId) => {
     recentlyCreatedTabs.delete(tabId);
     void forgetOpenedSidePanelTab(tabId);
-  });
-
-  chrome.windows?.onRemoved?.addListener((windowId) => {
-    if (controlWindowId === windowId) {
-      controlWindowId = undefined;
-      void chrome.storage?.session?.remove?.(CONTROL_WINDOW_STORAGE_KEY);
+    if (controlBeaconTabId === tabId) {
+      controlBeaconTabId = undefined;
+      void chrome.storage?.session?.remove?.(CONTROL_BEACON_TAB_STORAGE_KEY);
     }
   });
 }
@@ -150,69 +148,55 @@ export async function ensureSidePanelForControlledTab(tabId: number | undefined)
 }
 
 /**
- * Open/focus a dedicated popup window hosting the assistant UI.
- * This survives page tab switches during browser automation.
+ * Keep a compact signal beacon floating inside the active browser tab while automation runs.
+ * This stays in the same browser window instead of spawning a separate popup.
  */
 export async function ensureAutomationControlWindow(anchorTabId?: number): Promise<boolean> {
   try {
-    if (typeof controlWindowId === "number") {
-      try {
-        const existing = await chrome.windows.get(controlWindowId);
-        if (existing?.id) {
-          await chrome.windows.update(controlWindowId, { focused: true, drawAttention: true });
-          return true;
-        }
-      } catch {
-        controlWindowId = undefined;
-      }
-    }
-
-    let left: number | undefined;
-    let top: number | undefined;
-    try {
-      const current = await chrome.windows.getCurrent();
-      if (typeof current.left === "number" && typeof current.width === "number") {
-        left = Math.max(0, current.left + Math.max(0, current.width - CONTROL_WINDOW_WIDTH - 24));
-      }
-      if (typeof current.top === "number") {
-        top = Math.max(0, current.top + 24);
-      }
-    } catch {
-      // ignore placement failures
-    }
-
-    const query = new URLSearchParams({ floating: "1", controlWindow: "1" });
+    let tab: chrome.tabs.Tab | undefined;
     if (typeof anchorTabId === "number") {
-      query.set("tabId", String(anchorTabId));
+      try {
+        tab = await chrome.tabs.get(anchorTabId);
+      } catch {
+        tab = undefined;
+      }
     }
-    const finalUrl = chrome.runtime.getURL(`index.html?${query.toString()}`);
-
-    const created = await chrome.windows.create({
-      url: finalUrl,
-      type: "popup",
-      focused: true,
-      width: CONTROL_WINDOW_WIDTH,
-      height: CONTROL_WINDOW_HEIGHT,
-      ...(typeof left === "number" ? { left } : {}),
-      ...(typeof top === "number" ? { top } : {}),
-    });
-    if (typeof created?.id !== "number") {
+    if (!tab || typeof tab.id !== "number") {
+      const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+      tab = active;
+    }
+    if (typeof tab?.id !== "number") {
       return false;
     }
-    controlWindowId = created.id;
-    await chrome.storage?.session?.set?.({ [CONTROL_WINDOW_STORAGE_KEY]: created.id });
-    return true;
+    if (!isFloatingSupportedUrl(tab.url)) {
+      return false;
+    }
+
+    const url = chrome.runtime.getURL(createFloatingControlBeaconPath({
+      tabId: tab.id,
+      windowId: tab.windowId,
+    }));
+    const response = await sendFloatingMessageToTab(tab.id, {
+      type: SIDE_PANEL_FLOATING_ATTACH_TYPE,
+      url,
+    });
+    if (isSidePanelRuntimeResponse(response) && response.ok) {
+      controlBeaconTabId = tab.id;
+      await chrome.storage?.session?.set?.({ [CONTROL_BEACON_TAB_STORAGE_KEY]: tab.id });
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
 }
 
-async function restoreControlWindowId(): Promise<void> {
+async function restoreControlBeaconTabId(): Promise<void> {
   try {
-    const items = await chrome.storage?.session?.get?.(CONTROL_WINDOW_STORAGE_KEY);
-    const value = items?.[CONTROL_WINDOW_STORAGE_KEY];
+    const items = await chrome.storage?.session?.get?.(CONTROL_BEACON_TAB_STORAGE_KEY);
+    const value = items?.[CONTROL_BEACON_TAB_STORAGE_KEY];
     if (typeof value === "number") {
-      controlWindowId = value;
+      controlBeaconTabId = value;
     }
   } catch {
     // ignore

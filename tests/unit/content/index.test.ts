@@ -184,6 +184,40 @@ describe("content 脚本消息", () => {
     expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
   });
 
+  it("floating 控制信标 attach 会创建小尺寸页面内 iframe", async () => {
+    let registeredListener:
+      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn((listener) => {
+            registeredListener = listener;
+          }),
+        },
+      },
+    });
+
+    await import("../../../src/content/index");
+
+    const sendResponse = vi.fn();
+    const message = {
+      type: "sidePanel.floating.attach",
+      url: "chrome-extension://moon-tab/index.html?floating=1&controlWindow=1&tabId=7",
+    };
+
+    registeredListener?.(message, {} as chrome.runtime.MessageSender, sendResponse);
+
+    const frames = document.querySelectorAll("iframe[data-moon-tab-ai-control-beacon]");
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ src: message.url });
+    expect((frames[0] as HTMLIFrameElement).style.width).toBe("248px");
+    expect((frames[0] as HTMLIFrameElement).style.height).toBe("318px");
+    expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
+  });
+
   it("floating 悬浮助手拒绝非当前扩展 index floating 地址", async () => {
     let registeredListener:
       | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)

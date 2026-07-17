@@ -40,3 +40,15 @@ export function createFloatingSidePanelPath(input: { tabId?: number; windowId?: 
   }
   return `${SIDE_PANEL_PATH}?${params.toString()}`;
 }
+
+/** Compact in-page beacon used while browser control is active. */
+export function createFloatingControlBeaconPath(input: { tabId?: number; windowId?: number } = {}): string {
+  const params = new URLSearchParams({ floating: "1", controlWindow: "1" });
+  if (typeof input.tabId === "number") {
+    params.set("tabId", String(input.tabId));
+  }
+  if (typeof input.windowId === "number") {
+    params.set("windowId", String(input.windowId));
+  }
+  return `${SIDE_PANEL_PATH}?${params.toString()}`;
+}
