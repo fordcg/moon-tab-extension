@@ -1147,7 +1147,6 @@ var Room = {
 						cost: craftable.cost(),
 						text: _(k),
 						click: Room.build,
-						width: '80px',
 						ttPos: loc.children().length > 10 ? 'top right' : 'bottom right'
 					}).css('opacity', 0).attr('buildThing', k).appendTo(loc).animate({ opacity: 1 }, 300, 'linear');
 				}
@@ -1181,7 +1180,6 @@ var Room = {
 						cost: good.cost(),
 						text: _(g),
 						click: Room.buy,
-						width: '80px',
 						ttPos: buySection.children().length > 10 ? 'top right' : 'bottom right'
 					}).css('opacity', 0).attr('buildThing', g).appendTo(buySection).animate({ opacity: 1 }, 300, 'linear');
 				}
