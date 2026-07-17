@@ -60,6 +60,10 @@ describe("扩展构建产物合约", () => {
     expect(manifest.permissions).toEqual(expect.arrayContaining(["downloads"]));
   });
 
+  it("manifest 应声明 declarativeNetRequestWithHostAccess 以清洗模型请求 Origin", () => {
+    expect(manifest.permissions).toEqual(expect.arrayContaining(["declarativeNetRequestWithHostAccess"]));
+  });
+
   it("内容脚本入口不应引入动态 import，保持普通 content script 可直接执行", async () => {
     const contentEntry = await readProjectFile("src/content/index.ts");
 

@@ -321,19 +321,20 @@ describe("模型流式响应解析", () => {
     });
   });
 
-  it("OpenAI-compatible SSE 已有正文但未收到完成信号时返回中断错误", async () => {
+  it("OpenAI-compatible SSE 已有正文但未收到完成信号时仍按正常完成收尾", async () => {
     await expect(
       readModelStreamResponse(
         new Response(createStream(['data: {"choices":[{"delta":{"content":"半截回答"}}]}\n\n'])),
         createModel(),
       ),
     ).resolves.toEqual({
-      ok: false,
-      message: "流式响应异常中断，请重新生成后重试",
+      ok: true,
+      content: "半截回答",
+      thinking: undefined,
     });
   });
 
-  it("Anthropic SSE 已有正文但未收到 message_stop 时返回中断错误", async () => {
+  it("Anthropic SSE 已有正文但未收到 message_stop 时仍按正常完成收尾", async () => {
     await expect(
       readModelStreamResponse(
         new Response(
@@ -342,8 +343,9 @@ describe("模型流式响应解析", () => {
         createModel({ endpointType: "anthropic_messages" }),
       ),
     ).resolves.toEqual({
-      ok: false,
-      message: "流式响应异常中断，请重新生成后重试",
+      ok: true,
+      content: "半截回答",
+      thinking: undefined,
     });
   });
 });

@@ -41,6 +41,7 @@ import type { SidePanelRuntimeMessage } from "../shared/sidePanelRuntime";
 import { createNetworkDevtoolsBridge } from "./networkDevtoolsBridge";
 import { BrowserNetworkToolExecutor } from "./browserControl/networkToolExecutor";
 import { exportAllDataForSync, recoverInterruptedChatSessions, replaceAllDataFromSync } from "../shared/storage/repositories";
+import { installModelProviderHeaderRules } from "./modelProviderRequestHeaders";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
 const networkDevtoolsBridge = createNetworkDevtoolsBridge();
@@ -69,12 +70,17 @@ const NETWORK_DEVTOOLS_NOT_CONNECTED_RESPONSE = { ok: false, message: "未检测
 chrome.runtime.onInstalled.addListener(() => {
   ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
+  void installModelProviderHeaderRules();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
+  void installModelProviderHeaderRules();
 });
+
+// Service worker 冷启动时也要安装，避免只依赖 onInstalled/onStartup 时会话规则丢失。
+void installModelProviderHeaderRules();
 
 initializeSidePanelController();
 

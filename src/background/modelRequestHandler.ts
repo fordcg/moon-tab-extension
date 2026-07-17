@@ -29,6 +29,7 @@ import { appendBrowserControlPromptIfNeeded, createBackgroundToolExecutor, creat
 import { selectAutomationPlaybook } from "./automationPlaybookSelector";
 import { createChatRequestLogClient, type ChatRequestLogClient } from "./chatRequestLogFile";
 import { extractAssistantResponseData } from "./modelAssistantResponseParser";
+import { formatModelHttpErrorMessage } from "./modelProviderRequestHeaders";
 import { readModelStreamResponse } from "./modelStreamResponseParser";
 import { runModelToolLoop } from "./toolCalling/toolLoop";
 
@@ -394,14 +395,14 @@ async function requestModelOnce(
       });
 
       if (!streamResponse.ok) {
+        const errorBody = await readSafeErrorBody(streamResponse);
         const failed: ChatSendResponse = {
           ok: false,
-          message: `模型请求失败：${streamResponse.status} ${streamResponse.statusText}`.trim(),
-        };
-        emitModelResponse(log, {
-          ...failed,
+          message: formatModelHttpErrorMessage(streamResponse.status, streamResponse.statusText, errorBody),
           status: streamResponse.status,
-        });
+          errorBody,
+        };
+        emitModelResponse(log, failed);
         return failed;
       }
 
@@ -421,16 +422,14 @@ async function requestModelOnce(
     });
 
     if (!modelResponse.response.ok) {
-      const errorBody = message.structuredOutput ? await readSafeErrorBody(modelResponse.response) : undefined;
+      const errorBody = modelResponse.errorBody ?? (await readSafeErrorBody(modelResponse.response));
       const failed: ChatSendResponse = {
         ok: false,
-        message: `模型请求失败：${modelResponse.response.status} ${modelResponse.response.statusText}`.trim(),
-        ...(message.structuredOutput ? { status: modelResponse.response.status, errorBody } : {}),
-      };
-      emitModelResponse(log, {
-        ...failed,
+        message: formatModelHttpErrorMessage(modelResponse.response.status, modelResponse.response.statusText, errorBody),
         status: modelResponse.response.status,
-      });
+        errorBody,
+      };
+      emitModelResponse(log, failed);
       return failed;
     }
 
@@ -482,11 +481,13 @@ async function fetchAndReadModelResponse(
   fetcher: Fetcher,
   url: string,
   init: RequestInit,
-): Promise<{ response: Response; data?: unknown; retryable: boolean }> {
+): Promise<{ response: Response; data?: unknown; retryable: boolean; errorBody?: string }> {
   const response = await fetcher(url, init);
 
   if (!response.ok) {
-    return { response, retryable: shouldRetryModelResponse(response) };
+    // 失败响应体只读一次；重试前 cancel body，这里缓存摘要供最终错误展示。
+    const errorBody = shouldRetryModelResponse(response) ? undefined : await readSafeErrorBody(response);
+    return { response, retryable: shouldRetryModelResponse(response), errorBody };
   }
 
   const data = await response.json();

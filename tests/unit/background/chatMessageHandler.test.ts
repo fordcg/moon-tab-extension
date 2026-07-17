@@ -294,7 +294,7 @@ describe("聊天模型请求处理", () => {
     });
   });
 
-  it("模型接口失败时返回中文错误且不读取响应正文", async () => {
+  it("模型接口失败时返回中文错误并附带上游正文摘要", async () => {
     const text = vi.fn().mockResolvedValue("bad key");
     const fetcher = vi.fn().mockResolvedValue({
       ok: false,
@@ -315,9 +315,11 @@ describe("聊天模型请求处理", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "模型请求失败：401 Unauthorized",
+      message: "模型请求失败：401 Unauthorized — bad key",
+      status: 401,
+      errorBody: "bad key",
     });
-    expect(text).not.toHaveBeenCalled();
+    expect(text).toHaveBeenCalledTimes(1);
   });
 
   it("流式响应缺少响应体时返回中文错误", async () => {
@@ -2106,7 +2108,7 @@ describe("聊天模型请求处理", () => {
 
     expect(result).toEqual({
       ok: false,
-      message: "模型请求失败：400 Bad Request",
+      message: '模型请求失败：400 Bad Request — {"error":{"message":"response_format json_schema is not supported"}}',
       status: 400,
       errorBody: '{"error":{"message":"response_format json_schema is not supported"}}',
     });

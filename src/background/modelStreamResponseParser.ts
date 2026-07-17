@@ -92,6 +92,12 @@ export async function readModelStreamResponse(
     return { ok: false, message: "模型响应中没有可用内容" };
   }
 
+  // 部分兼容渠道会在最后一段正文后直接关流：既没有 [DONE] 也没有 finish_reason。
+  // 只要已经拿到可见正文或思考内容，且读流正常结束，就按成功收尾，避免误报“流式中断”。
+  if (!sawDone && (visibleContent.trim() || rawContent.trim() || visibleThinking.trim() || rawThinking.trim())) {
+    sawDone = true;
+  }
+
   if (!sawDone) {
     return { ok: false, message: STREAM_INTERRUPTED_MESSAGE };
   }
