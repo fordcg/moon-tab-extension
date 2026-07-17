@@ -13,6 +13,12 @@
         name: '守火人',
         summary: '他们把陌生人带到火边，也把最后一口粮分成两半。',
         route: 'hearth',
+        reconciliation: {
+          text: '灰旗插在两边中间。谁也没有原谅谁，但最后一段路可以继续。',
+          action: '举起灰旗，送上一次赔礼',
+          cost: { wood: 300, cloth: 20, 'cured meat': 30, medicine: 2 },
+          notification: '灰旗被收下。旧账仍在，只是不再挡路。'
+        },
         quests: [
           {
             title: '林边的三个人',
@@ -62,6 +68,12 @@
         name: '铁誓商队',
         summary: '他们相信契约、车轮和能被称量的一切。',
         route: 'foundry',
+        reconciliation: {
+          text: '灰旗插在两边中间。谁也没有原谅谁，但最后一段路可以继续。',
+          action: '举起灰旗，送上一次赔礼',
+          cost: { wood: 300, cloth: 20, 'cured meat': 30, medicine: 2 },
+          notification: '灰旗被收下。旧账仍在，只是不再挡路。'
+        },
         quests: [
           {
             title: '断轴的车队',
@@ -113,6 +125,12 @@
         name: '灰径旅团',
         summary: '他们不留城墙，只把每条能活着走完的路画下来。',
         route: 'waystation',
+        reconciliation: {
+          text: '灰旗插在两边中间。谁也没有原谅谁，但最后一段路可以继续。',
+          action: '举起灰旗，送上一次赔礼',
+          cost: { wood: 300, cloth: 20, 'cured meat': 30, medicine: 2 },
+          notification: '灰旗被收下。旧账仍在，只是不再挡路。'
+        },
         quests: [
           {
             title: '无灯的路标',
@@ -166,19 +184,40 @@
         name: '共灶',
         faction: 'embers',
         description: '新搭起的棚屋围着同一堆火。村庄可再容纳十个人。',
-        cost: { wood: 300, 'cured meat': 15, medicine: 2 }
+        cost: { wood: 300, 'cured meat': 15, medicine: 2 },
+        effect: { population: 10, leanYearPopulation: 15 },
+        upgrade: {
+          name: '长桌',
+          description: '棚屋围着长桌又添一圈。村庄总计可再容纳二十人。',
+          cost: { wood: 800, 'cured meat': 60, medicine: 5 },
+          effect: { population: 20, leanYearPopulation: 25 }
+        }
       },
       foundry: {
         name: '铸炉',
         faction: 'iron',
         description: '秤砣和炉火从早响到晚。基础材料、药品和弹药便宜一成。',
-        cost: { wood: 300, iron: 40, steel: 10 }
+        cost: { wood: 300, iron: 40, steel: 10 },
+        effect: { tradeMultiplier: 0.9, leanYearTradeMultiplier: 0.85 },
+        upgrade: {
+          name: '公秤',
+          description: '每一笔货都过同一杆秤。基础交易成本降低两成。',
+          cost: { wood: 1000, iron: 80, coal: 80, steel: 20 },
+          effect: { tradeMultiplier: 0.8, leanYearTradeMultiplier: 0.75 }
+        }
       },
       waystation: {
         name: '无灯驿',
         faction: 'trail',
         description: '出发的人总能找到一只空架子。行囊容量增加五。',
-        cost: { wood: 300, leather: 20, torch: 15 }
+        cost: { wood: 300, leather: 20, torch: 15 },
+        effect: { capacity: 5, leanYearCapacity: 8 },
+        upgrade: {
+          name: '远行架',
+          description: '空架子一直搭到村口。行囊容量总计增加十。',
+          cost: { wood: 800, leather: 80, cloth: 80, torch: 30 },
+          effect: { capacity: 10, leanYearCapacity: 13 }
+        }
       }
     },
     modifiers: {
@@ -209,6 +248,13 @@
         damage: 2,
         hit: 0.75,
         cooldown: 1.5,
+        ranged: false,
+        mechanic: {
+          kind: 'charge',
+          threshold: 0.5,
+          cue: '蓄势',
+          warning: '它的伤越深，背脊压得越低。下一次扑击会格外致命。'
+        },
         deathMessage: '白色的脊背终于伏进尘土。',
         approaches: [
           { id: 'lure', text: '把它引远', cost: { bait: 5, 'cured meat': 5 }, bypass: true, reputation: { embers: 25, trail: -5 }, loot: {} },
@@ -229,6 +275,15 @@
         damage: 5,
         hit: 0.7,
         cooldown: 2,
+        ranged: true,
+        mechanic: {
+          kind: 'toll',
+          interval: 10,
+          store: 'cured meat',
+          amount: 1,
+          cue: '夺粮',
+          warning: '桥上的战斗拖得越久，带来的口粮越少。'
+        },
         deathMessage: '桥上只剩下火星和断绳。',
         approaches: [
           { id: 'medicine', text: '交出药品', cost: { medicine: 3 }, bypass: true, reputation: { iron: 25, embers: -5 }, loot: {} },
@@ -249,6 +304,13 @@
         damage: 6,
         hit: 0.75,
         cooldown: 2.2,
+        ranged: true,
+        mechanic: {
+          kind: 'shield',
+          interval: 9,
+          cue: '吸能',
+          warning: '白光亮起时，下一击会转成它的生命。先用最轻的一击打碎它。'
+        },
         deathMessage: '白光在最后一次转动后熄灭。',
         approaches: [
           { id: 'reroute', text: '改写它的巡路线', cost: { 'energy cell': 2, torch: 5 }, health: 48, reputation: { trail: 25, iron: 5 }, loot: { steel: [8, 13], 'energy cell': [2, 4] } },

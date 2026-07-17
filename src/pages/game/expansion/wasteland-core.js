@@ -9,11 +9,12 @@
 })(typeof window !== 'undefined' ? window : globalThis, function() {
   'use strict';
 
-  var VERSION = 1;
+  var VERSION = 2;
   var FACTION_IDS = ['embers', 'iron', 'trail'];
   var ROUTE_IDS = ['hearth', 'foundry', 'waystation'];
   var MODIFIER_IDS = ['longNight', 'leanYear', 'wolfSeason'];
   var ENDING_IDS = ['concord', 'dominion', 'fracture'];
+  var ROUTE_UPGRADE_REPUTATION = 55;
   var ROUTE_FACTIONS = {
     hearth: 'embers',
     foundry: 'iron',
@@ -24,21 +25,18 @@
       costMultiplier: 1.25,
       reputationMultiplier: 1.5,
       bossThresholdDelta: 0,
-      routeDelayMultiplier: 1,
       legacyMarkBonus: 0
     },
     leanYear: {
       costMultiplier: 1.4,
       reputationMultiplier: 1,
       bossThresholdDelta: 0,
-      routeDelayMultiplier: 0.75,
       legacyMarkBonus: 0
     },
     wolfSeason: {
       costMultiplier: 1,
       reputationMultiplier: 1.2,
       bossThresholdDelta: 10,
-      routeDelayMultiplier: 1,
       legacyMarkBonus: 1
     }
   };
@@ -46,7 +44,6 @@
     costMultiplier: 1,
     reputationMultiplier: 1,
     bossThresholdDelta: 0,
-    routeDelayMultiplier: 1,
     legacyMarkBonus: 0
   };
 
@@ -107,36 +104,26 @@
     return result;
   }
 
-  function normalizeEventTimes(value) {
-    var source = isRecord(value) ? value : {};
-    var result = {};
-    for(var key in source) {
-      if(hasOwn(source, key) && key.length <= 80) {
-        var time = toFiniteNumber(source[key], 0);
-        if(time > 0) result[key] = time;
-      }
-    }
-    return result;
-  }
-
   function normalizeState(input) {
     var source = isRecord(input) ? input : {};
+    var route = validId(source.route, ROUTE_IDS);
+    var routeLevel = route ? clampInteger(source.routeLevel === undefined ? 1 : source.routeLevel, 1, 2) : 0;
     return {
       version: VERSION,
       revision: clampInteger(source.revision, 0, Number.MAX_SAFE_INTEGER),
       runId: typeof source.runId === 'string' && source.runId.length <= 100 ? source.runId : '',
       unlocked: source.unlocked === true,
-      route: validId(source.route, ROUTE_IDS),
+      route: route,
+      routeLevel: routeLevel,
       modifier: validId(source.modifier, MODIFIER_IDS),
       reputations: normalizeNumberMap(source.reputations, -100, 100),
       quests: normalizeNumberMap(source.quests, 0, 3),
       bosses: normalizeBooleanMap(source.bosses),
       mapReveals: normalizeBooleanMap(source.mapReveals),
-      routeMapApplied: source.routeMapApplied === true,
+      reconciliations: normalizeBooleanMap(source.reconciliations),
       legacyApplied: source.legacyApplied === true,
       ending: validId(source.ending, ENDING_IDS),
-      receipts: normalizeReceiptMap(source.receipts),
-      randomEventTimes: normalizeEventTimes(source.randomEventTimes)
+      receipts: normalizeReceiptMap(source.receipts)
     };
   }
 
@@ -211,19 +198,51 @@
     return { state: next, status: 'applied' };
   }
 
+  function hasFactionAccess(input, factionId, threshold) {
+    var state = normalizeState(input);
+    if(FACTION_IDS.indexOf(factionId) < 0) return false;
+    return state.reputations[factionId] >= threshold || state.reconciliations[factionId] === true;
+  }
+
   function chooseRoute(input, routeId, commandId) {
     var state = normalizeState(input);
     if(ROUTE_IDS.indexOf(routeId) < 0) return { state: state, status: 'invalid' };
     if(state.route === routeId) return { state: state, status: 'duplicate' };
     if(state.route !== null) return { state: state, status: 'conflict' };
+    var factionId = ROUTE_FACTIONS[routeId];
+    if(state.quests[factionId] < 1) return { state: state, status: 'quest' };
+    if(!hasFactionAccess(state, factionId, 10)) return { state: state, status: 'reputation' };
 
     return withReceipt(state, commandId || ('route:' + routeId), function(next) {
       next.route = routeId;
+      next.routeLevel = 1;
       next = adjustReputations(next, (function() {
         var changes = { embers: -3, iron: -3, trail: -3 };
         changes[ROUTE_FACTIONS[routeId]] = 10;
         return changes;
       })());
+      return next;
+    });
+  }
+
+  function routeUpgradeRequirement(input) {
+    var state = normalizeState(input);
+    if(!state.route) return { available: false, reason: 'route', threshold: ROUTE_UPGRADE_REPUTATION };
+    if(state.routeLevel >= 2) return { available: false, reason: 'complete', threshold: ROUTE_UPGRADE_REPUTATION };
+    var factionId = ROUTE_FACTIONS[state.route];
+    if(!state.bosses[factionId]) return { available: false, reason: 'boss', threshold: ROUTE_UPGRADE_REPUTATION };
+    if(state.reputations[factionId] < ROUTE_UPGRADE_REPUTATION) {
+      return { available: false, reason: 'reputation', threshold: ROUTE_UPGRADE_REPUTATION };
+    }
+    return { available: true, reason: 'ready', threshold: ROUTE_UPGRADE_REPUTATION };
+  }
+
+  function upgradeRoute(input, commandId) {
+    var state = normalizeState(input);
+    var requirement = routeUpgradeRequirement(state);
+    if(!requirement.available) return { state: state, status: requirement.reason };
+    return withReceipt(state, commandId || ('route-upgrade:' + state.route), function(next) {
+      next.routeLevel = 2;
       return next;
     });
   }
@@ -235,10 +254,33 @@
     if(stage >= 3 || state.bosses[factionId]) return { available: false, reason: 'complete', threshold: 0 };
     if(stage === 0) return { available: true, reason: 'ready', threshold: 0 };
     var threshold = stage === 1 ? 10 : 30 + modifierRules(state.modifier).bossThresholdDelta;
-    if(state.reputations[factionId] < threshold) {
+    if(!hasFactionAccess(state, factionId, threshold)) {
       return { available: false, reason: 'reputation', threshold: threshold };
     }
     return { available: true, reason: 'ready', threshold: threshold };
+  }
+
+  function reconciliationRequirement(input, factionId) {
+    var state = normalizeState(input);
+    if(FACTION_IDS.indexOf(factionId) < 0) return { available: false, reason: 'invalid', threshold: 0 };
+    var commandId = 'reconcile:' + factionId;
+    if(state.receipts[commandId] || state.reconciliations[factionId]) return { available: false, reason: 'used', threshold: 0 };
+    var stage = state.quests[factionId];
+    if(stage < 1) return { available: false, reason: 'quest', threshold: 0 };
+    if(stage >= 3 || state.bosses[factionId]) return { available: false, reason: 'complete', threshold: 0 };
+    var threshold = stage === 1 ? 10 : 30 + modifierRules(state.modifier).bossThresholdDelta;
+    if(state.reputations[factionId] >= threshold) return { available: false, reason: 'ready', threshold: threshold };
+    return { available: true, reason: 'reputation', threshold: threshold };
+  }
+
+  function reconcileFaction(input, factionId, commandId) {
+    var state = normalizeState(input);
+    var requirement = reconciliationRequirement(state, factionId);
+    if(!requirement.available) return { state: state, status: requirement.reason };
+    return withReceipt(state, commandId || ('reconcile:' + factionId), function(next) {
+      next.reconciliations[factionId] = true;
+      return next;
+    });
   }
 
   function completeQuest(input, factionId, expectedStage, reputationChanges, commandId) {
@@ -360,14 +402,20 @@
     MODIFIER_IDS: Object.freeze(MODIFIER_IDS.slice()),
     ENDING_IDS: Object.freeze(ENDING_IDS.slice()),
     ROUTE_FACTIONS: Object.freeze(ROUTE_FACTIONS),
+    ROUTE_UPGRADE_REPUTATION: ROUTE_UPGRADE_REPUTATION,
     normalizeState: normalizeState,
     normalizeLegacy: normalizeLegacy,
     modifierRules: modifierRules,
     scaleCost: scaleCost,
     adjustReputations: adjustReputations,
     withReceipt: withReceipt,
+    hasFactionAccess: hasFactionAccess,
     chooseRoute: chooseRoute,
+    routeUpgradeRequirement: routeUpgradeRequirement,
+    upgradeRoute: upgradeRoute,
     questRequirement: questRequirement,
+    reconciliationRequirement: reconciliationRequirement,
+    reconcileFaction: reconcileFaction,
     completeQuest: completeQuest,
     countDefeatedBosses: countDefeatedBosses,
     dominantFaction: dominantFaction,

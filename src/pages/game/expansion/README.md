@@ -7,4 +7,8 @@
 - `wasteland-factions.js`：连接 StateManager、Events、World、Outside 与 Prestige 的薄运行时。
 - `wasteland.css`：沿用原作黑白文字界面的少量样式。
 
-当前周目状态保存在 `game.wasteland`，跨周目遗产保存在 `previous.wasteland`。所有一次性选择均带命令回执；首领胜利只写入远征中的 `World.state`，安全返村后才提交，死亡会随远征状态一起回滚。
+当前周目状态保存在 `game.wasteland`，跨周目遗产保存在 `previous.wasteland`。扩展 schema 当前为 v2：旧存档已有路线时自动迁移为一阶路线，击败对应首领且真实声望达到 55 后可以扩建二阶设施。
+
+每个势力每周目允许一次高成本“灰旗和解”。它只解除任务和一阶路线的声望阻挡，不增加真实声望，因此不会降低结局和二阶设施的门槛。三名首领分别具有半血蓄势、周期夺粮和吸能护罩机制。
+
+所有一次性选择均带命令回执；首领胜利只写入远征中的 `World.state`，安全返村后才提交，死亡会随远征状态一起回滚。

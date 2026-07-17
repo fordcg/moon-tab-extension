@@ -10,8 +10,13 @@ type WastelandCoreApi = {
   normalizeState(input?: unknown): any;
   normalizeLegacy(input?: unknown): any;
   scaleCost(cost: Record<string, number>, modifierId?: string | null): Record<string, number>;
+  hasFactionAccess(state: unknown, factionId: string, threshold: number): boolean;
   chooseRoute(state: unknown, routeId: string, commandId?: string): { state: any; status: string };
+  routeUpgradeRequirement(state: unknown): { available: boolean; reason: string; threshold: number };
+  upgradeRoute(state: unknown, commandId?: string): { state: any; status: string };
   questRequirement(state: unknown, factionId: string): { available: boolean; reason: string; threshold: number };
+  reconciliationRequirement(state: unknown, factionId: string): { available: boolean; reason: string; threshold: number };
+  reconcileFaction(state: unknown, factionId: string, commandId?: string): { state: any; status: string };
   completeQuest(
     state: unknown,
     factionId: string,
@@ -39,6 +44,7 @@ describe("荒原势力纯规则", () => {
       version: 99,
       route: "unknown-route",
       modifier: "unknown-modifier",
+      routeLevel: 99,
       reputations: { embers: 999, iron: -999, trail: Number.NaN },
       quests: { embers: 9, iron: -2, trail: 1.6 },
       bosses: { embers: true, iron: "yes" },
@@ -46,20 +52,29 @@ describe("荒原势力纯规则", () => {
     });
 
     expect(state).toMatchObject({
-      version: 1,
+      version: 2,
       route: null,
+      routeLevel: 0,
       modifier: null,
       reputations: { embers: 100, iron: -100, trail: 0 },
       quests: { embers: 3, iron: 0, trail: 2 },
       bosses: { embers: true, iron: false, trail: false },
+      reconciliations: { embers: false, iron: false, trail: false },
       receipts: { valid: true },
     });
   });
 
+  it("v1 路线存档自动迁移为一阶，非法层级会被约束", () => {
+    expect(core.normalizeState({ version: 1, route: "hearth" })).toMatchObject({ version: 2, route: "hearth", routeLevel: 1 });
+    expect(core.normalizeState({ route: "foundry", routeLevel: 99 })).toMatchObject({ route: "foundry", routeLevel: 2 });
+    expect(core.normalizeState({ routeLevel: 2 })).toMatchObject({ route: null, routeLevel: 0 });
+  });
+
   it("村庄路线只能选择一次，同命令重放不重复加声望", () => {
-    const first = core.chooseRoute({ reputations: {} }, "hearth", "route:hearth");
+    const first = core.chooseRoute({ quests: { embers: 1 }, reconciliations: { embers: true } }, "hearth", "route:hearth");
     expect(first.status).toBe("applied");
     expect(first.state.route).toBe("hearth");
+    expect(first.state.routeLevel).toBe(1);
     expect(first.state.reputations).toEqual({ embers: 10, iron: -3, trail: -3 });
 
     const replay = core.chooseRoute(first.state, "hearth", "route:hearth");
@@ -69,6 +84,48 @@ describe("荒原势力纯规则", () => {
     const conflict = core.chooseRoute(first.state, "foundry", "route:foundry");
     expect(conflict.status).toBe("conflict");
     expect(conflict.state.route).toBe("hearth");
+  });
+
+  it("灰旗和解只解除内容阻挡，不改变真实声望且不能重复", () => {
+    const blocked = core.normalizeState({ quests: { embers: 1 }, reputations: { embers: 8 } });
+    expect(core.questRequirement(blocked, "embers")).toMatchObject({ available: false, reason: "reputation", threshold: 10 });
+    expect(core.reconciliationRequirement(blocked, "embers")).toEqual({ available: true, reason: "reputation", threshold: 10 });
+
+    const reconciled = core.reconcileFaction(blocked, "embers", "reconcile:embers");
+    expect(reconciled.status).toBe("applied");
+    expect(reconciled.state.reputations.embers).toBe(8);
+    expect(reconciled.state.reconciliations.embers).toBe(true);
+    expect(core.questRequirement(reconciled.state, "embers")).toMatchObject({ available: true, reason: "ready" });
+    expect(core.hasFactionAccess(reconciled.state, "embers", 30)).toBe(true);
+
+    const replay = core.reconcileFaction(reconciled.state, "embers", "reconcile:embers");
+    expect(replay.status).toBe("used");
+    expect(replay.state.reputations.embers).toBe(8);
+  });
+
+  it("二阶路线要求对应首领和 55 点真实声望，并以回执阻止重复扩建", () => {
+    const bossMissing = core.normalizeState({ route: "hearth", routeLevel: 1, reputations: { embers: 60 } });
+    expect(core.routeUpgradeRequirement(bossMissing)).toEqual({ available: false, reason: "boss", threshold: 55 });
+
+    const lowReputation = core.normalizeState({
+      route: "hearth",
+      routeLevel: 1,
+      bosses: { embers: true },
+      reputations: { embers: 20 },
+      reconciliations: { embers: true },
+    });
+    expect(core.routeUpgradeRequirement(lowReputation)).toEqual({ available: false, reason: "reputation", threshold: 55 });
+
+    const ready = core.normalizeState({
+      route: "hearth",
+      routeLevel: 1,
+      bosses: { embers: true },
+      reputations: { embers: 55 },
+    });
+    const upgraded = core.upgradeRoute(ready, "route-upgrade:hearth");
+    expect(upgraded.status).toBe("applied");
+    expect(upgraded.state.routeLevel).toBe(2);
+    expect(core.upgradeRoute(upgraded.state, "route-upgrade:hearth").status).toBe("complete");
   });
 
   it("连锁委托按声望门槛推进，并以回执阻止重复奖励", () => {
@@ -151,6 +208,8 @@ describe("荒原势力纯规则", () => {
     const inherited = core.applyLegacy({ runId: "run-2" }, first.legacy);
     expect(inherited.status).toBe("applied");
     expect(inherited.state.reputations).toEqual({ embers: 20, iron: 20, trail: 20 });
+    expect(inherited.state.routeLevel).toBe(0);
+    expect(inherited.state.reconciliations).toEqual({ embers: false, iron: false, trail: false });
 
     const inheritedAgain = core.applyLegacy(inherited.state, first.legacy);
     expect(inheritedAgain.status).toBe("duplicate");

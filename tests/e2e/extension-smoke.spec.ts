@@ -81,6 +81,7 @@ test("荒原势力扩展可从村庄打开并显示三方声望", async ({ page 
   const savedState = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) || "{}"), ADARKROOM_STORAGE_KEY);
   expect(savedState.game.wasteland).toMatchObject({
     route: "hearth",
+    routeLevel: 1,
     quests: { embers: 1 },
     reputations: { embers: 22, iron: -3, trail: -5 },
     receipts: {
@@ -109,6 +110,75 @@ test("荒原势力扩展可从村庄打开并显示三方声望", async ({ page 
     return map.flat().filter((tile: string) => tile === "Q").length;
   });
   expect(revealedBossTiles).toBe(1);
+
+  const bossMechanics = await page.evaluate(() => {
+    const events = (window as any).Events;
+    const path = (window as any).Path;
+    const runtime = (window as any).WastelandFactions;
+    const whiteback = events.Setpieces["wf-whiteback"].scenes.fight_nest;
+    const tollkeeper = events.Setpieces["wf-tollkeeper"].scenes.fight_burn;
+    const sentry = events.Setpieces["wf-sentry"].scenes.fight_advance;
+    whiteback.onLoad();
+    tollkeeper.onLoad();
+    sentry.onLoad();
+
+    const whitebackThreshold = Number(Object.keys(whiteback.atHealth)[0]);
+    const whitebackEnemy = events.createFighterDiv("白脊", whitebackThreshold, whiteback.health);
+    whiteback.atHealth[whitebackThreshold](whitebackEnemy);
+
+    path.outfit = { "cured meat": 2 };
+    const tollCue = tollkeeper.specials[0].action();
+
+    const sentryEnemy = events.createFighterDiv("旧哨机", sentry.health, sentry.health);
+    const sentryCue = sentry.specials[0].action(sentryEnemy);
+    const wolfState = runtime.getState();
+    wolfState.modifier = "wolfSeason";
+    runtime.commitState(wolfState, true);
+    whiteback.onLoad();
+    whiteback.onLoad();
+    tollkeeper.onLoad();
+    tollkeeper.onLoad();
+    sentry.onLoad();
+    sentry.onLoad();
+    const wolfWhitebackHealth = whiteback.health;
+    const wolfWhitebackThreshold = Number(Object.keys(whiteback.atHealth)[0]);
+    const wolfTollSpecials = tollkeeper.specials.length;
+    const wolfSentrySpecials = sentry.specials.length;
+    wolfState.modifier = null;
+    runtime.commitState(wolfState, true);
+    return {
+      whitebackThreshold,
+      whitebackStatus: whitebackEnemy.data("status"),
+      tollDelay: tollkeeper.specials[0].delay,
+      tollCue,
+      curedMeatLeft: path.outfit["cured meat"],
+      tollkeeperRanged: tollkeeper.ranged,
+      sentryDelay: sentry.specials[0].delay,
+      sentryCue,
+      sentryStatus: sentryEnemy.data("status"),
+      sentryRanged: sentry.ranged,
+      wolfWhitebackHealth,
+      wolfWhitebackThreshold,
+      wolfTollSpecials,
+      wolfSentrySpecials,
+    };
+  });
+  expect(bossMechanics).toEqual({
+    whitebackThreshold: 12,
+    whitebackStatus: "energised",
+    tollDelay: 10,
+    tollCue: "夺粮",
+    curedMeatLeft: 1,
+    tollkeeperRanged: true,
+    sentryDelay: 9,
+    sentryCue: "吸能",
+    sentryStatus: "shield",
+    sentryRanged: true,
+    wolfWhitebackHealth: 27,
+    wolfWhitebackThreshold: 14,
+    wolfTollSpecials: 1,
+    wolfSentrySpecials: 1,
+  });
 
   const bossLifecycle = await page.evaluate(() => {
     const runtime = (window as any).WastelandFactions;
@@ -171,6 +241,124 @@ test("荒原势力扩展可从村庄打开并显示三方声望", async ({ page 
     deathBoss: false,
     deathQuest: 2,
     deathTiles: 1,
+  });
+  expect(pageErrors).toEqual([]);
+});
+
+test("荒原势力灰旗和解解除内容阻挡但不改变真实声望", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const state = createWastelandUnlockedState();
+  (state.game as any).wasteland = {
+    version: 1,
+    runId: "reconcile-e2e",
+    unlocked: true,
+    quests: { embers: 1 },
+    reputations: { embers: 8 },
+  };
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, { key: ADARKROOM_STORAGE_KEY, value: state });
+
+  await page.goto("/src/pages/game/index.html");
+  await page.getByRole("button", { name: "荒原来客" }).click();
+  await page.getByRole("button", { name: "听听三面旗帜" }).click();
+  await page.getByRole("button", { name: /守火人：陌生/ }).click();
+  await expect(page.getByText("还需声望 10。", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /举起灰旗，送上一次赔礼/ }).dblclick();
+  await expect(page.locator("#event")).toHaveCount(0);
+
+  const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) || "{}"), ADARKROOM_STORAGE_KEY);
+  expect(saved.game.wasteland).toMatchObject({
+    version: 2,
+    reputations: { embers: 8 },
+    reconciliations: { embers: true },
+    receipts: { "reconcile:embers": true },
+  });
+  expect(saved.stores).toMatchObject({
+    wood: 1_700,
+    cloth: 80,
+    "cured meat": 170,
+    medicine: 18,
+  });
+
+  await page.getByRole("button", { name: "荒原来客" }).click();
+  await page.getByRole("button", { name: "听听三面旗帜" }).click();
+  await page.getByRole("button", { name: /守火人：陌生/ }).click();
+  await expect(page.getByRole("button", { name: /带药过去/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /举起灰旗/ })).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("荒原势力二阶路线双击只扩建一次并刷新真实效果", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const state = createWastelandUnlockedState();
+  (state.game as any).wasteland = {
+    version: 1,
+    runId: "route-upgrade-e2e",
+    unlocked: true,
+    route: "hearth",
+    quests: { embers: 3 },
+    bosses: { embers: true },
+    reputations: { embers: 55 },
+  };
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, { key: ADARKROOM_STORAGE_KEY, value: state });
+
+  await page.goto("/src/pages/game/index.html");
+  await expect.poll(() => page.evaluate(() => (window as any).Outside.getMaxPopulation())).toBe(26);
+  await page.getByRole("button", { name: "荒原来客" }).click();
+  await page.getByRole("button", { name: "查看村庄路线" }).click();
+  await page.getByRole("button", { name: /扩建长桌/ }).dblclick();
+  await expect(page.locator("#event")).toHaveCount(0);
+
+  const upgraded = await page.evaluate((key) => ({
+    saved: JSON.parse(localStorage.getItem(key) || "{}"),
+    maxPopulation: (window as any).Outside.getMaxPopulation(),
+  }), ADARKROOM_STORAGE_KEY);
+  expect(upgraded.saved.game.wasteland).toMatchObject({
+    route: "hearth",
+    routeLevel: 2,
+    receipts: { "route-upgrade:hearth": true },
+  });
+  expect(upgraded.saved.stores).toMatchObject({
+    "cured meat": 140,
+    medicine: 15,
+  });
+  expect(upgraded.saved.stores.wood).toBeGreaterThanOrEqual(1_200);
+  expect(upgraded.saved.stores.wood).toBeLessThan(1_300);
+  expect(upgraded.maxPopulation).toBe(36);
+
+  const otherRouteEffects = await page.evaluate(() => {
+    const runtime = (window as any).WastelandFactions;
+    const room = (window as any).Room;
+    const path = (window as any).Path;
+    const foundry = runtime.getState();
+    foundry.route = "foundry";
+    foundry.routeLevel = 1;
+    runtime.commitState(foundry, true);
+    const foundryLevelOne = room.TradeGoods.iron.cost();
+    foundry.routeLevel = 2;
+    runtime.commitState(foundry, true);
+    const foundryLevelTwo = room.TradeGoods.iron.cost();
+
+    const waystation = runtime.getState();
+    waystation.route = "waystation";
+    waystation.routeLevel = 1;
+    runtime.commitState(waystation, true);
+    const waystationLevelOne = path.getCapacity();
+    waystation.routeLevel = 2;
+    runtime.commitState(waystation, true);
+    const waystationLevelTwo = path.getCapacity();
+    return { foundryLevelOne, foundryLevelTwo, waystationLevelOne, waystationLevelTwo };
+  });
+  expect(otherRouteEffects).toEqual({
+    foundryLevelOne: { fur: 135, scales: 45 },
+    foundryLevelTwo: { fur: 120, scales: 40 },
+    waystationLevelOne: 15,
+    waystationLevelTwo: 20,
   });
   expect(pageErrors).toEqual([]);
 });

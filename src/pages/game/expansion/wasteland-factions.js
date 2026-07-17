@@ -109,6 +109,22 @@
       return Core.scaleCost(cost, WastelandFactions.getState().modifier);
     },
 
+    routeStage: function(state) {
+      if(!state.route) return null;
+      var route = Data.routes[state.route];
+      return state.routeLevel >= 2 ? route.upgrade : route;
+    },
+
+    routeEffect: function(state) {
+      var stage = WastelandFactions.routeStage(state);
+      return stage && stage.effect ? stage.effect : {};
+    },
+
+    routeName: function(state) {
+      var stage = WastelandFactions.routeStage(state);
+      return stage ? stage.name : '未定';
+    },
+
     formatCost: function(cost) {
       var parts = [];
       for(var store in cost) {
@@ -166,8 +182,34 @@
       if(status === 'applied') {
         Notifications.notify(null, route.name + '在村庄边缘立了起来。');
         if(root.Outside && Outside.updateVillage) Outside.updateVillage();
-        if(root.Path && Path.updatePerks) Path.updatePerks();
+        if(root.Room && Room.updateBuildButtons) Room.updateBuildButtons();
+        if(root.Path && Path.updateOutfitting) Path.updateOutfitting();
       }
+    },
+
+    upgradeRoute: function(routeId) {
+      var route = Data.routes[routeId];
+      if(!route || !route.upgrade) return;
+      var commandId = 'route-upgrade:' + routeId;
+      var status = WastelandFactions.executeVillageCommand(commandId, route.upgrade.cost, {}, function(state) {
+        if(state.route !== routeId) return { state: state, status: 'conflict' };
+        return Core.upgradeRoute(state, commandId);
+      });
+      if(status === 'applied') {
+        Notifications.notify(null, route.upgrade.name + '在旧地基上立了起来。');
+        if(root.Outside && Outside.updateVillage) Outside.updateVillage();
+        if(root.Room && Room.updateBuildButtons) Room.updateBuildButtons();
+        if(root.Path && Path.updateOutfitting) Path.updateOutfitting();
+      }
+    },
+
+    reconcileFaction: function(factionId) {
+      var faction = Data.factions[factionId];
+      var commandId = 'reconcile:' + factionId;
+      var status = WastelandFactions.executeVillageCommand(commandId, faction.reconciliation.cost, {}, function(state) {
+        return Core.reconcileFaction(state, factionId, commandId);
+      });
+      if(status === 'applied') Notifications.notify(null, faction.reconciliation.notification);
     },
 
     selectModifier: function(modifierId) {
@@ -190,7 +232,6 @@
       WastelandFactions.executeVillageCommand(commandId, choice.cost, choice.reward, function(state) {
         return Core.withReceipt(state, commandId, function(next) {
           next = Core.adjustReputations(next, choice.reputation || {});
-          next.randomEventTimes[eventData.id] = Date.now();
           return next;
         });
       });
@@ -199,10 +240,7 @@
     dismissRandomEvent: function(eventData) {
       var commandId = 'random:' + eventData.id;
       WastelandFactions.executeStateCommand(commandId, function(state) {
-        return Core.withReceipt(state, commandId, function(next) {
-          next.randomEventTimes[eventData.id] = Date.now();
-          return next;
-        });
+        return Core.withReceipt(state, commandId, function(next) { return next; });
       });
     },
 
@@ -261,7 +299,7 @@
         WastelandFactions.factionLine(state, 'iron'),
         WastelandFactions.factionLine(state, 'trail')
       ];
-      if(state.route) startText.push('村庄路线：' + Data.routes[state.route].name + '。');
+      if(state.route) startText.push('村庄路线：' + WastelandFactions.routeName(state) + '。');
       startText.push('荒原走向：' + WastelandFactions.currentEndingLabel(state) + '。');
 
       var scenes = {
@@ -301,8 +339,11 @@
       var stage = state.quests[factionId];
       var scene = {
         text: [faction.summary, WastelandFactions.questStatus(state, factionId)],
-        buttons: { back: { text: '返回', nextScene: { 1: 'factions' } } }
+        buttons: {}
       };
+      if(state.reconciliations[factionId]) {
+        scene.text.push('灰旗只让委托和一阶路线继续。结局和二阶设施仍看真实声望。');
+      }
 
       if(stage < 2) {
         var quest = faction.quests[stage];
@@ -333,15 +374,58 @@
         };
         if(!bossRequirement.available) scene.text.push('还需声望 ' + bossRequirement.threshold + '。');
       }
+      var reconciliation = Core.reconciliationRequirement(state, factionId);
+      if(reconciliation.available) {
+        var reconciliationCost = Core.scaleCost(faction.reconciliation.cost, state.modifier);
+        scene.text.push(faction.reconciliation.text);
+        scene.text.push('赔礼需要：' + WastelandFactions.formatCost(reconciliationCost).slice(1, -1) + '。');
+        scene.buttons.reconcile = {
+          text: faction.reconciliation.action,
+          available: function() {
+            var current = WastelandFactions.getState();
+            return Core.reconciliationRequirement(current, factionId).available && WastelandFactions.canAffordStores(reconciliationCost);
+          },
+          onChoose: function() { WastelandFactions.reconcileFaction(factionId); },
+          nextScene: 'end'
+        };
+      }
+      scene.buttons.back = { text: '返回', nextScene: { 1: 'factions' } };
       return scene;
     },
 
     buildRouteScene: function(state) {
       if(state.route) {
-        return {
-          text: ['村庄选择了' + Data.routes[state.route].name + '。', Data.routes[state.route].description, '这条路不会再改。'],
-          buttons: { back: { text: '返回', nextScene: { 1: 'start' } } }
+        var currentRoute = Data.routes[state.route];
+        var currentStage = WastelandFactions.routeStage(state);
+        var routeScene = {
+          text: ['村庄选择了' + currentRoute.name + '。', currentStage.description],
+          buttons: {}
         };
+        if(state.routeLevel < 2) {
+          routeScene.text.push('路线不会更换，但还能扩建一次。');
+          var upgradeRequirement = Core.routeUpgradeRequirement(state);
+          var upgradeCost = Core.scaleCost(currentRoute.upgrade.cost, state.modifier);
+          routeScene.text.push('扩建需要：' + WastelandFactions.formatCost(upgradeCost).slice(1, -1) + '。');
+          routeScene.buttons.upgrade = {
+            text: '扩建' + currentRoute.upgrade.name,
+            available: function() {
+              var current = WastelandFactions.getState();
+              return current.route === state.route && Core.routeUpgradeRequirement(current).available && WastelandFactions.canAffordStores(upgradeCost);
+            },
+            onChoose: function() { WastelandFactions.upgradeRoute(state.route); },
+            nextScene: 'end'
+          };
+          if(upgradeRequirement.reason === 'boss') {
+            routeScene.text.push('还需先平息' + Data.bosses[currentRoute.faction].title + '。');
+          } else if(upgradeRequirement.reason === 'reputation') {
+            routeScene.text.push(currentRoute.upgrade.name + '需要势力声望 ' + upgradeRequirement.threshold + '。');
+          }
+        } else {
+          routeScene.text.push('这条路不会再改。');
+          routeScene.text.push(currentRoute.upgrade.name + '已经建成。');
+        }
+        routeScene.buttons.back = { text: '返回', nextScene: { 1: 'start' } };
+        return routeScene;
       }
 
       var scene = {
@@ -355,7 +439,7 @@
           text: route.name + WastelandFactions.formatCost(cost),
           available: function() {
             var current = WastelandFactions.getState();
-            return current.route === null && current.quests[route.faction] >= 1 && current.reputations[route.faction] >= 10 && WastelandFactions.canAffordStores(cost);
+            return current.route === null && current.quests[route.faction] >= 1 && Core.hasFactionAccess(current, route.faction, 10) && WastelandFactions.canAffordStores(cost);
           },
           onChoose: function() { WastelandFactions.chooseRoute(routeId); },
           nextScene: 'end'
@@ -425,7 +509,7 @@
       if(!entry.length) return;
       var state = WastelandFactions.getState();
       var bossCount = Core.countDefeatedBosses(state);
-      var route = state.route ? Data.routes[state.route].name : '未定';
+      var route = WastelandFactions.routeName(state);
       entry.find('.wasteland-entry-copy').text('三面旗帜。' + bossCount + '/3 处危险已平息。村庄路线：' + route + '。');
     },
 
@@ -438,8 +522,8 @@
         var base = originalMaxPopulation.apply(Outside, arguments);
         var state = WastelandFactions.getState();
         if(state.route !== 'hearth') return base;
-        var strength = state.modifier === 'leanYear' ? 15 : 10;
-        return base + strength;
+        var effect = WastelandFactions.routeEffect(state);
+        return base + (state.modifier === 'leanYear' ? effect.leanYearPopulation : effect.population);
       };
 
       var originalCapacity = Path.getCapacity;
@@ -447,7 +531,8 @@
         var base = originalCapacity.apply(Path, arguments);
         var state = WastelandFactions.getState();
         if(state.route !== 'waystation') return base;
-        return base + (state.modifier === 'leanYear' ? 8 : 5);
+        var effect = WastelandFactions.routeEffect(state);
+        return base + (state.modifier === 'leanYear' ? effect.leanYearCapacity : effect.capacity);
       };
 
       BASIC_TRADE_GOODS.forEach(function(goodId) {
@@ -458,7 +543,8 @@
           var cost = originalCost.apply(good, arguments);
           var state = WastelandFactions.getState();
           if(state.route !== 'foundry') return cost;
-          var multiplier = state.modifier === 'leanYear' ? 0.85 : 0.9;
+          var effect = WastelandFactions.routeEffect(state);
+          var multiplier = state.modifier === 'leanYear' ? effect.leanYearTradeMultiplier : effect.tradeMultiplier;
           var discounted = {};
           for(var store in cost) {
             if(Object.prototype.hasOwnProperty.call(cost, store)) discounted[store] = Math.ceil(cost[store] * multiplier);
@@ -499,8 +585,45 @@
       });
     },
 
+    configureBossMechanic: function(scene, boss) {
+      var mechanic = boss.mechanic;
+      scene.atHealth = {};
+      scene.specials = [];
+      if(!mechanic) return;
+
+      if(mechanic.kind === 'charge') {
+        var chargeThreshold = Math.ceil(scene.health * mechanic.threshold);
+        scene.atHealth[chargeThreshold] = function(enemy) {
+          Events.setStatus(enemy, 'energised');
+          Events.drawFloatText(mechanic.cue, $('.hp', enemy));
+        };
+      } else if(mechanic.kind === 'toll') {
+        scene.specials.push({
+          delay: mechanic.interval,
+          action: function() {
+            var current = Path.outfit && typeof Path.outfit[mechanic.store] === 'number' ? Path.outfit[mechanic.store] : 0;
+            if(current <= 0) return null;
+            Path.outfit[mechanic.store] = Math.max(0, current - mechanic.amount);
+            World.updateSupplies();
+            return mechanic.cue;
+          }
+        });
+      } else if(mechanic.kind === 'shield') {
+        scene.specials.push({
+          delay: mechanic.interval,
+          action: function(enemy) {
+            if(enemy.data('status') === 'shield') return null;
+            Events.setStatus(enemy, 'shield');
+            return mechanic.cue;
+          }
+        });
+      }
+    },
+
     buildBossEvent: function(factionId, boss) {
-      var scenes = { start: { text: boss.text.slice(), buttons: {} } };
+      var introduction = boss.text.slice();
+      if(boss.mechanic && boss.mechanic.warning) introduction.push(boss.mechanic.warning);
+      var scenes = { start: { text: introduction, buttons: {} } };
       boss.approaches.forEach(function(approach) {
         var fightScene = 'fight_' + approach.id;
         var victoryScene = 'victory_' + approach.id;
@@ -527,6 +650,7 @@
             health: approach.health || boss.health,
             damage: boss.damage,
             hit: boss.hit,
+            ranged: boss.ranged === true,
             attackDelay: boss.cooldown,
             notification: boss.text[boss.text.length - 1],
             deathMessage: boss.deathMessage,
@@ -534,9 +658,10 @@
             nextScene: victoryScene,
             onLoad: function() {
               var rules = Core.modifierRules(WastelandFactions.getState().modifier);
-              if(rules.bossThresholdDelta > 0) {
-                scenes[fightScene].health = Math.ceil((approach.health || boss.health) * 1.1);
-              }
+              var scene = scenes[fightScene];
+              scene.health = rules.bossThresholdDelta > 0 ? Math.ceil((approach.health || boss.health) * 1.1) : (approach.health || boss.health);
+              scene.hit = boss.hit;
+              WastelandFactions.configureBossMechanic(scene, boss);
             }
           };
         }
