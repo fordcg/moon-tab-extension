@@ -287,6 +287,8 @@ export function appendBrowserControlPromptIfNeeded(
     "- 需要一次性汇总页面状态、Console、性能和 Network 错误/慢请求现场时，调用 collect_diagnostics；该工具只返回脱敏聚合摘要，不读取响应体、Header、Cookie 或敏感原文。",
     "- 图形验证码：take_snapshot 找验证码图片 UID，再 screenshot(target=element)；根据自动回传截图识读后 fill+确认。",
     "- SHIELD/我不是机器人：click 复选框本体，不要只点外层卡片。",
+    "- LinuxDO/GitHub 授权页：出现「允许/Authorize」大按钮时立刻点击，不要停在授权确认页。",
+    "- 默认不要给 click/fill 加 includeSnapshot；只在关键状态变化后按需 take_snapshot，避免过慢。",
     "- 需要截取元素图片时，先使用 take_snapshot 获取 UID，再调用 screenshot 且 target=element；不要传 CSS 选择器或自定义脚本。",
     "- 不要猜测 UID；只能使用 take_snapshot 返回的 UID。",
     "- 长页面、虚拟列表或懒加载内容需要继续观察时，可调用 scroll 滚动当前视口；滚动指定元素时必须先使用 take_snapshot 获取 UID。",

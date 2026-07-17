@@ -596,6 +596,8 @@ chrome.runtime.onConnect.addListener((port) => {
     }
     try {
       port.postMessage(message);
+      // Mirror tool progress to all extension pages (control window / other side panels).
+      void broadcastAutomationLiveEvent(message);
       return true;
     } catch {
       try {

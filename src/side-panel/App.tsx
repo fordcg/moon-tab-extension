@@ -3,6 +3,7 @@ import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
 import type { SettingsTab } from "./components/SettingsPanel";
 import { SessionList } from "./components/SessionList";
+import { AutomationHud } from "./components/AutomationHud";
 import { useAppStore } from "./state/appStore";
 import { sendRuntimeMessage } from "./state/runtimeMessage";
 import {
@@ -30,6 +31,7 @@ export function App() {
   const [drawerOrigin, setDrawerOrigin] = useState<SidePanelDrawerOrigin>("header");
   const drawerRestoreFocusRef = useRef<HTMLElement | null>(null);
   const searchParams = new URLSearchParams(window.location.search);
+  const controlWindowMode = searchParams.get("controlWindow") === "1";
   const floatingMode = searchParams.get("floating") === "1";
   const floatingTabId = resolveFloatingTabId(searchParams.get("tabId"));
   const historyPanelDefaultOpen = useAppStore((state) => state.chatPreferences.historyDrawerDefaultOpen);
@@ -120,6 +122,18 @@ export function App() {
   };
 
   useEffect(() => {
+    if (!controlWindowMode) {
+      return;
+    }
+    document.documentElement.classList.add("automation-hud-root");
+    document.body.classList.add("automation-hud-root");
+    return () => {
+      document.documentElement.classList.remove("automation-hud-root");
+      document.body.classList.remove("automation-hud-root");
+    };
+  }, [controlWindowMode]);
+
+  useEffect(() => {
     void Promise.all([loadChannelConfig(), loadExtractionRules(), loadPromptTemplates(), loadChatData(), loadSyncSettings()]).then(() => refreshPageContext());
   }, [loadChannelConfig, loadExtractionRules, loadPromptTemplates, loadChatData, loadSyncSettings, refreshPageContext]);
 
@@ -174,6 +188,14 @@ export function App() {
   ]
     .filter(Boolean)
     .join(" ");
+
+  if (controlWindowMode) {
+    return (
+      <div className="automation-hud-shell" aria-label="补签监视窗">
+        <AutomationHud />
+      </div>
+    );
+  }
 
   return (
     <main className="app-shell sidebar-shell" aria-busy={syncRestoreBarrierActive || undefined}>
