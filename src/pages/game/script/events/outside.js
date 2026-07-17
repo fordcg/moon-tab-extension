@@ -3,9 +3,15 @@
  **/
 Events.Outside = [
 	{ /* Ruined traps */
-	title: _('A Ruined Trap'),
+		title: _('A Ruined Trap'),
+		// Early forest AFK used to nearly always hit this event for huge rewards.
+		// Gate it with a cooldown and keep the payout modest.
+		_COOLDOWN_MS: 18 * 60 * 1000,
 		isAvailable: function() {
-			return Engine.activeModule == Outside && $SM.get('game.buildings["trap"]', true) > 0;
+			if(Engine.activeModule != Outside) return false;
+			if($SM.get('game.buildings["trap"]', true) <= 0) return false;
+			var last = $SM.get('game.events.ruinedTrapAt', true) || 0;
+			return (Date.now() - last) >= Events.Outside[0]._COOLDOWN_MS;
 		},
 		scenes: {
 			'start': {
@@ -14,8 +20,12 @@ Events.Outside = [
 					_('large prints lead away, into the forest.')
 				],
 				onLoad: function() {
-					var numWrecked = Math.floor(Math.random() * $SM.get('game.buildings["trap"]', true)) + 1;
+					var traps = $SM.get('game.buildings["trap"]', true);
+					// Break 1-3 traps, never more than half of a large set rounded up.
+					var maxBreak = Math.max(1, Math.ceil(traps / 2));
+					var numWrecked = Math.min(traps, Math.floor(Math.random() * Math.min(3, maxBreak)) + 1);
 					$SM.add('game.buildings["trap"]', -numWrecked);
+					$SM.set('game.events.ruinedTrapAt', Date.now());
 					Outside.updateVillage();
 					Outside.updateTrapButton();
 				},
@@ -52,9 +62,9 @@ Events.Outside = [
 				],
 				notification: _('there was a beast. it\'s dead now'),
 				reward: {
-					fur: 100,
-					meat: 100,
-					teeth: 10
+					fur: 25,
+					meat: 25,
+					teeth: 3
 				},
 				buttons: {
 					'end': {

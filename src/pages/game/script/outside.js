@@ -534,27 +534,30 @@ var Outside = {
 	},
 	
 	updateTrapButton: function() {
-		// Buttons are <button id="...">, not divs. A div#trapsButton selector
-		// never matches, so every onArrival recreated the control.
-		var btn = $('#trapsButton');
-		if(btn.length > 1) {
-			btn.slice(1).remove();
-			btn = $('#trapsButton');
+		// Real controls are <button id="trapsButton">. jQuery $('#id') only ever
+		// returns the first match, so duplicates must be collected by attribute.
+		var buttons = $('#outsidePanel').children('button').filter(function() {
+			return this.id === 'trapsButton';
+		});
+		if(buttons.length > 1) {
+			buttons.slice(1).remove();
+			buttons = buttons.eq(0);
 		}
+		var btn = buttons.eq(0);
 		if($SM.get('game.buildings["trap"]', true) > 0) {
-			if(btn.length === 0) {
+			if(buttons.length === 0) {
 				new Button.Button({
 					id: 'trapsButton',
 					text: _("check traps"),
 					click: Outside.checkTraps,
 					cooldown: Outside._TRAPS_DELAY,
-					width: '80px'
+					width: '100px'
 				}).appendTo('div#outsidePanel');
 			} else {
 				Button.setDisabled(btn, false);
 			}
 		} else {
-			if(btn.length > 0) {
+			if(buttons.length > 0) {
 				Button.setDisabled(btn, true);
 			}
 		}
