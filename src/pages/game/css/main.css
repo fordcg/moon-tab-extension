@@ -522,8 +522,10 @@ body.noMask .eventPanel .button {
 .eventTitle {
 	display: inline-block;
 	font-weight: bold;
+	line-height: 1.25;
 	position: absolute;
 	top: -12px;
+	z-index: 1;
 }
 
 body.noMask .eventTitle {
@@ -532,12 +534,14 @@ body.noMask .eventTitle {
 
 .eventTitle:after {
 	background-color: white;
-	bottom: 32%;
+	bottom: 0;
 	content: " ";
-	height: 5px;
-	left: 0;
+	height: auto;
+	left: -5px;
 	position: absolute;
-	width: 100%;
+	right: -5px;
+	top: 0;
+	width: auto;
 	z-index: -1;
 }
 

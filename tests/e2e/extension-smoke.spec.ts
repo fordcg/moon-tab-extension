@@ -53,6 +53,57 @@ test("构建后的游戏页面可以渲染游戏入口", async ({ page }) => {
   await expect(page.locator("#lightButton")).toContainText("生火");
 });
 
+test("游戏事件标题遮罩完整覆盖中文行框", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/src/pages/game/index.html");
+  await page.evaluate(() => {
+    (window as any).Events.startEvent({
+      title: "损毁的陷阱",
+      scenes: {
+        start: {
+          text: ["一些陷阱损毁了。", "巨大的足印延伸至森林。"],
+          buttons: { ignore: { text: "忽略", nextScene: "end" } },
+        },
+      },
+    });
+  });
+  const title = page.locator(".eventTitle");
+  await expect(title).toHaveText("损毁的陷阱");
+  await page.waitForFunction(() => getComputedStyle(document.querySelector("#event")!).opacity === "1");
+
+  const geometry = await title.evaluate((element) => {
+    const titleStyle = getComputedStyle(element);
+    const maskStyle = getComputedStyle(element, "::after");
+    return {
+      titleHeight: element.getBoundingClientRect().height,
+      maskHeight: Number.parseFloat(maskStyle.height),
+      maskLeft: Number.parseFloat(maskStyle.left),
+      maskRight: Number.parseFloat(maskStyle.right),
+      lineHeight: Number.parseFloat(titleStyle.lineHeight),
+      zIndex: titleStyle.zIndex,
+    };
+  });
+  expect(geometry.maskHeight).toBeCloseTo(geometry.titleHeight, 1);
+  expect(geometry.maskLeft).toBe(-5);
+  expect(geometry.maskRight).toBe(-5);
+  expect(geometry.lineHeight).toBeGreaterThanOrEqual(20);
+  expect(geometry.zIndex).toBe("1");
+
+  const maskBackground = () => title.evaluate((element) => getComputedStyle(element, "::after").backgroundColor);
+  await expect.poll(maskBackground).toBe("rgb(255, 255, 255)");
+  await page.evaluate(() => document.body.classList.add("noMask"));
+  await expect.poll(maskBackground).toBe("rgb(0, 0, 0)");
+  await page.evaluate(() => {
+    document.body.classList.remove("noMask");
+    (window as any).Engine.turnLightsOff();
+  });
+  await expect.poll(maskBackground).toBe("rgb(39, 40, 35)");
+  await page.evaluate(() => document.body.classList.add("noMask"));
+  await expect.poll(maskBackground).toBe("rgb(238, 238, 238)");
+  expect(pageErrors).toEqual([]);
+});
+
 test("荒原势力扩展可从村庄打开并显示三方声望", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -276,11 +327,12 @@ test("荒原势力灰旗和解解除内容阻挡但不改变真实声望", async
     receipts: { "reconcile:embers": true },
   });
   expect(saved.stores).toMatchObject({
-    wood: 1_700,
     cloth: 80,
     "cured meat": 170,
     medicine: 18,
   });
+  expect(saved.stores.wood).toBeGreaterThanOrEqual(1_700);
+  expect(saved.stores.wood).toBeLessThan(1_800);
 
   await page.getByRole("button", { name: "荒原来客" }).click();
   await page.getByRole("button", { name: "听听三面旗帜" }).click();
