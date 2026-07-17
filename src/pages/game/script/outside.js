@@ -534,7 +534,13 @@ var Outside = {
 	},
 	
 	updateTrapButton: function() {
-		var btn = $('div#trapsButton');
+		// Buttons are <button id="...">, not divs. A div#trapsButton selector
+		// never matches, so every onArrival recreated the control.
+		var btn = $('#trapsButton');
+		if(btn.length > 1) {
+			btn.slice(1).remove();
+			btn = $('#trapsButton');
+		}
 		if($SM.get('game.buildings["trap"]', true) > 0) {
 			if(btn.length === 0) {
 				new Button.Button({
