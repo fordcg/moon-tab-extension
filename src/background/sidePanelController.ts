@@ -11,8 +11,9 @@ import {
 
 const RECENTLY_CREATED_TAB_TTL_MS = 60000;
 const CONTROL_WINDOW_STORAGE_KEY = "sidePanel.controlWindowId.v1";
-const CONTROL_WINDOW_WIDTH = 360;
-const CONTROL_WINDOW_HEIGHT = 520;
+// Compact signal-beacon popup: not a full assistant panel.
+const CONTROL_WINDOW_WIDTH = 280;
+const CONTROL_WINDOW_HEIGHT = 360;
 
 const recentlyCreatedTabs = new Set<number>();
 let initialized = false;

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useAppStore } from "../state/appStore";
 import type { ChatMessage, ChatToolCallRecord } from "../../shared/types";
+
+type LivePhase = "idle" | "running" | "done" | "error";
 
 function statusLabel(status: ChatToolCallRecord["status"] | "unknown"): string {
   if (status === "running") return "进行中";
@@ -9,14 +11,7 @@ function statusLabel(status: ChatToolCallRecord["status"] | "unknown"): string {
   return String(status);
 }
 
-function statusClass(status: ChatToolCallRecord["status"] | "unknown"): string {
-  if (status === "running") return "is-running";
-  if (status === "success") return "is-success";
-  if (status === "error") return "is-error";
-  return "";
-}
-
-function collectRecentToolRecords(messages: ChatMessage[], limit = 12): ChatToolCallRecord[] {
+function collectRecentToolRecords(messages: ChatMessage[], limit = 10): ChatToolCallRecord[] {
   const records: ChatToolCallRecord[] = [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -41,7 +36,15 @@ function mergeLiveRecord(current: ChatToolCallRecord[], record: ChatToolCallReco
   } else {
     next.push(record);
   }
-  return next.slice(-20);
+  return next.slice(-16);
+}
+
+function shortName(record?: ChatToolCallRecord): string {
+  if (!record) {
+    return "";
+  }
+  const label = (record.displayName || record.name || "").trim();
+  return label.length > 22 ? `${label.slice(0, 21)}…` : label;
 }
 
 export function AutomationHud() {
@@ -53,8 +56,10 @@ export function AutomationHud() {
   const browserControlEnabled = useAppStore((state) => state.browserControlEnabled);
   const chatTasksBySessionId = useAppStore((state) => state.chatTasksBySessionId);
   const [liveRecords, setLiveRecords] = useState<ChatToolCallRecord[]>([]);
-  const [liveStatus, setLiveStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [liveStatus, setLiveStatus] = useState<LivePhase>("idle");
   const [now, setNow] = useState(Date.now());
+  const [expanded, setExpanded] = useState(false);
+  const [burstKey, setBurstKey] = useState(0);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -83,6 +88,7 @@ export function AutomationHud() {
         if (record?.id) {
           setLiveRecords((current) => mergeLiveRecord(current, record));
           setLiveStatus(eventType === "tool:start" ? "running" : record.status === "error" ? "error" : "running");
+          setBurstKey((value) => value + 1);
         }
         return;
       }
@@ -113,67 +119,107 @@ export function AutomationHud() {
 
   const task = activeSessionId ? chatTasksBySessionId[activeSessionId] : undefined;
   const storeRecords = useMemo(
-    () => collectRecentToolRecords(activeSession?.messages ?? [], 14),
+    () => collectRecentToolRecords(activeSession?.messages ?? [], 10),
     [activeSession?.messages, now],
   );
-  const records = liveRecords.length > 0 ? liveRecords.slice(-14) : storeRecords;
+  const records = liveRecords.length > 0 ? liveRecords.slice(-10) : storeRecords;
   const runningCount = records.filter((item) => item.status === "running").length;
   const latest = records[records.length - 1];
-  const isBusy = sending || task?.status === "running" || liveStatus === "running";
+  const isBusy = sending || task?.status === "running" || liveStatus === "running" || runningCount > 0;
+  const phase: LivePhase = liveStatus === "error"
+    ? "error"
+    : isBusy
+      ? "running"
+      : liveStatus === "done"
+        ? "done"
+        : "idle";
+
+  const headline = latest
+    ? shortName(latest)
+    : isBusy
+      ? "模型思考中"
+      : browserControlEnabled
+        ? "信标待命"
+        : "控制未开";
+
+  const detail = latest?.resultSummary
+    || latest?.errorMessage
+    || (latest ? statusLabel(latest.status) : browserControlEnabled ? "等待下一步" : "先在侧栏开启浏览器控制");
+
+  const sparkRecords = records.slice(-6);
 
   return (
-    <div className="automation-hud" data-browser-control={browserControlEnabled ? "on" : "off"}>
-      <header className="automation-hud-header">
-        <div className="automation-hud-brand">
-          <span className="automation-hud-dot" aria-hidden="true" />
-          <div>
-            <div className="automation-hud-title">补签监视</div>
-            <div className="automation-hud-subtitle">
-              {browserControlEnabled ? "浏览器控制已开" : "浏览器控制未开"}
-              {isBusy ? " · 运行中" : liveStatus === "done" ? " · 完成" : " · 空闲"}
-            </div>
-          </div>
-        </div>
-        <div className="automation-hud-badges">
-          <span className="automation-hud-badge">{records.length} 步</span>
-          {runningCount > 0 ? <span className="automation-hud-badge is-live">{runningCount} 进行中</span> : null}
-        </div>
-      </header>
+    <div
+      className={`signal-beacon phase-${phase}${expanded ? " is-expanded" : ""}${browserControlEnabled ? " control-on" : ""}`}
+      data-browser-control={browserControlEnabled ? "on" : "off"}
+      data-phase={phase}
+    >
+      <div className="signal-beacon-sky" aria-hidden="true">
+        <span className="signal-beacon-aurora signal-beacon-aurora-a" />
+        <span className="signal-beacon-aurora signal-beacon-aurora-b" />
+        <span className="signal-beacon-grain" />
+      </div>
 
-      <section className="automation-hud-current" aria-live="polite">
-        <div className="automation-hud-current-label">当前</div>
-        <div className="automation-hud-current-value">
-          {latest
-            ? `${latest.displayName || latest.name} · ${statusLabel(latest.status)}`
-            : isBusy
-              ? "模型思考中…"
-              : "等待工具调用"}
-        </div>
-        {latest?.resultSummary ? <div className="automation-hud-current-summary">{latest.resultSummary}</div> : null}
-      </section>
+      <button
+        type="button"
+        className="signal-beacon-core-button"
+        aria-expanded={expanded}
+        aria-label={expanded ? "收起步骤轨迹" : "展开步骤轨迹"}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span className="signal-beacon-orbit signal-beacon-orbit-outer" aria-hidden="true" />
+        <span className="signal-beacon-orbit signal-beacon-orbit-mid" aria-hidden="true" />
+        <span className="signal-beacon-orbit signal-beacon-orbit-inner" aria-hidden="true" />
+        <span className="signal-beacon-wave signal-beacon-wave-a" aria-hidden="true" />
+        <span className="signal-beacon-wave signal-beacon-wave-b" aria-hidden="true" />
+        <span className="signal-beacon-core" aria-hidden="true">
+          <span className="signal-beacon-core-glow" />
+          <span className="signal-beacon-core-blob" />
+          <span className="signal-beacon-core-eye" />
+        </span>
+        {sparkRecords.map((record, index) => (
+          <span
+            key={`${record.id}-${index}`}
+            className={`signal-beacon-spark is-${record.status}`}
+            style={{ "--spark-index": index, "--spark-count": sparkRecords.length } as CSSProperties}
+            title={shortName(record)}
+          />
+        ))}
+        <span key={burstKey} className="signal-beacon-burst" aria-hidden="true" />
+      </button>
 
-      <section className="automation-hud-list" aria-label="最近工具调用">
-        {records.length === 0 ? (
-          <div className="automation-hud-empty">
-            开始补签后，这里实时显示：新建页面、点击、LinuxDO 允许、验证码、记录结果等步骤。
-          </div>
-        ) : (
-          records.map((record) => (
-            <article key={record.id} className={`automation-hud-item ${statusClass(record.status)}`}>
-              <div className="automation-hud-item-top">
-                <span className="automation-hud-item-name">{record.displayName || record.name}</span>
-                <span className="automation-hud-item-status">{statusLabel(record.status)}</span>
+      <div className="signal-beacon-readout" aria-live="polite">
+        <div className="signal-beacon-kicker">
+          <span className="signal-beacon-pulse-dot" />
+          {phase === "running" ? "LIVE" : phase === "error" ? "ALERT" : phase === "done" ? "DONE" : "STANDBY"}
+          <span className="signal-beacon-sep">·</span>
+          {records.length} 步
+          {runningCount > 0 ? ` · ${runningCount} 执行中` : ""}
+        </div>
+        <div className="signal-beacon-headline">{headline}</div>
+        <div className="signal-beacon-detail">{detail}</div>
+      </div>
+
+      {expanded ? (
+        <div className="signal-beacon-trail" aria-label="最近步骤">
+          {sparkRecords.length === 0 ? (
+            <div className="signal-beacon-trail-empty">开始自动化后，火花会绕着信标飞出。</div>
+          ) : (
+            sparkRecords.map((record, index) => (
+              <div
+                key={record.id}
+                className={`signal-beacon-chip is-${record.status}`}
+                style={{ "--chip-index": index } as CSSProperties}
+              >
+                <span className="signal-beacon-chip-name">{shortName(record)}</span>
+                <span className="signal-beacon-chip-status">{statusLabel(record.status)}</span>
               </div>
-              {record.resultSummary ? <div className="automation-hud-item-summary">{record.resultSummary}</div> : null}
-              {record.errorMessage ? <div className="automation-hud-item-error">{record.errorMessage}</div> : null}
-            </article>
-          ))
-        )}
-      </section>
+            ))
+          )}
+        </div>
+      ) : null}
 
-      <footer className="automation-hud-footer">
-        LinuxDO 授权页请点黑色「允许」。完整对话仍在主侧栏。
-      </footer>
+      <p className="signal-beacon-hint">点信标展开轨迹 · LinuxDO 请点「允许」</p>
     </div>
   );
 }

@@ -191,7 +191,7 @@ export function App() {
 
   if (controlWindowMode) {
     return (
-      <div className="automation-hud-shell" aria-label="补签监视窗">
+      <div className="automation-hud-shell" aria-label="自动化信标">
         <AutomationHud />
       </div>
     );
