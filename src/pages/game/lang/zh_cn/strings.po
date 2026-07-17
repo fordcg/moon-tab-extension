@@ -880,15 +880,15 @@ msgstr "再增加陷阱已毫无裨益"
 
 #: script/room.js:31
 msgid "cart"
-msgstr "货车"
+msgstr "小推车"
 
 #: script/room.js:34
 msgid "builder says she can make a cart for carrying wood"
-msgstr "建造者说她能够制造出货车，用来运载木头"
+msgstr "建造者说她能够制造出小推车，用来运载木头"
 
 #: script/room.js:35
 msgid "the rickety cart will carry more wood from the forest"
-msgstr "摇摇晃晃的货车满载从森林运出的木头"
+msgstr "摇摇晃晃的小推车能从森林里运回更多木头"
 
 #: script/room.js:44
 msgid "hut"

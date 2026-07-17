@@ -1211,7 +1211,7 @@ var Room = {
 		if (cNeedsAppend && craftSection.children().length > 0) {
 			craftSection.appendTo('div#roomPanel').animate({ opacity: 1 }, 300, 'linear');
 		}
-		if (bNeedsAppend && buildSection.children().length > 0) {
+		if (bNeedsAppend && buySection.children().length > 0) {
 			buySection.appendTo('div#roomPanel').animate({ opacity: 1 }, 300, 'linear');
 		}
 	},
