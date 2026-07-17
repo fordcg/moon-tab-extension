@@ -338,6 +338,49 @@ describe("content 脚本消息", () => {
     });
   });
 
+  it("关闭控制信标消息会移除页面内 orb iframe", async () => {
+    let registeredListener:
+      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
+      | undefined;
+
+    vi.stubGlobal("chrome", {
+      runtime: {
+        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
+        onMessage: {
+          addListener: vi.fn((listener) => {
+            registeredListener = listener;
+          }),
+        },
+      },
+      storage: {
+        session: {
+          get: vi.fn(async () => ({})),
+          set: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    await import("../../../src/content/index");
+    const sendResponse = vi.fn();
+    registeredListener?.(
+      {
+        type: "sidePanel.floating.attach",
+        url: "chrome-extension://moon-tab/index.html?floating=1&controlWindow=1",
+      },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+    expect(document.querySelectorAll("iframe[data-moon-tab-ai-control-beacon]")).toHaveLength(1);
+
+    registeredListener?.(
+      { type: "sidePanel.controlBeacon.close" },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+    expect(document.querySelectorAll("iframe[data-moon-tab-ai-control-beacon]")).toHaveLength(0);
+    expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
+  });
+
   it("floating 悬浮助手拒绝非当前扩展 index floating 地址", async () => {
     let registeredListener:
       | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)

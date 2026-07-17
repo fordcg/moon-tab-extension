@@ -1,4 +1,8 @@
 import {
+  CONTROL_BEACON_ACTIVE_STORAGE_KEY,
+  CONTROL_BEACON_CLOSE_TYPE,
+  CONTROL_BEACON_HOST_MESSAGE_TYPE,
+  CONTROL_BEACON_FRAME_SOURCE,
   LEGACY_SIDE_PANEL_OPEN_FLOATING_TYPE,
   OPENED_SIDE_PANEL_TABS_KEY,
   SIDE_PANEL_CLOSE_TYPE,
@@ -7,6 +11,8 @@ import {
   SIDE_PANEL_PATH,
   createFloatingControlBeaconPath,
   createFloatingSidePanelPath,
+  isControlBeaconHostRuntimeMessage,
+  type ControlBeaconFrameMessage,
   type SidePanelRuntimeMessage,
 } from "../shared/sidePanelRuntime";
 
@@ -16,6 +22,7 @@ const CONTROL_BEACON_TAB_STORAGE_KEY = "sidePanel.controlBeaconTabId.v1";
 const recentlyCreatedTabs = new Set<number>();
 let initialized = false;
 let controlBeaconTabId: number | undefined;
+let controlBeaconActive = false;
 
 export type SidePanelRuntimeResponse = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -26,13 +33,13 @@ export function initializeSidePanelController(): void {
   initialized = true;
 
   void bootstrapTabScopedSidePanel();
-  void restoreControlBeaconTabId();
+  void restoreControlBeaconState();
   chrome.runtime.onInstalled.addListener(() => {
     void bootstrapTabScopedSidePanel();
   });
   chrome.runtime.onStartup.addListener(() => {
     void bootstrapTabScopedSidePanel();
-    void restoreControlBeaconTabId();
+    void restoreControlBeaconState();
   });
 
   chrome.action?.onClicked?.addListener((tab) => {
@@ -61,7 +68,8 @@ export function initializeSidePanelController(): void {
 
   chrome.tabs?.onActivated?.addListener((activeInfo) => {
     void syncActiveTabSidePanel(activeInfo.tabId, activeInfo.windowId);
-    if (typeof controlBeaconTabId === "number") {
+    // Only re-mount the orb while browser control is actively enabled.
+    if (controlBeaconActive) {
       void ensureAutomationControlWindow(activeInfo.tabId);
     }
   });
@@ -87,6 +95,9 @@ export function handleSidePanelRuntimeMessage(message: SidePanelRuntimeMessage):
   }
   if (message.type === SIDE_PANEL_CLOSE_TYPE) {
     return closeSidePanelFromRequest(message);
+  }
+  if (isControlBeaconHostRuntimeMessage(message)) {
+    return relayControlBeaconHostMessage(message.payload);
   }
   return undefined;
 }
@@ -153,6 +164,9 @@ export async function ensureSidePanelForControlledTab(tabId: number | undefined)
  */
 export async function ensureAutomationControlWindow(anchorTabId?: number): Promise<boolean> {
   try {
+    controlBeaconActive = true;
+    await chrome.storage?.session?.set?.({ [CONTROL_BEACON_ACTIVE_STORAGE_KEY]: true });
+
     let tab: chrome.tabs.Tab | undefined;
     if (typeof anchorTabId === "number") {
       try {
@@ -191,13 +205,86 @@ export async function ensureAutomationControlWindow(anchorTabId?: number): Promi
   }
 }
 
-async function restoreControlBeaconTabId(): Promise<void> {
+/** Close the in-page control orb when browser control turns off. */
+export async function closeAutomationControlBeacon(tabId?: number): Promise<void> {
+  controlBeaconActive = false;
+  const targets = new Set<number>();
+  if (typeof tabId === "number") {
+    targets.add(tabId);
+  }
+  if (typeof controlBeaconTabId === "number") {
+    targets.add(controlBeaconTabId);
+  }
   try {
-    const items = await chrome.storage?.session?.get?.(CONTROL_BEACON_TAB_STORAGE_KEY);
-    const value = items?.[CONTROL_BEACON_TAB_STORAGE_KEY];
-    if (typeof value === "number") {
-      controlBeaconTabId = value;
+    const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (typeof active?.id === "number") {
+      targets.add(active.id);
     }
+  } catch {
+    // ignore
+  }
+
+  await Promise.all(
+    Array.from(targets).map(async (targetTabId) => {
+      try {
+        await chrome.tabs.sendMessage(targetTabId, { type: CONTROL_BEACON_CLOSE_TYPE });
+      } catch {
+        // Content script may be missing on restricted pages.
+      }
+    }),
+  );
+
+  controlBeaconTabId = undefined;
+  try {
+    await chrome.storage?.session?.remove?.([CONTROL_BEACON_TAB_STORAGE_KEY, CONTROL_BEACON_ACTIVE_STORAGE_KEY]);
+  } catch {
+    // ignore
+  }
+}
+
+async function relayControlBeaconHostMessage(
+  payload: ControlBeaconHostRuntimeMessagePayload,
+): Promise<SidePanelRuntimeResponse> {
+  const tabId = typeof controlBeaconTabId === "number"
+    ? controlBeaconTabId
+    : (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
+  if (typeof tabId !== "number") {
+    return { ok: false, message: "未找到控制信标所在标签页" };
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: CONTROL_BEACON_HOST_MESSAGE_TYPE,
+      payload: {
+        source: CONTROL_BEACON_FRAME_SOURCE,
+        ...payload,
+      },
+    });
+    if (isSidePanelRuntimeResponse(response)) {
+      return response;
+    }
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    return { ok: false, message: `转发控制信标事件失败：${message}` };
+  }
+}
+
+type ControlBeaconHostRuntimeMessagePayload = Omit<ControlBeaconFrameMessage, "source"> & {
+  source?: typeof CONTROL_BEACON_FRAME_SOURCE;
+};
+
+async function restoreControlBeaconState(): Promise<void> {
+  try {
+    const items = await chrome.storage?.session?.get?.([
+      CONTROL_BEACON_TAB_STORAGE_KEY,
+      CONTROL_BEACON_ACTIVE_STORAGE_KEY,
+    ]);
+    const tabValue = items?.[CONTROL_BEACON_TAB_STORAGE_KEY];
+    if (typeof tabValue === "number") {
+      controlBeaconTabId = tabValue;
+    }
+    controlBeaconActive = items?.[CONTROL_BEACON_ACTIVE_STORAGE_KEY] === true;
   } catch {
     // ignore
   }

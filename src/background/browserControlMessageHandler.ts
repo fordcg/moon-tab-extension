@@ -64,7 +64,7 @@ import { ReplayToolExecutor } from "./browserControl/replayToolExecutor";
 import { FullAccessToolExecutor } from "./browserControl/fullAccessToolExecutor";
 import { BrowserConsoleRecorder } from "./browserControl/consoleRecorder";
 import { handlePageContextMessage, type PageContextExtractResponse } from "./pageContextMessageHandler";
-import { ensureSidePanelForControlledTab } from "./sidePanelController";
+import { ensureSidePanelForControlledTab, closeAutomationControlBeacon } from "./sidePanelController";
 
 const FULL_ACCESS_GRANT_TTL_MS = 5 * 60 * 1000;
 
@@ -934,6 +934,7 @@ export class BrowserControlManager {
       this.stopNetworkAnalysis();
       this.clearAutomationModeState();
       this.notifyDetached(detachedTabId, "disabled_by_user");
+      await closeAutomationControlBeacon(detachedTabId);
       return { ok: true, attached: false, message: "浏览器控制已关闭。" };
     }
 

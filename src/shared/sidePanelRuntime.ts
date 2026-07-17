@@ -7,6 +7,9 @@ export const SIDE_PANEL_FLOATING_ATTACH_TYPE = "sidePanel.floating.attach";
 export const LEGACY_SIDE_PANEL_FLOATING_ATTACH_TYPE = "sidepanelFloating.open";
 export const SIDE_PANEL_FLOATING_CLOSE_TYPE = "sidePanel.floating.close";
 export const SIDE_PANEL_CLOSE_TYPE = "sidePanel.close";
+export const CONTROL_BEACON_CLOSE_TYPE = "sidePanel.controlBeacon.close";
+export const CONTROL_BEACON_HOST_MESSAGE_TYPE = "sidePanel.controlBeacon.host";
+export const CONTROL_BEACON_ACTIVE_STORAGE_KEY = "sidePanel.controlBeaconActive.v1";
 
 /** postMessage bridge between in-page control orb iframe and content script. */
 export const CONTROL_BEACON_FRAME_SOURCE = "moon-tab-control-beacon";
@@ -26,6 +29,15 @@ export interface ControlBeaconFrameMessage {
   expanded?: boolean;
 }
 
+export interface ControlBeaconHostRuntimeMessage {
+  type: typeof CONTROL_BEACON_HOST_MESSAGE_TYPE;
+  payload: Omit<ControlBeaconFrameMessage, "source"> & { source?: typeof CONTROL_BEACON_FRAME_SOURCE };
+}
+
+export interface ControlBeaconCloseMessage {
+  type: typeof CONTROL_BEACON_CLOSE_TYPE;
+}
+
 export function isControlBeaconFrameMessage(value: unknown): value is ControlBeaconFrameMessage {
   if (!value || typeof value !== "object" || !("source" in value) || !("type" in value)) {
     return false;
@@ -36,6 +48,16 @@ export function isControlBeaconFrameMessage(value: unknown): value is ControlBea
     (message.type === CONTROL_BEACON_DRAG_MOVE_TYPE ||
       message.type === CONTROL_BEACON_DRAG_END_TYPE ||
       message.type === CONTROL_BEACON_LAYOUT_TYPE)
+  );
+}
+
+export function isControlBeaconHostRuntimeMessage(value: unknown): value is ControlBeaconHostRuntimeMessage {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "type" in value &&
+      (value as { type?: unknown }).type === CONTROL_BEACON_HOST_MESSAGE_TYPE &&
+      "payload" in value,
   );
 }
 
@@ -58,8 +80,11 @@ export interface SidePanelFloatingCloseMessage {
   type: typeof SIDE_PANEL_FLOATING_CLOSE_TYPE;
 }
 
-export type SidePanelRuntimeMessage = SidePanelOpenFloatingMessage | SidePanelCloseMessage;
-export type SidePanelContentMessage = SidePanelFloatingAttachMessage | SidePanelFloatingCloseMessage;
+export type SidePanelRuntimeMessage = SidePanelOpenFloatingMessage | SidePanelCloseMessage | ControlBeaconHostRuntimeMessage;
+export type SidePanelContentMessage =
+  | SidePanelFloatingAttachMessage
+  | SidePanelFloatingCloseMessage
+  | ControlBeaconCloseMessage;
 
 export function createFloatingSidePanelPath(input: { tabId?: number; windowId?: number } = {}): string {
   const params = new URLSearchParams({ floating: "1" });

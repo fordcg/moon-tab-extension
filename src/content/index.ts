@@ -1,14 +1,17 @@
 import type { ExtractionRule, ExtractionSelectorType, PageContextExtractMode } from "../shared/types";
 import {
+  CONTROL_BEACON_CLOSE_TYPE,
   CONTROL_BEACON_DRAG_END_TYPE,
   CONTROL_BEACON_DRAG_MOVE_TYPE,
   CONTROL_BEACON_FRAME_SOURCE,
+  CONTROL_BEACON_HOST_MESSAGE_TYPE,
   CONTROL_BEACON_LAYOUT_TYPE,
   CONTROL_BEACON_POSITION_STORAGE_KEY,
   LEGACY_SIDE_PANEL_FLOATING_ATTACH_TYPE,
   SIDE_PANEL_FLOATING_ATTACH_TYPE,
   SIDE_PANEL_FLOATING_CLOSE_TYPE,
   isControlBeaconFrameMessage,
+  isControlBeaconHostRuntimeMessage,
   type SidePanelContentMessage,
 } from "../shared/sidePanelRuntime";
 import { extractPageText } from "./extractPageText";
@@ -56,7 +59,8 @@ function isSidePanelContentMessage(message: unknown): message is SidePanelConten
   return Boolean(message && typeof message === "object" && "type" in message && (
     message.type === SIDE_PANEL_FLOATING_ATTACH_TYPE ||
     message.type === LEGACY_SIDE_PANEL_FLOATING_ATTACH_TYPE ||
-    message.type === SIDE_PANEL_FLOATING_CLOSE_TYPE
+    message.type === SIDE_PANEL_FLOATING_CLOSE_TYPE ||
+    message.type === CONTROL_BEACON_CLOSE_TYPE
   ));
 }
 
@@ -64,9 +68,23 @@ ensureControlBeaconDragBridge();
 void restoreControlBeaconPosition();
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (isControlBeaconHostRuntimeMessage(message)) {
+    const ok = handleControlBeaconHostMessage({
+      source: CONTROL_BEACON_FRAME_SOURCE,
+      ...message.payload,
+    });
+    sendResponse({ ok });
+    return false;
+  }
+
   if (isSidePanelContentMessage(message)) {
     if (message.type === SIDE_PANEL_FLOATING_CLOSE_TYPE) {
       closeFloatingAssistantFrame();
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message.type === CONTROL_BEACON_CLOSE_TYPE) {
+      closeControlBeaconFrame();
       sendResponse({ ok: true });
       return false;
     }
@@ -324,6 +342,10 @@ function ensureControlBeaconDragBridge(): void {
 
 function closeFloatingAssistantFrame(): void {
   document.querySelector<HTMLIFrameElement>("iframe[data-moon-tab-ai-floating-frame]")?.remove();
+  closeControlBeaconFrame();
+}
+
+function closeControlBeaconFrame(): void {
   document.querySelector<HTMLIFrameElement>(BEACON_FRAME_SELECTOR)?.remove();
 }
 

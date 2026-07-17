@@ -3,6 +3,7 @@ import {
   CONTROL_BEACON_DRAG_END_TYPE,
   CONTROL_BEACON_DRAG_MOVE_TYPE,
   CONTROL_BEACON_FRAME_SOURCE,
+  CONTROL_BEACON_HOST_MESSAGE_TYPE,
   CONTROL_BEACON_LAYOUT_TYPE,
 } from "../../shared/sidePanelRuntime";
 import { useAppStore } from "../state/appStore";
@@ -55,22 +56,32 @@ function shortName(record?: ChatToolCallRecord): string {
   return label.length > 18 ? `${label.slice(0, 17)}…` : label;
 }
 
-function postBeaconFrameMessage(message: {
+function postBeaconHostMessage(message: {
   type: typeof CONTROL_BEACON_DRAG_MOVE_TYPE | typeof CONTROL_BEACON_DRAG_END_TYPE | typeof CONTROL_BEACON_LAYOUT_TYPE;
   dx?: number;
   dy?: number;
   expanded?: boolean;
 }): void {
+  const runtime = globalThis.chrome?.runtime;
+  if (!runtime?.sendMessage) {
+    try {
+      window.parent?.postMessage({ source: CONTROL_BEACON_FRAME_SOURCE, ...message }, "*");
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
   try {
-    window.parent?.postMessage(
-      {
+    void runtime.sendMessage({
+      type: CONTROL_BEACON_HOST_MESSAGE_TYPE,
+      payload: {
         source: CONTROL_BEACON_FRAME_SOURCE,
         ...message,
       },
-      "*",
-    );
+    });
   } catch {
-    // Host page may reject postMessage in rare sandbox cases.
+    // Service worker may be restarting mid-drag.
   }
 }
 
@@ -102,7 +113,7 @@ export function AutomationHud() {
   }, []);
 
   useEffect(() => {
-    postBeaconFrameMessage({ type: CONTROL_BEACON_LAYOUT_TYPE, expanded });
+    postBeaconHostMessage({ type: CONTROL_BEACON_LAYOUT_TYPE, expanded });
   }, [expanded]);
 
   useEffect(() => {
@@ -187,6 +198,7 @@ export function AutomationHud() {
     if (event.button !== 0) {
       return;
     }
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     dragStateRef.current = {
       pointerId: event.pointerId,
@@ -214,7 +226,7 @@ export function AutomationHud() {
     if (!dragging) {
       setDragging(true);
     }
-    postBeaconFrameMessage({ type: CONTROL_BEACON_DRAG_MOVE_TYPE, dx, dy });
+    postBeaconHostMessage({ type: CONTROL_BEACON_DRAG_MOVE_TYPE, dx, dy });
   };
 
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -230,7 +242,7 @@ export function AutomationHud() {
       // capture may already be released
     }
     if (drag.moved) {
-      postBeaconFrameMessage({ type: CONTROL_BEACON_DRAG_END_TYPE });
+      postBeaconHostMessage({ type: CONTROL_BEACON_DRAG_END_TYPE });
       setDragging(false);
       return;
     }
