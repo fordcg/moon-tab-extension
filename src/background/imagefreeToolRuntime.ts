@@ -23,9 +23,10 @@ const IMAGEFREE_ASPECT_RATIOS = new Set(["1:1", "16:9", "9:16", "4:3", "3:4"]);
 export const IMAGEFREE_TURNSTILE_SITE_KEY = "0x4AAAAAACE-XLGoQUckKKm_";
 const IMAGEFREE_TURNSTILE_SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 const IMAGEFREE_TAB_LOAD_TIMEOUT_MS = 30_000;
-const IMAGEFREE_TURNSTILE_TIMEOUT_MS = 60_000;
+/** Allow interactive checkbox / image challenge when managed mode cannot auto-pass. */
+const IMAGEFREE_TURNSTILE_TIMEOUT_MS = 180_000;
 const IMAGEFREE_HUMAN_VERIFICATION_HINT =
-  "Imagefree 需要 Cloudflare Turnstile 人机验证。工具会在 imagefree.net 同源页内取 token 并提交；若升级为图片点选或环境校验失败，请在浏览器打开 https://imagefree.net/zh 手动通过一次「请验证您是真人」后再重试。";
+  "Imagefree 需要 Cloudflare Turnstile 人机验证。工具会激活 imagefree.net 标签页并显示验证框；请在该页完成「请验证您是真人」后等待工具继续。不要只在别的标签页手动过一次就关闭。";
 
 export type ImagefreeTurnstileTokenResolver = () => Promise<string>;
 export type ImagefreePageGenerateRunner = (input: ImagefreeInput) => Promise<Record<string, unknown>>;
@@ -277,19 +278,20 @@ async function generateImagefreeImageInBrowserTab(
     throw new Error(`当前环境无法自动完成 Imagefree 人机验证。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
   }
 
-  const tab = await chromeApi.tabs.create({
-    url: IMAGEFREE_PAGE_URL,
-    active: false,
-  });
-  const tabId = tab.id;
-  if (typeof tabId !== "number") {
-    throw new Error(`无法创建 Imagefree 验证标签页。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
-  }
+  const opened = await openOrReuseImagefreeTab(chromeApi);
+  const tabId = opened.tabId;
+  let shouldCloseTab = opened.created;
 
   try {
     await waitForTabComplete(tabId, chromeApi, IMAGEFREE_TAB_LOAD_TIMEOUT_MS);
-    // Let Next.js hydrate and Turnstile preload settle (HAR shows widget before generate).
-    await delay(1_200);
+    // Prefer a visible tab so managed Turnstile / interactive checkbox can complete.
+    try {
+      await chromeApi.tabs.update(tabId, { active: true });
+    } catch {
+      // Background-only hosts may reject focus; continue with inactive tab.
+    }
+    // Let Next.js hydrate and any existing page widget settle.
+    await delay(1_500);
 
     const injection = await chromeApi.scripting.executeScript({
       target: { tabId },
@@ -309,10 +311,13 @@ async function generateImagefreeImageInBrowserTab(
     });
     const result = injection?.[0]?.result;
     if (!result || typeof result !== "object") {
+      shouldCloseTab = false;
       throw new Error(`Imagefree 页面内生成未返回结果。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
     }
     const payload = result as Record<string, unknown>;
     if (payload.ok !== true) {
+      // Keep tab for interactive captcha / diagnostics.
+      shouldCloseTab = false;
       const message = typeof payload.error === "string" && payload.error.trim()
         ? payload.error.trim()
         : `Imagefree 页面内生成失败。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`;
@@ -329,14 +334,44 @@ async function generateImagefreeImageInBrowserTab(
       aspect_ratio: input.aspect_ratio,
     };
   } catch (error) {
+    shouldCloseTab = false;
     throw rewriteHumanVerificationError(error);
   } finally {
-    try {
-      await chromeApi.tabs.remove(tabId);
-    } catch {
-      // Tab may already be closed by the user.
+    if (shouldCloseTab) {
+      try {
+        await chromeApi.tabs.remove(tabId);
+      } catch {
+        // Tab may already be closed by the user.
+      }
     }
   }
+}
+
+async function openOrReuseImagefreeTab(
+  chromeApi: typeof chrome,
+): Promise<{ tabId: number; created: boolean }> {
+  try {
+    const existing = await chromeApi.tabs.query({ url: ["https://imagefree.net/*", "http://imagefree.net/*"] });
+    const reusable = existing.find((tab) => typeof tab.id === "number" && Boolean(tab.url && /imagefree\.net/i.test(tab.url)));
+    if (reusable && typeof reusable.id === "number") {
+      // Prefer Chinese page if the tab is on another locale root.
+      if (reusable.url && !/\/zh(?:$|[/?#])/i.test(reusable.url) && /imagefree\.net\/?$/i.test(reusable.url.replace(/https?:\/\//, ""))) {
+        await chromeApi.tabs.update(reusable.id, { url: IMAGEFREE_PAGE_URL, active: true });
+      }
+      return { tabId: reusable.id, created: false };
+    }
+  } catch {
+    // Fall through to create.
+  }
+
+  const tab = await chromeApi.tabs.create({
+    url: IMAGEFREE_PAGE_URL,
+    active: true,
+  });
+  if (typeof tab.id !== "number") {
+    throw new Error(`无法创建 Imagefree 验证标签页。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+  }
+  return { tabId: tab.id, created: true };
 }
 
 /**
@@ -404,13 +439,27 @@ function generateImagefreeInPage(options: {
   };
 
   const acquireToken = async (): Promise<string> => {
+    // 1) Reuse token already present on the official page widget (user may have just verified).
+    const existing = readExistingTurnstileToken();
+    if (existing) {
+      return existing;
+    }
+
     await ensureScript();
     const turnstile = await waitForTurnstileApi();
+
+    // 2) Visible widget so interactive checkbox / challenge is possible.
     const host = document.createElement("div");
     host.setAttribute("data-imagefree-turnstile-host", "1");
-    // Keep widget in viewport (HAR uses normal size). Fully offscreen often fails managed mode.
     host.style.cssText =
-      "position:fixed;right:12px;bottom:12px;width:300px;height:65px;opacity:0.02;z-index:2147483647;pointer-events:auto;";
+      "position:fixed;right:16px;bottom:16px;width:320px;min-height:70px;padding:10px;border-radius:12px;" +
+      "background:rgba(15,23,42,0.92);color:#fff;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.35);" +
+      "font:12px/1.4 system-ui,sans-serif;";
+    host.innerHTML =
+      '<div style="margin-bottom:8px;font-weight:600;">Imagefree 人机验证</div>' +
+      '<div style="margin-bottom:8px;opacity:.85;">请完成下方验证；通过后会自动继续生成。</div>';
+    const mount = document.createElement("div");
+    host.appendChild(mount);
     document.documentElement.appendChild(host);
 
     return new Promise((resolve, reject) => {
@@ -441,7 +490,7 @@ function generateImagefreeInPage(options: {
       };
 
       try {
-        widgetId = turnstile.render(host, {
+        widgetId = turnstile.render(mount, {
           sitekey: options.siteKey,
           theme: "auto",
           size: "normal",
@@ -457,13 +506,59 @@ function generateImagefreeInPage(options: {
 
       void (async () => {
         while (!settled && Date.now() < turnstileDeadline) {
-          await wait(250);
+          // Keep polling official page inputs in case user verifies the site widget instead.
+          const reused = readExistingTurnstileToken();
+          if (reused) {
+            finish(undefined, reused);
+            return;
+          }
+          try {
+            const api = turnstile as {
+              getResponse?: (id?: string | number) => string | undefined;
+            };
+            const response = api.getResponse?.(widgetId ?? undefined);
+            if (typeof response === "string" && response.trim().length > 20) {
+              finish(undefined, response.trim());
+              return;
+            }
+          } catch {
+            // ignore
+          }
+          await wait(400);
         }
         if (!settled) {
-          finish(new Error("Turnstile token wait timed out"));
+          finish(
+            new Error(
+              "Turnstile token wait timed out. 请在当前 imagefree.net 标签页完成验证后重试。",
+            ),
+          );
         }
       })();
     });
+  };
+
+  const readExistingTurnstileToken = (): string => {
+    const selectors = [
+      'textarea[name="cf-turnstile-response"]',
+      'input[name="cf-turnstile-response"]',
+      '[name="cf-turnstile-response"]',
+      "textarea[id^=\"cf-chl-widget\"]",
+    ];
+    for (const selector of selectors) {
+      const nodes = Array.from(document.querySelectorAll(selector));
+      for (const node of nodes) {
+        const value =
+          (node as HTMLInputElement | HTMLTextAreaElement).value ||
+          node.getAttribute("value") ||
+          node.textContent ||
+          "";
+        const token = String(value).trim();
+        if (token.length > 20) {
+          return token;
+        }
+      }
+    }
+    return "";
   };
 
   const pollStatus = async (taskId: string): Promise<Record<string, unknown>> => {

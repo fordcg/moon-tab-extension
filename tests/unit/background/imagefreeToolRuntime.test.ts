@@ -135,7 +135,7 @@ describe("Imagefree 图片生成工具", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content).toContain("Human verification failed");
-    expect(result.content).toContain("imagefree.net/zh");
+    expect(result.content).toMatch(/imagefree\.net|人机验证|Turnstile/i);
   });
 
   it("数组 JSON 响应缺少顶层 taskId 时返回诊断错误", async () => {
