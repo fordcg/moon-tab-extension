@@ -5,21 +5,22 @@ import {
   getReasoningEffortProfile,
   normalizeModelReasoningEffort,
   reasoningEffortToAnthropicBudgetTokens,
-  reasoningEffortToDeepSeekMaxTokens,
+  reasoningEffortToDeepSeekWire,
 } from "../../../src/shared/models/modelReasoning";
 
-describe("provider-aware reasoning effort", () => {
+describe("provider-aware reasoning effort (official docs)", () => {
   it("classifies OpenAI / Anthropic / DeepSeek families correctly", () => {
     expect(detectReasoningEffortFamily("gpt-5.5")).toBe("openai_gpt5");
     expect(detectReasoningEffortFamily("o3")).toBe("openai_o");
     expect(detectReasoningEffortFamily("claude-sonnet-4", undefined, "anthropic_messages")).toBe("anthropic");
     expect(detectReasoningEffortFamily("deepseek-reasoner")).toBe("deepseek");
     expect(detectReasoningEffortFamily("deepseek-r1")).toBe("deepseek");
-    expect(detectReasoningEffortFamily("deepseek-v4-flash")).toBeNull();
+    expect(detectReasoningEffortFamily("deepseek-v4-flash")).toBe("deepseek");
+    expect(detectReasoningEffortFamily("deepseek-v4-pro")).toBe("deepseek");
     expect(detectReasoningEffortFamily("gpt-4o-mini")).toBeNull();
   });
 
-  it("uses different option sets", () => {
+  it("uses different option sets per family", () => {
     expect(getReasoningEffortProfile("gpt-5.5")?.options.map((o) => o.value)).toEqual([
       "minimal",
       "low",
@@ -29,13 +30,8 @@ describe("provider-aware reasoning effort", () => {
     ]);
     expect(getReasoningEffortProfile("o3")?.options.map((o) => o.value)).toEqual(["low", "medium", "high"]);
     expect(getReasoningEffortProfile("claude-sonnet-4")?.wire).toBe("anthropic_thinking_budget");
-    expect(getReasoningEffortProfile("deepseek-reasoner")?.wire).toBe("deepseek_max_tokens");
-    expect(getReasoningEffortProfile("deepseek-reasoner")?.options.map((o) => o.value)).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-    ]);
+    expect(getReasoningEffortProfile("deepseek-v4-flash")?.wire).toBe("deepseek_thinking_effort");
+    expect(getReasoningEffortProfile("deepseek-v4-pro")?.options.map((o) => o.value)).toEqual(["high", "xhigh"]);
   });
 
   it("sends OpenAI reasoning_effort for GPT-5 / o-series", () => {
@@ -53,7 +49,7 @@ describe("provider-aware reasoning effort", () => {
         body: { model: "o3" },
         modelId: "o3",
         endpointType: "openai_chat",
-        reasoningEffort: "xhigh",
+        reasoningEffort: "high",
       }).reasoning_effort,
     ).toBe("high");
   });
@@ -73,19 +69,36 @@ describe("provider-aware reasoning effort", () => {
     expect(body.reasoning_effort).toBeUndefined();
   });
 
-  it("does not send reasoning_effort for DeepSeek; raises max_tokens instead", () => {
-    const body = applyReasoningEffortToRequestBody({
-      body: { model: "deepseek-reasoner", max_tokens: 1024 },
-      modelId: "deepseek-reasoner",
+  it("sends DeepSeek official thinking + reasoning_effort high|max", () => {
+    const highBody = applyReasoningEffortToRequestBody({
+      body: { model: "deepseek-v4-pro", max_tokens: 1024 },
+      modelId: "deepseek-v4-pro",
       endpointType: "openai_chat",
       reasoningEffort: "high",
     });
-    expect(body.reasoning_effort).toBeUndefined();
-    expect(body.max_tokens).toBe(reasoningEffortToDeepSeekMaxTokens("high", 1024));
+    expect(highBody.thinking).toEqual({ type: "enabled" });
+    expect(highBody.reasoning_effort).toBe("high");
+
+    const maxBody = applyReasoningEffortToRequestBody({
+      body: { model: "deepseek-v4-flash" },
+      modelId: "deepseek-v4-flash",
+      endpointType: "openai_chat",
+      reasoningEffort: "xhigh",
+    });
+    expect(maxBody.thinking).toEqual({ type: "enabled" });
+    expect(maxBody.reasoning_effort).toBe("max");
+  });
+
+  it("maps DeepSeek compatibility aliases to high|max", () => {
+    expect(reasoningEffortToDeepSeekWire("low")).toBe("high");
+    expect(reasoningEffortToDeepSeekWire("medium")).toBe("high");
+    expect(reasoningEffortToDeepSeekWire("high")).toBe("high");
+    expect(reasoningEffortToDeepSeekWire("xhigh")).toBe("max");
   });
 
   it("normalizes effort values to family allow-list", () => {
     expect(normalizeModelReasoningEffort("minimal", ["low", "medium", "high"])).toBe("low");
     expect(normalizeModelReasoningEffort("xhigh", ["low", "medium", "high"])).toBe("high");
+    expect(normalizeModelReasoningEffort("medium", ["high", "xhigh"], "high")).toBe("high");
   });
 });

@@ -292,17 +292,7 @@ export function ModelSelector() {
               >
                 <div className="model-select-effort-head">
                   <span className="model-select-effort-label">强度</span>
-                  <span className="model-select-effort-family">
-                    {effortProfile.family === "openai_gpt5"
-                      ? "GPT-5"
-                      : effortProfile.family === "openai_o"
-                        ? "o 系列"
-                        : effortProfile.family === "anthropic"
-                          ? "Claude 思考预算"
-                          : effortProfile.family === "deepseek"
-                            ? "DeepSeek 输出上限"
-                            : "兼容"}
-                  </span>
+                  <span className="model-select-effort-family">{effortProfile.providerLabel}</span>
                 </div>
                 <div className="model-select-effort-chips">
                   {effortProfile.options.map((option) => {

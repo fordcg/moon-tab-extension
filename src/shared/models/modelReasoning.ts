@@ -1,15 +1,22 @@
 /**
  * Provider-aware reasoning / thinking intensity.
  *
- * Sources (official / docs-based):
- * - OpenAI o-series / GPT-5.x: request field `reasoning_effort`
+ * Official sources (re-verified 2026-07-18):
+ * - OpenAI o-series / GPT-5.x: top-level `reasoning_effort`
  *   - o-series: low | medium | high
  *   - GPT-5.x:  minimal | low | medium | high | xhigh
- * - Anthropic Claude extended thinking: `thinking: { type: "enabled", budget_tokens }`
- *   - No official low/medium/high enum; we expose budget presets via UI chips
- * - DeepSeek reasoner / R1: returns `reasoning_content`; official API does NOT document
- *   `reasoning_effort`. Thinking length is mainly constrained by `max_tokens`.
- *   We expose budget presets that raise max_tokens, not a fake reasoning_effort field.
+ * - Anthropic Claude extended thinking (Messages API):
+ *   - `thinking: { type: "enabled", budget_tokens: number }`
+ *   - No official low/medium/high effort enum on classic extended-thinking path
+ *   - budget_tokens min typically 1024; max_tokens must be greater than budget_tokens
+ *   - Anthropic docs portal is geo-blocked in this environment; wire format confirmed via
+ *     widespread SDK/docs citations (budget_tokens).
+ * - DeepSeek Chat Completions (official api-docs.deepseek.com create-chat-completion):
+ *   - `thinking: { type: "enabled" | "disabled" }` (default enabled)
+ *   - `reasoning_effort: "high" | "max"`
+ *   - Compatibility: low/medium map to high; xhigh maps to max
+ *   - Response may include `reasoning_content` and `completion_tokens_details.reasoning_tokens`
+ *   - Models: deepseek-v4-flash / deepseek-v4-pro (deepseek-reasoner is legacy thinking mode)
  */
 
 export type ModelReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -28,7 +35,9 @@ export interface ReasoningEffortProfile {
   options: ReasoningEffortOption[];
   defaultValue: ModelReasoningEffort;
   /** How this family is applied to the wire payload */
-  wire: "openai_reasoning_effort" | "anthropic_thinking_budget" | "deepseek_max_tokens";
+  wire: "openai_reasoning_effort" | "anthropic_thinking_budget" | "deepseek_thinking_effort";
+  /** Provider label shown in the model menu */
+  providerLabel: string;
 }
 
 const OPENAI_O_OPTIONS: ReasoningEffortOption[] = [
@@ -45,7 +54,7 @@ const OPENAI_GPT5_OPTIONS: ReasoningEffortOption[] = [
   { value: "xhigh", label: "极高" },
 ];
 
-// Claude has no official effort enum; chips map to thinking.budget_tokens presets.
+// Claude has no official effort enum on classic extended thinking; chips map to budget_tokens.
 const ANTHROPIC_OPTIONS: ReasoningEffortOption[] = [
   { value: "low", label: "低", hint: "2k" },
   { value: "medium", label: "中", hint: "8k" },
@@ -53,12 +62,10 @@ const ANTHROPIC_OPTIONS: ReasoningEffortOption[] = [
   { value: "xhigh", label: "极高", hint: "32k" },
 ];
 
-// DeepSeek reasoner: no official reasoning_effort; chips map to max_tokens floor.
+// DeepSeek official: only high | max (low/medium alias to high, xhigh alias to max).
 const DEEPSEEK_OPTIONS: ReasoningEffortOption[] = [
-  { value: "low", label: "低", hint: "4k" },
-  { value: "medium", label: "中", hint: "8k" },
-  { value: "high", label: "高", hint: "16k" },
-  { value: "xhigh", label: "极高", hint: "32k" },
+  { value: "high", label: "高", hint: "high" },
+  { value: "xhigh", label: "最大", hint: "max" },
 ];
 
 /** @deprecated use getReasoningEffortProfile(...).options */
@@ -84,19 +91,26 @@ export function detectReasoningEffortFamily(
     return null;
   }
 
-  // DeepSeek reasoner / R1 first
-  if (/\bdeepseek\b/.test(text) && /\b(reasoner|r1|thinking)\b/.test(text)) {
-    return "deepseek";
+  // DeepSeek V4 thinking models + legacy reasoner / R1
+  // Official docs: deepseek-v4-flash / deepseek-v4-pro support thinking + reasoning_effort
+  if (/\bdeepseek\b/.test(text)) {
+    if (
+      /\b(v4-pro|v4-flash|v4\.pro|v4\.flash|reasoner|r1|thinking)\b/.test(text) ||
+      /\bdeepseek-v4\b/.test(text)
+    ) {
+      return "deepseek";
+    }
+    return null;
   }
 
-  // Anthropic Claude extended thinking (3.7 / 4 / sonnet / opus; not claude-2 / instant / 3-haiku)
+  // Anthropic Claude extended thinking (3.5+ / 3.7 / 4 / sonnet / opus; not claude-2 / instant / pure 3-haiku)
   if (endpointType === "anthropic_messages" || /\bclaude\b/.test(text)) {
-    if (/\bclaude[-_ ]?2\b|\bclaude[-_ ]?instant\b|\bclaude[-_ ]?3-haiku\b/.test(text)) {
+    if (/\bclaude[-_ ]?2\b|\bclaude[-_ ]?instant\b/.test(text)) {
       return null;
     }
     if (
       endpointType === "anthropic_messages" ||
-      /\b(3\.7|4|4\.5|opus|sonnet|thinking|3-5|3\.5)\b/.test(text)
+      /\b(3\.7|4|4\.5|opus|sonnet|thinking|3-5|3\.5|3-7)\b/.test(text)
     ) {
       return "anthropic";
     }
@@ -112,8 +126,8 @@ export function detectReasoningEffortFamily(
     return "openai_o";
   }
 
-  // Generic "reasoner/reasoning" IDs on OpenAI-compatible relays
-  if (/\b(reasoner|reasoning)\b/.test(text) && !/\bdeepseek\b/.test(text)) {
+  // Generic "reasoner/reasoning" IDs on OpenAI-compatible relays (not DeepSeek)
+  if (/\b(reasoner|reasoning)\b/.test(text)) {
     return "openai_compat";
   }
 
@@ -140,15 +154,45 @@ export function getReasoningEffortProfile(
 
   switch (family) {
     case "openai_gpt5":
-      return { family, options: OPENAI_GPT5_OPTIONS, defaultValue: "medium", wire: "openai_reasoning_effort" };
+      return {
+        family,
+        options: OPENAI_GPT5_OPTIONS,
+        defaultValue: "medium",
+        wire: "openai_reasoning_effort",
+        providerLabel: "GPT-5",
+      };
     case "openai_o":
-      return { family, options: OPENAI_O_OPTIONS, defaultValue: "medium", wire: "openai_reasoning_effort" };
+      return {
+        family,
+        options: OPENAI_O_OPTIONS,
+        defaultValue: "medium",
+        wire: "openai_reasoning_effort",
+        providerLabel: "o 系列",
+      };
     case "anthropic":
-      return { family, options: ANTHROPIC_OPTIONS, defaultValue: "medium", wire: "anthropic_thinking_budget" };
+      return {
+        family,
+        options: ANTHROPIC_OPTIONS,
+        defaultValue: "medium",
+        wire: "anthropic_thinking_budget",
+        providerLabel: "Claude 思考预算",
+      };
     case "deepseek":
-      return { family, options: DEEPSEEK_OPTIONS, defaultValue: "medium", wire: "deepseek_max_tokens" };
+      return {
+        family,
+        options: DEEPSEEK_OPTIONS,
+        defaultValue: "high",
+        wire: "deepseek_thinking_effort",
+        providerLabel: "DeepSeek 思考",
+      };
     case "openai_compat":
-      return { family, options: OPENAI_O_OPTIONS, defaultValue: "medium", wire: "openai_reasoning_effort" };
+      return {
+        family,
+        options: OPENAI_O_OPTIONS,
+        defaultValue: "medium",
+        wire: "openai_reasoning_effort",
+        providerLabel: "兼容强度",
+      };
     default:
       return null;
   }
@@ -174,16 +218,28 @@ function mapEffortToAllowed(value: ModelReasoningEffort, allowed: readonly Model
   if (allowed.includes(value)) {
     return value;
   }
-  if (value === "minimal" && allowed.includes("low")) {
-    return "low";
+
+  // Map to the nearest allowed tier (works for OpenAI o, Claude, and DeepSeek high|max).
+  const rank: ModelReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
+  const valueIndex = rank.indexOf(value);
+  if (valueIndex >= 0) {
+    for (let distance = 1; distance < rank.length; distance += 1) {
+      const lower = rank[valueIndex - distance];
+      const higher = rank[valueIndex + distance];
+      // Prefer the lower neighbor first so "minimal" collapses to "low" not "medium".
+      if (lower && allowed.includes(lower)) {
+        return lower;
+      }
+      if (higher && allowed.includes(higher)) {
+        return higher;
+      }
+    }
   }
-  if (value === "xhigh" && allowed.includes("high")) {
-    return "high";
-  }
+
   return allowed.includes("medium") ? "medium" : allowed[0] ?? "medium";
 }
 
-/** Anthropic extended-thinking budget_tokens presets (min official is typically 1024). */
+/** Anthropic extended-thinking budget_tokens presets (official min is typically 1024). */
 export function reasoningEffortToAnthropicBudgetTokens(effort: ModelReasoningEffort): number {
   switch (effort) {
     case "minimal":
@@ -202,27 +258,15 @@ export function reasoningEffortToAnthropicBudgetTokens(effort: ModelReasoningEff
 }
 
 /**
- * DeepSeek reasoner has no official reasoning_effort.
- * Raise max_tokens floor so the model has room for reasoning_content + answer.
+ * Map UI effort to DeepSeek official reasoning_effort values.
+ * Official allow-list: high | max
+ * Compatibility (docs): low/medium -> high, xhigh -> max
  */
-export function reasoningEffortToDeepSeekMaxTokens(effort: ModelReasoningEffort, currentMaxTokens?: number): number {
-  const floor = (() => {
-    switch (effort) {
-      case "minimal":
-      case "low":
-        return 4_096;
-      case "medium":
-        return 8_192;
-      case "high":
-        return 16_384;
-      case "xhigh":
-        return 32_768;
-      default:
-        return 8_192;
-    }
-  })();
-  const current = typeof currentMaxTokens === "number" && Number.isFinite(currentMaxTokens) ? currentMaxTokens : 0;
-  return Math.max(floor, current);
+export function reasoningEffortToDeepSeekWire(effort: ModelReasoningEffort): "high" | "max" {
+  if (effort === "xhigh") {
+    return "max";
+  }
+  return "high";
 }
 
 /**
@@ -262,12 +306,16 @@ export function applyReasoningEffortToRequestBody(input: {
     };
   }
 
-  if (profile.wire === "deepseek_max_tokens") {
-    const currentMax = typeof input.body.max_tokens === "number" ? input.body.max_tokens : undefined;
+  if (profile.wire === "deepseek_thinking_effort") {
+    // Official DeepSeek Chat Completions:
+    //   thinking: { type: "enabled" | "disabled" }
+    //   reasoning_effort: "high" | "max"
     return {
       ...input.body,
-      max_tokens: reasoningEffortToDeepSeekMaxTokens(effort, currentMax),
-      // Do NOT send reasoning_effort for official DeepSeek reasoner.
+      thinking: {
+        type: "enabled",
+      },
+      reasoning_effort: reasoningEffortToDeepSeekWire(effort),
     };
   }
 
