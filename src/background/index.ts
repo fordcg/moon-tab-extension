@@ -605,9 +605,6 @@ chrome.runtime.onConnect.addListener((port) => {
     }
     try {
       port.postMessage(message);
-      // Mirror tool progress to all extension pages (control window / other side panels).
-      void broadcastAutomationLiveEvent(message);
-      return true;
     } catch {
       try {
         port.disconnect();
@@ -618,6 +615,16 @@ chrome.runtime.onConnect.addListener((port) => {
       }
       return false;
     }
+
+    // Live fan-out must never break the primary chat.stream port.
+    try {
+      void broadcastAutomationLiveEvent(message);
+    } catch (error) {
+      console.warn("[chat.stream] automation live broadcast failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
   }
   activeChatStreamRequests.add(streamRequest);
   if (syncRestoreInProgress) {
@@ -739,6 +746,47 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 export {};
+
+/**
+ * Fan out chat-stream progress to extension pages / content scripts that are not on the
+ * primary chat.stream port (e.g. native control orb host, secondary side panels).
+ * Best-effort only: failures must never interrupt the active stream.
+ */
+async function broadcastAutomationLiveEvent(payload: unknown): Promise<void> {
+  if (!payload || typeof payload !== "object" || !("type" in payload)) {
+    return;
+  }
+  const eventType = (payload as { type?: unknown }).type;
+  // Skip high-frequency content chunks to reduce extension message spam.
+  if (eventType === "chunk" || eventType === "thinking" || eventType === "token_usage") {
+    return;
+  }
+
+  const message = { type: "automation.live", payload };
+  try {
+    await chrome.runtime.sendMessage(message);
+  } catch {
+    // No extension page listeners is normal.
+  }
+
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(
+      tabs.map(async (tab) => {
+        if (typeof tab.id !== "number") {
+          return;
+        }
+        try {
+          await chrome.tabs.sendMessage(tab.id, message);
+        } catch {
+          // Content script absent on restricted pages.
+        }
+      }),
+    );
+  } catch {
+    // tabs API unavailable in some contexts.
+  }
+}
 
 function getSenderTabId(sender?: chrome.runtime.MessageSender): number | undefined {
   const tabId = sender?.tab?.id;
