@@ -18,6 +18,15 @@ const IMAGEFREE_PROMPT_MAX_LENGTH = 2000;
 const IMAGEFREE_POLL_INTERVAL_MS = 3000;
 const IMAGEFREE_TIMEOUT_MS = 8 * 60 * 1000;
 const IMAGEFREE_ASPECT_RATIOS = new Set(["1:1", "16:9", "9:16", "4:3", "3:4"]);
+/** Public Turnstile sitekey embedded by imagefree.net front-end. */
+export const IMAGEFREE_TURNSTILE_SITE_KEY = "0x4AAAAAACE-XLGoQUckKKm_";
+const IMAGEFREE_TURNSTILE_SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const IMAGEFREE_TAB_LOAD_TIMEOUT_MS = 30_000;
+const IMAGEFREE_TURNSTILE_TIMEOUT_MS = 60_000;
+const IMAGEFREE_HUMAN_VERIFICATION_HINT =
+  "Imagefree 需要 Cloudflare Turnstile 人机验证。工具会打开后台标签页自动取 token；若升级为图片点选或环境校验失败，请在浏览器打开 https://imagefree.net/zh 手动通过一次「请验证您是真人」后再重试。";
+
+export type ImagefreeTurnstileTokenResolver = () => Promise<string>;
 
 interface ImagefreeInput {
   prompt: string;
@@ -34,11 +43,18 @@ declare global {
   var __imagefreeGenerateTool: ((toolCall: ModelToolCall, fetcher?: typeof fetch) => Promise<ModelToolResult>) | undefined;
 }
 
+let imagefreeTurnstileTokenResolver: ImagefreeTurnstileTokenResolver | undefined;
+
 globalThis.__imagefreeGenerateTool = executeImagefreeGenerateTool;
 void migrateImagefreeToolSelection();
 
 export function registerImagefreeTool(): void {
   hasImagefreeToolRegistered();
+}
+
+/** Test-only override for Turnstile token acquisition. Pass undefined to restore default. */
+export function setImagefreeTurnstileTokenResolverForTests(resolver?: ImagefreeTurnstileTokenResolver): void {
+  imagefreeTurnstileTokenResolver = resolver;
 }
 
 export async function migrateImagefreeToolSelection(): Promise<void> {
@@ -171,19 +187,26 @@ function normalizeImagefreeArguments(input: Record<string, unknown>): ImagefreeV
 }
 
 async function generateImagefreeImage(input: ImagefreeInput, fetcher: typeof fetch): Promise<Record<string, unknown>> {
-  const task = await requestImagefreeJson(fetcher, IMAGEFREE_GENERATE_URL, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Referer: IMAGEFREE_PAGE_URL,
-    },
-    body: JSON.stringify({
-      prompt: input.prompt,
-      aspect_ratio: input.aspect_ratio,
-      turnstile_token: null,
-    }),
-  });
+  const turnstileToken = await resolveImagefreeTurnstileToken();
+  let task: unknown;
+  try {
+    task = await requestImagefreeJson(fetcher, IMAGEFREE_GENERATE_URL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Origin: IMAGEFREE_BASE_URL,
+        Referer: IMAGEFREE_PAGE_URL,
+      },
+      body: JSON.stringify({
+        prompt: input.prompt,
+        aspect_ratio: input.aspect_ratio,
+        turnstile_token: turnstileToken,
+      }),
+    });
+  } catch (error) {
+    throw rewriteHumanVerificationError(error);
+  }
 
   const taskId = getStringProperty(task, "taskId").trim();
   if (!taskId) {
@@ -208,6 +231,231 @@ async function generateImagefreeImage(input: ImagefreeInput, fetcher: typeof fet
   };
 }
 
+async function resolveImagefreeTurnstileToken(): Promise<string> {
+  if (imagefreeTurnstileTokenResolver) {
+    const token = (await imagefreeTurnstileTokenResolver()).trim();
+    if (!token) {
+      throw new Error(`Imagefree Turnstile token 为空。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+    }
+    return token;
+  }
+  return acquireImagefreeTurnstileTokenInBrowserTab();
+}
+
+async function acquireImagefreeTurnstileTokenInBrowserTab(
+  chromeApi: typeof chrome | undefined = globalThis.chrome,
+): Promise<string> {
+  if (!chromeApi?.tabs?.create || !chromeApi?.scripting?.executeScript || !chromeApi?.tabs?.remove) {
+    throw new Error(`当前环境无法自动完成 Imagefree 人机验证。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+  }
+
+  const tab = await chromeApi.tabs.create({
+    url: IMAGEFREE_PAGE_URL,
+    active: false,
+  });
+  const tabId = tab.id;
+  if (typeof tabId !== "number") {
+    throw new Error(`无法创建 Imagefree 验证标签页。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+  }
+
+  try {
+    await waitForTabComplete(tabId, chromeApi, IMAGEFREE_TAB_LOAD_TIMEOUT_MS);
+    // Give the page a short beat so document.body and CF scripts are ready.
+    await delay(800);
+
+    const injection = await chromeApi.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: acquireTurnstileTokenInPage,
+      args: [IMAGEFREE_TURNSTILE_SITE_KEY, IMAGEFREE_TURNSTILE_SCRIPT_URL, IMAGEFREE_TURNSTILE_TIMEOUT_MS],
+    });
+    const token = typeof injection?.[0]?.result === "string" ? injection[0].result.trim() : "";
+    if (!token) {
+      throw new Error(`Imagefree Turnstile 未返回 token。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+    }
+    return token;
+  } catch (error) {
+    const message = formatError(error);
+    if (/Human verification|Turnstile|人机验证|token/i.test(message)) {
+      throw error instanceof Error ? error : new Error(message);
+    }
+    throw new Error(`Imagefree 人机验证失败：${message}。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+  } finally {
+    try {
+      await chromeApi.tabs.remove(tabId);
+    } catch {
+      // Tab may already be closed by the user.
+    }
+  }
+}
+
+/**
+ * Runs inside the Imagefree page MAIN world.
+ * Must stay self-contained: Chrome serializes this function for injection.
+ */
+function acquireTurnstileTokenInPage(siteKey: string, scriptUrl: string, timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + Math.max(5_000, timeoutMs || 60_000);
+    let settled = false;
+    let widgetId: string | number | null = null;
+    let host: HTMLDivElement | null = null;
+
+    const finish = (error?: Error, token?: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      try {
+        const turnstile = (window as unknown as { turnstile?: { remove?: (id: string | number) => void } }).turnstile;
+        if (widgetId != null && turnstile?.remove) {
+          turnstile.remove(widgetId);
+        }
+      } catch {
+        // ignore cleanup failures
+      }
+      host?.remove();
+      if (error) {
+        reject(error);
+        return;
+      }
+      if (!token) {
+        reject(new Error("Turnstile token empty"));
+        return;
+      }
+      resolve(token);
+    };
+
+    const ensureScript = (): Promise<void> =>
+      new Promise((scriptResolve, scriptReject) => {
+        const existing = (window as unknown as { turnstile?: unknown }).turnstile;
+        if (existing) {
+          scriptResolve();
+          return;
+        }
+        const prior = document.querySelector<HTMLScriptElement>('script[data-imagefree-turnstile="1"]');
+        if (prior) {
+          prior.addEventListener("load", () => scriptResolve(), { once: true });
+          prior.addEventListener("error", () => scriptReject(new Error("Turnstile script load failed")), { once: true });
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = scriptUrl;
+        script.async = true;
+        script.dataset.imagefreeTurnstile = "1";
+        script.onload = () => scriptResolve();
+        script.onerror = () => scriptReject(new Error("Turnstile script load failed"));
+        (document.head || document.documentElement).appendChild(script);
+      });
+
+    const waitForTurnstileApi = async (): Promise<{
+      render: (
+        container: HTMLElement,
+        options: Record<string, unknown>,
+      ) => string | number;
+    }> => {
+      while (Date.now() < deadline) {
+        const api = (window as unknown as {
+          turnstile?: {
+            render: (
+              container: HTMLElement,
+              options: Record<string, unknown>,
+            ) => string | number;
+          };
+        }).turnstile;
+        if (api?.render) {
+          return api;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error("Turnstile API unavailable");
+    };
+
+    void (async () => {
+      try {
+        await ensureScript();
+        const turnstile = await waitForTurnstileApi();
+        host = document.createElement("div");
+        host.setAttribute("data-imagefree-turnstile-host", "1");
+        host.style.cssText = "position:fixed;left:-9999px;top:0;width:320px;height:80px;opacity:0.01;pointer-events:auto;z-index:2147483647;";
+        document.documentElement.appendChild(host);
+
+        widgetId = turnstile.render(host, {
+          sitekey: siteKey,
+          theme: "auto",
+          size: "normal",
+          callback: (token: string) => finish(undefined, token),
+          "error-callback": () => finish(new Error("Turnstile error-callback")),
+          "expired-callback": () => finish(new Error("Turnstile expired")),
+          "timeout-callback": () => finish(new Error("Turnstile timeout-callback")),
+        });
+
+        // Managed/checkbox widgets may auto-complete; poll leftover time for safety.
+        while (!settled && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        if (!settled) {
+          finish(new Error("Turnstile token wait timed out"));
+        }
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
+    })();
+  });
+}
+
+function waitForTabComplete(
+  tabId: number,
+  chromeApi: typeof chrome,
+  timeoutMs: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      chromeApi.tabs.onUpdated.removeListener(onUpdated);
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    };
+
+    const onUpdated = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === "complete") {
+        finish();
+      }
+    };
+
+    const timer = setTimeout(() => {
+      finish(new Error("Imagefree 页面加载超时"));
+    }, timeoutMs);
+
+    chromeApi.tabs.onUpdated.addListener(onUpdated);
+    void chromeApi.tabs
+      .get(tabId)
+      .then((tab) => {
+        if (tab.status === "complete") {
+          finish();
+        }
+      })
+      .catch((error) => {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      });
+  });
+}
+
+function rewriteHumanVerificationError(error: unknown): Error {
+  const message = formatError(error);
+  if (/Human verification failed|turnstile|人机验证/i.test(message)) {
+    return new Error(`${message} ${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
 async function pollImagefreeStatus(fetcher: typeof fetch, taskId: string): Promise<unknown> {
   const deadline = Date.now() + IMAGEFREE_TIMEOUT_MS;
   let latest: unknown;
@@ -220,6 +468,7 @@ async function pollImagefreeStatus(fetcher: typeof fetch, taskId: string): Promi
         method: "GET",
         headers: {
           Accept: "application/json",
+          Origin: IMAGEFREE_BASE_URL,
           Referer: IMAGEFREE_PAGE_URL,
         },
       },

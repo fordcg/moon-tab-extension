@@ -242,7 +242,7 @@ const RAW_AVAILABLE_MODEL_TOOLS: Omit<ModelToolRegistryEntry, "toolClassificatio
     groupId: MODEL_TOOL_GROUP_SYSTEM_ID,
     displayName: "Imagefree 图片生成",
     description:
-      "调用 imagefree.net 按 prompt 和 aspect_ratio 生成图片，返回生成后的图片 URL。非官方接口，可能较慢。",
+      "调用 imagefree.net 按 prompt 和 aspect_ratio 生成图片，返回生成后的图片 URL。会自动在后台完成 Cloudflare Turnstile 人机验证；若升级为图片点选挑战则需用户在 imagefree.net 手动通过后重试。非官方接口，可能较慢。",
     parameters: {
       type: "object",
       properties: {
