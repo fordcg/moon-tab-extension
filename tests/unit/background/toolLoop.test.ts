@@ -502,9 +502,9 @@ describe("通用模型工具循环", () => {
     expect(started).toEqual(["call-browser-1", "call-browser-2"]);
   });
 
-  it("AbortSignal 已中止时不再执行工具调用", async () => {
+  it("显式 user_cancel 中止时不再执行工具调用", async () => {
     const controller = new AbortController();
-    controller.abort();
+    controller.abort("user_cancel");
     const requestModel = vi.fn().mockResolvedValue({
       ok: true,
       content: "",
@@ -523,6 +523,40 @@ describe("通用模型工具循环", () => {
 
     expect(result).toEqual({ ok: false, message: "已终止本次生成。" });
     expect(executeTool).not.toHaveBeenCalled();
+  });
+
+  it("无 reason 的 AbortSignal 不会丢掉已返回的工具决策", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const requestModel = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        content: "先调用工具",
+        toolCalls: [{ id: "call-abort", name: tool.name, arguments: { mode: "text" } }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        content: "最终回答",
+      });
+    const executeTool = vi.fn<ModelToolExecutor>().mockResolvedValue({
+      toolCallId: "call-abort",
+      name: tool.name,
+      content: "工具结果",
+    });
+
+    const result = await runModelToolLoop({
+      initialMessages: baseMessages,
+      tools: [tool],
+      enabledToolIds: [tool.id],
+      requestModel,
+      executeTool,
+      signal: controller.signal,
+      maxIterations: 2,
+    });
+
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({ ok: true, content: "最终回答" }));
   });
 
   it("工具执行器会收到 AbortSignal", async () => {

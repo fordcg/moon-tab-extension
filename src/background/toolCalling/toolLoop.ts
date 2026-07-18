@@ -75,19 +75,21 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
   let exhaustedByMaxIterations = false;
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    if (input.signal?.aborted) {
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     messages = appendGuidanceMessages(messages, input);
     const response = await input.requestModel(messages);
     // Prefer a concrete model failure over a generic abort when both happened around the same time.
     if (!response.ok) {
-      if (input.signal?.aborted && response.message === "已终止本次生成。") {
+      if (shouldHonorAbort(input.signal) && response.message === "已终止本次生成。") {
         return createAbortResponse();
       }
       return response;
     }
-    if (input.signal?.aborted) {
+    // If the model already returned tool calls / content, only stop for explicit user/restore cancel.
+    // Generic abort (e.g. transient chat.stream port drop) must not discard a successful tool decision.
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     tokenUsageEntries.push(...(response.tokenUsageEntries ?? []));
@@ -157,7 +159,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     } else {
       toolResultMessages.push(...await Promise.all(response.toolCalls.map(executeCurrentTool)));
     }
-    if (input.signal?.aborted) {
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     for (const toolResultMessage of toolResultMessages) {
@@ -212,12 +214,12 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
   }
 
   if (input.requestFinalModel && lastResponse?.ok) {
-    if (input.signal?.aborted) {
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     messages = appendGuidanceMessages(messages, input);
     const finalResponse = await input.requestFinalModel(createFinalRequestMessages(messages));
-    if (input.signal?.aborted) {
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     if (!finalResponse.ok) {
@@ -239,7 +241,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
   // Tool loop exhausted while model still wanted more tools, or no final response was produced.
   // Prefer a final natural-language answer over a hard failure when possible.
   if (input.requestFinalModel) {
-    if (input.signal?.aborted) {
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     messages = appendGuidanceMessages(messages, input);
@@ -251,7 +253,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
       },
     ];
     const finalResponse = await input.requestFinalModel(createFinalRequestMessages(exhaustionMessages));
-    if (input.signal?.aborted) {
+    if (shouldHonorAbort(input.signal)) {
       return createAbortResponse();
     }
     if (finalResponse.ok) {
@@ -407,6 +409,26 @@ function createAbortResponse(): ModelToolLoopResponse {
   return { ok: false, message: "已终止本次生成。" };
 }
 
+/**
+ * Only honor explicit user cancel / sync restore.
+ * Bare AbortSignal without a known reason is treated as non-fatal for the tool loop
+ * so transient port disconnects cannot drop already-received tool decisions.
+ */
+function shouldHonorAbort(signal?: AbortSignal): boolean {
+  if (!signal?.aborted) {
+    return false;
+  }
+  const reason = signal.reason;
+  if (reason === "user_cancel" || reason === "sync_restore") {
+    return true;
+  }
+  if (typeof reason === "string") {
+    return reason === "user_cancel" || reason === "sync_restore";
+  }
+  // Unknown / empty abort reason: do not kill the tool loop.
+  return false;
+}
+
 function createToolTurnMessage(input: {
   id: string;
   initialMessages: ModelRequestMessage[];
@@ -493,11 +515,11 @@ async function executeAllowedTool(
   }
 
   try {
-    if (callbacks.signal?.aborted) {
+    if (shouldHonorAbort(callbacks.signal)) {
       return completeToolError(runningRecord, toolCall, "已终止本次生成。", callbacks);
     }
     const result = await executeTool(toolCall, tool, { signal: callbacks.signal });
-    if (callbacks.signal?.aborted) {
+    if (shouldHonorAbort(callbacks.signal)) {
       return completeToolError(runningRecord, toolCall, "已终止本次生成。", callbacks);
     }
     const resultMessage: ModelToolResultMessage = {

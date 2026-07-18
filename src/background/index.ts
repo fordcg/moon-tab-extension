@@ -581,7 +581,10 @@ chrome.runtime.onConnect.addListener((port) => {
     }
     disconnected = true;
     clearInterval(keepAliveTimer);
-    controller.abort();
+    // Do NOT abort the in-flight model/tool loop on port disconnect.
+    // Side panel reloads, focus changes, or transient port drops would otherwise kill
+    // a request that already received tool calls and leave the UI as a false "stream interrupt".
+    // Explicit user cancel / sync restore still abort via dedicated reasons.
     if (!streamRequest.execution || streamExecutionSettled) {
       activeChatStreamRequests.delete(streamRequest);
     }

@@ -197,38 +197,8 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       }
       resolve(result);
     };
-    input.onAbortHandle?.(() => {
-      if (settled) {
-        return;
-      }
-      if (receivedFinalComplete) {
-        return;
-      }
-
-      canceledByUser = true;
-      try {
-        port.postMessage({ type: "chat.stream.cancel" });
-      } catch {
-        port.disconnect();
-      }
-    });
-    input.onFollowUpHandle?.((followUp) => {
-      if (settled || receivedFinalComplete) {
-        return;
-      }
-
-      pendingFollowUpIds.add(followUp.id);
-      port.postMessage({
-        type: "chat.stream.followUp",
-        payload: {
-          followUpId: followUp.id,
-          content: followUp.content,
-          attachments: followUp.attachments,
-          promptInvocations: followUp.promptInvocations,
-          userMessageId: followUp.userMessageId,
-        },
-      });
-    });
+    // Register cancel/follow-up handles after the port object exists, but delay binding until
+    // listeners below are installed so a pending abort cannot race before start is posted.
     const enqueueWrite = (operation: () => Promise<void>) => {
       writeQueue = writeQueue.then(operation).catch(() => {
         if (input.shouldShowFailure?.() ?? true) {
@@ -451,6 +421,42 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
     port.postMessage({
       type: "chat.stream.start",
       payload: input.request,
+    });
+
+    // Bind abort/follow-up only after start is queued, so a stale pending abort cannot cancel
+    // before the background handler has begun the request.
+    input.onAbortHandle?.(() => {
+      if (settled || receivedFinalComplete || receivedTerminalFailure) {
+        return;
+      }
+
+      canceledByUser = true;
+      try {
+        port.postMessage({ type: "chat.stream.cancel" });
+      } catch {
+        // Port already gone; background may still finish without an explicit cancel reason.
+      }
+    });
+    input.onFollowUpHandle?.((followUp) => {
+      if (settled || receivedFinalComplete || receivedTerminalFailure) {
+        return;
+      }
+
+      pendingFollowUpIds.add(followUp.id);
+      try {
+        port.postMessage({
+          type: "chat.stream.followUp",
+          payload: {
+            followUpId: followUp.id,
+            content: followUp.content,
+            attachments: followUp.attachments,
+            promptInvocations: followUp.promptInvocations,
+            userMessageId: followUp.userMessageId,
+          },
+        });
+      } catch {
+        // ignore follow-up delivery when the port is already closed
+      }
     });
   });
 }

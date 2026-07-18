@@ -1522,10 +1522,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
   regenerateMessage: (messageId) => regenerateChatMessage({ messageId, get, set }),
   editAndRegenerateUserMessage: (messageId, content, promptInvocations) => editAndRegenerateUserMessage({ messageId, content, promptInvocations, get, set }),
   abortChatTask: (sessionId) => {
-    const aborted = abortChatTaskHandle(sessionId);
+    const taskId = get().chatTasksBySessionId[sessionId]?.id;
+    const aborted = abortChatTaskHandle(sessionId, taskId);
     set((state) => {
-      const taskId = state.chatTasksBySessionId[sessionId]?.id;
-      const chatTasksBySessionId = finishChatTask(state.chatTasksBySessionId, sessionId, "canceled", Date.now(), taskId);
+      const currentTaskId = state.chatTasksBySessionId[sessionId]?.id;
+      const chatTasksBySessionId = finishChatTask(state.chatTasksBySessionId, sessionId, "canceled", Date.now(), currentTaskId);
       return {
         chatTasksBySessionId,
         chatRetryProgressByMessageId: clearChatRetryProgressForSession(state, sessionId),

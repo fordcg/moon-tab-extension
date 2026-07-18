@@ -40,14 +40,34 @@ describe("appStoreChatTasks", () => {
     });
   });
 
-  it("提前终止请求会在取消句柄注册后立即执行", () => {
+  it("提前终止请求会在同任务取消句柄注册后立即执行", () => {
     const handle = vi.fn();
 
-    expect(abortChatTaskHandle("session-1")).toBe(true);
+    expect(abortChatTaskHandle("session-1", "task-1")).toBe(true);
     registerChatTaskAbortHandle("session-1", "task-1", handle);
 
     expect(handle).toHaveBeenCalledTimes(1);
+    expect(abortChatTaskHandle("session-1", "task-1")).toBe(false);
+  });
+
+  it("无运行中任务的终止不会毒害下一次发送", () => {
+    const handle = vi.fn();
+
     expect(abortChatTaskHandle("session-1")).toBe(false);
+    registerChatTaskAbortHandle("session-1", "task-1", handle);
+
+    expect(handle).not.toHaveBeenCalled();
+    expect(abortChatTaskHandle("session-1")).toBe(true);
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("旧任务的提前终止不能取消新任务", () => {
+    const handle = vi.fn();
+
+    expect(abortChatTaskHandle("session-1", "task-old")).toBe(true);
+    registerChatTaskAbortHandle("session-1", "task-new", handle);
+
+    expect(handle).not.toHaveBeenCalled();
   });
 
   it("旧任务不能注销同会话新任务的取消句柄", () => {
