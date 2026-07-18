@@ -2,41 +2,66 @@ import { describe, expect, it } from "vitest";
 import {
   applyReasoningEffortToRequestBody,
   detectModelSupportsReasoningEffort,
+  detectReasoningEffortFamily,
+  getReasoningEffortProfile,
   normalizeModelReasoningEffort,
   reasoningEffortToAnthropicBudgetTokens,
 } from "../../../src/shared/models/modelReasoning";
 import { detectModelSupportsVision } from "../../../src/shared/models/modelVision";
 
 describe("model reasoning effort", () => {
-  it("detects gpt-5.x / claude / deepseek reasoner as effort-capable", () => {
-    expect(detectModelSupportsReasoningEffort("gpt-5.5")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("gpt-5.4-pro")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("gpt-5-mini")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("o3")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("o4-mini")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("claude-sonnet-4")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("claude-3-7-sonnet")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("deepseek-reasoner")).toBe(true);
-    expect(detectModelSupportsReasoningEffort("deepseek-r1")).toBe(true);
+  it("classifies provider families", () => {
+    expect(detectReasoningEffortFamily("gpt-5.5")).toBe("openai_gpt5");
+    expect(detectReasoningEffortFamily("o3")).toBe("openai_o");
+    expect(detectReasoningEffortFamily("o4-mini")).toBe("openai_o");
+    expect(detectReasoningEffortFamily("claude-sonnet-4", undefined, "anthropic_messages")).toBe("anthropic");
+    expect(detectReasoningEffortFamily("deepseek-reasoner")).toBe("deepseek");
+    expect(detectReasoningEffortFamily("deepseek-v4-flash")).toBeNull();
+    expect(detectReasoningEffortFamily("gpt-4o-mini")).toBeNull();
   });
 
-  it("does not mark plain chat models as effort-capable", () => {
-    expect(detectModelSupportsReasoningEffort("deepseek-v4-flash")).toBe(false);
-    expect(detectModelSupportsReasoningEffort("gpt-4o-mini")).toBe(false);
-    expect(detectModelSupportsReasoningEffort("gpt-3.5-turbo")).toBe(false);
+  it("exposes different option sets per family", () => {
+    expect(getReasoningEffortProfile("gpt-5.5")?.options.map((o) => o.value)).toEqual([
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(getReasoningEffortProfile("o3")?.options.map((o) => o.value)).toEqual(["low", "medium", "high"]);
+    expect(getReasoningEffortProfile("claude-sonnet-4")?.options.map((o) => o.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    expect(getReasoningEffortProfile("deepseek-reasoner")?.options.map((o) => o.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
   });
 
-  it("applies reasoning_effort for openai-compatible payloads", () => {
+  it("applies openai reasoning_effort", () => {
     const body = applyReasoningEffortToRequestBody({
       body: { model: "gpt-5.5", messages: [] },
       modelId: "gpt-5.5",
       endpointType: "openai_chat",
-      reasoningEffort: "high",
+      reasoningEffort: "xhigh",
+    });
+    expect(body.reasoning_effort).toBe("xhigh");
+  });
+
+  it("maps o-series xhigh down to high", () => {
+    const body = applyReasoningEffortToRequestBody({
+      body: { model: "o3", messages: [] },
+      modelId: "o3",
+      endpointType: "openai_chat",
+      reasoningEffort: "xhigh",
     });
     expect(body.reasoning_effort).toBe("high");
   });
 
-  it("applies anthropic thinking budget for claude", () => {
+  it("applies anthropic thinking budget", () => {
     const body = applyReasoningEffortToRequestBody({
       body: { model: "claude-sonnet-4", messages: [] },
       modelId: "claude-sonnet-4",
@@ -49,9 +74,14 @@ describe("model reasoning effort", () => {
     });
   });
 
-  it("normalizes invalid effort values", () => {
-    expect(normalizeModelReasoningEffort("nope")).toBe("medium");
-    expect(normalizeModelReasoningEffort("xhigh")).toBe("xhigh");
+  it("normalizes invalid effort values against allowed list", () => {
+    expect(normalizeModelReasoningEffort("nope", ["low", "medium", "high"])).toBe("medium");
+    expect(normalizeModelReasoningEffort("minimal", ["low", "medium", "high"])).toBe("low");
+  });
+
+  it("detect helper matches profile presence", () => {
+    expect(detectModelSupportsReasoningEffort("gpt-5.5")).toBe(true);
+    expect(detectModelSupportsReasoningEffort("deepseek-v4-flash")).toBe(false);
   });
 });
 

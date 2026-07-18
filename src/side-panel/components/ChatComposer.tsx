@@ -11,7 +11,6 @@ import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, SendSho
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
-import { ReasoningEffortSelector } from "./ReasoningEffortSelector";
 import { PromptInlineEditor } from "./PromptInlineEditor";
 import { WorkflowTemplateMenu } from "./WorkflowTemplateMenu";
 import { useModalDialogFocus } from "./useModalDialogFocus";
@@ -1033,7 +1032,6 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
             />
           </div>
           <span className="sidepanel-footer-spacer" aria-hidden="true" />
-          <ReasoningEffortSelector />
           <ModelSelector />
           <button
             className={sending && !hasDraft ? "ui-button-primary composer-abort-button" : "ui-button-primary"}

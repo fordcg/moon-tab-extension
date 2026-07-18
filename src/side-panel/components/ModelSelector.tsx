@@ -1,5 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import {
+  detectModelSupportsReasoningEffort,
+  getReasoningEffortProfile,
+  normalizeModelReasoningEffort,
+  type ModelReasoningEffort,
+} from "../../shared/models/modelReasoning";
 import { useAppStore } from "../state/appStore";
 import { formatModelLabelWithVision } from "./ModelVisionIndicator";
 
@@ -14,6 +20,8 @@ export function ModelSelector() {
   const models = useAppStore((state) => state.models);
   const selectedModelId = useAppStore((state) => state.selectedModelId);
   const selectModel = useAppStore((state) => state.selectModel);
+  const updateModel = useAppStore((state) => state.updateModel);
+
   const selectableModelGroups = useMemo(() => {
     const providerById = new Map(providers.map((provider, index) => [provider.id, { provider, index }]));
     const grouped = new Map<
@@ -22,7 +30,18 @@ export function ModelSelector() {
         providerId: string;
         providerName: string;
         providerIndex: number;
-        models: Array<{ id: string; label: string; name: string; modelIndex: number }>;
+        endpointType: string;
+        models: Array<{
+          id: string;
+          label: string;
+          name: string;
+          modelIndex: number;
+          modelId: string;
+          displayName: string;
+          supportsVision?: boolean;
+          supportsReasoning: boolean;
+          reasoningEffort?: ModelReasoningEffort;
+        }>;
       }
     >();
 
@@ -37,31 +56,52 @@ export function ModelSelector() {
           providerId: providerItem.provider.id,
           providerName: providerItem.provider.name,
           providerIndex: providerItem.index,
+          endpointType: providerItem.provider.endpointType,
           models: [],
         });
       }
 
+      const endpointType = providerItem.provider.endpointType;
       grouped.get(providerItem.provider.id)?.models.push({
         id: model.id,
         label: formatModelLabelWithVision(`${providerItem.provider.name} / ${model.displayName}`, model.supportsVision),
         name: formatModelLabelWithVision(model.displayName, model.supportsVision),
         modelIndex,
+        modelId: model.modelId,
+        displayName: model.displayName,
+        supportsVision: model.supportsVision,
+        supportsReasoning: detectModelSupportsReasoningEffort(model.modelId, model.displayName, endpointType),
+        reasoningEffort: model.reasoningEffort,
       });
     }
 
     return Array.from(grouped.values())
-      // 按渠道配置顺序分组，同一渠道内保留模型原有顺序，避免不同渠道模型在下拉框中穿插显示。
       .sort((left, right) => left.providerIndex - right.providerIndex)
       .map((group) => ({
         ...group,
         models: [...group.models].sort((left, right) => left.modelIndex - right.modelIndex),
       }));
   }, [models, providers]);
+
   const selectableModels = useMemo(
     () => selectableModelGroups.flatMap((group) => group.models),
     [selectableModelGroups],
   );
   const selectedModelLabel = selectableModels.find((model) => model.id === selectedModelId)?.label ?? "未选择模型";
+  const selectedModel = selectableModels.find((model) => model.id === selectedModelId);
+  const selectedProviderEndpointType = selectableModelGroups.find((group) =>
+    group.models.some((model) => model.id === selectedModelId),
+  )?.endpointType;
+  const effortProfile = selectedModel
+    ? getReasoningEffortProfile(selectedModel.modelId, selectedModel.displayName, selectedProviderEndpointType)
+    : null;
+  const effortValue = effortProfile
+    ? normalizeModelReasoningEffort(
+        selectedModel?.reasoningEffort,
+        effortProfile.options.map((item) => item.value),
+        effortProfile.defaultValue,
+      )
+    : undefined;
 
   const focusModelOption = (modelId: string) => {
     setActiveModelId(modelId);
@@ -243,6 +283,37 @@ export function ModelSelector() {
                 <div className="model-select-menu-empty" role="option" aria-disabled="true">暂无可用模型</div>
               )}
             </div>
+            {effortProfile && selectedModel ? (
+              <div
+                className="model-select-effort"
+                role="group"
+                aria-label="推理强度"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <span className="model-select-effort-label">强度</span>
+                <div className="model-select-effort-chips">
+                  {effortProfile.options.map((option) => {
+                    const active = option.value === effortValue;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={active ? "model-select-effort-chip is-active" : "model-select-effort-chip"}
+                        aria-pressed={active}
+                        title={`推理强度：${option.label}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          updateModel(selectedModel.id, { reasoningEffort: option.value });
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
