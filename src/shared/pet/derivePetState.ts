@@ -99,7 +99,7 @@ export function derivePetState(input: PetDeriveInput): PetSnapshot {
       ? undefined
       : input.muted
         ? undefined
-        : clip(input.assistantSnippet || "回复中…", 72);
+        : clip(input.assistantSnippet || "回复中…", 140);
     return {
       state: "talking",
       bubble,
@@ -116,9 +116,13 @@ export function derivePetState(input: PetDeriveInput): PetSnapshot {
   }
 
   if (input.justCompleted) {
+    const reply = !input.privateMode && !input.muted
+      ? clip(input.assistantSnippet || "", 140)
+      : undefined;
     return {
-      state: "happy",
-      bubble: input.muted ? undefined : "本轮完成",
+      // Keep the spoken reply in the bubble; fall back to a short done note only when empty.
+      state: reply ? "talking" : "happy",
+      bubble: reply || (input.muted || input.privateMode ? undefined : "本轮完成"),
       badge: "done",
     };
   }

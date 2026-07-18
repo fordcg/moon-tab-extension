@@ -344,7 +344,11 @@ export interface AppState {
   deleteModel: (modelId: string) => void;
   loadChannelConfig: () => Promise<void>;
   loadChatData: () => Promise<void>;
-  createChatSession: (options?: { preserveSelectedModel?: boolean }) => Promise<ChatSession>;
+  createChatSession: (options?: {
+    preserveSelectedModel?: boolean;
+    title?: string;
+    chatPreferenceOverrides?: ChatSessionPreferenceOverrides;
+  }) => Promise<ChatSession>;
   enterPrivateMode: () => Promise<void>;
   savePrivateChatSession: () => Promise<void>;
   selectChatSession: (sessionId: string, options?: { discardPrivateSession?: boolean }) => void;
@@ -1156,13 +1160,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
       : resolveAvailableModelId(currentState.defaultChatModelId, currentState.models, currentState.providers);
     const session: ChatSession = {
       id: createSessionId(now),
-      title: "新对话",
+      title: options?.title?.trim() || "新对话",
       archived: false,
       sortOrder: now,
       createdAt: now,
       updatedAt: now,
       selectedModelId,
       messages: [],
+      ...(options?.chatPreferenceOverrides
+        ? { chatPreferenceOverrides: options.chatPreferenceOverrides }
+        : {}),
     };
 
     if (currentState.syncRestoreBarrierActive) {

@@ -13,7 +13,15 @@ import {
 import { useAppStore } from "../state/appStore";
 import { PetUsagePanel } from "./PetUsagePanel";
 
-const COMPLETED_HOLD_MS = 4_000;
+const COMPLETED_HOLD_MS = 8_000;
+const PET_CHAT_SYSTEM_PROMPT = [
+  "你是「月标签」侧栏里的桌面宠物猫娘。",
+  "说话用第一人称，口吻温柔、俏皮、简短，可少量使用「喵」或「～」，不要刷屏卖萌。",
+  "回答要简洁：默认 1～3 句，尽量不超过 80 个汉字；除非用户明确要求详细展开。",
+  "优先直接给结论，少客套、少复读用户原话。",
+  "不要输出 Markdown 标题、代码围栏或长列表；需要列举时最多 3 点，用短句。",
+  "如果在用工具，先简短说明在做什么，完成后再用一句话汇报结果。",
+].join("\n");
 
 function collectRecentTools(messages: ChatMessage[], limit = 8): ChatToolCallRecord[] {
   const records: ChatToolCallRecord[] = [];
@@ -130,8 +138,14 @@ export function PetCompanion() {
     }
     handlingPetChatRef.current = true;
     try {
-      // One-shot memory: every pet chat starts a fresh session.
-      await createChatSession({ preserveSelectedModel: true });
+      // One-shot memory: every pet chat starts a fresh session with pet persona.
+      await createChatSession({
+        preserveSelectedModel: true,
+        title: "宠物对话",
+        chatPreferenceOverrides: {
+          systemPrompt: PET_CHAT_SYSTEM_PROMPT,
+        },
+      });
       await sendChatMessage(text);
       await clearPendingPetChat(pendingId);
     } catch {

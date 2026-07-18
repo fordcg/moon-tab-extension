@@ -34,6 +34,22 @@ describe("derivePetState", () => {
     expect(muted.bubble).toBeUndefined();
   });
 
+  it("shows assistant reply in the bubble after completion", () => {
+    const snapshot = derivePetState({
+      justCompleted: true,
+      assistantSnippet: "主人，今天天气很好喵～",
+    });
+    expect(snapshot.state).toBe("talking");
+    expect(snapshot.bubble).toContain("天气很好");
+    expect(snapshot.badge).toBe("done");
+  });
+
+  it("falls back to done note only when reply is empty", () => {
+    const snapshot = derivePetState({ justCompleted: true });
+    expect(snapshot.state).toBe("happy");
+    expect(snapshot.bubble).toBe("本轮完成");
+  });
+
   it("falls to sleeping after long idle", () => {
     const now = 1_000_000;
     const snapshot = derivePetState({ now, lastActivityAt: now - 11 * 60_000 });

@@ -194,11 +194,23 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
             updatedAt: now,
           };
         } else if (eventType === "complete") {
+          // Prefer keeping an existing spoken reply from the side-panel snapshot.
+          // Only fall back to a generic done note when there is no real content yet.
+          const existingBubble = petSnapshot.bubble?.trim();
+          const looksLikeStatus =
+            !existingBubble ||
+            existingBubble === "思考中…" ||
+            existingBubble === "本轮完成" ||
+            existingBubble.startsWith("正在 ");
           next = {
-            state: "happy",
+            state: looksLikeStatus ? "happy" : "talking",
             badge: "done",
-            stateLabel: "完成",
-            bubble: petMuted ? undefined : "本轮完成",
+            stateLabel: looksLikeStatus ? "完成" : "回复中",
+            bubble: petMuted
+              ? undefined
+              : looksLikeStatus
+                ? "本轮完成"
+                : existingBubble,
             muted: petMuted,
             updatedAt: now,
           };
