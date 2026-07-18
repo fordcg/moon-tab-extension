@@ -16,6 +16,8 @@ const PET_HOST_SELECTOR = "[data-moon-tab-ai-pet-host]";
 const PET_STYLE_ID = "moon-tab-ai-pet-style";
 const PET_SIZE = 112;
 const DRAG_THRESHOLD_PX = 4;
+/** Local safety net: hide a stuck bubble if the publisher never clears it. */
+const LOCAL_BUBBLE_MAX_MS = 30_000;
 
 export interface FloatingPetCompanionController {
   applySnapshot: (snapshot: PetRuntimeSnapshot | null | undefined) => void;
@@ -50,6 +52,8 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
   let petPoolIndex = 0;
   let savedPetPosition: { left: number; top: number } | undefined;
   let poolTimer: number | undefined;
+  let bubbleClearTimer: number | undefined;
+  let localBubbleHidden = false;
   let runtimeListener:
     | ((message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => void)
     | undefined;
@@ -67,9 +71,14 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       if (petSnapshot.updatedAt && snapshot.updatedAt && snapshot.updatedAt < petSnapshot.updatedAt) {
         return;
       }
+      const bubbleChanged = (snapshot.bubble || "") !== (petSnapshot.bubble || "");
       petSnapshot = snapshot;
       if (typeof snapshot.muted === "boolean") {
         petMuted = snapshot.muted;
+      }
+      if (bubbleChanged) {
+        localBubbleHidden = false;
+        scheduleLocalBubbleClear(snapshot.bubble);
       }
       renderPagePet();
     },
@@ -91,6 +100,10 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       if (poolTimer != null) {
         window.clearInterval(poolTimer);
         poolTimer = undefined;
+      }
+      if (bubbleClearTimer != null) {
+        window.clearTimeout(bubbleClearTimer);
+        bubbleClearTimer = undefined;
       }
       if (runtimeListener) {
         chrome.runtime?.onMessage?.removeListener?.(runtimeListener as never);
@@ -254,6 +267,27 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     } catch {
       // ignore
     }
+  }
+
+  function scheduleLocalBubbleClear(bubble: string | undefined): void {
+    if (bubbleClearTimer != null) {
+      window.clearTimeout(bubbleClearTimer);
+      bubbleClearTimer = undefined;
+    }
+    if (!bubble) {
+      return;
+    }
+    // Status bubbles while working can stay until the next state; only spoken replies auto-hide.
+    const isTransientStatus =
+      bubble === "思考中…" ||
+      bubble === "本轮完成" ||
+      bubble.startsWith("正在 ") ||
+      bubble.startsWith("并行 ");
+    const delay = isTransientStatus ? LOCAL_BUBBLE_MAX_MS : LOCAL_BUBBLE_MAX_MS;
+    bubbleClearTimer = window.setTimeout(() => {
+      localBubbleHidden = true;
+      renderPagePet();
+    }, delay);
   }
 
   function requestLatestSnapshot(): void {
@@ -559,7 +593,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     }
 
     if (bubble) {
-      const text = !petMuted && petSnapshot.bubble ? petSnapshot.bubble : "";
+      const text = !petMuted && !localBubbleHidden && petSnapshot.bubble ? petSnapshot.bubble : "";
       if (text) {
         bubble.hidden = false;
         bubble.textContent = text;

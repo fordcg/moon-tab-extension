@@ -99,7 +99,7 @@ export function derivePetState(input: PetDeriveInput): PetSnapshot {
       ? undefined
       : input.muted
         ? undefined
-        : clip(input.assistantSnippet || "回复中…", 140);
+        : clip(plainText(input.assistantSnippet || "回复中…"), 72);
     return {
       state: "talking",
       bubble,
@@ -117,10 +117,10 @@ export function derivePetState(input: PetDeriveInput): PetSnapshot {
 
   if (input.justCompleted) {
     const reply = !input.privateMode && !input.muted
-      ? clip(input.assistantSnippet || "", 140)
+      ? clip(plainText(input.assistantSnippet || ""), 72)
       : undefined;
     return {
-      // Keep the spoken reply in the bubble; fall back to a short done note only when empty.
+      // Keep the spoken reply in the bubble briefly; fall back to a short done note only when empty.
       state: reply ? "talking" : "happy",
       bubble: reply || (input.muted || input.privateMode ? undefined : "本轮完成"),
       badge: "done",
@@ -159,6 +159,21 @@ function shortTool(tool?: PetToolSignal): string {
   }
   const label = (tool.displayName || tool.name || "工具").trim();
   return label.length > 18 ? `${label.slice(0, 17)}…` : label;
+}
+
+function plainText(value: string): string {
+  return String(value || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[[^\]]*]\(([^)]*)\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/\|/g, " ")
+    .replace(/[-=]{3,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function clip(text: string, max: number): string {

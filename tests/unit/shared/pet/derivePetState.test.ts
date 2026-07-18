@@ -44,6 +44,16 @@ describe("derivePetState", () => {
     expect(snapshot.badge).toBe("done");
   });
 
+  it("strips markdown tables from spoken reply bubbles", () => {
+    const snapshot = derivePetState({
+      justCompleted: true,
+      assistantSnippet: "## 一、项目定位\n\n| 项目 | 内容 |\n| --- | --- |\n| 仓库 | DeusData/codebase |",
+    });
+    expect(snapshot.bubble).toBeTruthy();
+    expect(snapshot.bubble).not.toContain("|");
+    expect(snapshot.bubble).not.toContain("##");
+  });
+
   it("falls back to done note only when reply is empty", () => {
     const snapshot = derivePetState({ justCompleted: true });
     expect(snapshot.state).toBe("happy");

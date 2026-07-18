@@ -13,7 +13,9 @@ import {
 import { useAppStore } from "../state/appStore";
 import { PetUsagePanel } from "./PetUsagePanel";
 
-const COMPLETED_HOLD_MS = 8_000;
+const COMPLETED_HOLD_MS = 4_000;
+/** Spoken reply bubble stays for 30s after the turn finishes, then auto-hides. */
+const BUBBLE_HOLD_MS = 30_000;
 const PET_CHAT_SYSTEM_PROMPT = [
   "你是「月标签」侧栏里的桌面宠物猫娘。",
   "说话用第一人称，口吻温柔、俏皮、简短，可少量使用「喵」或「～」，不要刷屏卖萌。",
@@ -109,6 +111,7 @@ export function PetCompanion() {
   const [muted, setMuted] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [completedUntil, setCompletedUntil] = useState(0);
+  const [bubbleUntil, setBubbleUntil] = useState(0);
   const [prevSending, setPrevSending] = useState(false);
   const handlingPetChatRef = useRef(false);
   const handledPendingIdsRef = useRef(new Set<string>());
@@ -120,7 +123,9 @@ export function PetCompanion() {
 
   useEffect(() => {
     if (prevSending && !sending) {
-      setCompletedUntil(Date.now() + COMPLETED_HOLD_MS);
+      const stamp = Date.now();
+      setCompletedUntil(stamp + COMPLETED_HOLD_MS);
+      setBubbleUntil(stamp + BUBBLE_HOLD_MS);
     }
     setPrevSending(sending);
   }, [sending, prevSending]);
@@ -235,17 +240,29 @@ export function PetCompanion() {
     now,
   });
 
+  // Keep status bubbles while running; spoken replies auto-dismiss after BUBBLE_HOLD_MS.
+  const showBubble = Boolean(
+    derived.bubble && (
+      sending ||
+      streamingText ||
+      task?.status === "running" ||
+      Boolean(pendingBoundaryChoice) ||
+      Boolean(lastError) ||
+      now < bubbleUntil
+    ),
+  );
+
   const snapshot: PetRuntimeSnapshot = useMemo(
     () => ({
       state: derived.state,
-      bubble: derived.bubble,
+      bubble: showBubble ? derived.bubble : undefined,
       badge: derived.badge,
       toolLabel: derived.toolLabel,
       stateLabel: petStateLabel(derived.state),
       muted,
       updatedAt: now,
     }),
-    [derived.badge, derived.bubble, derived.state, derived.toolLabel, muted, now],
+    [derived.badge, derived.bubble, derived.state, derived.toolLabel, muted, now, showBubble],
   );
 
   useEffect(() => {
