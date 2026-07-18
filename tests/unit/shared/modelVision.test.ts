@@ -10,9 +10,14 @@ describe("detectModelSupportsVision", () => {
       "gpt-4.1-mini",
       "gpt-4-turbo",
       "gpt-5",
+      "gpt-5.5",
+      "gpt-5-mini",
+      "openai/gpt-4o",
+      "openai/gpt-5.5",
       "claude-3-5-sonnet",
       "claude-sonnet-4",
       "claude-opus-4",
+      "anthropic/claude-sonnet-4",
       "gemini-2.0-flash",
       "gemini-1.5-pro",
       "qwen2.5-vl-72b",
@@ -21,6 +26,7 @@ describe("detectModelSupportsVision", () => {
       "pixtral-12b",
       "glm-4v",
       "grok-2-vision",
+      "grok-4.5",
       "deepseek-vl",
     ];
     for (const id of positives) {
@@ -38,14 +44,8 @@ describe("detectModelSupportsVision", () => {
       "whisper-1",
       "o1-mini",
       "o1",
-      "grok-4.5", // ambiguous; only vision-marked variants are true
     ];
     for (const id of negatives) {
-      // grok-4.5 currently returns true due to "4.5" pattern — assert intentionally
-      if (id === "grok-4.5") {
-        expect(detectModelSupportsVision(id), id).toBe(true);
-        continue;
-      }
       expect(detectModelSupportsVision(id), id).toBe(false);
     }
   });

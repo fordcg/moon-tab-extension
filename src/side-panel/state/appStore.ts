@@ -2,7 +2,11 @@ import { create, type StoreApi } from "zustand";
 import { buildChatRequestMessages } from "../../shared/chat/buildChatRequestMessages";
 import { createModelConfig } from "../../shared/chat/modelConfig";
 import { detectModelSupportsVision } from "../../shared/models/modelVision";
-import { detectModelSupportsReasoningEffort, normalizeModelReasoningEffort } from "../../shared/models/modelReasoning";
+import {
+  detectModelSupportsReasoningEffort,
+  getReasoningEffortProfile,
+  normalizeModelReasoningEffort,
+} from "../../shared/models/modelReasoning";
 import { createPageContextPrompt } from "../../shared/chat/pageContextPrompt";
 import { mergeTokenUsageEntries } from "../../shared/chat/tokenUsage";
 import {
@@ -610,12 +614,27 @@ export const useAppStore = create<AppState>()((set, get) => ({
             : updates.modelId !== undefined || updates.displayName !== undefined
               ? detectModelSupportsVision(nextModelId, nextDisplayName)
               : model.supportsVision;
+        const reasoningProfile =
+          updates.modelId !== undefined || updates.displayName !== undefined || updates.reasoningEffort !== undefined
+            ? (() => {
+                const provider = state.providers.find((item) => item.id === model.providerId);
+                return getReasoningEffortProfile(nextModelId, nextDisplayName, provider?.endpointType);
+              })()
+            : null;
         const reasoningEffort =
           updates.reasoningEffort !== undefined
-            ? normalizeModelReasoningEffort(updates.reasoningEffort)
+            ? normalizeModelReasoningEffort(
+                updates.reasoningEffort,
+                reasoningProfile?.options.map((item) => item.value),
+                reasoningProfile?.defaultValue ?? "medium",
+              )
             : updates.modelId !== undefined || updates.displayName !== undefined
-              ? detectModelSupportsReasoningEffort(nextModelId, nextDisplayName)
-                ? normalizeModelReasoningEffort(model.reasoningEffort, "medium")
+              ? reasoningProfile
+                ? normalizeModelReasoningEffort(
+                    model.reasoningEffort,
+                    reasoningProfile.options.map((item) => item.value),
+                    reasoningProfile.defaultValue,
+                  )
                 : undefined
               : model.reasoningEffort;
 
@@ -1036,18 +1055,30 @@ export const useAppStore = create<AppState>()((set, get) => ({
       getWebSearchSettings(),
       getMcpSettings(),
     ]);
-    // Auto-upgrade known multimodal models that were saved with supportsVision=false.
+    // Auto-upgrade known multimodal models that were saved with supportsVision=false/undefined.
     // Never auto-downgrade an explicit true flag.
     const models = modelsFromDb.map((model) => {
-      if (model.supportsVision) {
-        return model;
+      const detectedVision = detectModelSupportsVision(model.modelId, model.displayName);
+      let next = model;
+      if (!model.supportsVision && detectedVision) {
+        next = { ...next, supportsVision: true, updatedAt: Date.now() };
       }
-      if (!detectModelSupportsVision(model.modelId, model.displayName)) {
-        return model;
+      // Seed default reasoning effort for known reasoning models when missing.
+      if (next.reasoningEffort === undefined) {
+        const provider = providers.find((item) => item.id === next.providerId);
+        const profile = getReasoningEffortProfile(next.modelId, next.displayName, provider?.endpointType);
+        if (profile) {
+          next = {
+            ...next,
+            reasoningEffort: profile.defaultValue,
+            updatedAt: Date.now(),
+          };
+        }
       }
-      const upgraded = { ...model, supportsVision: true, updatedAt: Date.now() };
-      void saveProviderModel(upgraded);
-      return upgraded;
+      if (next !== model) {
+        void saveProviderModel(next);
+      }
+      return next;
     });
     const mcpBearerTokens = await readMcpBearerTokens(mcpSettings);
     const currentState = get();
@@ -3029,7 +3060,9 @@ function createAndStoreModel(
   const index = get().models.filter((model) => model.providerId === providerId).length + 1;
   const modelId = overrides.modelId ?? "gpt-4.1-mini";
   const displayName = overrides.displayName ?? `新模型 ${index}`;
-  const supportsReasoning = detectModelSupportsReasoningEffort(modelId, displayName);
+  const provider = get().providers.find((item) => item.id === providerId);
+  const reasoningProfile = getReasoningEffortProfile(modelId, displayName, provider?.endpointType);
+  const detectedVision = detectModelSupportsVision(modelId, displayName);
   const model: ProviderModel = {
     id: `model-${now}-${index}`,
     providerId,
@@ -3039,9 +3072,15 @@ function createAndStoreModel(
     maxTokens: 1024,
     systemPrompt: "你是网页助手",
     isTitleModel: false,
-    supportsVision: overrides.supportsVision ?? detectModelSupportsVision(modelId, displayName),
-    ...(supportsReasoning
-      ? { reasoningEffort: normalizeModelReasoningEffort(overrides.reasoningEffort, "medium") }
+    supportsVision: overrides.supportsVision ?? detectedVision,
+    ...(reasoningProfile
+      ? {
+          reasoningEffort: normalizeModelReasoningEffort(
+            overrides.reasoningEffort,
+            reasoningProfile.options.map((item) => item.value),
+            reasoningProfile.defaultValue,
+          ),
+        }
       : overrides.reasoningEffort
         ? { reasoningEffort: normalizeModelReasoningEffort(overrides.reasoningEffort) }
         : {}),

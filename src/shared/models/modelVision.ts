@@ -6,10 +6,16 @@
  * Unknown IDs default to false (text-only safe default).
  */
 export function detectModelSupportsVision(modelId: string | undefined | null, displayName?: string | undefined | null): boolean {
-  const text = [modelId, displayName].filter(Boolean).join(" ").toLowerCase().trim();
-  if (!text) {
+  const raw = [modelId, displayName].filter(Boolean).join(" ").toLowerCase().trim();
+  if (!raw) {
     return false;
   }
+
+  // Gateways often prefix with provider: "openai/gpt-4o", "anthropic/claude-sonnet-4"
+  const text = raw
+    .replaceAll(/[\\/]/g, " ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
 
   // Explicit negative markers first.
   if (
@@ -19,29 +25,34 @@ export function detectModelSupportsVision(modelId: string | undefined | null, di
     return false;
   }
 
-  // OpenAI / GPT multimodal families
+  // OpenAI / GPT multimodal families (including gpt-5 / gpt-5.5 / gpt-5-mini)
   if (
-    /\b(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-4-vision|gpt-5|computer-use)\b/.test(text) ||
+    /\bgpt-4o\b/.test(text) ||
+    /\bgpt-4\.1\b/.test(text) ||
+    /\bgpt-4-turbo\b/.test(text) ||
+    /\bgpt-4-vision\b/.test(text) ||
     /\bchatgpt-4o\b/.test(text) ||
-    /\bgpt-4o[-_]?mini\b/.test(text) ||
-    /\bgpt-4\.1[-_]?(mini|nano)?\b/.test(text) ||
-    // gpt-5, gpt-5.1, gpt-5.2, gpt-5.4, gpt-5.5, gpt-5-mini, gpt-5-nano, ...
-    /\bgpt-5(\.\d+)?([-_]|$)/.test(text)
+    /\bcomputer-use\b/.test(text) ||
+    /\bgpt-5(\.\d+)?\b/.test(text) ||
+    /\bgpt-5[-_]/.test(text)
   ) {
     return true;
   }
-  // o-series: only mark models that commonly accept image inputs on gateways
+
+  // o-series that commonly accept image inputs on gateways
   if (/\b(o3|o4-mini|o1-pro)\b/.test(text) && !/\b(audio|tts|transcribe)\b/.test(text)) {
     return true;
   }
 
   // Anthropic Claude 3+/4 with vision
-  if (/\bclaude[-_ ]?(3|3\.5|3\.7|4|4\.5|sonnet|opus|haiku)\b/.test(text)) {
-    // Claude 2 / instant historically weaker / no vision path in our usage
+  if (/\bclaude\b/.test(text)) {
     if (/\bclaude[-_ ]?2\b|\bclaude[-_ ]?instant\b/.test(text)) {
       return false;
     }
-    return true;
+    // Claude 3+ / sonnet / opus / haiku generally multimodal on modern APIs
+    if (/\b(3|3\.5|3\.7|4|4\.5|sonnet|opus|haiku)\b/.test(text)) {
+      return true;
+    }
   }
 
   // Google Gemini multimodal
@@ -53,27 +64,25 @@ export function detectModelSupportsVision(modelId: string | undefined | null, di
   }
 
   // Qwen VL / Omni
-  if (/\bqwen\b/.test(text) && /\b(vl|vision|omni|2\.5-vl|2-vl|3-vl)\b/.test(text)) {
+  if (/\bqwen\b/.test(text) && /\b(vl|vision|omni)\b/.test(text)) {
     return true;
   }
   if (/\bqwen2(\.5)?-vl\b|\bqwen-vl\b|\bqwen3-vl\b/.test(text)) {
     return true;
   }
 
-  // DeepSeek — official deepseek-v4-flash/chat are not general vision OCR models for captcha.
-  // Only mark known VL-named variants.
+  // DeepSeek — only VL-named variants; v4-flash/chat/reasoner stay false
   if (/\bdeepseek\b/.test(text)) {
     return /\b(vl|vision)\b/.test(text);
   }
 
   // Moonshot / Kimi
   if (/\b(moonshot|kimi)\b/.test(text)) {
-    // kimi/moonshot chat often multimodal in recent versions; keep VL/vision explicit or kimi-latest/k1
     return /\b(vl|vision|kimi-latest|k1|k2)\b/.test(text) || /\bkimi[-_.]?(latest|k1|k2)\b/.test(text);
   }
 
   // GLM / Zhipu
-  if (/\bglm[-_ ]?(4v|4\.1v|4\.5v|4v-plus|4-voice)\b/.test(text) || /\bglm-4v\b/.test(text)) {
+  if (/\bglm[-_ ]?(4v|4\.1v|4\.5v|4v-plus)\b/.test(text) || /\bglm-4v\b/.test(text)) {
     return true;
   }
   if (/\b(cogvlm|visualglm)\b/.test(text)) {
@@ -87,7 +96,6 @@ export function detectModelSupportsVision(modelId: string | undefined | null, di
 
   // Grok vision-capable recent models
   if (/\bgrok\b/.test(text)) {
-    // Prefer explicit vision markers; also accept recent major grok-2/4 chat IDs commonly multimodal on gateways.
     return /\b(vision|2-vision)\b/.test(text) || /\bgrok-2\b/.test(text) || /\bgrok-4(\.|$|[-_])/.test(text);
   }
 
@@ -97,7 +105,7 @@ export function detectModelSupportsVision(modelId: string | undefined | null, di
   }
 
   // Generic markers last
-  if (/\b(vision|multimodal|omni)\b/.test(text) || /[-_]vl\b|\bvl[-_]|[-_]v\b.*vision/.test(text)) {
+  if (/\b(vision|multimodal|omni)\b/.test(text) || /[-_]vl\b|\bvl[-_]/.test(text)) {
     return true;
   }
 

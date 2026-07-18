@@ -151,7 +151,10 @@ export function ChannelManagement() {
       return;
     }
 
-    nextModelIds.forEach((modelId) => addModel(provider.id, { modelId, displayName: modelId }));
+    nextModelIds.forEach((modelId) => {
+      // Force vision/reasoning detection at add time (batch path).
+      addModel(provider.id, { modelId, displayName: modelId });
+    });
     setBatchModelInput("");
     setBatchModelError("");
   };
