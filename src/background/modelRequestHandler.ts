@@ -437,7 +437,8 @@ async function requestModelOnce(
       structuredOutput: message.structuredOutput,
       collectToolCalls: Boolean(message.tools?.length),
     });
-    if (!responseData.content && !responseData.toolCalls?.length) {
+    // 部分推理模型（DeepSeek V4 / reasoner）首轮可能只回 reasoning_content 或仅 tool_calls。
+    if (!responseData.content && !responseData.reasoningContent && !responseData.toolCalls?.length) {
       const failed: ChatSendResponse = { ok: false, message: "模型响应中没有可用内容" };
       emitModelResponse(log, failed);
       return failed;
@@ -467,14 +468,43 @@ async function requestModelOnce(
     };
     emitModelResponse(log, success);
     return success;
-  } catch {
+  } catch (error) {
+    if (isAbortError(error) || message.signal?.aborted) {
+      const failed: ChatSendResponse = {
+        ok: false,
+        message: "已终止本次生成。",
+      };
+      emitModelResponse(log, failed);
+      return failed;
+    }
+
+    const detail = error instanceof Error ? error.message.trim() : String(error ?? "").trim();
+    const safeDetail = detail && !looksLikeSensitiveErrorDetail(detail) ? detail.slice(0, 240) : "";
     const failed: ChatSendResponse = {
       ok: false,
-      message: "模型请求失败，请稍后重试",
+      message: safeDetail ? `模型请求失败：${safeDetail}` : "模型请求失败，请稍后重试",
     };
+    console.warn("[chat-send] 模型请求异常", {
+      message: detail,
+      modelId: message.model.modelId,
+      endpointType: message.model.endpointType,
+      stream: message.stream,
+    });
     emitModelResponse(log, failed);
     return failed;
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : Boolean(error && typeof error === "object" && "name" in error && (error as { name?: unknown }).name === "AbortError");
+}
+
+function looksLikeSensitiveErrorDetail(message: string): boolean {
+  return /(?:\bsk-[A-Za-z0-9_-]{8,}|authorization\s*[:=]|bearer\s+[A-Za-z0-9._~+/-]{8,}|api[_-]?key\s*[:=]|secret\s*[:=]|password\s*[:=])/i.test(
+    message,
+  );
 }
 
 async function fetchAndReadModelResponse(

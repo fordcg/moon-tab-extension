@@ -179,6 +179,7 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
     const port = globalThis.chrome.runtime.connect({ name: "chat.stream" });
     let settled = false;
     let receivedFinalComplete = false;
+    let receivedTerminalFailure = false;
     let canceledByUser = false;
     let canceledForRestore = false;
     let pendingTokenUsageEntries: ChatTokenUsageEntry[] | undefined;
@@ -392,18 +393,20 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
         return;
       }
 
+      // error / unknown terminal messages
+      receivedTerminalFailure = true;
       const failureMessage = resolveStreamPortFailureMessage(message);
       if (input.shouldShowFailure?.() ?? true) {
         input.set({ failure: { message: failureMessage } });
       }
       void enqueueWrite(async () => {
         const finalAssistantMessage = await ensureFinalAssistantMessage();
-          if (finalAssistantMessage) {
-            pendingRetryProgress = undefined;
-            clearAssistantRetryProgress(finalAssistantMessage.id, input.set);
-            await failAssistantMessage(input.sessionId, finalAssistantMessage.id, failureMessage, input.set, input.privateMode, pendingTokenUsageEntries);
-          }
-        }).then(() => finish({ completed: true, failed: true, unconsumedFollowUpIds: Array.from(pendingFollowUpIds) }));
+        if (finalAssistantMessage) {
+          pendingRetryProgress = undefined;
+          clearAssistantRetryProgress(finalAssistantMessage.id, input.set);
+          await failAssistantMessage(input.sessionId, finalAssistantMessage.id, failureMessage, input.set, input.privateMode, pendingTokenUsageEntries);
+        }
+      }).then(() => finish({ completed: true, failed: true, unconsumedFollowUpIds: Array.from(pendingFollowUpIds) }));
     });
 
     port.onDisconnect.addListener(() => {
@@ -411,14 +414,15 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
         void writeQueue.then(() => finish({ completed: true, restoreCanceled: true }, { disconnect: false }));
         return;
       }
-      if (receivedFinalComplete) {
-        finish({ completed: true }, { disconnect: false });
+      // complete/error already finished the turn; do not overwrite with a generic stream-interrupt.
+      if (receivedFinalComplete || receivedTerminalFailure) {
+        finish({ completed: true, failed: receivedTerminalFailure }, { disconnect: false });
         return;
       }
 
       if (canceledByUser) {
         void enqueueWrite(async () => {
-          if (settled || receivedFinalComplete) {
+          if (settled || receivedFinalComplete || receivedTerminalFailure) {
             return;
           }
           const finalAssistantMessage = await ensureFinalAssistantMessage();
@@ -590,7 +594,10 @@ function resolveStreamPortFailureMessage(message: ChatStreamPortMessage): string
 
 function containsSensitiveErrorFragment(message: string): boolean {
   // 端口消息异常时仍按外部输入处理，避免模型供应商原始报文把密钥、鉴权头或连接串带到用户可见错误里。
-  return /(?:\bsk-[A-Za-z0-9_-]+|authorization|bearer\s+[A-Za-z0-9._~+/-]+|\btoken\b|secret|password)/i.test(message);
+  // 注意：不要用裸 \btoken\b，否则会把 "Invalid token"、错误码说明等正常诊断也吞掉。
+  return /(?:\bsk-[A-Za-z0-9_-]{8,}|authorization\s*[:=]|bearer\s+[A-Za-z0-9._~+/-]{8,}|api[_-]?key\s*[:=]|secret\s*[:=]|password\s*[:=])/i.test(
+    message,
+  );
 }
 
 async function failAssistantMessage(

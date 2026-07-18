@@ -80,11 +80,15 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     }
     messages = appendGuidanceMessages(messages, input);
     const response = await input.requestModel(messages);
+    // Prefer a concrete model failure over a generic abort when both happened around the same time.
+    if (!response.ok) {
+      if (input.signal?.aborted && response.message === "已终止本次生成。") {
+        return createAbortResponse();
+      }
+      return response;
+    }
     if (input.signal?.aborted) {
       return createAbortResponse();
-    }
-    if (!response.ok) {
-      return response;
     }
     tokenUsageEntries.push(...(response.tokenUsageEntries ?? []));
 
