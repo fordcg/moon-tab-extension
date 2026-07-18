@@ -290,7 +290,20 @@ export function ModelSelector() {
                 aria-label="推理强度"
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                <span className="model-select-effort-label">强度</span>
+                <div className="model-select-effort-head">
+                  <span className="model-select-effort-label">强度</span>
+                  <span className="model-select-effort-family">
+                    {effortProfile.family === "openai_gpt5"
+                      ? "GPT-5"
+                      : effortProfile.family === "openai_o"
+                        ? "o 系列"
+                        : effortProfile.family === "anthropic"
+                          ? "Claude 思考预算"
+                          : effortProfile.family === "deepseek"
+                            ? "DeepSeek 输出上限"
+                            : "兼容"}
+                  </span>
+                </div>
                 <div className="model-select-effort-chips">
                   {effortProfile.options.map((option) => {
                     const active = option.value === effortValue;
@@ -300,14 +313,15 @@ export function ModelSelector() {
                         type="button"
                         className={active ? "model-select-effort-chip is-active" : "model-select-effort-chip"}
                         aria-pressed={active}
-                        title={`推理强度：${option.label}`}
+                        title={option.hint ? `${option.label}（${option.hint}）` : `推理强度：${option.label}`}
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
                           updateModel(selectedModel.id, { reasoningEffort: option.value });
                         }}
                       >
-                        {option.label}
+                        <span>{option.label}</span>
+                        {option.hint ? <span className="model-select-effort-chip-hint">{option.hint}</span> : null}
                       </button>
                     );
                   })}

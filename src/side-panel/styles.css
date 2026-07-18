@@ -3727,20 +3727,35 @@ body {
 
 /* Reasoning effort chips inside model menu */
 .model-select-effort {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.4rem;
   padding: 0.55rem 0.7rem 0.65rem;
   border-top: 1px solid color-mix(in srgb, var(--sidepanel-border, #d8dee8) 85%, transparent);
   background: color-mix(in srgb, var(--sidepanel-surface, #fff) 92%, var(--sidepanel-canvas, #f4f6fa));
 }
 
+.model-select-effort-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .model-select-effort-label {
   flex: 0 0 auto;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--sidepanel-muted, #7b8698);
   letter-spacing: 0.02em;
+}
+
+.model-select-effort-family {
+  min-width: 0;
+  font-size: 0.68rem;
+  color: color-mix(in srgb, var(--sidepanel-muted, #7b8698) 88%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .model-select-effort-chips {
@@ -3756,11 +3771,19 @@ body {
   background: color-mix(in srgb, var(--sidepanel-surface, #fff) 96%, transparent);
   color: var(--sidepanel-text, #2b3445);
   border-radius: 999px;
-  padding: 0.18rem 0.55rem;
+  padding: 0.2rem 0.55rem;
   font-size: 0.72rem;
-  line-height: 1.2;
+  line-height: 1.15;
   cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.model-select-effort-chip-hint {
+  font-size: 0.64rem;
+  opacity: 0.7;
 }
 
 .model-select-effort-chip:hover {
