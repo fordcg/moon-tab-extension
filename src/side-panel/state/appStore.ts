@@ -1,6 +1,7 @@
 import { create, type StoreApi } from "zustand";
 import { buildChatRequestMessages } from "../../shared/chat/buildChatRequestMessages";
 import { createModelConfig } from "../../shared/chat/modelConfig";
+import { detectModelSupportsVision } from "../../shared/models/modelVision";
 import { createPageContextPrompt } from "../../shared/chat/pageContextPrompt";
 import { mergeTokenUsageEntries } from "../../shared/chat/tokenUsage";
 import {
@@ -595,15 +596,27 @@ export const useAppStore = create<AppState>()((set, get) => ({
   updateModel: (modelId, updates) => {
     markModelCatalogChanged();
     set((state) => {
-      const models = state.models.map((model) =>
-        model.id === modelId
-          ? {
-              ...model,
-              ...updates,
-              updatedAt: Date.now(),
-            }
-          : model,
-      );
+      const models = state.models.map((model) => {
+        if (model.id !== modelId) {
+          return model;
+        }
+
+        const nextModelId = updates.modelId ?? model.modelId;
+        const nextDisplayName = updates.displayName ?? model.displayName;
+        const supportsVision =
+          updates.supportsVision !== undefined
+            ? updates.supportsVision
+            : updates.modelId !== undefined || updates.displayName !== undefined
+              ? detectModelSupportsVision(nextModelId, nextDisplayName)
+              : model.supportsVision;
+
+        return {
+          ...model,
+          ...updates,
+          supportsVision,
+          updatedAt: Date.now(),
+        };
+      });
       const updatedModel = models.find((model) => model.id === modelId);
 
       if (updatedModel) {
@@ -1002,7 +1015,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   loadChannelConfig: async () => {
     const revisionAtStart = modelCatalogRevision;
-    const [providers, models, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, savedSkillPlaybooks, savedMetapiAdminSettings, webSearchSettings, mcpSettings] = await Promise.all([
+    const [providers, modelsFromDb, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, savedSkillPlaybooks, savedMetapiAdminSettings, webSearchSettings, mcpSettings] = await Promise.all([
       getModelProviders(),
       getProviderModels(),
       getAppSetting<string>("defaultChatModelId"),
@@ -1013,6 +1026,19 @@ export const useAppStore = create<AppState>()((set, get) => ({
       getWebSearchSettings(),
       getMcpSettings(),
     ]);
+    // Auto-upgrade known multimodal models that were saved with supportsVision=false.
+    // Never auto-downgrade an explicit true flag.
+    const models = modelsFromDb.map((model) => {
+      if (model.supportsVision) {
+        return model;
+      }
+      if (!detectModelSupportsVision(model.modelId, model.displayName)) {
+        return model;
+      }
+      const upgraded = { ...model, supportsVision: true, updatedAt: Date.now() };
+      void saveProviderModel(upgraded);
+      return upgraded;
+    });
     const mcpBearerTokens = await readMcpBearerTokens(mcpSettings);
     const currentState = get();
     const catalogChangedDuringLoad = modelCatalogRevision !== revisionAtStart;
@@ -2986,21 +3012,23 @@ function createAndStoreModel(
   providerId: string,
   get: StoreGetter,
   set: StoreSetter,
-  overrides: Partial<Pick<ProviderModel, "displayName" | "modelId">> = {},
+  overrides: Partial<Pick<ProviderModel, "displayName" | "modelId" | "supportsVision">> = {},
 ): ProviderModel {
   markModelCatalogChanged();
   const now = Date.now();
   const index = get().models.filter((model) => model.providerId === providerId).length + 1;
+  const modelId = overrides.modelId ?? "gpt-4.1-mini";
+  const displayName = overrides.displayName ?? `新模型 ${index}`;
   const model: ProviderModel = {
     id: `model-${now}-${index}`,
     providerId,
-    displayName: overrides.displayName ?? `新模型 ${index}`,
-    modelId: overrides.modelId ?? "gpt-4.1-mini",
+    displayName,
+    modelId,
     temperature: 0.7,
     maxTokens: 1024,
     systemPrompt: "你是网页助手",
     isTitleModel: false,
-    supportsVision: false,
+    supportsVision: overrides.supportsVision ?? detectModelSupportsVision(modelId, displayName),
     enabled: true,
     createdAt: now,
     updatedAt: now,

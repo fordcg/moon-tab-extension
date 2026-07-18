@@ -1,7 +1,7 @@
 import { buildPromptExpandedUserContent } from "../../shared/chat/buildChatRequestMessages";
 import type { AutomationPlaybookSelection, ChatImageAttachment, ChatMessage, ChatPromptInvocation, ChatTokenUsageEntry, ChatToolAttachment, ChatToolCallRecord } from "../../shared/types";
 import type { ModelRequestMessage, ModelResponseData, ModelToolCall, ModelToolExecutor, ModelToolRegistryEntry, ModelToolResultMessage } from "../../shared/models/types";
-import { isBrowserAutomationToolId } from "../../shared/models/toolRegistry";
+import { BROWSER_SCREENSHOT_TOOL_ID, BROWSER_SCREENSHOT_TOOL_NAME, isBrowserAutomationToolId } from "../../shared/models/toolRegistry";
 import { redactSensitiveText } from "../../shared/security/redaction";
 import { createAutomationReportToolAttachment, isBrowserScreenshotToolAttachment } from "../../shared/toolArtifacts";
 import { truncateText } from "../../shared/utils/text";
@@ -40,6 +40,8 @@ export interface RunModelToolLoopInput {
   initialMessages: ModelRequestMessage[];
   tools: ModelToolRegistryEntry[];
   enabledToolIds: string[];
+  /** When false, screenshot OCR follow-ups are skipped and screenshot tool calls are rejected. */
+  supportsVision?: boolean;
   requestModel: (messages: ModelRequestMessage[]) => Promise<ModelToolLoopResponse>;
   requestFinalModel?: (messages: ModelRequestMessage[]) => Promise<ModelToolLoopResponse>;
   executeTool: ModelToolExecutor;
@@ -123,6 +125,7 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     const executeCurrentTool = (toolCall: ModelToolCall) =>
       executeAllowedTool(toolCall, input.tools, enabledToolIds, input.executeTool, {
         signal: input.signal,
+        supportsVision: Boolean(input.supportsVision),
         onStart: (record) => {
           toolCallRecords.push(record);
           currentTurnRecords.push(record);
@@ -188,11 +191,13 @@ export async function runModelToolLoop(input: RunModelToolLoopInput): Promise<Mo
     });
     toolTurnMessages.push(toolTurnMessage);
 
-    const visionFollowUp = createScreenshotVisionFollowUpMessage({
-      toolCallId: response.toolCalls[0]?.id,
-      attachments: currentTurnAttachments,
-      modelMeta: getModelMetaFromMessages(input.initialMessages),
-    });
+    const visionFollowUp = input.supportsVision
+      ? createScreenshotVisionFollowUpMessage({
+          toolCallId: response.toolCalls[0]?.id,
+          attachments: currentTurnAttachments,
+          modelMeta: getModelMetaFromMessages(input.initialMessages),
+        })
+      : undefined;
 
     messages = [
       ...messages,
@@ -486,6 +491,7 @@ async function executeAllowedTool(
   executeTool: ModelToolExecutor,
   callbacks: {
     signal?: AbortSignal;
+    supportsVision?: boolean;
     onStart: (record: ChatToolCallRecord) => void;
     onComplete: (record: ChatToolCallRecord, attachments: ChatToolAttachment[]) => void;
   },
@@ -508,6 +514,18 @@ async function executeAllowedTool(
 
   if (!enabledToolIds.has(tool.id)) {
     return completeToolError(runningRecord, toolCall, `工具 ${toolCall.name} 未启用，已拒绝执行。`, callbacks);
+  }
+
+  if (
+    !callbacks.supportsVision &&
+    (tool.id === BROWSER_SCREENSHOT_TOOL_ID || tool.name === BROWSER_SCREENSHOT_TOOL_NAME || toolCall.name === BROWSER_SCREENSHOT_TOOL_NAME)
+  ) {
+    return completeToolError(
+      runningRecord,
+      toolCall,
+      "当前模型不支持视觉理解/识图，已跳过 screenshot。请改用 take_snapshot/DOM/Network，或对验证码标记 needs_human 后继续其他站点。",
+      callbacks,
+    );
   }
 
   if (toolCall.parseError) {

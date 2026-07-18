@@ -254,11 +254,13 @@ export function appendBrowserControlPromptIfNeeded(
   enabledTools: ModelToolRegistryEntry[],
   automationPlaybookSelection?: AutomationPlaybookSelection,
   skillPlaybooks: readonly AutomationPlaybook[] = [],
+  options: { supportsVision?: boolean } = {},
 ): ModelRequestMessage[] {
   if (!enabledTools.some((tool) => isBrowserAutomationToolId(tool.id))) {
     return messages;
   }
 
+  const supportsVision = Boolean(options.supportsVision);
   const browserPrompt = [
     "浏览器控制工具使用规则：",
     "- 当用户明确要求读取、分析、操作当前页面、已打开页面，或任务依赖当前页面上下文中的 URL、标题、正文或登录后信息时，优先使用当前受控页面和浏览器登录态，而不是先要求用户提供 URL。",
@@ -277,7 +279,16 @@ export function appendBrowserControlPromptIfNeeded(
     "- 需要当前页面结构时先调用 take_snapshot。",
     "- 需要确认 URL、标题、加载状态、视口、滚动位置或当前焦点时，优先调用 get_page_state。",
     "- 需要读取当前页面正文、全文 HTML，或按发送前提取规则、CSS、XPath 提取局部 HTML/文本时，调用 extract_content；该工具只读，不执行自定义脚本，不读取 Cookie、Storage 或跨域 iframe。",
-    "- 需要确认页面视觉状态时调用 screenshot；截图会作为工具附件返回，并在下一轮自动作为视觉输入供识图。",
+    ...(supportsVision
+      ? [
+          "- 需要确认页面视觉状态时调用 screenshot；截图会作为工具附件返回，并在下一轮自动作为视觉输入供识图。",
+          "- 图形验证码：take_snapshot 找验证码图片 UID，再 screenshot(target=element)；根据自动回传截图识读后 fill+确认。",
+          "- 需要截取元素图片时，先使用 take_snapshot 获取 UID，再调用 screenshot 且 target=element；不要传 CSS 选择器或自定义脚本。",
+        ]
+      : [
+          "- 当前模型不支持视觉理解/识图：不要调用 screenshot，也不要尝试识别图形验证码图片。",
+          "- 遇到图形验证码或必须识图才能继续的步骤：标记 needs_human / 跳过该站，改走 DOM 文本、take_snapshot、Network/API 或请求用户处理。",
+        ]),
     "- 需要排查页面报错、JS 异常、资源加载失败或控制台日志时，优先调用 get_console_messages。",
     "- 需要按文本、role、label、placeholder 或简单 CSS 定位候选元素时，先使用 take_snapshot，再调用 find_elements 获取可继续操作的 UID。",
     "- 需要确认某个元素的属性、可见性、尺寸、样式或可交互状态时，先使用 take_snapshot 获取 UID，再调用 inspect_element。",
@@ -285,11 +296,9 @@ export function appendBrowserControlPromptIfNeeded(
     "- 需要排查表单无法提交、按钮禁用、必填项缺失或错误文案时，调用 analyze_form；如已知道表单或字段 UID，可传 uid 限定范围。该工具只读诊断，不会读取字段原文值或提交表单。",
     "- 需要排查页面加载慢、资源耗时或主线程长任务时，调用 get_performance_summary；该工具只返回脱敏性能元数据，不读取 Header、Cookie、响应体或资源内容。",
     "- 需要一次性汇总页面状态、Console、性能和 Network 错误/慢请求现场时，调用 collect_diagnostics；该工具只返回脱敏聚合摘要，不读取响应体、Header、Cookie 或敏感原文。",
-    "- 图形验证码：take_snapshot 找验证码图片 UID，再 screenshot(target=element)；根据自动回传截图识读后 fill+确认。",
     "- SHIELD/我不是机器人：click 复选框本体，不要只点外层卡片。",
     "- LinuxDO/GitHub 授权页：出现「允许/Authorize」大按钮时立刻点击，不要停在授权确认页。",
     "- 默认不要给 click/fill 加 includeSnapshot；只在关键状态变化后按需 take_snapshot，避免过慢。",
-    "- 需要截取元素图片时，先使用 take_snapshot 获取 UID，再调用 screenshot 且 target=element；不要传 CSS 选择器或自定义脚本。",
     "- 不要猜测 UID；只能使用 take_snapshot 返回的 UID。",
     "- 长页面、虚拟列表或懒加载内容需要继续观察时，可调用 scroll 滚动当前视口；滚动指定元素时必须先使用 take_snapshot 获取 UID。",
     "- 需要展开悬停菜单、提示层或触发 hover 状态时，先使用 take_snapshot 获取 UID，再调用 hover；不要传 CSS 选择器或自定义脚本。",

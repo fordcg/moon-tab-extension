@@ -156,6 +156,7 @@ export async function handleChatSendMessage(
     exposedTools,
     automationPlaybookSelection,
     skillPlaybooks,
+    { supportsVision: Boolean(message.model.supportsVision) },
   );
   const exposedToolIds = exposedTools.map((tool) => tool.id);
   const toolOptions = exposedTools.length > 0
@@ -175,6 +176,7 @@ export async function handleChatSendMessage(
         initialMessages,
         tools: exposedTools,
         enabledToolIds: exposedToolIds,
+        supportsVision: Boolean(message.model.supportsVision),
         // 工具链路会产生决策与最终回答两次模型响应，需要固定来源，不能沿用调用方传入的普通请求来源。
         requestModel: (messages) =>
           requestModelOnce(
