@@ -90,15 +90,26 @@ describe("chat.stream live broadcast isolation", () => {
       disconnected = true;
     }
     async function broadcastAutomationLiveEvent(payload: unknown): Promise<void> {
-      await chrome.runtime.sendMessage({ type: "automation.live", payload });
-      const tabs = await chrome.tabs.query({});
-      await Promise.all(
-        tabs.map(async (tab) => {
-          if (typeof tab.id === "number") {
-            await chrome.tabs.sendMessage(tab.id, { type: "automation.live", payload });
-          }
-        }),
-      );
+      try {
+        await chrome.runtime.sendMessage({ type: "automation.live", payload });
+      } catch {
+        // ignore
+      }
+      try {
+        const tabs = await chrome.tabs.query({});
+        await Promise.all(
+          tabs.map(async (tab) => {
+            if (typeof tab.id !== "number") return;
+            try {
+              await chrome.tabs.sendMessage(tab.id, { type: "automation.live", payload });
+            } catch {
+              // ignore
+            }
+          }),
+        );
+      } catch {
+        // ignore
+      }
     }
     function postToPort(message: unknown): boolean {
       if (disconnected) return false;
