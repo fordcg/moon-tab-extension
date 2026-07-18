@@ -76,7 +76,7 @@ describe("content 脚本消息", () => {
     });
   });
 
-  it("floating 控制信标 attach 会创建原生页面球体而不是 iframe", async () => {
+  it("拒绝 legacy 控制信标 URL，不再挂页面球体", async () => {
     let registeredListener:
       | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
       | undefined;
@@ -95,95 +95,11 @@ describe("content 脚本消息", () => {
       sendResponse,
     );
 
-    expect(document.querySelectorAll("iframe[data-moon-tab-ai-control-beacon]")).toHaveLength(0);
-    const host = document.querySelector("[data-moon-tab-ai-control-beacon-host]") as HTMLElement | null;
-    expect(host).toBeTruthy();
-    expect(host!.style.background).toBe("transparent");
-    expect(host!.querySelector(".moon-orb-button")).toBeTruthy();
-    expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
-  });
-
-  it("关闭控制信标消息会移除页面球体", async () => {
-    let registeredListener:
-      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
-      | undefined;
-    stubChrome((listener) => {
-      registeredListener = listener as typeof registeredListener;
-    });
-
-    await import("../../../src/content/index");
-    const sendResponse = vi.fn();
-    registeredListener?.(
-      {
-        type: "sidePanel.floating.attach",
-        url: "chrome-extension://moon-tab/index.html?floating=1&controlWindow=1",
-      },
-      {} as chrome.runtime.MessageSender,
-      sendResponse,
-    );
-    expect(document.querySelectorAll("[data-moon-tab-ai-control-beacon-host]")).toHaveLength(1);
-
-    registeredListener?.(
-      { type: "sidePanel.controlBeacon.close" },
-      {} as chrome.runtime.MessageSender,
-      sendResponse,
-    );
     expect(document.querySelectorAll("[data-moon-tab-ai-control-beacon-host]")).toHaveLength(0);
-    expect(sendResponse).toHaveBeenLastCalledWith({ ok: true });
-  });
-
-  it("原生球体 pointer 拖动会更新 left/top 并持久化", async () => {
-    let registeredListener:
-      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
-      | undefined;
-    const storageSet = vi.fn(async () => undefined);
-    vi.stubGlobal("chrome", {
-      runtime: {
-        getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
-        onMessage: {
-          addListener: vi.fn((listener) => {
-            registeredListener = listener as typeof registeredListener;
-          }),
-        },
-      },
-      storage: {
-        session: {
-          get: vi.fn(async () => ({})),
-          set: storageSet,
-        },
-      },
-    });
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
-
-    await import("../../../src/content/index");
-    const sendResponse = vi.fn();
-    registeredListener?.(
-      {
-        type: "sidePanel.floating.attach",
-        url: "chrome-extension://moon-tab/index.html?floating=1&controlWindow=1",
-      },
-      {} as chrome.runtime.MessageSender,
-      sendResponse,
-    );
-
-    const host = document.querySelector("[data-moon-tab-ai-control-beacon-host]") as HTMLElement;
-    const button = host.querySelector(".moon-orb-button") as HTMLButtonElement;
-    Object.defineProperty(host, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({ left: 1000, top: 600, width: 96, height: 96, right: 1096, bottom: 696, x: 1000, y: 600, toJSON: () => ({}) }),
-    });
-    button.setPointerCapture = vi.fn();
-    button.releasePointerCapture = vi.fn();
-
-    button.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientX: 1000, clientY: 600, pointerId: 1, bubbles: true }));
-    button.dispatchEvent(new PointerEvent("pointermove", { button: 0, clientX: 960, clientY: 570, pointerId: 1, bubbles: true }));
-    button.dispatchEvent(new PointerEvent("pointerup", { button: 0, clientX: 960, clientY: 570, pointerId: 1, bubbles: true }));
-
-    expect(host.style.left).toBe("960px");
-    expect(host.style.top).toBe("570px");
-    expect(storageSet).toHaveBeenCalledWith({
-      "sidePanel.controlBeaconPosition.v1": { left: 960, top: 570 },
+    expect(document.querySelectorAll("iframe[data-moon-tab-ai-control-beacon]")).toHaveLength(0);
+    expect(sendResponse).toHaveBeenLastCalledWith({
+      ok: false,
+      message: "控制信标已移除，请使用侧栏 AI 伴侣",
     });
   });
 

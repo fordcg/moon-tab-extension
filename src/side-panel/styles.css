@@ -7874,379 +7874,284 @@ body.sidepanel-stop-requested .composer-abort-button {
   }
 }
 
-
-/* Pure floating control orb (controlWindow=1) — no panel chrome */
-html.automation-hud-root,
-body.automation-hud-root,
-.automation-hud-shell {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: visible;
-  background: transparent !important;
-  color: #f4efe6;
-  font-family: "Bahnschrift", "Segoe UI Variable Display", "DIN Alternate", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-
-.automation-hud-shell {
+/* Side-panel AI pet companion */
+.pet-companion {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 40;
+  width: 112px;
   display: grid;
-  place-items: end end;
-  box-sizing: border-box;
-  padding: 8px;
-  background: transparent !important;
-}
-
-.orb-beacon {
-  --orb-amber: #ffb454;
-  --orb-coral: #ff6b4a;
-  --orb-cyan: #42e8d0;
-  --orb-mint: #8dffb0;
-  --orb-danger: #ff5d73;
-  position: relative;
-  width: 96px;
-  height: 96px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  overflow: visible;
-}
-
-.orb-beacon-button {
-  position: relative;
-  width: 96px;
-  height: 96px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: grab;
-  color: inherit;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.orb-beacon.is-dragging .orb-beacon-button {
-  cursor: grabbing;
-}
-
-.orb-beacon-ring {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 180, 84, 0.28);
+  justify-items: center;
+  gap: 4px;
   pointer-events: none;
 }
 
-.orb-beacon-ring-a {
-  width: 88px;
-  height: 88px;
-  border-style: dashed;
-  border-color: rgba(66, 232, 208, 0.34);
-  animation: orb-spin 14s linear infinite;
-}
-
-.orb-beacon-ring-b {
-  width: 72px;
-  height: 72px;
-  border-color: rgba(255, 180, 84, 0.28);
-  animation: orb-spin 9s linear infinite reverse;
-}
-
-.orb-beacon-wave {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 180, 84, 0.4);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.orb-beacon.phase-running .orb-beacon-wave-a {
-  animation: orb-ripple 1.8s ease-out infinite;
-}
-
-.orb-beacon.phase-running .orb-beacon-wave-b {
-  animation: orb-ripple 1.8s ease-out infinite 0.9s;
-}
-
-.orb-beacon-core {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 52px;
-  height: 52px;
-}
-
-.orb-beacon-glow {
-  position: absolute;
-  inset: -14px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 180, 84, 0.55), transparent 68%);
-  filter: blur(6px);
-  animation: orb-breathe 2.8s ease-in-out infinite;
-}
-
-.orb-beacon-sphere {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.78), transparent 28%),
-    radial-gradient(circle at 68% 72%, rgba(255, 107, 74, 0.92), transparent 48%),
-    linear-gradient(145deg, #ffd089 0%, #ff7a4d 48%, #2ad5c2 100%);
-  box-shadow:
-    0 8px 22px rgba(7, 16, 24, 0.35),
-    0 0 24px rgba(255, 180, 84, 0.45);
-  animation: orb-morph 4.8s ease-in-out infinite;
-}
-
-.orb-beacon-highlight {
-  position: absolute;
-  top: 10px;
-  left: 14px;
-  width: 14px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.55);
-  filter: blur(1px);
-  transform: rotate(-18deg);
-  pointer-events: none;
-}
-
-.orb-beacon-pupil {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #071018;
-  box-shadow:
-    0 0 0 2px rgba(244, 239, 230, 0.28),
-    0 0 12px rgba(66, 232, 208, 0.7);
-  animation: orb-eye 2.4s ease-in-out infinite;
-}
-
-.orb-beacon.phase-running .orb-beacon-glow {
-  animation-duration: 1.2s;
-  background: radial-gradient(circle, rgba(66, 232, 208, 0.55), transparent 68%);
-}
-
-.orb-beacon.phase-running .orb-beacon-sphere {
-  animation-duration: 2s;
-}
-
-.orb-beacon.phase-error .orb-beacon-sphere {
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7), transparent 28%),
-    linear-gradient(145deg, #ff9aa8 0%, #ff5d73 52%, #ff8f4a 100%);
-  animation: orb-shake 0.4s ease-in-out infinite;
-}
-
-.orb-beacon.phase-done .orb-beacon-sphere {
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), transparent 28%),
-    linear-gradient(145deg, #c8ffd8 0%, #8dffb0 45%, #42e8d0 100%);
-}
-
-.orb-beacon.control-on .orb-beacon-pupil {
-  box-shadow:
-    0 0 0 2px rgba(141, 255, 176, 0.4),
-    0 0 14px rgba(66, 232, 208, 0.85);
-}
-
-.orb-beacon-spark {
-  --spark-index: 0;
-  --spark-count: 1;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
-  border-radius: 50%;
-  background: var(--orb-amber);
-  box-shadow: 0 0 8px rgba(255, 180, 84, 0.85);
-  transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-42px);
-  animation: orb-spark 1.6s ease-in-out infinite;
-  animation-delay: calc(var(--spark-index) * 0.1s);
-  pointer-events: none;
-}
-
-.orb-beacon-spark.is-running {
-  background: var(--orb-cyan);
-  box-shadow: 0 0 10px rgba(66, 232, 208, 0.9);
-}
-
-.orb-beacon-spark.is-success {
-  background: var(--orb-mint);
-  box-shadow: 0 0 8px rgba(141, 255, 176, 0.85);
-}
-
-.orb-beacon-spark.is-error {
-  background: var(--orb-danger);
-  box-shadow: 0 0 8px rgba(255, 93, 115, 0.9);
-}
-
-.orb-beacon-burst {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 180, 84, 0.7);
-  opacity: 0;
-  animation: orb-burst 0.65s ease-out 1;
-  pointer-events: none;
-}
-
-.orb-beacon-tip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  max-width: 180px;
-  padding: 5px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(7, 16, 24, 0.72);
-  color: rgba(244, 239, 230, 0.88);
-  font-size: 10px;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.16s ease;
-  backdrop-filter: blur(8px);
-}
-
-.orb-beacon-button:hover + .orb-beacon-tip,
-.orb-beacon-button:focus-visible + .orb-beacon-tip,
-.orb-beacon.is-expanded .orb-beacon-tip {
-  opacity: 1;
-}
-
-.orb-beacon-trail {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 34px);
-  display: grid;
-  gap: 5px;
-  width: 168px;
-  max-height: 140px;
-  overflow: auto;
-  padding: 2px;
+.pet-companion-button,
+.pet-companion-mute {
   pointer-events: auto;
 }
 
-.orb-beacon-chip {
+.pet-companion-bubble {
+  max-width: 168px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
+  background: color-mix(in srgb, var(--color-surface, #fffaf2) 92%, transparent);
+  color: var(--color-body, #2b241c);
+  box-shadow: 0 10px 28px rgba(43, 36, 28, 0.12);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.pet-companion-button {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 18px;
+}
+
+.pet-companion-img {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 8px 14px rgba(43, 36, 28, 0.18));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.pet-companion-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-surface, #fff) 90%, transparent);
+  background: #9aa0a6;
+}
+
+.pet-companion-badge.is-running { background: #2f9e8f; }
+.pet-companion-badge.is-done { background: #4caf70; }
+.pet-companion-badge.is-interrupted { background: #d95c63; }
+.pet-companion-badge.is-idle { background: #b7b1a6; }
+
+.pet-companion-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.pet-companion-state {
+  font-size: 11px;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 78%, transparent);
+}
+
+.pet-companion-mute {
+  border: 0;
+  background: color-mix(in srgb, var(--color-surface, #fff) 70%, transparent);
+  color: color-mix(in srgb, var(--color-body, #2b241c) 70%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.pet-companion-credit {
+  margin: 0;
+  font-size: 9px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 45%, transparent);
+}
+
+.pet-usage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+  background: rgba(20, 16, 12, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+.pet-usage-panel {
+  width: min(360px, 100%);
+  max-height: min(78vh, 640px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 90%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface, #fffaf2) 96%, #f3ebe0), var(--color-surface, #fffaf2));
+  box-shadow: 0 24px 60px rgba(30, 24, 18, 0.28);
+  color: var(--color-body, #2b241c);
+  padding: 14px;
+}
+
+.pet-usage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pet-usage-brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.pet-usage-logo {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, #f4c27a 35%, transparent);
+  font-size: 18px;
+}
+
+.pet-usage-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pet-usage-sub {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 62%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.pet-usage-close {
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 70%, transparent);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.pet-usage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pet-usage-stat {
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--color-canvas, #f7f1e8) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 70%, transparent);
+}
+
+.pet-usage-stat-label {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 58%, transparent);
+}
+
+.pet-usage-stat-value {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.pet-usage-stat-foot {
+  margin-top: 2px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 55%, transparent);
+}
+
+.pet-usage-block {
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 70%, transparent);
+  background: color-mix(in srgb, var(--color-surface, #fff) 88%, transparent);
+  padding: 10px 12px;
+}
+
+.pet-usage-block-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-width: 0;
-  padding: 6px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(7, 16, 24, 0.78);
-  color: rgba(244, 239, 230, 0.9);
-  font-size: 10px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 18px rgba(7, 16, 24, 0.28);
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.orb-beacon-chip > span:first-child {
+.pet-usage-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.pet-usage-tabs button {
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 55%, transparent);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pet-usage-tabs button.is-active {
+  background: color-mix(in srgb, #efd8b0 55%, transparent);
+  color: var(--color-body, #2b241c);
+  font-weight: 650;
+}
+
+.pet-usage-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.pet-usage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.pet-usage-row span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 72%, transparent);
+}
+
+.pet-usage-row b {
   font-weight: 650;
+  white-space: nowrap;
 }
 
-.orb-beacon-chip > span:last-child {
-  flex: 0 0 auto;
-  opacity: 0.72;
+.pet-usage-row.is-total,
+.pet-usage-row.is-active span {
+  font-weight: 700;
 }
 
-.orb-beacon-chip.is-running {
-  border-color: rgba(66, 232, 208, 0.35);
+.pet-usage-empty {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 50%, transparent);
+  padding: 6px 0;
 }
 
-.orb-beacon-chip.is-success {
-  border-color: rgba(141, 255, 176, 0.28);
-}
-
-.orb-beacon-chip.is-error {
-  border-color: rgba(255, 93, 115, 0.35);
-}
-
-.orb-beacon-chip.is-empty {
-  justify-content: center;
-  opacity: 0.78;
-}
-
-.orb-beacon.is-expanded {
-  width: 168px;
-  height: 112px;
-  place-items: end center;
-}
-
-@keyframes orb-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes orb-morph {
-  0%, 100% { border-radius: 50%; transform: scale(1); }
-  40% { border-radius: 46% 54% 48% 52% / 52% 46% 54% 48%; transform: scale(1.05); }
-  70% { border-radius: 54% 46% 52% 48% / 48% 54% 46% 52%; transform: scale(0.97); }
-}
-
-@keyframes orb-breathe {
-  0%, 100% { opacity: 0.5; transform: scale(0.9); }
-  50% { opacity: 0.95; transform: scale(1.12); }
-}
-
-@keyframes orb-eye {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(0.8); }
-}
-
-@keyframes orb-ripple {
-  0% { transform: scale(1); opacity: 0.55; }
-  100% { transform: scale(2.1); opacity: 0; }
-}
-
-@keyframes orb-spark {
-  0%, 100% { opacity: 0.5; transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-42px) scale(0.85); }
-  50% { opacity: 1; transform: rotate(calc(var(--spark-index) * (360deg / max(var(--spark-count), 1)))) translateY(-46px) scale(1.15); }
-}
-
-@keyframes orb-burst {
-  0% { transform: scale(0.4); opacity: 0.75; }
-  100% { transform: scale(3.6); opacity: 0; }
-}
-
-@keyframes orb-shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-1px); }
-  75% { transform: translateX(1px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .orb-beacon-ring,
-  .orb-beacon-wave,
-  .orb-beacon-sphere,
-  .orb-beacon-glow,
-  .orb-beacon-pupil,
-  .orb-beacon-spark,
-  .orb-beacon-burst {
-    animation: none !important;
-  }
+.pet-usage-footnote {
+  margin: 10px 2px 0;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 45%, transparent);
 }
