@@ -9,7 +9,7 @@ import {
 } from "./browserControlMessageHandler";
 import { createBackgroundToolExecutor, shouldExposeTool, type BackgroundToolExecutorOptions } from "./backgroundToolRuntime";
 import { handleSidePanelRuntimeMessage, initializeSidePanelController } from "./sidePanelController";
-import { handlePetRuntimeMessage } from "./petRuntime";
+import { handlePetRuntimeMessage, reinjectPetContentScripts } from "./petRuntime";
 import type { PetRuntimeMessage } from "../shared/pet/runtime";
 import { handleChatSendMessage, type ChatSendMessage } from "./modelRequestHandler";
 import {
@@ -73,12 +73,15 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
   void installModelProviderHeaderRules();
+  // Re-inject so already-open tabs get the pet without a manual refresh.
+  void reinjectPetContentScripts();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
   void installModelProviderHeaderRules();
+  void reinjectPetContentScripts();
 });
 
 // Service worker 冷启动时也要安装，避免只依赖 onInstalled/onStartup 时会话规则丢失。

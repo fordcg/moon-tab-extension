@@ -8,6 +8,8 @@ export const PET_CHAT_SEND_TYPE = "pet.chat.send";
 export const PET_POSITION_STORAGE_KEY = "pet.pagePosition.v1";
 export const PET_MUTED_STORAGE_KEY = "pet.muted.v1";
 export const PET_PENDING_CHAT_STORAGE_KEY = "pet.pendingChat.v1";
+/** Single source of truth for the live pet mood across all pages/tabs. */
+export const PET_SNAPSHOT_STORAGE_KEY = "pet.snapshot.v1";
 
 export interface PetRuntimeSnapshot {
   state: PetState;

@@ -5,6 +5,8 @@ import {
   PET_POSITION_STORAGE_KEY,
   PET_SNAPSHOT_EVENT_TYPE,
   PET_SNAPSHOT_GET_TYPE,
+  PET_SNAPSHOT_PUBLISH_TYPE,
+  PET_SNAPSHOT_STORAGE_KEY,
   createDefaultPetSnapshot,
   resolvePublicCatAssetPath,
   type PetRuntimeSnapshot,
@@ -52,10 +54,17 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     | ((message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => void)
     | undefined;
   let automationListener: ((message: unknown) => void) | undefined;
+  let storageListener:
+    | ((changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void)
+    | undefined;
 
   const controller: FloatingPetCompanionController = {
     applySnapshot(snapshot) {
       if (!snapshot) {
+        return;
+      }
+      // Ignore stale snapshots so multi-tab writers don't rewind mood.
+      if (petSnapshot.updatedAt && snapshot.updatedAt && snapshot.updatedAt < petSnapshot.updatedAt) {
         return;
       }
       petSnapshot = snapshot;
@@ -67,6 +76,15 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     setMuted(muted) {
       petMuted = muted;
       void chrome.storage?.local?.set?.({ [PET_MUTED_STORAGE_KEY]: petMuted });
+      // Keep muted flag on the shared snapshot so every page agrees.
+      const next: PetRuntimeSnapshot = {
+        ...petSnapshot,
+        muted: petMuted,
+        bubble: petMuted ? undefined : petSnapshot.bubble,
+        updatedAt: Date.now(),
+      };
+      petSnapshot = next;
+      publishSnapshot(next);
       renderPagePet();
     },
     destroy() {
@@ -82,6 +100,10 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         chrome.runtime?.onMessage?.removeListener?.(automationListener as never);
         automationListener = undefined;
       }
+      if (storageListener) {
+        chrome.storage?.onChanged?.removeListener?.(storageListener as never);
+        storageListener = undefined;
+      }
       document.querySelectorAll(PET_HOST_SELECTOR).forEach((node) => node.remove());
       document.getElementById(PET_STYLE_ID)?.remove();
       sharedController = null;
@@ -95,6 +117,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
   async function bootstrap(): Promise<void> {
     await restorePetPrefs();
     mountPagePet();
+    await hydrateSnapshotFromStorage();
     requestLatestSnapshot();
     if (poolTimer == null) {
       poolTimer = window.setInterval(() => {
@@ -102,6 +125,24 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         renderPagePet();
       }, 60_000);
     }
+
+    // Reliable cross-page sync: storage is the shared bus.
+    storageListener = (changes, areaName) => {
+      if (areaName === "session" && changes[PET_SNAPSHOT_STORAGE_KEY]) {
+        const next = changes[PET_SNAPSHOT_STORAGE_KEY].newValue as PetRuntimeSnapshot | undefined;
+        controller.applySnapshot(next);
+      }
+      if (areaName === "local" && changes[PET_MUTED_STORAGE_KEY]) {
+        petMuted = changes[PET_MUTED_STORAGE_KEY].newValue === true;
+        renderPagePet();
+      }
+    };
+    try {
+      chrome.storage?.onChanged?.addListener?.(storageListener as never);
+    } catch {
+      // ignore
+    }
+
     if (listenRuntimeMessages) {
       runtimeListener = (message) => {
         if (!message || typeof message !== "object" || !("type" in message)) {
@@ -139,10 +180,11 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         }
         const eventType = (payload as { type?: string }).type;
         const now = Date.now();
+        let next: PetRuntimeSnapshot | undefined;
         if (eventType === "tool:start") {
           const record = (payload as { record?: { displayName?: string; name?: string } }).record;
           const label = record?.displayName || record?.name || "工具";
-          controller.applySnapshot({
+          next = {
             state: "working",
             badge: "running",
             stateLabel: "干活中",
@@ -150,33 +192,27 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
             toolLabel: label,
             muted: petMuted,
             updatedAt: now,
-          });
-          return;
-        }
-        if (eventType === "complete") {
-          controller.applySnapshot({
+          };
+        } else if (eventType === "complete") {
+          next = {
             state: "happy",
             badge: "done",
             stateLabel: "完成",
             bubble: petMuted ? undefined : "本轮完成",
             muted: petMuted,
             updatedAt: now,
-          });
-          return;
-        }
-        if (eventType === "error" || eventType === "canceled") {
-          controller.applySnapshot({
+          };
+        } else if (eventType === "error" || eventType === "canceled") {
+          next = {
             state: "error",
             badge: "interrupted",
             stateLabel: "出错",
             bubble: petMuted ? undefined : "执行失败",
             muted: petMuted,
             updatedAt: now,
-          });
-          return;
-        }
-        if (eventType === "chunk" || eventType === "assistant:tool-turn") {
-          controller.applySnapshot({
+          };
+        } else if (eventType === "chunk" || eventType === "assistant:tool-turn") {
+          next = {
             ...petSnapshot,
             state: "thinking",
             badge: "running",
@@ -184,10 +220,27 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
             bubble: petMuted ? undefined : "思考中…",
             muted: petMuted,
             updatedAt: now,
-          });
+          };
+        }
+        if (next) {
+          controller.applySnapshot(next);
+          // Publish so every other page/tab follows the same mood.
+          publishSnapshot(next);
         }
       };
       chrome.runtime?.onMessage?.addListener?.(automationListener as never);
+    }
+  }
+
+  async function hydrateSnapshotFromStorage(): Promise<void> {
+    try {
+      const items = await chrome.storage?.session?.get?.(PET_SNAPSHOT_STORAGE_KEY);
+      const value = items?.[PET_SNAPSHOT_STORAGE_KEY] as PetRuntimeSnapshot | undefined;
+      if (value && typeof value === "object" && typeof value.state === "string") {
+        controller.applySnapshot(value);
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -203,6 +256,27 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       });
     } catch {
       // ignore
+    }
+  }
+
+  function publishSnapshot(snapshot: PetRuntimeSnapshot): void {
+    try {
+      void chrome.runtime.sendMessage(
+        {
+          type: PET_SNAPSHOT_PUBLISH_TYPE,
+          snapshot,
+        },
+        () => {
+          void chrome.runtime.lastError;
+        },
+      );
+    } catch {
+      // Fallback: write storage directly when runtime is unavailable.
+      try {
+        void chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot });
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -411,6 +485,16 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
   }
 
   function sendPetChat(content: string): void {
+    const next: PetRuntimeSnapshot = {
+      state: "thinking",
+      badge: "running",
+      stateLabel: "思考中",
+      bubble: "思考中…",
+      muted: petMuted,
+      updatedAt: Date.now(),
+    };
+    controller.applySnapshot(next);
+    publishSnapshot(next);
     try {
       void chrome.runtime.sendMessage(
         {
@@ -425,15 +509,6 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     } catch {
       // ignore
     }
-    // Local optimistic feedback while side panel starts the real turn.
-    controller.applySnapshot({
-      state: "thinking",
-      badge: "running",
-      stateLabel: "思考中",
-      bubble: "思考中…",
-      muted: petMuted,
-      updatedAt: Date.now(),
-    });
   }
 
   function renderPagePet(): void {

@@ -5,6 +5,7 @@ import {
   PET_SNAPSHOT_EVENT_TYPE,
   PET_SNAPSHOT_GET_TYPE,
   PET_SNAPSHOT_PUBLISH_TYPE,
+  PET_SNAPSHOT_STORAGE_KEY,
   createDefaultPetSnapshot,
   isPetRuntimeMessage,
   type PetPendingChat,
@@ -14,6 +15,7 @@ import {
 import { openSidePanelForActiveTab, openSidePanelForTab } from "./sidePanelController";
 
 let latestSnapshot: PetRuntimeSnapshot | null = null;
+let snapshotHydrated = false;
 
 export type PetRuntimeResponse =
   | { ok: true; snapshot?: PetRuntimeSnapshot | null; message?: string; pending?: PetPendingChat | null }
@@ -29,18 +31,45 @@ export function handlePetRuntimeMessage(
   return dispatch(message, sender);
 }
 
+/** Best-effort re-inject content scripts so already-open tabs get the pet without a manual refresh. */
+export async function reinjectPetContentScripts(): Promise<void> {
+  const executeScript = chrome.scripting?.executeScript;
+  const query = chrome.tabs?.query;
+  if (typeof executeScript !== "function" || typeof query !== "function") {
+    return;
+  }
+  let tabs: chrome.tabs.Tab[] = [];
+  try {
+    tabs = await query({});
+  } catch {
+    return;
+  }
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (typeof tab.id !== "number" || !isHttpLikeUrl(tab.url)) {
+        return;
+      }
+      try {
+        await executeScript({ target: { tabId: tab.id }, files: ["content/index.js"] });
+      } catch {
+        // Restricted pages / missing host permission.
+      }
+    }),
+  );
+}
+
 async function dispatch(
   message: PetRuntimeMessage,
   sender?: chrome.runtime.MessageSender,
 ): Promise<PetRuntimeResponse> {
   if (message.type === PET_SNAPSHOT_GET_TYPE) {
-    return { ok: true, snapshot: latestSnapshot ?? createDefaultPetSnapshot() };
+    const snapshot = await getLatestSnapshot();
+    return { ok: true, snapshot };
   }
 
   if (message.type === PET_SNAPSHOT_PUBLISH_TYPE) {
-    latestSnapshot = normalizeSnapshot(message.snapshot);
-    await broadcastSnapshot(latestSnapshot);
-    return { ok: true, snapshot: latestSnapshot };
+    const snapshot = await setLatestSnapshot(message.snapshot);
+    return { ok: true, snapshot };
   }
 
   if (message.type === PET_OPEN_SIDE_PANEL_TYPE) {
@@ -67,20 +96,17 @@ async function dispatch(
       // ignore
     }
 
-    // Optimistic pet feedback before the side panel takes over.
-    const thinkingSnapshot: PetRuntimeSnapshot = {
+    const current = await getLatestSnapshot();
+    await setLatestSnapshot({
       state: "thinking",
       badge: "running",
       stateLabel: "思考中",
       bubble: "思考中…",
-      muted: latestSnapshot?.muted,
+      muted: current.muted,
       updatedAt: Date.now(),
-    };
-    latestSnapshot = thinkingSnapshot;
-    await broadcastSnapshot(thinkingSnapshot);
+    });
 
     const opened = await openSidePanelFromSender(sender);
-    // Also notify any already-open side panel pages.
     try {
       await chrome.runtime.sendMessage({
         type: PET_CHAT_SEND_TYPE,
@@ -89,7 +115,7 @@ async function dispatch(
         pendingId: pending.id,
       });
     } catch {
-      // No side-panel listener yet; it will pick up from session storage on mount.
+      // Side panel will pick up from session storage on mount.
     }
 
     return opened
@@ -97,8 +123,49 @@ async function dispatch(
       : { ok: false, message: "消息已排队，但打开侧栏失败；请点击扩展图标打开后继续" };
   }
 
-  // PET_SNAPSHOT_EVENT_TYPE is outbound only
-  return { ok: true, snapshot: latestSnapshot };
+  return { ok: true, snapshot: await getLatestSnapshot() };
+}
+
+async function getLatestSnapshot(): Promise<PetRuntimeSnapshot> {
+  if (!snapshotHydrated) {
+    await hydrateSnapshotFromStorage();
+  }
+  return latestSnapshot ?? createDefaultPetSnapshot();
+}
+
+async function setLatestSnapshot(snapshot: PetRuntimeSnapshot): Promise<PetRuntimeSnapshot> {
+  const normalized = normalizeSnapshot(snapshot);
+  // Ignore stale writes so concurrent tabs/side-panel don't rewind state.
+  if (latestSnapshot && normalized.updatedAt < (latestSnapshot.updatedAt || 0)) {
+    return latestSnapshot;
+  }
+  latestSnapshot = normalized;
+  snapshotHydrated = true;
+  try {
+    await chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: normalized });
+  } catch {
+    // ignore
+  }
+  // Best-effort push for already-listening pages; storage.onChanged is the reliable path.
+  void broadcastSnapshot(normalized);
+  return normalized;
+}
+
+async function hydrateSnapshotFromStorage(): Promise<void> {
+  snapshotHydrated = true;
+  try {
+    const items = await chrome.storage?.session?.get?.(PET_SNAPSHOT_STORAGE_KEY);
+    const value = items?.[PET_SNAPSHOT_STORAGE_KEY];
+    if (value && typeof value === "object" && typeof (value as { state?: unknown }).state === "string") {
+      latestSnapshot = normalizeSnapshot(value as PetRuntimeSnapshot);
+      return;
+    }
+  } catch {
+    // ignore
+  }
+  if (!latestSnapshot) {
+    latestSnapshot = createDefaultPetSnapshot();
+  }
 }
 
 function normalizeSnapshot(snapshot: PetRuntimeSnapshot): PetRuntimeSnapshot {
@@ -116,6 +183,13 @@ async function broadcastSnapshot(snapshot: PetRuntimeSnapshot): Promise<void> {
   } as const;
 
   try {
+    // Extension pages (newtab/side panel) listen via runtime.onMessage.
+    void chrome.runtime.sendMessage(event).catch(() => undefined);
+  } catch {
+    // ignore
+  }
+
+  try {
     const tabs = await chrome.tabs.query({});
     await Promise.all(
       tabs.map(async (tab) => {
@@ -125,7 +199,7 @@ async function broadcastSnapshot(snapshot: PetRuntimeSnapshot): Promise<void> {
         try {
           await chrome.tabs.sendMessage(tab.id, event);
         } catch {
-          // Content script may be missing on chrome:// and similar pages.
+          // Content script may be missing.
         }
       }),
     );
@@ -143,4 +217,16 @@ async function openSidePanelFromSender(sender?: chrome.runtime.MessageSender): P
     }
   }
   return openSidePanelForActiveTab();
+}
+
+function isHttpLikeUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "file:";
+  } catch {
+    return false;
+  }
 }

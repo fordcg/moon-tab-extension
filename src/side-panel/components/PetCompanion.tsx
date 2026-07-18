@@ -5,6 +5,7 @@ import {
   PET_CHAT_SEND_TYPE,
   PET_PENDING_CHAT_STORAGE_KEY,
   PET_SNAPSHOT_PUBLISH_TYPE,
+  PET_SNAPSHOT_STORAGE_KEY,
   petStateLabel,
   type PetPendingChat,
   type PetRuntimeSnapshot,
@@ -54,6 +55,13 @@ function publishPetSnapshot(snapshot: PetRuntimeSnapshot): void {
     );
   } catch {
     // Side panel may run outside extension runtime in unit tests.
+  }
+  // Direct storage write as a second path so newtab/content pick up via onChanged
+  // even if the service worker is mid-restart.
+  try {
+    void chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot });
+  } catch {
+    // ignore
   }
 }
 

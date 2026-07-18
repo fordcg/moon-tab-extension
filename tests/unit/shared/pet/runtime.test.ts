@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PET_CHAT_SEND_TYPE,
+  PET_SNAPSHOT_STORAGE_KEY,
   createDefaultPetSnapshot,
   isPetRuntimeMessage,
   petStateLabel,
@@ -26,5 +27,9 @@ describe("pet runtime helpers", () => {
 
   it("recognizes pet chat send messages", () => {
     expect(isPetRuntimeMessage({ type: PET_CHAT_SEND_TYPE, content: "hi" })).toBe(true);
+  });
+
+  it("exports a stable snapshot storage key for cross-page sync", () => {
+    expect(PET_SNAPSHOT_STORAGE_KEY).toBe("pet.snapshot.v1");
   });
 });
