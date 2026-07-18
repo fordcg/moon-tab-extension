@@ -144,8 +144,28 @@ const openAiSidebar = () => {
     return;
   }
 
-  // sidePanel.open() 必须同步运行在用户手势任务内，任何 await 都会丢失手势，
-  // 因此用启动时预取并缓存的 windowId，避免在点击处理里再 await tabs.query。
+  // Prefer runtime helper so tab-scoped open is used (windowId can throw
+  // "No active side panel for windowId" when panel is tab-enabled only).
+  try {
+    const openResult = extensionApi.runtime?.sendMessage?.({ type: "pet.openSidePanel" });
+    if (openResult && typeof openResult.then === "function") {
+      void openResult
+        .then((response) => {
+          if (response?.ok === false) {
+            setSearchStatus(response.message || "打开 AI 侧边栏失败。", "error");
+            return;
+          }
+          setSearchStatus("已打开 AI 助手侧边栏。", "success");
+        })
+        .catch((error) => {
+          setSearchStatus(error instanceof Error ? error.message : "打开 AI 侧边栏失败。", "error");
+        });
+      return;
+    }
+  } catch {
+    // Fall through to local open.
+  }
+
   if (typeof cachedSidebarWindowId !== "number") {
     setSearchStatus("正在准备 AI 侧边栏，请再点一次。", "error");
     void refreshSidebarWindowId();

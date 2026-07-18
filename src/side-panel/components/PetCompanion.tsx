@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ChatToolCallRecord } from "../../shared/types";
 import { derivePetState } from "../../shared/pet/derivePetState";
 import {
+  PET_CHAT_SEND_TYPE,
+  PET_PENDING_CHAT_STORAGE_KEY,
   PET_SNAPSHOT_PUBLISH_TYPE,
   petStateLabel,
+  type PetPendingChat,
   type PetRuntimeSnapshot,
 } from "../../shared/pet/runtime";
 import { useAppStore } from "../state/appStore";
@@ -54,9 +57,25 @@ function publishPetSnapshot(snapshot: PetRuntimeSnapshot): void {
   }
 }
 
+async function clearPendingPetChat(pendingId?: string): Promise<void> {
+  try {
+    if (!pendingId) {
+      await chrome.storage?.session?.remove?.(PET_PENDING_CHAT_STORAGE_KEY);
+      return;
+    }
+    const items = await chrome.storage?.session?.get?.(PET_PENDING_CHAT_STORAGE_KEY);
+    const pending = items?.[PET_PENDING_CHAT_STORAGE_KEY] as PetPendingChat | undefined;
+    if (!pending || pending.id === pendingId) {
+      await chrome.storage?.session?.remove?.(PET_PENDING_CHAT_STORAGE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 /**
- * Side-panel publisher + usage entry.
- * The visible draggable pet lives in the content script on every web page.
+ * Side-panel publisher + usage entry + pet chat intake.
+ * The visible draggable pet lives on webpages / newtab.
  */
 export function PetCompanion() {
   const activeSessionId = useAppStore((state) => state.activeSessionId);
@@ -66,11 +85,17 @@ export function PetCompanion() {
   const sending = useAppStore((state) => state.sending);
   const pendingBoundaryChoice = useAppStore((state) => state.pendingBoundaryChoice);
   const chatTasksBySessionId = useAppStore((state) => state.chatTasksBySessionId);
+  const createChatSession = useAppStore((state) => state.createChatSession);
+  const sendChatMessage = useAppStore((state) => state.sendChatMessage);
+  const loadChatData = useAppStore((state) => state.loadChatData);
+  const syncRestoreBarrierActive = useAppStore((state) => state.syncRestoreBarrierActive);
   const [panelOpen, setPanelOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [completedUntil, setCompletedUntil] = useState(0);
   const [prevSending, setPrevSending] = useState(false);
+  const handlingPetChatRef = useRef(false);
+  const handledPendingIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -83,6 +108,75 @@ export function PetCompanion() {
     }
     setPrevSending(sending);
   }, [sending, prevSending]);
+
+  const handlePetChat = async (content: string, pendingId?: string) => {
+    const text = content.trim();
+    if (!text || handlingPetChatRef.current || syncRestoreBarrierActive) {
+      return;
+    }
+    if (pendingId && handledPendingIdsRef.current.has(pendingId)) {
+      return;
+    }
+    if (pendingId) {
+      handledPendingIdsRef.current.add(pendingId);
+    }
+    handlingPetChatRef.current = true;
+    try {
+      // One-shot memory: every pet chat starts a fresh session.
+      await createChatSession({ preserveSelectedModel: true });
+      await sendChatMessage(text);
+      await clearPendingPetChat(pendingId);
+    } catch {
+      if (pendingId) {
+        handledPendingIdsRef.current.delete(pendingId);
+      }
+    } finally {
+      handlingPetChatRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const consumePending = async () => {
+      try {
+        const items = await chrome.storage?.session?.get?.(PET_PENDING_CHAT_STORAGE_KEY);
+        const pending = items?.[PET_PENDING_CHAT_STORAGE_KEY] as PetPendingChat | undefined;
+        if (!pending?.content || cancelled) {
+          return;
+        }
+        await handlePetChat(pending.content, pending.id);
+      } catch {
+        // ignore
+      }
+    };
+
+    void loadChatData().then(() => {
+      if (!cancelled) {
+        void consumePending();
+      }
+    });
+
+    const runtime = globalThis.chrome?.runtime;
+    const onMessage = (message: unknown) => {
+      if (!message || typeof message !== "object" || !("type" in message)) {
+        return;
+      }
+      if ((message as { type?: string }).type !== PET_CHAT_SEND_TYPE) {
+        return;
+      }
+      const content = String((message as { content?: unknown }).content || "");
+      const pendingId = typeof (message as { pendingId?: unknown }).pendingId === "string"
+        ? (message as { pendingId: string }).pendingId
+        : undefined;
+      void handlePetChat(content, pendingId);
+    };
+    runtime?.onMessage?.addListener?.(onMessage);
+    return () => {
+      cancelled = true;
+      runtime?.onMessage?.removeListener?.(onMessage);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadChatData, syncRestoreBarrierActive]);
 
   const activeSession = useMemo(() => {
     if (privateModeActive && privateChatSession) {
@@ -143,7 +237,7 @@ export function PetCompanion() {
           type="button"
           className="pet-side-chip-button"
           onClick={() => setPanelOpen(true)}
-          title="打开用量面板；页面右下角可拖动浮宠"
+          title="打开用量面板；页面右键浮宠可对话"
         >
           <span className={`pet-side-chip-dot is-${snapshot.badge || "idle"}`} aria-hidden="true" />
           <span className="pet-side-chip-label">{snapshot.stateLabel}</span>

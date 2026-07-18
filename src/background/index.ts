@@ -207,7 +207,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
     return true;
   }
 
-  const petResponse = handlePetRuntimeMessage(message);
+  const petResponse = handlePetRuntimeMessage(message, sender);
   if (petResponse) {
     void petResponse.then(sendResponse);
     return true;

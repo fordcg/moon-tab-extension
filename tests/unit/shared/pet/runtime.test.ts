@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  PET_CHAT_SEND_TYPE,
   createDefaultPetSnapshot,
+  isPetRuntimeMessage,
   petStateLabel,
   resolvePublicCatAssetPath,
 } from "../../../../src/shared/pet/runtime";
@@ -20,5 +22,9 @@ describe("pet runtime helpers", () => {
     const snapshot = createDefaultPetSnapshot(123);
     expect(snapshot.state).toBe("idle");
     expect(snapshot.updatedAt).toBe(123);
+  });
+
+  it("recognizes pet chat send messages", () => {
+    expect(isPetRuntimeMessage({ type: PET_CHAT_SEND_TYPE, content: "hi" })).toBe(true);
   });
 });

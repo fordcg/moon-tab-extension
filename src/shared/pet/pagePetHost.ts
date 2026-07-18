@@ -1,4 +1,5 @@
 import {
+  PET_CHAT_SEND_TYPE,
   PET_MUTED_STORAGE_KEY,
   PET_OPEN_SIDE_PANEL_TYPE,
   PET_POSITION_STORAGE_KEY,
@@ -220,8 +221,15 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         </button>
         <div class="moon-pet-meta">
           <span class="moon-pet-state">待命</span>
-          <button type="button" class="moon-pet-mute">气泡</button>
         </div>
+        <div class="moon-pet-menu" hidden>
+          <button type="button" data-pet-action="chat">对话</button>
+          <button type="button" data-pet-action="open">打开侧栏</button>
+          <button type="button" data-pet-action="mute">静音气泡</button>
+        </div>
+        <form class="moon-pet-composer" hidden>
+          <input class="moon-pet-input" type="text" maxlength="2000" placeholder="跟宠物说点什么…" autocomplete="off" />
+        </form>
       `;
       root.appendChild(host);
       wirePetInteractions(host);
@@ -232,7 +240,9 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
   function wirePetInteractions(host: HTMLElement): void {
     const button = host.querySelector<HTMLButtonElement>(".moon-pet-button");
-    const muteButton = host.querySelector<HTMLButtonElement>(".moon-pet-mute");
+    const menu = host.querySelector<HTMLElement>(".moon-pet-menu");
+    const composer = host.querySelector<HTMLFormElement>(".moon-pet-composer");
+    const input = host.querySelector<HTMLInputElement>(".moon-pet-input");
     if (!button || button.dataset.wired === "1") {
       return;
     }
@@ -253,6 +263,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         return;
       }
       event.preventDefault();
+      hideMenu();
       button.setPointerCapture(event.pointerId);
       const rect = host.getBoundingClientRect();
       drag.pointerId = event.pointerId;
@@ -304,12 +315,124 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
-      controller.setMuted(!petMuted);
+      event.stopPropagation();
+      toggleMenu();
     });
 
-    muteButton?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      controller.setMuted(!petMuted);
+    menu?.querySelectorAll<HTMLButtonElement>("[data-pet-action]").forEach((item) => {
+      item.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const action = item.dataset.petAction;
+        hideMenu();
+        if (action === "chat") {
+          showComposer();
+          return;
+        }
+        if (action === "open") {
+          openSidePanelFromPet();
+          return;
+        }
+        if (action === "mute") {
+          controller.setMuted(!petMuted);
+        }
+      });
+    });
+
+    composer?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const content = input?.value.trim() ?? "";
+      if (!content) {
+        return;
+      }
+      sendPetChat(content);
+      if (input) {
+        input.value = "";
+      }
+      hideComposer();
+    });
+
+    document.addEventListener("pointerdown", (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (!host.contains(target)) {
+        hideMenu();
+      }
+    });
+  }
+
+  function toggleMenu(): void {
+    const host = document.querySelector<HTMLElement>(PET_HOST_SELECTOR);
+    const menu = host?.querySelector<HTMLElement>(".moon-pet-menu");
+    if (!menu) {
+      return;
+    }
+    menu.hidden = !menu.hidden;
+    if (!menu.hidden) {
+      hideComposer();
+      const muteButton = menu.querySelector<HTMLButtonElement>('[data-pet-action="mute"]');
+      if (muteButton) {
+        muteButton.textContent = petMuted ? "取消静音" : "静音气泡";
+      }
+    }
+  }
+
+  function hideMenu(): void {
+    const host = document.querySelector<HTMLElement>(PET_HOST_SELECTOR);
+    const menu = host?.querySelector<HTMLElement>(".moon-pet-menu");
+    if (menu) {
+      menu.hidden = true;
+    }
+  }
+
+  function showComposer(): void {
+    const host = document.querySelector<HTMLElement>(PET_HOST_SELECTOR);
+    const composer = host?.querySelector<HTMLFormElement>(".moon-pet-composer");
+    const input = host?.querySelector<HTMLInputElement>(".moon-pet-input");
+    if (!composer || !input) {
+      return;
+    }
+    hideMenu();
+    composer.hidden = false;
+    window.requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  }
+
+  function hideComposer(): void {
+    const host = document.querySelector<HTMLElement>(PET_HOST_SELECTOR);
+    const composer = host?.querySelector<HTMLFormElement>(".moon-pet-composer");
+    if (composer) {
+      composer.hidden = true;
+    }
+  }
+
+  function sendPetChat(content: string): void {
+    try {
+      void chrome.runtime.sendMessage(
+        {
+          type: PET_CHAT_SEND_TYPE,
+          content,
+          source: options.openSidePanel ? "newtab" : "page",
+        },
+        () => {
+          void chrome.runtime.lastError;
+        },
+      );
+    } catch {
+      // ignore
+    }
+    // Local optimistic feedback while side panel starts the real turn.
+    controller.applySnapshot({
+      state: "thinking",
+      badge: "running",
+      stateLabel: "思考中",
+      bubble: "思考中…",
+      muted: petMuted,
+      updatedAt: Date.now(),
     });
   }
 
@@ -322,8 +445,8 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     const bubble = host.querySelector<HTMLElement>(".moon-pet-bubble");
     const stateEl = host.querySelector<HTMLElement>(".moon-pet-state");
     const badge = host.querySelector<HTMLElement>(".moon-pet-badge");
-    const muteButton = host.querySelector<HTMLButtonElement>(".moon-pet-mute");
     const button = host.querySelector<HTMLButtonElement>(".moon-pet-button");
+    const muteMenuItem = host.querySelector<HTMLButtonElement>('[data-pet-action="mute"]');
 
     host.dataset.state = petSnapshot.state;
     host.dataset.badge = petSnapshot.badge || "idle";
@@ -344,9 +467,8 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       badge.className = `moon-pet-badge is-${petSnapshot.badge || "idle"}`;
     }
 
-    if (muteButton) {
-      muteButton.textContent = petMuted ? "静音" : "气泡";
-      muteButton.setAttribute("aria-pressed", petMuted ? "true" : "false");
+    if (muteMenuItem) {
+      muteMenuItem.textContent = petMuted ? "取消静音" : "静音气泡";
     }
 
     if (bubble) {
@@ -361,7 +483,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     }
 
     if (button) {
-      const label = `${petSnapshot.stateLabel || "待命"} · 点击打开侧栏`;
+      const label = `${petSnapshot.stateLabel || "待命"} · 左键打开侧栏 · 右键菜单`;
       button.title = label;
       button.setAttribute("aria-label", label);
     }
@@ -521,15 +643,50 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         color: rgba(43,36,28,.78);
         text-shadow: 0 1px 0 rgba(255,255,255,.55);
       }
-      .moon-pet-mute {
+      .moon-pet-menu {
+        display: grid;
+        gap: 4px;
+        min-width: 108px;
+        padding: 6px;
+        border-radius: 12px;
+        border: 1px solid rgba(43,36,28,.12);
+        background: rgba(255,250,242,.96);
+        box-shadow: 0 10px 24px rgba(43,36,28,.16);
+      }
+      .moon-pet-menu[hidden] { display: none !important; }
+      .moon-pet-menu button {
         border: 0;
-        background: rgba(255,250,242,.82);
-        color: rgba(43,36,28,.72);
-        border-radius: 999px;
-        padding: 2px 7px;
-        font-size: 10px;
+        background: transparent;
+        color: rgba(43,36,28,.86);
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 12px;
+        text-align: left;
         cursor: pointer;
-        box-shadow: 0 2px 8px rgba(43,36,28,.12);
+      }
+      .moon-pet-menu button:hover {
+        background: rgba(239,216,176,.45);
+      }
+      .moon-pet-composer {
+        width: 168px;
+        margin-top: 2px;
+      }
+      .moon-pet-composer[hidden] { display: none !important; }
+      .moon-pet-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid rgba(43,36,28,.14);
+        border-radius: 999px;
+        background: rgba(255,250,242,.96);
+        color: #2b241c;
+        padding: 8px 12px;
+        font-size: 12px;
+        outline: none;
+        box-shadow: 0 6px 18px rgba(43,36,28,.12);
+      }
+      .moon-pet-input:focus {
+        border-color: rgba(47,158,143,.55);
+        box-shadow: 0 0 0 3px rgba(47,158,143,.14), 0 6px 18px rgba(43,36,28,.12);
       }
       @media (prefers-reduced-motion: reduce) {
         .moon-pet-img { filter: drop-shadow(0 4px 8px rgba(43,36,28,.14)); }

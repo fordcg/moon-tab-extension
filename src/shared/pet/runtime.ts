@@ -4,8 +4,10 @@ export const PET_SNAPSHOT_PUBLISH_TYPE = "pet.snapshot.publish";
 export const PET_SNAPSHOT_GET_TYPE = "pet.snapshot.get";
 export const PET_SNAPSHOT_EVENT_TYPE = "pet.snapshot.event";
 export const PET_OPEN_SIDE_PANEL_TYPE = "pet.openSidePanel";
+export const PET_CHAT_SEND_TYPE = "pet.chat.send";
 export const PET_POSITION_STORAGE_KEY = "pet.pagePosition.v1";
 export const PET_MUTED_STORAGE_KEY = "pet.muted.v1";
+export const PET_PENDING_CHAT_STORAGE_KEY = "pet.pendingChat.v1";
 
 export interface PetRuntimeSnapshot {
   state: PetState;
@@ -15,6 +17,13 @@ export interface PetRuntimeSnapshot {
   stateLabel: string;
   muted?: boolean;
   updatedAt: number;
+}
+
+export interface PetPendingChat {
+  id: string;
+  content: string;
+  createdAt: number;
+  source?: "page" | "newtab";
 }
 
 export interface PetSnapshotPublishMessage {
@@ -35,11 +44,19 @@ export interface PetOpenSidePanelMessage {
   type: typeof PET_OPEN_SIDE_PANEL_TYPE;
 }
 
+export interface PetChatSendMessage {
+  type: typeof PET_CHAT_SEND_TYPE;
+  content: string;
+  source?: "page" | "newtab";
+  pendingId?: string;
+}
+
 export type PetRuntimeMessage =
   | PetSnapshotPublishMessage
   | PetSnapshotGetMessage
   | PetSnapshotEventMessage
-  | PetOpenSidePanelMessage;
+  | PetOpenSidePanelMessage
+  | PetChatSendMessage;
 
 export function isPetRuntimeMessage(value: unknown): value is PetRuntimeMessage {
   if (!value || typeof value !== "object" || !("type" in value)) {
@@ -50,7 +67,8 @@ export function isPetRuntimeMessage(value: unknown): value is PetRuntimeMessage 
     type === PET_SNAPSHOT_PUBLISH_TYPE ||
     type === PET_SNAPSHOT_GET_TYPE ||
     type === PET_SNAPSHOT_EVENT_TYPE ||
-    type === PET_OPEN_SIDE_PANEL_TYPE
+    type === PET_OPEN_SIDE_PANEL_TYPE ||
+    type === PET_CHAT_SEND_TYPE
   );
 }
 

@@ -81,16 +81,28 @@ export function handleSidePanelRuntimeMessage(message: SidePanelRuntimeMessage):
 
 /**
  * Keep the AI assistant side panel available while browser automation creates/switches tabs.
- * The in-page control beacon is intentionally removed; only tab/window side-panel inheritance remains.
+ * Prefer tab-scoped open: windowId open fails with "No active side panel for windowId"
+ * when the panel is only enabled for specific tabs.
  */
 export async function ensureSidePanelForControlledTab(tabId: number | undefined): Promise<boolean> {
   if (typeof tabId !== "number") {
     return false;
   }
   markRecentlyCreatedTab(tabId);
-  await rememberOpenedSidePanelTab(tabId);
+  return openSidePanelForTab(tabId);
+}
+
+/** Open the AI side panel for a concrete tab (tab-scoped first, window fallback). */
+export async function openSidePanelForTab(tabId: number): Promise<boolean> {
   if (!enableTabScopedSidePanel(tabId)) {
     return false;
+  }
+
+  try {
+    await chrome.sidePanel?.open?.({ tabId });
+    return true;
+  } catch {
+    // Some Chromium builds only accept windowId after options are set.
   }
 
   let windowId: number | undefined;
@@ -101,17 +113,12 @@ export async function ensureSidePanelForControlledTab(tabId: number | undefined)
     windowId = undefined;
   }
 
-  try {
-    if (typeof windowId === "number") {
-      await chrome.sidePanel?.open?.({ windowId });
-      return true;
-    }
-  } catch {
-    // Fall through to tab-scoped open.
+  if (typeof windowId !== "number") {
+    return false;
   }
 
   try {
-    await chrome.sidePanel?.open?.({ tabId });
+    await chrome.sidePanel?.open?.({ windowId });
     return true;
   } catch {
     try {
@@ -120,6 +127,19 @@ export async function ensureSidePanelForControlledTab(tabId: number | undefined)
     } catch {
       return false;
     }
+  }
+}
+
+/** Open the AI side panel for the currently active tab. */
+export async function openSidePanelForActiveTab(): Promise<boolean> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (typeof tab?.id !== "number") {
+      return false;
+    }
+    return openSidePanelForTab(tab.id);
+  } catch {
+    return false;
   }
 }
 
@@ -133,16 +153,8 @@ function openTabScopedSidePanel(tabId: number | undefined): boolean {
     return false;
   }
 
-  if (!enableTabScopedSidePanel(tabId)) {
-    return false;
-  }
-
-  try {
-    void chrome.sidePanel?.open?.({ tabId })?.catch(() => undefined);
-    return true;
-  } catch {
-    return false;
-  }
+  void openSidePanelForTab(tabId);
+  return true;
 }
 
 function enableTabScopedSidePanel(tabId: number | undefined): boolean {

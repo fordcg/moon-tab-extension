@@ -1,28 +1,38 @@
 import {
+  PET_CHAT_SEND_TYPE,
   PET_OPEN_SIDE_PANEL_TYPE,
+  PET_PENDING_CHAT_STORAGE_KEY,
   PET_SNAPSHOT_EVENT_TYPE,
   PET_SNAPSHOT_GET_TYPE,
   PET_SNAPSHOT_PUBLISH_TYPE,
   createDefaultPetSnapshot,
   isPetRuntimeMessage,
+  type PetPendingChat,
   type PetRuntimeMessage,
   type PetRuntimeSnapshot,
 } from "../shared/pet/runtime";
+import { openSidePanelForActiveTab, openSidePanelForTab } from "./sidePanelController";
 
 let latestSnapshot: PetRuntimeSnapshot | null = null;
 
 export type PetRuntimeResponse =
-  | { ok: true; snapshot?: PetRuntimeSnapshot | null; message?: string }
+  | { ok: true; snapshot?: PetRuntimeSnapshot | null; message?: string; pending?: PetPendingChat | null }
   | { ok: false; message: string };
 
-export function handlePetRuntimeMessage(message: unknown): Promise<PetRuntimeResponse> | undefined {
+export function handlePetRuntimeMessage(
+  message: unknown,
+  sender?: chrome.runtime.MessageSender,
+): Promise<PetRuntimeResponse> | undefined {
   if (!isPetRuntimeMessage(message)) {
     return undefined;
   }
-  return dispatch(message);
+  return dispatch(message, sender);
 }
 
-async function dispatch(message: PetRuntimeMessage): Promise<PetRuntimeResponse> {
+async function dispatch(
+  message: PetRuntimeMessage,
+  sender?: chrome.runtime.MessageSender,
+): Promise<PetRuntimeResponse> {
   if (message.type === PET_SNAPSHOT_GET_TYPE) {
     return { ok: true, snapshot: latestSnapshot ?? createDefaultPetSnapshot() };
   }
@@ -34,10 +44,57 @@ async function dispatch(message: PetRuntimeMessage): Promise<PetRuntimeResponse>
   }
 
   if (message.type === PET_OPEN_SIDE_PANEL_TYPE) {
-    const opened = await openSidePanelInActiveTab();
+    const opened = await openSidePanelFromSender(sender);
     return opened
       ? { ok: true, message: "已打开 AI 侧栏" }
       : { ok: false, message: "打开侧栏失败，请点击扩展图标重试" };
+  }
+
+  if (message.type === PET_CHAT_SEND_TYPE) {
+    const content = String(message.content || "").trim();
+    if (!content) {
+      return { ok: false, message: "消息不能为空" };
+    }
+    const pending: PetPendingChat = {
+      id: `pet-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      content,
+      createdAt: Date.now(),
+      source: message.source === "newtab" ? "newtab" : "page",
+    };
+    try {
+      await chrome.storage?.session?.set?.({ [PET_PENDING_CHAT_STORAGE_KEY]: pending });
+    } catch {
+      // ignore
+    }
+
+    // Optimistic pet feedback before the side panel takes over.
+    const thinkingSnapshot: PetRuntimeSnapshot = {
+      state: "thinking",
+      badge: "running",
+      stateLabel: "思考中",
+      bubble: "思考中…",
+      muted: latestSnapshot?.muted,
+      updatedAt: Date.now(),
+    };
+    latestSnapshot = thinkingSnapshot;
+    await broadcastSnapshot(thinkingSnapshot);
+
+    const opened = await openSidePanelFromSender(sender);
+    // Also notify any already-open side panel pages.
+    try {
+      await chrome.runtime.sendMessage({
+        type: PET_CHAT_SEND_TYPE,
+        content: pending.content,
+        source: pending.source,
+        pendingId: pending.id,
+      });
+    } catch {
+      // No side-panel listener yet; it will pick up from session storage on mount.
+    }
+
+    return opened
+      ? { ok: true, message: "已发送到 AI 侧栏", pending }
+      : { ok: false, message: "消息已排队，但打开侧栏失败；请点击扩展图标打开后继续" };
   }
 
   // PET_SNAPSHOT_EVENT_TYPE is outbound only
@@ -77,33 +134,13 @@ async function broadcastSnapshot(snapshot: PetRuntimeSnapshot): Promise<void> {
   }
 }
 
-async function openSidePanelInActiveTab(): Promise<boolean> {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (typeof tab?.id !== "number") {
-      return false;
-    }
-    try {
-      await chrome.sidePanel?.setOptions?.({ tabId: tab.id, path: "index.html", enabled: true });
-    } catch {
-      // ignore
-    }
-    try {
-      if (typeof tab.windowId === "number") {
-        await chrome.sidePanel?.open?.({ windowId: tab.windowId });
-      } else {
-        await chrome.sidePanel?.open?.({ tabId: tab.id });
-      }
+async function openSidePanelFromSender(sender?: chrome.runtime.MessageSender): Promise<boolean> {
+  const senderTabId = typeof sender?.tab?.id === "number" ? sender.tab.id : undefined;
+  if (typeof senderTabId === "number") {
+    const opened = await openSidePanelForTab(senderTabId);
+    if (opened) {
       return true;
-    } catch {
-      try {
-        void chrome.sidePanel?.open?.({ tabId: tab.id })?.catch(() => undefined);
-        return true;
-      } catch {
-        return false;
-      }
     }
-  } catch {
-    return false;
   }
+  return openSidePanelForActiveTab();
 }
