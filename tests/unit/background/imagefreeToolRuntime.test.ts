@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   executeImagefreeGenerateTool,
   IMAGEFREE_TOOL_NAME,
+  setImagefreePageGenerateRunnerForTests,
   setImagefreeTurnstileTokenResolverForTests,
 } from "../../../src/background/imagefreeToolRuntime";
 import type { ModelToolCall } from "../../../src/shared/models/types";
@@ -17,6 +18,7 @@ function createToolCall(argumentsValue: Record<string, unknown>): ModelToolCall 
 describe("Imagefree 图片生成工具", () => {
   afterEach(() => {
     setImagefreeTurnstileTokenResolverForTests(undefined);
+    setImagefreePageGenerateRunnerForTests(undefined);
   });
 
   it("参数非法时在网络请求前 fail closed", async () => {
@@ -49,7 +51,37 @@ describe("Imagefree 图片生成工具", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("提交任务后轮询状态并返回图片 URL，且携带真实 Turnstile token", async () => {
+  it("页面同源路径：完成 Turnstile 后返回图片 URL", async () => {
+    setImagefreePageGenerateRunnerForTests(async (input) => ({
+      ok: true,
+      taskId: "task-page-1",
+      status: "completed",
+      progress: 100,
+      image: "https://pub-62e693a7058040f98bba94ed1d6f880b.r2.dev/images/demo.png",
+      imageUrl: "https://pub-62e693a7058040f98bba94ed1d6f880b.r2.dev/images/demo.png",
+      prompt: input.prompt,
+      aspect_ratio: input.aspect_ratio,
+    }));
+    const fetcher = vi.fn();
+
+    const result = await executeImagefreeGenerateTool(
+      createToolCall({ prompt: "生成一个美女", aspect_ratio: "1:1" }),
+      fetcher as unknown as typeof fetch,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.content)).toMatchObject({
+      ok: true,
+      taskId: "task-page-1",
+      image: "https://pub-62e693a7058040f98bba94ed1d6f880b.r2.dev/images/demo.png",
+      prompt: "生成一个美女",
+      aspect_ratio: "1:1",
+    });
+    // Same-origin page path should not use service-worker fetch.
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("测试兜底路径：提交任务后轮询状态并返回图片 URL，且携带真实 Turnstile token", async () => {
     setImagefreeTurnstileTokenResolverForTests(async () => "turnstile-token-demo");
     const fetcher = vi.fn()
       .mockResolvedValueOnce(Response.json({ taskId: "task-1", status: "pending" }))
@@ -91,14 +123,10 @@ describe("Imagefree 图片生成工具", () => {
   });
 
   it("人机验证失败时附带可操作提示", async () => {
-    setImagefreeTurnstileTokenResolverForTests(async () => "bad-token");
-    const fetcher = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: "Human verification failed. Please complete the setup or refresh the page to try again." }), {
-        status: 400,
-        statusText: "",
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    setImagefreePageGenerateRunnerForTests(async () => {
+      throw new Error("Human verification failed. Please complete the setup or refresh the page to try again.");
+    });
+    const fetcher = vi.fn();
 
     const result = await executeImagefreeGenerateTool(
       createToolCall({ prompt: "moon" }),
