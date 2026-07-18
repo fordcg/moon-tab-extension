@@ -8121,3 +8121,37 @@ body.sidepanel-stop-requested .composer-abort-button {
   font-size: 10px;
   color: color-mix(in srgb, var(--color-body, #2b241c) 45%, transparent);
 }
+
+
+/* Generated image URLs rendered inside assistant bubbles / tool results */
+.message-generated-image-link {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
+  background: color-mix(in srgb, var(--color-canvas, #f7f1e8) 70%, transparent);
+}
+
+.message-generated-image {
+  display: block;
+  max-width: min(100%, 420px);
+  max-height: 420px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.message-tool-result-text pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.message-tool-result-images {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type AnchorHTMLAttributes, type ImgHTMLAttributes, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatNetworkAttachmentSummary, redactNetworkRequestDetail } from "../../shared/networkContext";
@@ -475,8 +475,17 @@ export function MessageList({
                     <PromptTokenLinks prompts={message.promptInvocations} ariaLabelPrefix="用户消息提示词" />
                   ) : null}
                   {hasVisibleContent ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: MarkdownCodeBlock, pre: MarkdownCodePre, table: MarkdownTableBlock }}>
-                      {message.content}
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code: MarkdownCodeBlock,
+                        pre: MarkdownCodePre,
+                        table: MarkdownTableBlock,
+                        a: MarkdownLink,
+                        img: MarkdownImage,
+                      }}
+                    >
+                      {enhanceMarkdownImageLinks(message.content)}
                     </ReactMarkdown>
                   ) : null}
                 </div>
@@ -693,7 +702,9 @@ function ToolCallTimeline({
                   </div>
                   <div>
                     <dt>{record.status === "error" ? "错误" : "结果"}</dt>
-                    <dd>{record.errorMessage || record.resultSummary || "工具没有返回可展示摘要"}</dd>
+                    <dd>
+                      <ToolResultText text={record.errorMessage || record.resultSummary || "工具没有返回可展示摘要"} />
+                    </dd>
                   </div>
                   {relatedAttachments.length ? (
                     <div>
@@ -1261,6 +1272,113 @@ function formatToolCallLine(record: ChatToolCallRecord): string {
     return `${record.displayName} 调用失败${query}`;
   }
   return `已调用 ${record.displayName}${query}`;
+}
+
+const IMAGE_URL_PATTERN = /https?:\/\/[^\s<>"'`)\]]+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s<>"'`)\]]*)?/gi;
+const MARKDOWN_IMAGE_OR_LINK_PATTERN = /(!?\[[^\]]*]\()https?:\/\/[^)\s]+(\))/g;
+
+function isRenderableImageUrl(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return false;
+    }
+    return /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:$|\?)/i.test(parsed.pathname + parsed.search)
+      || /\/images?\//i.test(parsed.pathname)
+      || /r2\.dev\/images\//i.test(parsed.hostname + parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** Turn bare image URLs into markdown images so ReactMarkdown can render them. */
+export function enhanceMarkdownImageLinks(content: string): string {
+  if (!content) {
+    return content;
+  }
+
+  // Skip URLs already inside markdown image/link destinations.
+  const placeholders: string[] = [];
+  const protectedContent = content.replace(MARKDOWN_IMAGE_OR_LINK_PATTERN, (match) => {
+    const token = `@@MD_LINK_${placeholders.length}@@`;
+    placeholders.push(match);
+    return token;
+  });
+
+  const enhanced = protectedContent.replace(IMAGE_URL_PATTERN, (url) => {
+    const cleaned = url.replace(/[),.，。；;]+$/g, "");
+    const trailing = url.slice(cleaned.length);
+    if (!isRenderableImageUrl(cleaned)) {
+      return url;
+    }
+    return `![生成图片](${cleaned})${trailing}`;
+  });
+
+  return enhanced.replace(/@@MD_LINK_(\d+)@@/g, (_match, index) => placeholders[Number(index)] ?? "");
+}
+
+function extractImageUrls(text: string): string[] {
+  if (!text) {
+    return [];
+  }
+  const matches = text.match(IMAGE_URL_PATTERN) ?? [];
+  const urls: string[] = [];
+  for (const match of matches) {
+    const cleaned = match.replace(/[),.，。；;]+$/g, "");
+    if (isRenderableImageUrl(cleaned) && !urls.includes(cleaned)) {
+      urls.push(cleaned);
+    }
+  }
+  return urls;
+}
+
+function MarkdownImage(props: ImgHTMLAttributes<HTMLImageElement>) {
+  const src = typeof props.src === "string" ? props.src : undefined;
+  if (!src) {
+    return null;
+  }
+  return (
+    <a className="message-generated-image-link" href={src} target="_blank" rel="noreferrer noopener">
+      <img className="message-generated-image" src={src} alt={props.alt || "生成图片"} loading="lazy" />
+    </a>
+  );
+}
+
+function MarkdownLink(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const href = typeof props.href === "string" ? props.href : undefined;
+  if (isRenderableImageUrl(href)) {
+    return (
+      <a className="message-generated-image-link" href={href} target="_blank" rel="noreferrer noopener">
+        <img className="message-generated-image" src={href} alt={typeof props.children === "string" ? props.children : "生成图片"} loading="lazy" />
+      </a>
+    );
+  }
+  return (
+    <a {...props} target={props.target ?? "_blank"} rel={props.rel ?? "noreferrer noopener"}>
+      {props.children}
+    </a>
+  );
+}
+
+function ToolResultText({ text }: { text: string }) {
+  const imageUrls = extractImageUrls(text);
+  return (
+    <div className="message-tool-result-text">
+      <pre>{text}</pre>
+      {imageUrls.length > 0 ? (
+        <div className="message-tool-result-images" aria-label="结果图片">
+          {imageUrls.map((url) => (
+            <a key={url} className="message-generated-image-link" href={url} target="_blank" rel="noreferrer noopener">
+              <img className="message-generated-image" src={url} alt="工具返回图片" loading="lazy" />
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function formatToolDuration(record: ChatToolCallRecord): string {
