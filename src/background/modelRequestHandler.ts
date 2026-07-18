@@ -23,7 +23,7 @@ import type {
 } from "../shared/types";
 import { parseTavilyApiKeys, type TavilySearchOptions } from "../shared/webSearch/tavily";
 import { getWebSearchSettings } from "../shared/webSearch/settings";
-import { getEnabledAutomationPlaybooks, normalizeAutomationPlaybookSettings, shouldRunAutomationPlaybookSelection } from "../shared/automationPlaybooks";
+import { getEnabledAutomationPlaybooks, matchAutomationPlaybookByHints, normalizeAutomationPlaybookSettings, shouldRunAutomationPlaybookSelection } from "../shared/automationPlaybooks";
 import { parseMcpToolId } from "../shared/mcp/toolAdapter";
 import { appendBrowserControlPromptIfNeeded, createBackgroundToolExecutor, createModelToolDefinition, normalizeBrowserAutomationMaxToolIterations, shouldExposeTool } from "./backgroundToolRuntime";
 import { selectAutomationPlaybook } from "./automationPlaybookSelector";
@@ -236,7 +236,7 @@ async function maybeSelectAutomationPlaybook(
   exposedTools: ReturnType<typeof resolveEnabledModelTools>,
   fetcher: Fetcher,
 ) {
-  if (!message.automationPlaybookSettings || message.structuredOutput || exposedTools.length === 0 || !exposedTools.some((tool) => isBrowserAutomationToolId(tool.id))) {
+  if (!message.automationPlaybookSettings || message.structuredOutput || exposedTools.length === 0) {
     return undefined;
   }
   const skillPlaybooks = Array.isArray(message.importedSkillPlaybooks)
@@ -244,6 +244,13 @@ async function maybeSelectAutomationPlaybook(
     : [];
   const playbooks = getEnabledAutomationPlaybooks(message.automationPlaybookSettings, skillPlaybooks);
   if (playbooks.length === 0) {
+    return undefined;
+  }
+
+  const hasBrowserTools = exposedTools.some((tool) => isBrowserAutomationToolId(tool.id));
+  const hasMetapiTools = exposedTools.some((tool) => tool.id.startsWith("metapi."));
+  // Browser playbooks need browser tools; pure Metapi skills (开始签到/收录) only need metapi_*.
+  if (!hasBrowserTools && !hasMetapiTools) {
     return undefined;
   }
 
@@ -263,7 +270,21 @@ async function maybeSelectAutomationPlaybook(
   }
 
   const userContent = getLatestUserContent(message.messages);
-  if (!shouldRunAutomationPlaybookSelection(userContent)) {
+
+  // Natural-language skill trigger without "/": exact title/hint match auto-selects.
+  const hinted = matchAutomationPlaybookByHints(userContent, playbooks);
+  if (hinted) {
+    return {
+      playbookId: hinted.id,
+      title: hinted.title,
+      source: hinted.source,
+      confidence: "high" as const,
+      reason: `用户自然语言命中任务策略「${hinted.title}」`,
+    };
+  }
+
+  // Model preselection still requires a browser scene when no explicit hint matched.
+  if (!hasBrowserTools || !shouldRunAutomationPlaybookSelection(userContent)) {
     return undefined;
   }
   return selectAutomationPlaybook({

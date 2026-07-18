@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -10,6 +10,16 @@ const DEFAULT_PORT = Number.parseInt(process.env.MODEL_DIAGNOSTICS_PORT || "1733
 const DEFAULT_HOST = process.env.MODEL_DIAGNOSTICS_HOST || "127.0.0.1";
 const MAX_REQUEST_BYTES = Number.parseInt(process.env.MODEL_DIAGNOSTICS_MAX_BYTES || `${8 * 1024 * 1024}`, 10);
 const MAX_RECORDS = Number.parseInt(process.env.MODEL_DIAGNOSTICS_MAX_RECORDS || "200", 10);
+/** Keep chat request logs for 24 hours only. */
+const CHAT_REQUEST_LOG_RETENTION_MS = Number.parseInt(
+  process.env.CHAT_REQUEST_LOG_RETENTION_MS || `${24 * 60 * 60 * 1000}`,
+  10,
+);
+const CHAT_REQUEST_LOG_CLEANUP_INTERVAL_MS = Number.parseInt(
+  process.env.CHAT_REQUEST_LOG_CLEANUP_INTERVAL_MS || `${15 * 60 * 1000}`,
+  10,
+);
+let lastChatLogCleanupAt = 0;
 
 export function diagnosticsPaths(outputDir = DEFAULT_OUTPUT_DIR) {
   return {
@@ -90,7 +100,14 @@ export async function handleChatRequestLogEvent(event, options = {}) {
   const paths = options.paths || chatRequestLogPaths(options.outputDir);
   await mkdir(paths.outputDir, { recursive: true });
   await mkdir(paths.historyDir, { recursive: true });
-  const normalized = normalizeChatEvent(event, options.now ?? Date.now());
+  const now = options.now ?? Date.now();
+  // Opportunistic retention cleanup (24h) — at most once per interval unless forced.
+  await maybeCleanupChatRequestLogs(paths, {
+    now,
+    retentionMs: options.retentionMs ?? CHAT_REQUEST_LOG_RETENTION_MS,
+    force: options.forceCleanup === true,
+  });
+  const normalized = normalizeChatEvent(event, now);
   await appendFile(paths.eventsNdjson, `${JSON.stringify(normalized)}\n`, "utf8");
 
   const sessionPath = resolve(paths.historyDir, `${sanitizeRequestId(normalized.requestId)}.json`);
@@ -122,6 +139,72 @@ export async function handleChatRequestLogEvent(event, options = {}) {
   await writeFile(paths.latestJson, `${JSON.stringify(nextSession, null, 2)}\n`, "utf8");
   await writeFile(paths.latestMd, markdown, "utf8");
   return { requestId: nextSession.requestId, eventCount: nextSession.events.length };
+}
+
+/**
+ * Delete chat request history older than retention window (default 24h).
+ * Also prunes events.ndjson by rewriting only recent lines (best-effort).
+ */
+export async function cleanupChatRequestLogs(paths, options = {}) {
+  const retentionMs = Number.isFinite(options.retentionMs) ? options.retentionMs : CHAT_REQUEST_LOG_RETENTION_MS;
+  const now = options.now ?? Date.now();
+  const cutoff = now - Math.max(60_000, retentionMs);
+  const result = { removedHistoryFiles: 0, prunedEvents: false };
+
+  try {
+    const names = await readdir(paths.historyDir);
+    await Promise.all(
+      names.map(async (name) => {
+        const full = resolve(paths.historyDir, name);
+        try {
+          const info = await stat(full);
+          // Prefer file mtime; history json also has updatedAt but mtime is enough for retention.
+          if (info.mtimeMs < cutoff) {
+            await rm(full, { force: true });
+            result.removedHistoryFiles += 1;
+          }
+        } catch {
+          // ignore single-file failures
+        }
+      }),
+    );
+  } catch {
+    // history dir may not exist yet
+  }
+
+  // Prune events.ndjson: keep only events with at >= cutoff (or unparseable recent lines).
+  try {
+    const raw = await readFile(paths.eventsNdjson, "utf8");
+    const lines = raw.split(/\r?\n/);
+    const kept = [];
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        const at = typeof event?.at === "number" ? event.at : Date.parse(event?.atIso || "") || 0;
+        if (at >= cutoff) {
+          kept.push(line);
+        }
+      } catch {
+        // Drop unparseable old junk.
+      }
+    }
+    await writeFile(paths.eventsNdjson, kept.length ? `${kept.join("\n")}\n` : "", "utf8");
+    result.prunedEvents = true;
+  } catch {
+    // events file may not exist yet
+  }
+
+  lastChatLogCleanupAt = now;
+  return result;
+}
+
+async function maybeCleanupChatRequestLogs(paths, options = {}) {
+  const now = options.now ?? Date.now();
+  if (!options.force && now - lastChatLogCleanupAt < CHAT_REQUEST_LOG_CLEANUP_INTERVAL_MS) {
+    return null;
+  }
+  return cleanupChatRequestLogs(paths, options);
 }
 
 export function renderChatSessionMarkdown(session) {
@@ -644,7 +727,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`Readable: ${paths.readable}`);
     console.log(`Chat logs: ${chatPaths.outputDir}`);
     console.log(`Chat latest: ${chatPaths.latestMd}`);
+    console.log(`Chat retention: ${Math.round(CHAT_REQUEST_LOG_RETENTION_MS / 3600000)}h`);
     console.log("按 Ctrl+C 停止。扩展未连接时服务会保持空闲等待。");
+    // Initial + periodic cleanup so idle sinks still purge old logs.
+    void cleanupChatRequestLogs(chatPaths).catch(() => undefined);
+    setInterval(() => {
+      void cleanupChatRequestLogs(chatPaths).catch(() => undefined);
+    }, CHAT_REQUEST_LOG_CLEANUP_INTERVAL_MS).unref?.();
   });
   server.on("error", (error) => {
     console.error(`模型调用诊断服务启动失败：${formatError(error)}`);

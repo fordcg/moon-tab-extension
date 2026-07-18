@@ -22,3 +22,7 @@ export const METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID = "metapi.record_browser_chec
 export const METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME = "metapi_record_browser_checkin";
 export const METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID = "metapi.list_browser_checkin_results";
 export const METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME = "metapi_list_browser_checkin_results";
+export const METAPI_DELETE_SITE_TOOL_ID = "metapi.delete_site";
+export const METAPI_DELETE_SITE_TOOL_NAME = "metapi_delete_site";
+export const METAPI_SET_SITE_CHECKIN_ENABLED_TOOL_ID = "metapi.set_site_checkin_enabled";
+export const METAPI_SET_SITE_CHECKIN_ENABLED_TOOL_NAME = "metapi_set_site_checkin_enabled";

@@ -297,6 +297,7 @@ export function appendBrowserControlPromptIfNeeded(
     "- 需要排查页面加载慢、资源耗时或主线程长任务时，调用 get_performance_summary；该工具只返回脱敏性能元数据，不读取 Header、Cookie、响应体或资源内容。",
     "- 需要一次性汇总页面状态、Console、性能和 Network 错误/慢请求现场时，调用 collect_diagnostics；该工具只返回脱敏聚合摘要，不读取响应体、Header、Cookie 或敏感原文。",
     "- SHIELD/我不是机器人：click 复选框本体，不要只点外层卡片。",
+    "- hCaptcha 图片题 / Cloudflare Turnstile（跨域 iframe）：扩展无法操作 iframe 内部，不要反复截图；record needs_human，保留标签页，继续其他站。",
     "- LinuxDO/GitHub 授权页：出现「允许/Authorize」大按钮时立刻点击，不要停在授权确认页。",
     "- 默认不要给 click/fill 加 includeSnapshot；只在关键状态变化后按需 take_snapshot，避免过慢。",
     "- 不要猜测 UID；只能使用 take_snapshot 返回的 UID。",

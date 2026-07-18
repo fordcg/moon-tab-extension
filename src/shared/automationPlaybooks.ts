@@ -435,6 +435,16 @@ export function shouldRunAutomationPlaybookSelection(userContent: string): boole
     return false;
   }
 
+  // Natural-language skill triggers (no slash command required).
+  // Covers Metapi ops and common automation intents so the model can auto-pick playbooks.
+  if (
+    /补签|开始签到|全部签到|启动签到|签到巡检|收录中转站|收录站点|添加中转站|删除站点|关闭签到|开启签到|checkin|repair\s*checkin|register\s*relay|metapi/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+
   const hasBrowserScene = /当前页面|这个页面|此页面|页面|网页|标签页|浏览器|站点|网站|控制台|console|network|dom|html|css|xpath/.test(text);
   const hasAutomationIntent = /点击|填写|按钮|表单|提交|报错|错误|加载|总结|提取|阅读|查看|看看|排查|诊断|分析|比较|汇总|打开|切换|定位|等待|截图/.test(text);
   if (hasBrowserScene && hasAutomationIntent) {
@@ -442,6 +452,34 @@ export function shouldRunAutomationPlaybookSelection(userContent: string): boole
   }
 
   return /(?:分析|排查|查看|定位|提取|重放|抓包|观察|找).*(?:接口|api|请求|响应|参数|network|源码|source\s*map|runtime|运行时|javascript|js)|(?:接口|api|请求|响应|参数|network|源码|source\s*map|runtime|运行时|javascript|js).*(?:分析|排查|查看|定位|提取|重放|抓包|观察|找)/.test(text);
+}
+
+/**
+ * Prefer exact skill/playbook hint matches from free text (no "/" required).
+ * Returns the first enabled playbook whose title or selectionHints appear in the user text.
+ */
+export function matchAutomationPlaybookByHints(
+  userContent: string,
+  playbooks: AutomationPlaybook[],
+): AutomationPlaybook | undefined {
+  const text = userContent.trim().toLowerCase();
+  if (!text || playbooks.length === 0) {
+    return undefined;
+  }
+
+  // Longer hints first so "开始签到" beats bare "签到" if both exist.
+  const ranked: Array<{ playbook: AutomationPlaybook; hint: string }> = [];
+  for (const playbook of playbooks) {
+    const hints = [playbook.title, ...playbook.selectionHints].filter(Boolean);
+    for (const hint of hints) {
+      const normalized = hint.trim().toLowerCase();
+      if (normalized && text.includes(normalized)) {
+        ranked.push({ playbook, hint: normalized });
+      }
+    }
+  }
+  ranked.sort((a, b) => b.hint.length - a.hint.length);
+  return ranked[0]?.playbook;
 }
 
 export function normalizeAutomationPlaybookSelection(

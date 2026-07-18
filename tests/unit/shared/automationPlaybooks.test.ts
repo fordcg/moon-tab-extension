@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getEnabledAutomationPlaybooks,
   getRegisteredAutomationPlaybooks,
+  matchAutomationPlaybookByHints,
   normalizeAutomationPlaybookSettings,
   shouldRunAutomationPlaybookSelection,
 } from "../../../src/shared/automationPlaybooks";
@@ -60,12 +61,23 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(enabled.map((playbook) => playbook.id)).toContain("network_api_analysis");
   });
 
-  it("只有浏览器现场相关需求才触发预选", () => {
+  it("浏览器现场相关需求与 Metapi skill 关键词都会触发预选", () => {
     expect(shouldRunAutomationPlaybookSelection("帮我看看当前页面为什么报错")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("分析这个接口参数怎么生成")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("总结这个网页内容")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("帮我补签失败的站")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("开始签到")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("收录中转站")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("React useMemo 是什么")).toBe(false);
     expect(shouldRunAutomationPlaybookSelection("当前时间是多少")).toBe(false);
     expect(shouldRunAutomationPlaybookSelection("JS 的闭包是什么")).toBe(false);
+  });
+
+  it("自然语言可直接命中 skill 策略，无需 / 命令", () => {
+    const playbooks = getEnabledAutomationPlaybooks({ disabledPlaybookIds: [] });
+    expect(matchAutomationPlaybookByHints("请帮我补签", playbooks)?.id).toBe("repair_failed_checkin");
+    expect(matchAutomationPlaybookByHints("开始签到并汇总", playbooks)?.id).toBe("start_all_checkin");
+    expect(matchAutomationPlaybookByHints("收录中转站 gpt(name)", playbooks)?.id).toBe("register_relay_site");
+    expect(matchAutomationPlaybookByHints("今天天气怎么样", playbooks)).toBeUndefined();
   });
 });

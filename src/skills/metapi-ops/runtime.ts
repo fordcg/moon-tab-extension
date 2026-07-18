@@ -33,12 +33,16 @@ import {
   METAPI_PARSE_REGISTER_ARGS_TOOL_NAME,
   METAPI_RECORD_BROWSER_CHECKIN_TOOL_ID,
   METAPI_RECORD_BROWSER_CHECKIN_TOOL_NAME,
+  METAPI_SET_SITE_CHECKIN_ENABLED_TOOL_ID,
+  METAPI_SET_SITE_CHECKIN_ENABLED_TOOL_NAME,
   METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_ID,
   METAPI_SUMMARIZE_CHECKIN_LOGS_TOOL_NAME,
   METAPI_TRIGGER_CHECKIN_TOOL_ID,
   METAPI_TRIGGER_CHECKIN_TOOL_NAME,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_ID,
   METAPI_VERIFY_ACCOUNT_TOKEN_TOOL_NAME,
+  METAPI_DELETE_SITE_TOOL_ID,
+  METAPI_DELETE_SITE_TOOL_NAME,
 } from "./toolIds";
 import type { ModelToolCall, ModelToolResult } from "../../shared/models/types";
 import { getAppSetting, saveAppSetting } from "../../shared/storage/repositories";
@@ -84,6 +88,12 @@ export async function executeMetapiTool(
     }
     if (toolCall.id === METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID || toolName === METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME) {
       return listBrowserCheckinResults(toolCall);
+    }
+    if (toolCall.id === METAPI_DELETE_SITE_TOOL_ID || toolName === METAPI_DELETE_SITE_TOOL_NAME) {
+      return deleteSite(toolCall, fetcher);
+    }
+    if (toolCall.id === METAPI_SET_SITE_CHECKIN_ENABLED_TOOL_ID || toolName === METAPI_SET_SITE_CHECKIN_ENABLED_TOOL_NAME) {
+      return setSiteCheckinEnabled(toolCall, fetcher);
     }
     return metapiError(toolCall, `未知 Metapi 工具：${toolCall.id || toolName}`);
   } catch (error) {
@@ -640,12 +650,13 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
     instructions: [
       "必须对本轮 mustOpenThisRound 中的每一个站点执行 browser.new_page 并实际寻找签到入口。",
       "打开 URL 优先用 openUrl（有 externalCheckinUrl 就用外部签到站，否则用 siteUrl）。",
-      "签到入口优先：控制台 / 个人中心 / 个人资料 / 每日签到；不要优先去钱包。",
-      "未登录时优先点 LinuxDO 登录，其次 GitHub 登录，登录成功后继续找签到。",
+      "签到入口搜索顺序：外部签到页 → 控制台/个人资料 → 控制台钱包/充值页内签到入口 → 主页/仪表盘 → 顶栏/侧栏/标签栏；都没有才判无签到。",
+      "未登录时优先点 LinuxDO 登录，其次 GitHub 登录；授权页点「允许/Authorize」。",
+      "hCaptcha 图片题 / Cloudflare Turnstile：立即 needs_human，保留标签页不 close_page，继续下一站；不要反复截图空转。",
       "禁止因为官方日志写着 HTTP 404 / fetch failed / 签到功能未启用 / Cloudflare 403 就跳过不打开。",
-      "这些只是 Metapi 自动签到失败原因，浏览器页面仍可能有签到按钮。",
       "未打开的站点只能放进 pendingNextBatch，不能记 failed/skipped。",
-      "每站：new_page(openUrl) → take_snapshot → 登录(如需) → 控制台/个人资料找签到 → click →（验证码/SHIELD/hCaptcha）→ close_page → metapi_record_browser_checkin(status必填)。",
+      "成功/失败/无入口：close_page + metapi_record_browser_checkin(status必填)。needs_human：不要 close_page。",
+      "删除站点：metapi_delete_site；关闭/开启站点签到：metapi_set_site_checkin_enabled。",
     ],
     note: "浏览器补签不会自动改写 Metapi 官方签到日志。本地 browserRepairedToday/browserNeedsHumanToday 会从候选排除。",
   });
@@ -664,10 +675,19 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
   status = inferBrowserCheckinStatus(status, message);
 
   const barrier = detectCheckinBarrier(`${status ?? ""} ${message ?? ""}`);
-  if (status === "failed" && barrier !== "none") {
-    // Captcha/SHIELD failures are human-needed, not generic failed.
+  if ((status === "failed" || !status) && barrier !== "none" && barrier !== "login") {
+    // Captcha / Turnstile / SHIELD failures are human-needed, not generic failed.
     status = "needs_human";
-    message = message || (barrier === "shield" ? "SHIELD/人机验证，需人工" : "图形验证码/验证墙，需人工");
+    if (!message) {
+      message =
+        barrier === "cloudflare"
+          ? "Cloudflare Turnstile/人机验证跨域 iframe，需人工完成，页面已保留"
+          : barrier === "captcha"
+            ? "hCaptcha/图形验证码需人工完成，页面已保留，继续其他站"
+            : barrier === "shield"
+              ? "SHIELD/我不是机器人需人工或可点击复选框，页面已保留"
+              : "需人工处理，页面已保留";
+    }
   }
 
   if (status !== "success" && status !== "failed" && status !== "skipped" && status !== "needs_human") {
@@ -723,7 +743,7 @@ function inferBrowserCheckinStatus(status: unknown, message?: string): unknown {
   if (/(跳过|无需签到|already|skipped)/i.test(text)) {
     return "skipped";
   }
-  if (/(shield|我不是机器人|验证码|captcha|turnstile|需人工|needs_human|人机验证)/i.test(text)
+  if (/(shield|我不是机器人|人机验证|turnstile|cf-challenge|security check|hcaptcha|recaptcha|图片题|请验证您是真人)/i.test(text)
     && !/(通过后|已通过|验证码通过后签到成功|shield 通过后)/i.test(text)) {
     return "needs_human";
   }
@@ -744,6 +764,107 @@ async function listBrowserCheckinResults(toolCall: ModelToolCall): Promise<Model
     count: results.length,
     results,
   });
+}
+
+async function resolveSiteId(
+  settings: MetapiAdminSettings,
+  fetcher: typeof fetch,
+  args: Record<string, unknown>,
+): Promise<{ ok: true; siteId: number; site?: Record<string, unknown> } | { ok: false; message: string }> {
+  const directId = toPositiveInt(args.siteId);
+  if (directId) {
+    return { ok: true, siteId: directId };
+  }
+  const url = typeof args.url === "string" ? normalizeSiteUrl(args.url) : "";
+  if (!url) {
+    return { ok: false, message: "请提供 siteId 或 url" };
+  }
+  const listed = await metapiAdminFetch<unknown[]>({ settings, path: "/api/sites", fetcher });
+  if (!listed.ok) {
+    return { ok: false, message: listed.message };
+  }
+  const sites = Array.isArray(listed.data) ? listed.data : [];
+  const existing = findExistingSiteByUrl(
+    sites as Array<{ id?: number; url?: string; name?: string; platform?: string }>,
+    url,
+  );
+  const siteId = toPositiveInt(existing?.id);
+  if (!siteId) {
+    return { ok: false, message: `未找到 URL 对应站点：${url}` };
+  }
+  return { ok: true, siteId, site: existing as Record<string, unknown> | undefined };
+}
+
+async function deleteSite(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  if (args.confirm !== true) {
+    return metapiError(toolCall, "删除站点需要 confirm=true，防止误删");
+  }
+  const settings = await loadSettings();
+  const resolved = await resolveSiteId(settings, fetcher, args);
+  if (!resolved.ok) {
+    return metapiError(toolCall, resolved.message);
+  }
+  const result = await metapiAdminFetch({
+    settings,
+    path: `/api/sites/${resolved.siteId}`,
+    method: "DELETE",
+    fetcher,
+  });
+  if (!result.ok) {
+    return metapiError(toolCall, result.message, result);
+  }
+  return metapiOk(toolCall, {
+    deleted: true,
+    siteId: resolved.siteId,
+    data: result.data ?? null,
+  });
+}
+
+async function setSiteCheckinEnabled(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  if (typeof args.enabled !== "boolean") {
+    return metapiError(toolCall, "enabled 必须是 boolean");
+  }
+  const settings = await loadSettings();
+  const resolved = await resolveSiteId(settings, fetcher, args);
+  if (!resolved.ok) {
+    return metapiError(toolCall, resolved.message);
+  }
+
+  // Prefer PATCH; fall back to PUT if server rejects PATCH.
+  const bodies = [
+    { checkinEnabled: args.enabled },
+    { checkin_enabled: args.enabled },
+    { checkinEnabled: args.enabled, checkin_enabled: args.enabled },
+  ];
+  let lastError: string | undefined;
+  for (const method of ["PATCH", "PUT"] as const) {
+    for (const body of bodies) {
+      const result = await metapiAdminFetch({
+        settings,
+        path: `/api/sites/${resolved.siteId}`,
+        method,
+        body,
+        fetcher,
+      });
+      if (result.ok) {
+        return metapiOk(toolCall, {
+          siteId: resolved.siteId,
+          enabled: args.enabled,
+          method,
+          body,
+          data: result.data ?? null,
+        });
+      }
+      lastError = result.message;
+      // 404/405 means method/body shape wrong; try next. 401/403 should stop.
+      if (result.status === 401 || result.status === 403) {
+        return metapiError(toolCall, result.message, result);
+      }
+    }
+  }
+  return metapiError(toolCall, lastError || "更新站点签到开关失败");
 }
 
 async function loadSettings(): Promise<MetapiAdminSettings> {
@@ -965,16 +1086,25 @@ function detectCheckinBarrier(message: string): "none" | "shield" | "captcha" | 
   if (!text.trim()) {
     return "none";
   }
-  if (/(shield|我不是机器人|人机验证|turnstile|cf-challenge|security check)/i.test(message) || /shield|turnstile/.test(text)) {
-    return "shield";
-  }
-  if (/(验证码|captcha|\/checkin\/captcha|图形验证)/i.test(message) || /captcha/.test(text)) {
-    return "captcha";
-  }
-  if (/(cloudflare|cf-ray|just a moment|attention required)/i.test(message)) {
+  // Cloudflare Turnstile / CF challenge first (often reported as captcha too).
+  if (
+    /(turnstile|cf-challenge|just a moment|attention required|cloudflare|cf-ray|请验证您是真人|验证您是真人)/i.test(message)
+    || /turnstile|cloudflare/.test(text)
+  ) {
     return "cloudflare";
   }
-  if (/(登录|login|sign in|未登录|auth)/i.test(message) && !/oauth|authorization bearer/i.test(message)) {
+  // SHIELD checkbox (same-origin, sometimes clickable)
+  if (/(shield|我不是机器人|人机验证|security check)/i.test(message) || /\bshield\b/.test(text)) {
+    return "shield";
+  }
+  // hCaptcha / reCAPTCHA image challenges — always human; do not keep retrying screenshots.
+  if (
+    /(hcaptcha|recaptcha|图片题|点选|拖动|篮球|验证码|captcha|\/checkin\/captcha|图形验证)/i.test(message)
+    || /captcha|hcaptcha|recaptcha/.test(text)
+  ) {
+    return "captcha";
+  }
+  if (/(登录|login|sign in|未登录|auth|expired)/i.test(message) && !/oauth|authorization bearer/i.test(message)) {
     return "login";
   }
   return "none";
