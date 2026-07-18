@@ -316,8 +316,15 @@ async function createAccount(toolCall: ModelToolCall, fetcher: typeof fetch): Pr
 
 async function triggerCheckin(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
   const args = asObject(toolCall.arguments);
-  const waitSeconds = clampInt(args.waitSeconds, 0, 180, 0);
+  // Default wait 45s so "开始签到" behaves like a job runner instead of fire-and-forget.
+  const waitSeconds = clampInt(args.waitSeconds, 0, 180, 45);
+  const pollIntervalSeconds = clampInt(args.pollIntervalSeconds, 2, 30, 5);
   const settings = await loadSettings();
+
+  // Snapshot current log ids so we can detect newly produced check-in results while waiting.
+  const baseline = await fetchCheckinLogSnapshot(settings, fetcher, 200);
+  const baselineIds = new Set(baseline.logs.map((item) => checkinLogIdentity(item)).filter(Boolean));
+
   const result = await metapiAdminFetch({
     settings,
     path: "/api/checkin/trigger",
@@ -328,13 +335,200 @@ async function triggerCheckin(toolCall: ModelToolCall, fetcher: typeof fetch): P
   if (!result.ok) {
     return metapiError(toolCall, result.message, result);
   }
+
+  const triggerPayload =
+    typeof result.data === "object" && result.data && !Array.isArray(result.data)
+      ? (result.data as Record<string, unknown>)
+      : { data: result.data };
+  const jobId = firstString(triggerPayload.jobId, triggerPayload.job_id, triggerPayload.id);
+
+  let waitedSeconds = 0;
+  let pollCount = 0;
+  let latestLogs: Array<Record<string, unknown>> = [];
+  let newLogs: Array<Record<string, unknown>> = [];
+  let jobStatus = firstString(triggerPayload.status, triggerPayload.state, "pending") || "pending";
+
   if (waitSeconds > 0) {
-    await sleep(waitSeconds * 1000);
+    const deadline = Date.now() + waitSeconds * 1000;
+    while (Date.now() < deadline) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        break;
+      }
+      const sleepMs = Math.min(pollIntervalSeconds * 1000, remainingMs);
+      await sleep(sleepMs);
+      waitedSeconds += sleepMs / 1000;
+      pollCount += 1;
+
+      const snapshot = await fetchCheckinLogSnapshot(settings, fetcher, 200);
+      latestLogs = snapshot.logs;
+      newLogs = latestLogs.filter((item) => {
+        const id = checkinLogIdentity(item);
+        return id ? !baselineIds.has(id) : true;
+      });
+
+      // Prefer job-scoped logs when Metapi includes jobId fields; otherwise fall back to any new logs.
+      const jobScoped = jobId
+        ? newLogs.filter((item) => {
+            const entryJobId = firstString(item.jobId, item.job_id, item.runId, item.run_id);
+            return !entryJobId || entryJobId === jobId;
+          })
+        : newLogs;
+
+      if (jobScoped.length > 0) {
+        jobStatus = "completed_or_progressing";
+        // Once we observe new check-in logs, return immediately instead of waiting out the full timeout.
+        newLogs = jobScoped;
+        break;
+      }
+
+      // Optional job status endpoint variants — ignore failures and keep polling logs.
+      if (jobId) {
+        const status = await tryFetchCheckinJobStatus(settings, fetcher, jobId);
+        if (status) {
+          jobStatus = status;
+          if (isTerminalCheckinJobStatus(status)) {
+            break;
+          }
+        }
+      }
+    }
   }
+
+  const summary = summarizeCheckinLogRows(newLogs.length ? newLogs : latestLogs);
+  const stillRunning = newLogs.length === 0 && !isTerminalCheckinJobStatus(jobStatus);
+
   return metapiOk(toolCall, {
-    ...(typeof result.data === "object" && result.data ? result.data : { data: result.data }),
-    waitedSeconds: waitSeconds,
+    ...triggerPayload,
+    jobId: jobId || triggerPayload.jobId || null,
+    jobStatus,
+    waitedSeconds: Math.round(waitedSeconds * 10) / 10,
+    pollCount,
+    pollIntervalSeconds,
+    newLogCount: newLogs.length,
+    summary,
+    guidance:
+      newLogs.length > 0
+        ? "签到已产生新日志。可直接用下方 summary 汇报；若需补签，再调用 metapi_summarize_checkin_logs。"
+        : stillRunning
+          ? "任务仍在执行。不要立刻反复轮询；可再调用一次 metapi_trigger_checkin(waitSeconds=60) 继续等待，或稍后 metapi_summarize_checkin_logs。"
+          : "已触发签到。若 summary 为空，稍后再查日志。",
   });
+}
+
+async function fetchCheckinLogSnapshot(
+  settings: Awaited<ReturnType<typeof loadSettings>>,
+  fetcher: typeof fetch,
+  limit: number,
+): Promise<{ ok: boolean; logs: Array<Record<string, unknown>>; message?: string }> {
+  const result = await metapiAdminFetch({
+    settings,
+    path: `/api/checkin/logs?limit=${limit}`,
+    method: "GET",
+    fetcher,
+  });
+  if (!result.ok) {
+    return { ok: false, logs: [], message: result.message };
+  }
+  return { ok: true, logs: extractLogArray(result.data) };
+}
+
+function checkinLogIdentity(item: Record<string, unknown>): string {
+  const nested = item.checkin_logs && typeof item.checkin_logs === "object" && !Array.isArray(item.checkin_logs)
+    ? (item.checkin_logs as Record<string, unknown>)
+    : item;
+  const direct = firstString(
+    nested.id,
+    nested.logId,
+    nested.log_id,
+    item.id,
+  );
+  if (direct) {
+    return direct;
+  }
+  // Numeric ids from Metapi are common.
+  for (const value of [nested.id, nested.logId, nested.log_id, item.id]) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return [
+    firstString(nested.accountId, nested.account_id, item.accountId),
+    firstString(nested.createdAt, nested.created_at, nested.time, item.createdAt),
+    firstString(nested.status, item.status),
+    firstString(nested.message, item.message),
+  ].join("|");
+}
+
+async function tryFetchCheckinJobStatus(
+  settings: Awaited<ReturnType<typeof loadSettings>>,
+  fetcher: typeof fetch,
+  jobId: string,
+): Promise<string | undefined> {
+  const candidates = [
+    `/api/checkin/jobs/${encodeURIComponent(jobId)}`,
+    `/api/checkin/status?jobId=${encodeURIComponent(jobId)}`,
+    `/api/jobs/${encodeURIComponent(jobId)}`,
+  ];
+  for (const path of candidates) {
+    const result = await metapiAdminFetch({
+      settings,
+      path,
+      method: "GET",
+      fetcher,
+    });
+    if (!result.ok || !result.data || typeof result.data !== "object" || Array.isArray(result.data)) {
+      continue;
+    }
+    const data = result.data as Record<string, unknown>;
+    const status = firstString(data.status, data.state, data.jobStatus, data.job_status);
+    if (status) {
+      return status;
+    }
+  }
+  return undefined;
+}
+
+function isTerminalCheckinJobStatus(status: string): boolean {
+  const normalized = status.trim().toLowerCase();
+  return (
+    normalized === "completed" ||
+    normalized === "complete" ||
+    normalized === "success" ||
+    normalized === "failed" ||
+    normalized === "error" ||
+    normalized === "done" ||
+    normalized === "finished" ||
+    normalized === "cancelled" ||
+    normalized === "canceled"
+  );
+}
+
+function summarizeCheckinLogRows(logs: Array<Record<string, unknown>>): {
+  total: number;
+  counts: { success: number; failed: number; skipped: number; other: number };
+  sample: Array<Record<string, unknown>>;
+} {
+  const counts = { success: 0, failed: 0, skipped: 0, other: 0 };
+  const sample: Array<Record<string, unknown>> = [];
+  for (const raw of logs) {
+    const entry = summarizeCheckinEntry(raw);
+    counts[entry.bucket] += 1;
+    if (sample.length < 12) {
+      sample.push({
+        status: entry.status,
+        bucket: entry.bucket,
+        siteUrl: entry.siteUrl,
+        siteName: entry.siteName,
+        message: entry.message,
+      });
+    }
+  }
+  return {
+    total: logs.length,
+    counts,
+    sample: sample.map((item) => redactSensitive(item) as Record<string, unknown>),
+  };
 }
 
 async function getCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
@@ -814,6 +1008,9 @@ function firstString(...values: unknown[]): string {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
       return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
     }
   }
   return "";

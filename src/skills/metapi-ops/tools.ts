@@ -185,7 +185,8 @@ export const METAPI_OPS_TOOLS: SkillToolDefinition[] = [
     name: METAPI_TRIGGER_CHECKIN_TOOL_NAME,
     groupId: SYSTEM_GROUP_ID,
     displayName: "Metapi 开始全部签到",
-    description: "调用 POST /api/checkin/trigger 开始全部签到，返回 jobId/status。",
+    description:
+      "调用 POST /api/checkin/trigger 开始全部签到。默认会在工具内等待并轮询签到日志（类似后台 job），返回 jobId、等待时长、新增日志摘要。不要触发后立刻连续空轮询。",
     toolClassification: { runtime: "local", capabilities: ["deliver_result"], risk: "medium" },
     parameters: {
       type: "object",
@@ -194,7 +195,13 @@ export const METAPI_OPS_TOOLS: SkillToolDefinition[] = [
           type: "integer",
           minimum: 0,
           maximum: 180,
-          description: "触发后等待秒数再返回，默认 0（立即返回 jobId）。",
+          description: "触发后最长等待秒数并轮询日志，默认 45；设为 0 则立即返回 jobId。",
+        },
+        pollIntervalSeconds: {
+          type: "integer",
+          minimum: 2,
+          maximum: 30,
+          description: "等待期间轮询签到日志的间隔秒数，默认 5。",
         },
       },
       required: [],
