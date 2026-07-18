@@ -1,9 +1,12 @@
 export const MODEL_PROVIDER_HEADER_RULE_ID = 1733401;
 
+/** Spoof extension model-provider traffic as Claude CLI client. */
+export const MODEL_PROVIDER_USER_AGENT = "claude-cli/2.1.161 (external, cli)";
+
 /**
  * Chrome 扩展发出的跨域 fetch 会自动带上 Origin: chrome-extension://...
  * 部分 OpenAI 兼容网关 / Cloudflare WAF 会直接 403。
- * 用 DNR 在请求发出前去掉 Origin/Referer，使请求更接近普通 API 客户端。
+ * 用 DNR 在请求发出前去掉 Origin/Referer，并伪装 User-Agent 为 CLI 客户端。
  */
 export function createModelProviderHeaderRules(): chrome.declarativeNetRequest.Rule[] {
   return [
@@ -15,6 +18,7 @@ export function createModelProviderHeaderRules(): chrome.declarativeNetRequest.R
         requestHeaders: [
           { header: "Origin", operation: "remove" },
           { header: "Referer", operation: "remove" },
+          { header: "User-Agent", operation: "set", value: MODEL_PROVIDER_USER_AGENT },
         ],
       },
       condition: {
@@ -53,7 +57,7 @@ export function formatModelHttpErrorMessage(status: number, statusText: string, 
 
   if (status === 403) {
     const hint =
-      "上游拒绝了扩展发出的请求（常见于网关/WAF 拦截 chrome-extension Origin）。若 Key 在官网可用，请确认 Endpoint 正确；本扩展会尝试去掉 Origin/Referer 后重试。";
+      "上游拒绝了扩展发出的请求（常见于网关/WAF 拦截 chrome-extension Origin，或 API Key 权限不足）。本扩展已去掉 Origin/Referer 并将 User-Agent 伪装为 claude-cli；若 Key 在官网可用，请确认 Endpoint、模型权限与 console.x.ai 凭据。";
     return bodySummary ? `${base} — ${bodySummary}\n${hint}` : `${base}\n${hint}`;
   }
 
