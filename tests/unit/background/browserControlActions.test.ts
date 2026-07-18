@@ -41,7 +41,14 @@ describe("浏览器控制动作执行器", () => {
       resolveNodeByBackendId: vi.fn(async () => ({ object: { objectId: "object-1" } })),
       scrollIntoViewIfNeeded: vi.fn(),
       getBoxModel: vi.fn(async () => ({ model: { content: [0, 0, 20, 0, 20, 20, 0, 20] } })),
-      callFunctionOn: vi.fn(async () => ({ result: { value: false } })),
+      callFunctionOn: vi
+        .fn()
+        // probeClickTarget
+        .mockResolvedValueOnce({ result: { value: { isIframe: false, isCaptchaFrame: false, tagName: "BUTTON" } } })
+        // tryClickShieldLikeControl -> not shield
+        .mockResolvedValueOnce({ result: { value: { handled: false } } })
+        // hit-test occluded
+        .mockResolvedValueOnce({ result: { value: false } }),
       evaluate: vi.fn(),
       dispatchMouseEvent: vi.fn(),
       dispatchKeyEvent: vi.fn(),
@@ -62,7 +69,83 @@ describe("浏览器控制动作执行器", () => {
       isError: true,
     });
     expect(connection.dispatchMouseEvent).not.toHaveBeenCalled();
+    expect(connection.callFunctionOn).toHaveBeenCalledTimes(3);
+  });
+
+  it("click 跨域 Turnstile iframe 走 CDP 真实鼠标且跳过宿主页 hit-test", async () => {
+    const connection = {
+      resolveNodeByBackendId: vi.fn(async () => ({ object: { objectId: "iframe-1" } })),
+      scrollIntoViewIfNeeded: vi.fn(),
+      getBoxModel: vi.fn(async () => ({ model: { content: [10, 20, 310, 20, 310, 85, 10, 85] } })),
+      callFunctionOn: vi
+        .fn()
+        // probeClickTarget: captcha iframe
+        .mockResolvedValueOnce({
+          result: { value: { isIframe: true, isCaptchaFrame: true, tagName: "IFRAME" } },
+        }),
+      evaluate: vi.fn(),
+      dispatchMouseEvent: vi.fn(),
+      dispatchKeyEvent: vi.fn(),
+      insertText: vi.fn(),
+    };
+    const snapshot = {
+      getBackendNodeId: vi.fn(() => 202),
+      takeSnapshot: vi.fn(async () => "页面快照"),
+    };
+    const executor = new BrowserControlActionExecutor(connection, snapshot);
+
+    const result = await executor.execute(createToolCall("click", { uid: "12_1" }));
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toContain("跨域验证码 iframe");
+    expect(result.content).toContain("CDP");
+    // Center of content box: x=(10+310)/2=160, y=(20+85)/2=52.5
+    expect(connection.dispatchMouseEvent).toHaveBeenCalledTimes(3);
+    expect(connection.dispatchMouseEvent).toHaveBeenNthCalledWith(1, { type: "mouseMoved", x: 160, y: 52.5 });
+    expect(connection.dispatchMouseEvent).toHaveBeenNthCalledWith(2, {
+      type: "mousePressed",
+      x: 160,
+      y: 52.5,
+      button: "left",
+      clickCount: 1,
+    });
+    expect(connection.dispatchMouseEvent).toHaveBeenNthCalledWith(3, {
+      type: "mouseReleased",
+      x: 160,
+      y: 52.5,
+      button: "left",
+      clickCount: 1,
+    });
+    // No host-page synthetic click fallback and no shield probe for pure iframe
     expect(connection.callFunctionOn).toHaveBeenCalledTimes(1);
+  });
+
+  it("click 普通 iframe 命中检测失败时不走宿主页 JS fallback", async () => {
+    const connection = {
+      resolveNodeByBackendId: vi.fn(async () => ({ object: { objectId: "iframe-2" } })),
+      scrollIntoViewIfNeeded: vi.fn(async () => {
+        throw new Error("scroll failed");
+      }),
+      getBoxModel: vi.fn(),
+      callFunctionOn: vi.fn(async () => ({
+        result: { value: { isIframe: true, isCaptchaFrame: false, tagName: "IFRAME" } },
+      })),
+      evaluate: vi.fn(),
+      dispatchMouseEvent: vi.fn(),
+      dispatchKeyEvent: vi.fn(),
+      insertText: vi.fn(),
+    };
+    const snapshot = {
+      getBackendNodeId: vi.fn(() => 303),
+      takeSnapshot: vi.fn(async () => "页面快照"),
+    };
+    const executor = new BrowserControlActionExecutor(connection, snapshot);
+
+    const result = await executor.execute(createToolCall("click", { uid: "9_9" }));
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("跨域 iframe 真实鼠标点击失败");
+    expect(connection.dispatchMouseEvent).not.toHaveBeenCalled();
   });
 
   it("fill 空字符串表示清空输入框，并通过受控 JS 兜底清理残留值", async () => {

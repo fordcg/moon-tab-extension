@@ -134,28 +134,37 @@ export class BrowserControlActionExecutor {
   private async click(uid: string): Promise<string> {
     const objectId = await this.getObjectIdFromUid(uid);
     const backendNodeId = this.snapshot.getBackendNodeId(uid);
+    const targetMeta = await this.probeClickTarget(objectId);
 
-    // SHIELD / "I'm not a robot" checkboxes often need direct checked-state toggling
-    // rather than a simple geometric mouse click on an overlayed label.
-    const shieldResult = await this.tryClickShieldLikeControl(objectId, uid);
-    if (shieldResult) {
-      return shieldResult;
+    // Cross-origin captcha widgets (Turnstile / hCaptcha) live in OOPIF.
+    // Host-page JS .click() never reaches inside the iframe; only real CDP mouse events do.
+    // Skip same-origin shield probe for pure iframe targets so we don't fake-succeed.
+    if (!targetMeta.isIframe) {
+      const shieldResult = await this.tryClickShieldLikeControl(objectId, uid);
+      if (shieldResult) {
+        return shieldResult;
+      }
     }
 
     try {
       const { x, y } = await this.getElementCenter(objectId, backendNodeId);
-      const hitTest = await this.connection.callFunctionOn({
-        objectId,
-        functionDeclaration: `function(x, y) {
-          const hitElement = document.elementFromPoint(x, y);
-          if (!hitElement) return false;
-          return this.contains(hitElement) || hitElement.contains(this);
-        }`,
-        arguments: [{ value: x }, { value: y }],
-        returnByValue: true,
-      });
-      if (getResultValue(hitTest) === false) {
-        throw new Error(SAFE_CLICK_OCCLUDED_ERROR);
+      if (!targetMeta.isIframe) {
+        const hitTest = await this.connection.callFunctionOn({
+          objectId,
+          functionDeclaration: `function(x, y) {
+            const hitElement = document.elementFromPoint(x, y);
+            if (!hitElement) return false;
+            // elementFromPoint often returns the element itself (e.g. IFRAME).
+            // Node.contains(self) is always false, so treat identity as a hit.
+            if (hitElement === this) return true;
+            return this.contains(hitElement) || hitElement.contains(this);
+          }`,
+          arguments: [{ value: x }, { value: y }],
+          returnByValue: true,
+        });
+        if (getResultValue(hitTest) === false) {
+          throw new Error(SAFE_CLICK_OCCLUDED_ERROR);
+        }
       }
 
       await this.connection.dispatchMouseEvent({ type: "mouseMoved", x, y });
@@ -164,6 +173,14 @@ export class BrowserControlActionExecutor {
     } catch (error) {
       if (error instanceof Error && error.message === SAFE_CLICK_OCCLUDED_ERROR) {
         throw error;
+      }
+      // Synthetic host events cannot enter cross-origin iframe content documents.
+      if (targetMeta.isIframe) {
+        throw new Error(
+          targetMeta.isCaptchaFrame
+            ? "跨域验证码 iframe（Turnstile/hCaptcha）真实鼠标点击失败；若为图片挑战请标记 needs_human，checkbox 模式可重试 click iframe 中心。"
+            : "跨域 iframe 真实鼠标点击失败，宿主页合成事件无法进入 iframe 内部。",
+        );
       }
 
       await this.connection.callFunctionOn({
@@ -191,7 +208,42 @@ export class BrowserControlActionExecutor {
       });
     }
 
+    if (targetMeta.isCaptchaFrame) {
+      return `已对跨域验证码 iframe ${uid} 发送真实鼠标点击（CDP）。checkbox/managed Turnstile 常可自动通过；若出现图片点选/拖动挑战请 needs_human，不要空转。`;
+    }
+    if (targetMeta.isIframe) {
+      return `已对 iframe 元素 ${uid} 发送真实鼠标点击（CDP，可进入跨域 frame）。`;
+    }
     return `已点击元素 ${uid}。`;
+  }
+
+  private async probeClickTarget(objectId: string): Promise<{ isIframe: boolean; isCaptchaFrame: boolean; tagName: string }> {
+    try {
+      const response = await this.connection.callFunctionOn({
+        objectId,
+        functionDeclaration: `function() {
+          const tagName = String(this.tagName || "").toUpperCase();
+          const isIframe = tagName === "IFRAME" || tagName === "FRAME";
+          const src = String(this.src || this.getAttribute?.("src") || "").toLowerCase();
+          const name = String(this.name || this.getAttribute?.("name") || this.getAttribute?.("title") || this.getAttribute?.("aria-label") || "").toLowerCase();
+          const className = String(this.className || "").toLowerCase();
+          const isCaptchaFrame = isIframe && (
+            /challenges\\.cloudflare\\.com|turnstile|hcaptcha|recaptcha|gstatic\\.com\\/recaptcha|newassets\\.hcaptcha/.test(src)
+            || /turnstile|hcaptcha|recaptcha|cf-turnstile|请验证|真人|security challenge|captcha/.test(name + " " + className)
+          );
+          return { isIframe, isCaptchaFrame, tagName };
+        }`,
+        returnByValue: true,
+      });
+      const value = getResultValue(response) as { isIframe?: boolean; isCaptchaFrame?: boolean; tagName?: string } | undefined;
+      return {
+        isIframe: value?.isIframe === true,
+        isCaptchaFrame: value?.isCaptchaFrame === true,
+        tagName: typeof value?.tagName === "string" ? value.tagName : "",
+      };
+    } catch {
+      return { isIframe: false, isCaptchaFrame: false, tagName: "" };
+    }
   }
 
   private async tryClickShieldLikeControl(objectId: string, uid: string): Promise<string | undefined> {
@@ -199,13 +251,22 @@ export class BrowserControlActionExecutor {
       const probe = await this.connection.callFunctionOn({
         objectId,
         functionDeclaration: `function() {
+          const tagName = String(this.tagName || "").toUpperCase();
+          // Host-page synthetic clicks never enter cross-origin captcha iframes.
+          if (tagName === "IFRAME" || tagName === "FRAME") {
+            return { handled: false };
+          }
           const text = ((this.innerText || this.textContent || this.getAttribute?.("aria-label") || this.getAttribute?.("title") || "") + "").trim();
           const lower = text.toLowerCase();
           const looksLikeShield =
-            /我不是机器人|i['’]?m not a robot|not a robot|shield|turnstile|人机验证|安全验证/.test(text) ||
-            /shield|turnstile|cf-turnstile|recaptcha/.test(lower) ||
+            /我不是机器人|i['’]?m not a robot|not a robot|shield|人机验证|安全验证/.test(text) ||
+            /shield/.test(lower) ||
             (this.tagName === "INPUT" && this.type === "checkbox") ||
             this.getAttribute?.("role") === "checkbox";
+          // Do not treat Turnstile/hCaptcha widget hosts as same-origin shield checkboxes.
+          if (/turnstile|cf-turnstile|hcaptcha|recaptcha|challenges\\.cloudflare/.test(lower)) {
+            return { handled: false };
+          }
           if (!looksLikeShield) {
             return { handled: false };
           }

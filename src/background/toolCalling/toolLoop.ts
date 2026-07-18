@@ -623,6 +623,7 @@ function createScreenshotVisionFollowUpMessage(input: {
       "以下图片来自上一轮 screenshot 工具附件，请直接识读。",
       "若是图形验证码：只输出验证码字符（忽略干扰线），然后 fill 输入框并 click 确认。",
       "若是 SHIELD/我不是机器人复选框：click 复选框本身，不要只点外层卡片。",
+      "若是 Cloudflare Turnstile iframe：click 该 iframe UID（真实鼠标），不要只截图；图片点选挑战才 needs_human。",
       "若看不清：先对验证码图片元素再 screenshot(target=element)，不要猜测后直接放弃。",
     ].join("\n"),
     createdAt: Date.now(),
