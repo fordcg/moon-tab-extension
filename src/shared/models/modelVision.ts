@@ -24,7 +24,9 @@ export function detectModelSupportsVision(modelId: string | undefined | null, di
     /\b(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-4-vision|gpt-5|computer-use)\b/.test(text) ||
     /\bchatgpt-4o\b/.test(text) ||
     /\bgpt-4o[-_]?mini\b/.test(text) ||
-    /\bgpt-4\.1[-_]?(mini|nano)?\b/.test(text)
+    /\bgpt-4\.1[-_]?(mini|nano)?\b/.test(text) ||
+    // gpt-5, gpt-5.1, gpt-5.2, gpt-5.4, gpt-5.5, gpt-5-mini, gpt-5-nano, ...
+    /\bgpt-5(\.\d+)?([-_]|$)/.test(text)
   ) {
     return true;
   }

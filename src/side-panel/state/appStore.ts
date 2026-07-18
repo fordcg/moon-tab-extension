@@ -2,6 +2,7 @@ import { create, type StoreApi } from "zustand";
 import { buildChatRequestMessages } from "../../shared/chat/buildChatRequestMessages";
 import { createModelConfig } from "../../shared/chat/modelConfig";
 import { detectModelSupportsVision } from "../../shared/models/modelVision";
+import { detectModelSupportsReasoningEffort, normalizeModelReasoningEffort } from "../../shared/models/modelReasoning";
 import { createPageContextPrompt } from "../../shared/chat/pageContextPrompt";
 import { mergeTokenUsageEntries } from "../../shared/chat/tokenUsage";
 import {
@@ -317,7 +318,7 @@ export interface AppState {
   updateProvider: (providerId: string, updates: Partial<Pick<ModelProvider, "name" | "endpointType" | "endpointUrl" | "apiKey">>) => void;
   addModel: (providerId: string, overrides?: Partial<Pick<ProviderModel, "displayName" | "modelId">>) => ProviderModel;
   addRemoteModel: (providerId: string, remoteModel: RemoteModelInfo) => ProviderModel;
-  updateModel: (modelId: string, updates: Partial<Pick<ProviderModel, "displayName" | "modelId" | "temperature" | "maxTokens" | "topK" | "systemPrompt" | "supportsVision">>) => void;
+  updateModel: (modelId: string, updates: Partial<Pick<ProviderModel, "displayName" | "modelId" | "temperature" | "maxTokens" | "topK" | "systemPrompt" | "supportsVision" | "reasoningEffort">>) => void;
   setTitleModel: (modelId: string) => void;
   setDefaultChatModel: (modelId: string) => Promise<void>;
   updateChatPreferences: (updates: Partial<ChatPreferenceValues>) => Promise<void>;
@@ -609,11 +610,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
             : updates.modelId !== undefined || updates.displayName !== undefined
               ? detectModelSupportsVision(nextModelId, nextDisplayName)
               : model.supportsVision;
+        const reasoningEffort =
+          updates.reasoningEffort !== undefined
+            ? normalizeModelReasoningEffort(updates.reasoningEffort)
+            : updates.modelId !== undefined || updates.displayName !== undefined
+              ? detectModelSupportsReasoningEffort(nextModelId, nextDisplayName)
+                ? normalizeModelReasoningEffort(model.reasoningEffort, "medium")
+                : undefined
+              : model.reasoningEffort;
 
         return {
           ...model,
           ...updates,
           supportsVision,
+          reasoningEffort,
           updatedAt: Date.now(),
         };
       });
@@ -3012,13 +3022,14 @@ function createAndStoreModel(
   providerId: string,
   get: StoreGetter,
   set: StoreSetter,
-  overrides: Partial<Pick<ProviderModel, "displayName" | "modelId" | "supportsVision">> = {},
+  overrides: Partial<Pick<ProviderModel, "displayName" | "modelId" | "supportsVision" | "reasoningEffort">> = {},
 ): ProviderModel {
   markModelCatalogChanged();
   const now = Date.now();
   const index = get().models.filter((model) => model.providerId === providerId).length + 1;
   const modelId = overrides.modelId ?? "gpt-4.1-mini";
   const displayName = overrides.displayName ?? `新模型 ${index}`;
+  const supportsReasoning = detectModelSupportsReasoningEffort(modelId, displayName);
   const model: ProviderModel = {
     id: `model-${now}-${index}`,
     providerId,
@@ -3029,6 +3040,11 @@ function createAndStoreModel(
     systemPrompt: "你是网页助手",
     isTitleModel: false,
     supportsVision: overrides.supportsVision ?? detectModelSupportsVision(modelId, displayName),
+    ...(supportsReasoning
+      ? { reasoningEffort: normalizeModelReasoningEffort(overrides.reasoningEffort, "medium") }
+      : overrides.reasoningEffort
+        ? { reasoningEffort: normalizeModelReasoningEffort(overrides.reasoningEffort) }
+        : {}),
     enabled: true,
     createdAt: now,
     updatedAt: now,

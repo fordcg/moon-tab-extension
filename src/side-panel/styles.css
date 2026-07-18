@@ -3721,6 +3721,32 @@ body {
   overflow: visible;
 }
 
+.sidebar-shell .composer-actions > .reasoning-effort-selector {
+  flex: 0 0 auto;
+  order: 28;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 7.5rem;
+}
+
+.sidebar-shell .reasoning-effort-label {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--sidepanel-muted, #8b96a8);
+  white-space: nowrap;
+}
+
+.sidebar-shell .reasoning-effort-select {
+  min-width: 3.6rem;
+  max-width: 5rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border-radius: 0.65rem;
+  font-size: 0.78rem;
+}
+
 .sidebar-shell .composer-actions > .ui-button-primary {
   order: 40;
 }

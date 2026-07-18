@@ -1,5 +1,6 @@
 import type { ChatImageAttachment, ModelConfig } from "../types";
 import { createEndpointUrl } from "./modelCatalog";
+import { applyReasoningEffortToRequestBody } from "./modelReasoning";
 import type { ModelRequestMessage, ModelRequestPayload, ModelToolCall, ModelToolChoice, ModelToolOptions } from "./types";
 
 type AnthropicMessageContent =
@@ -19,7 +20,7 @@ export function createAnthropicMessagesPayload(
 ): ModelRequestPayload {
   const system = messages.find((message) => message.role === "system")?.content || model.systemPrompt;
 
-  const body: Record<string, unknown> = {
+  let body: Record<string, unknown> = {
     model: model.modelId,
     system,
     messages: messages
@@ -44,6 +45,14 @@ export function createAnthropicMessagesPayload(
       body.tool_choice = createAnthropicToolChoice(toolOptions.toolChoice);
     }
   }
+
+  body = applyReasoningEffortToRequestBody({
+    body,
+    modelId: model.modelId,
+    displayName: model.displayName,
+    endpointType: "anthropic_messages",
+    reasoningEffort: model.reasoningEffort,
+  });
 
   return {
     url: createEndpointUrl(model.endpointUrl, "anthropic_messages"),

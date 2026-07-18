@@ -1,5 +1,6 @@
 import type { ChatImageAttachment, ModelConfig } from "../types";
 import { createEndpointUrl } from "./modelCatalog";
+import { applyReasoningEffortToRequestBody } from "./modelReasoning";
 import type { ModelRequestMessage, ModelRequestPayload, ModelToolCall, ModelToolChoice, ModelToolOptions, OpenAIStructuredOutputFormat } from "./types";
 
 type OpenAIMessageContent =
@@ -16,7 +17,7 @@ export function createOpenAIChatPayload(
   structuredOutput?: OpenAIStructuredOutputFormat,
   toolOptions: ModelToolOptions = {},
 ): ModelRequestPayload {
-  const body: Record<string, unknown> = {
+  let body: Record<string, unknown> = {
     model: model.modelId,
     messages: messages.map((message) => createOpenAIMessage(model, message)),
     temperature: model.temperature,
@@ -60,6 +61,14 @@ export function createOpenAIChatPayload(
       body.tool_choice = createOpenAIToolChoice(toolOptions.toolChoice);
     }
   }
+
+  body = applyReasoningEffortToRequestBody({
+    body,
+    modelId: model.modelId,
+    displayName: model.displayName,
+    endpointType: "openai_chat",
+    reasoningEffort: model.reasoningEffort,
+  });
 
   return {
     url: createEndpointUrl(model.endpointUrl, "openai_chat"),

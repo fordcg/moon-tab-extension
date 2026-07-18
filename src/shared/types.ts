@@ -95,6 +95,11 @@ export interface ProviderModel {
   systemPrompt: string;
   isTitleModel: boolean;
   supportsVision?: boolean;
+  /**
+   * Reasoning intensity for models that accept `reasoning_effort` / extended thinking.
+   * Stored per model so switching models keeps each model's last choice.
+   */
+  reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
