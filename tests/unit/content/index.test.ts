@@ -14,6 +14,12 @@ function createRule(): ExtractionRule {
   };
 }
 
+type MessageListener = (
+  message: unknown,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: unknown) => void,
+) => boolean | void;
+
 describe("content 脚本消息", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -24,7 +30,8 @@ describe("content 脚本消息", () => {
     });
   });
 
-  function stubChrome(onMessage?: (listener: Function) => void) {
+  function stubChrome() {
+    const listeners: MessageListener[] = [];
     vi.stubGlobal("chrome", {
       runtime: {
         getURL: vi.fn((path: string) => `chrome-extension://moon-tab/${path}`),
@@ -40,8 +47,8 @@ describe("content 脚本消息", () => {
           });
         }),
         onMessage: {
-          addListener: vi.fn((listener) => {
-            onMessage?.(listener);
+          addListener: vi.fn((listener: MessageListener) => {
+            listeners.push(listener);
           }),
         },
         lastError: undefined,
@@ -57,31 +64,36 @@ describe("content 脚本消息", () => {
         },
       },
     });
+    return listeners;
+  }
+
+  function dispatch(
+    listeners: MessageListener[],
+    message: unknown,
+    sendResponse: (response?: unknown) => void = vi.fn(),
+  ) {
+    for (const listener of listeners) {
+      listener(message, {} as chrome.runtime.MessageSender, sendResponse);
+    }
+    return sendResponse;
   }
 
   it("收到提取消息后返回当前页提取结果", async () => {
-    let registeredListener:
-      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
-      | undefined;
-
-    stubChrome((listener) => {
-      registeredListener = listener as typeof registeredListener;
-    });
-
+    const listeners = stubChrome();
     await import("../../../src/content/index");
+    await Promise.resolve();
 
     const sendResponse = vi.fn();
-    const keepChannelOpen = registeredListener?.(
+    dispatch(
+      listeners,
       {
         type: "pageContext.extract",
         rules: [createRule()],
         maxLength: 100,
       },
-      {} as chrome.runtime.MessageSender,
       sendResponse,
     );
 
-    expect(keepChannelOpen).toBe(false);
     expect(sendResponse).toHaveBeenCalledWith({
       ok: true,
       url: "https://example.com/article",
@@ -97,6 +109,7 @@ describe("content 脚本消息", () => {
     stubChrome();
     await import("../../../src/content/index");
     await Promise.resolve();
+    await Promise.resolve();
     const host = document.querySelector("[data-moon-tab-ai-pet-host]") as HTMLElement | null;
     expect(host).toBeTruthy();
     expect(host!.querySelector(".moon-pet-button")).toBeTruthy();
@@ -104,29 +117,21 @@ describe("content 脚本消息", () => {
   });
 
   it("收到 pet snapshot 事件后更新状态文案", async () => {
-    let registeredListener:
-      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
-      | undefined;
-    stubChrome((listener) => {
-      registeredListener = listener as typeof registeredListener;
-    });
+    const listeners = stubChrome();
     await import("../../../src/content/index");
     await Promise.resolve();
+    await Promise.resolve();
 
-    registeredListener?.(
-      {
-        type: PET_SNAPSHOT_EVENT_TYPE,
-        snapshot: {
-          state: "working",
-          badge: "running",
-          stateLabel: "干活中",
-          bubble: "正在 Edit",
-          updatedAt: Date.now(),
-        },
+    dispatch(listeners, {
+      type: PET_SNAPSHOT_EVENT_TYPE,
+      snapshot: {
+        state: "working",
+        badge: "running",
+        stateLabel: "干活中",
+        bubble: "正在 Edit",
+        updatedAt: Date.now(),
       },
-      {} as chrome.runtime.MessageSender,
-      vi.fn(),
-    );
+    });
 
     const host = document.querySelector("[data-moon-tab-ai-pet-host]") as HTMLElement;
     expect(host.dataset.state).toBe("working");
@@ -135,21 +140,16 @@ describe("content 脚本消息", () => {
   });
 
   it("拒绝 legacy 控制信标 URL，不再挂页面球体", async () => {
-    let registeredListener:
-      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
-      | undefined;
-    stubChrome((listener) => {
-      registeredListener = listener as typeof registeredListener;
-    });
-
+    const listeners = stubChrome();
     await import("../../../src/content/index");
+    await Promise.resolve();
     const sendResponse = vi.fn();
-    registeredListener?.(
+    dispatch(
+      listeners,
       {
         type: "sidePanel.floating.attach",
         url: "chrome-extension://moon-tab/index.html?floating=1&controlWindow=1&tabId=7",
       },
-      {} as chrome.runtime.MessageSender,
       sendResponse,
     );
 
@@ -161,21 +161,16 @@ describe("content 脚本消息", () => {
   });
 
   it("floating 悬浮助手 attach 消息会创建可复用 iframe", async () => {
-    let registeredListener:
-      | ((message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => boolean)
-      | undefined;
-    stubChrome((listener) => {
-      registeredListener = listener as typeof registeredListener;
-    });
-
+    const listeners = stubChrome();
     await import("../../../src/content/index");
+    await Promise.resolve();
     const sendResponse = vi.fn();
     const message = {
       type: "sidePanel.floating.attach",
       url: "chrome-extension://moon-tab/index.html?floating=1&tabId=7&windowId=3",
     };
-    registeredListener?.(message, {} as chrome.runtime.MessageSender, sendResponse);
-    registeredListener?.(message, {} as chrome.runtime.MessageSender, sendResponse);
+    dispatch(listeners, message, sendResponse);
+    dispatch(listeners, message, sendResponse);
     const frames = document.querySelectorAll("iframe[data-moon-tab-ai-floating-frame]");
     expect(frames).toHaveLength(1);
     expect(frames[0]).toMatchObject({ src: message.url });

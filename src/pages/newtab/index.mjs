@@ -29,6 +29,7 @@ import { createInteractionsController } from "./interactions-controller.mjs";
 import { listWidgets } from "./widgets/registry.mjs";
 import { createWidgetRuntime } from "./widgets/widget-runtime.mjs";
 import * as widgetLayoutState from "./widgets/layout-state.mjs";
+import { mountFloatingPetCompanion } from "../../shared/pet/pagePetHost.ts";
 
 const registeredWidgets = listWidgets();
 const initialElements = getNewtabDomRefs();
@@ -432,6 +433,14 @@ void readSearchHistory(extensionApi).then((items) => {
   searchHistoryItems = Array.isArray(items) ? [...items] : [];
 });
 startupController.initialize({ prefersReducedMotion });
+
+// Newtab is an extension page, so content scripts do not run. Mount the same
+// floating pet host used on normal webpages.
+mountFloatingPetCompanion({
+  openSidePanel: () => {
+    openAiSidebar();
+  },
+});
 
 window.addEventListener("resize", () => {
   startupController.handleResize();
