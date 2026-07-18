@@ -26,7 +26,7 @@ const IMAGEFREE_TAB_LOAD_TIMEOUT_MS = 30_000;
 /** Allow interactive checkbox / image challenge when managed mode cannot auto-pass. */
 const IMAGEFREE_TURNSTILE_TIMEOUT_MS = 180_000;
 const IMAGEFREE_HUMAN_VERIFICATION_HINT =
-  "Imagefree 需要 Cloudflare Turnstile 人机验证。工具会激活 imagefree.net 标签页并显示验证框；请在该页完成「请验证您是真人」后等待工具继续。不要只在别的标签页手动过一次就关闭。";
+  "Imagefree 每次生成都需要一枚新的 Cloudflare Turnstile token（一次性，无法复用）。工具会打开小型验证弹窗；请只点右下角验证框。若自动通过则无需点击。";
 
 export type ImagefreeTurnstileTokenResolver = () => Promise<string>;
 export type ImagefreePageGenerateRunner = (input: ImagefreeInput) => Promise<Record<string, unknown>>;
@@ -278,20 +278,19 @@ async function generateImagefreeImageInBrowserTab(
     throw new Error(`当前环境无法自动完成 Imagefree 人机验证。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
   }
 
-  const opened = await openOrReuseImagefreeTab(chromeApi);
+  const opened = await openImagefreeCaptchaSurface(chromeApi);
   const tabId = opened.tabId;
-  let shouldCloseTab = opened.created;
+  let shouldClose = true;
 
   try {
     await waitForTabComplete(tabId, chromeApi, IMAGEFREE_TAB_LOAD_TIMEOUT_MS);
-    // Prefer a visible tab so managed Turnstile / interactive checkbox can complete.
     try {
       await chromeApi.tabs.update(tabId, { active: true });
     } catch {
-      // Background-only hosts may reject focus; continue with inactive tab.
+      // ignore focus failures
     }
-    // Let Next.js hydrate and any existing page widget settle.
-    await delay(1_500);
+    // Minimal settle for Next.js + Turnstile script preload.
+    await delay(800);
 
     const injection = await chromeApi.scripting.executeScript({
       target: { tabId },
@@ -311,13 +310,12 @@ async function generateImagefreeImageInBrowserTab(
     });
     const result = injection?.[0]?.result;
     if (!result || typeof result !== "object") {
-      shouldCloseTab = false;
+      shouldClose = false;
       throw new Error(`Imagefree 页面内生成未返回结果。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
     }
     const payload = result as Record<string, unknown>;
     if (payload.ok !== true) {
-      // Keep tab for interactive captcha / diagnostics.
-      shouldCloseTab = false;
+      shouldClose = false;
       const message = typeof payload.error === "string" && payload.error.trim()
         ? payload.error.trim()
         : `Imagefree 页面内生成失败。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`;
@@ -334,34 +332,63 @@ async function generateImagefreeImageInBrowserTab(
       aspect_ratio: input.aspect_ratio,
     };
   } catch (error) {
-    shouldCloseTab = false;
+    shouldClose = false;
     throw rewriteHumanVerificationError(error);
   } finally {
-    if (shouldCloseTab) {
+    if (shouldClose) {
       try {
-        await chromeApi.tabs.remove(tabId);
+        if (opened.windowId != null && chromeApi.windows?.remove) {
+          await chromeApi.windows.remove(opened.windowId);
+        } else {
+          await chromeApi.tabs.remove(tabId);
+        }
       } catch {
-        // Tab may already be closed by the user.
+        // Surface may already be closed.
       }
     }
   }
 }
 
-async function openOrReuseImagefreeTab(
+/**
+ * Prefer a small focused popup so the user only sees the captcha surface,
+ * not the full Imagefree marketing UI + duplicate widgets.
+ * Turnstile still requires the imagefree.net origin (sitekey is bound to it).
+ */
+async function openImagefreeCaptchaSurface(
   chromeApi: typeof chrome,
-): Promise<{ tabId: number; created: boolean }> {
+): Promise<{ tabId: number; windowId?: number }> {
+  // Close any previous helper popup we created to avoid stacking.
   try {
     const existing = await chromeApi.tabs.query({ url: ["https://imagefree.net/*", "http://imagefree.net/*"] });
-    const reusable = existing.find((tab) => typeof tab.id === "number" && Boolean(tab.url && /imagefree\.net/i.test(tab.url)));
-    if (reusable && typeof reusable.id === "number") {
-      // Prefer Chinese page if the tab is on another locale root.
-      if (reusable.url && !/\/zh(?:$|[/?#])/i.test(reusable.url) && /imagefree\.net\/?$/i.test(reusable.url.replace(/https?:\/\//, ""))) {
-        await chromeApi.tabs.update(reusable.id, { url: IMAGEFREE_PAGE_URL, active: true });
+    for (const tab of existing) {
+      if (typeof tab.id === "number" && tab.title?.includes("Imagefree 验证")) {
+        try {
+          await chromeApi.tabs.remove(tab.id);
+        } catch {
+          // ignore
+        }
       }
-      return { tabId: reusable.id, created: false };
     }
   } catch {
-    // Fall through to create.
+    // ignore
+  }
+
+  if (chromeApi.windows?.create) {
+    try {
+      const popup = await chromeApi.windows.create({
+        url: IMAGEFREE_PAGE_URL,
+        type: "popup",
+        width: 420,
+        height: 320,
+        focused: true,
+      });
+      const tabId = popup?.tabs?.find((tab) => typeof tab.id === "number")?.id;
+      if (typeof tabId === "number") {
+        return { tabId, windowId: popup.id };
+      }
+    } catch {
+      // Fall through to normal tab.
+    }
   }
 
   const tab = await chromeApi.tabs.create({
@@ -371,7 +398,7 @@ async function openOrReuseImagefreeTab(
   if (typeof tab.id !== "number") {
     throw new Error(`无法创建 Imagefree 验证标签页。${IMAGEFREE_HUMAN_VERIFICATION_HINT}`);
   }
-  return { tabId: tab.id, created: true };
+  return { tabId: tab.id };
 }
 
 /**
@@ -439,7 +466,11 @@ function generateImagefreeInPage(options: {
   };
 
   const acquireToken = async (): Promise<string> => {
-    // 1) Reuse token already present on the official page widget (user may have just verified).
+    // Strip the full Imagefree UI so the user only sees ONE captcha.
+    // The site's native "请验证您是真人" widget + our floating widget was confusing.
+    hideSiteChromeForCaptcha();
+
+    // Prefer an existing valid token if the page already solved (rare reuse window).
     const existing = readExistingTurnstileToken();
     if (existing) {
       return existing;
@@ -448,19 +479,35 @@ function generateImagefreeInPage(options: {
     await ensureScript();
     const turnstile = await waitForTurnstileApi();
 
-    // 2) Visible widget so interactive checkbox / challenge is possible.
+    // Remove any leftover helper widgets, then render exactly one.
+    document.querySelectorAll("[data-imagefree-turnstile-host]").forEach((node) => node.remove());
+    // Hide native page Turnstile mounts so users don't click a second box.
+    document.querySelectorAll('iframe[src*="challenges.cloudflare.com"]').forEach((frame) => {
+      const el = frame as HTMLElement;
+      if (!el.closest("[data-imagefree-turnstile-host]")) {
+        el.style.setProperty("display", "none", "important");
+        const parent = el.parentElement as HTMLElement | null;
+        if (parent) {
+          parent.style.setProperty("display", "none", "important");
+        }
+      }
+    });
+
     const host = document.createElement("div");
     host.setAttribute("data-imagefree-turnstile-host", "1");
     host.style.cssText =
-      "position:fixed;right:16px;bottom:16px;width:320px;min-height:70px;padding:10px;border-radius:12px;" +
-      "background:rgba(15,23,42,0.92);color:#fff;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.35);" +
-      "font:12px/1.4 system-ui,sans-serif;";
+      "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;" +
+      "background:rgba(15,23,42,0.96);color:#fff;z-index:2147483647;" +
+      "font:13px/1.45 system-ui,sans-serif;";
     host.innerHTML =
-      '<div style="margin-bottom:8px;font-weight:600;">Imagefree 人机验证</div>' +
-      '<div style="margin-bottom:8px;opacity:.85;">请完成下方验证；通过后会自动继续生成。</div>';
-    const mount = document.createElement("div");
-    host.appendChild(mount);
+      '<div style="width:min(360px,92vw);padding:18px 16px 14px;border-radius:14px;' +
+      "background:#0f172a;border:1px solid rgba(148,163,184,.35);box-shadow:0 16px 48px rgba(0,0,0,.45);\">" +
+      '<div style="font-weight:700;margin-bottom:6px;">Imagefree 人机验证</div>' +
+      '<div style="opacity:.85;margin-bottom:12px;font-size:12px;">只点下面这一个框。通过后会自动生成并关闭。</div>' +
+      '<div data-imagefree-turnstile-mount="1"></div>' +
+      "</div>";
     document.documentElement.appendChild(host);
+    const mount = host.querySelector("[data-imagefree-turnstile-mount]") as HTMLElement;
 
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -477,14 +524,20 @@ function generateImagefreeInPage(options: {
         } catch {
           // ignore
         }
-        host.remove();
+        // Keep host until generate finishes so the popup doesn't flash empty.
         if (error) {
+          host.remove();
           reject(error);
           return;
         }
         if (!token) {
+          host.remove();
           reject(new Error("Turnstile token empty"));
           return;
+        }
+        const tip = host.querySelector("div > div > div:nth-child(2)") as HTMLElement | null;
+        if (tip) {
+          tip.textContent = "验证通过，正在生成图片…";
         }
         resolve(token);
       };
@@ -492,8 +545,11 @@ function generateImagefreeInPage(options: {
       try {
         widgetId = turnstile.render(mount, {
           sitekey: options.siteKey,
-          theme: "auto",
+          theme: "dark",
           size: "normal",
+          // Retry can help managed mode auto-pass without a second native widget racing.
+          retry: "auto",
+          "refresh-expired": "auto",
           callback: (token: string) => finish(undefined, token),
           "error-callback": () => finish(new Error("Turnstile error-callback")),
           "expired-callback": () => finish(new Error("Turnstile expired")),
@@ -506,12 +562,6 @@ function generateImagefreeInPage(options: {
 
       void (async () => {
         while (!settled && Date.now() < turnstileDeadline) {
-          // Keep polling official page inputs in case user verifies the site widget instead.
-          const reused = readExistingTurnstileToken();
-          if (reused) {
-            finish(undefined, reused);
-            return;
-          }
           try {
             const api = turnstile as {
               getResponse?: (id?: string | number) => string | undefined;
@@ -527,14 +577,26 @@ function generateImagefreeInPage(options: {
           await wait(400);
         }
         if (!settled) {
-          finish(
-            new Error(
-              "Turnstile token wait timed out. 请在当前 imagefree.net 标签页完成验证后重试。",
-            ),
-          );
+          finish(new Error("Turnstile token wait timed out. 请点击验证框后重试。"));
         }
       })();
     });
+  };
+
+  const hideSiteChromeForCaptcha = (): void => {
+    try {
+      document.title = "Imagefree 验证";
+      const style = document.createElement("style");
+      style.setAttribute("data-imagefree-captcha-style", "1");
+      style.textContent = `
+        html, body { overflow: hidden !important; background: #0f172a !important; }
+        body > *:not([data-imagefree-turnstile-host]) { visibility: hidden !important; pointer-events: none !important; }
+        [data-imagefree-turnstile-host], [data-imagefree-turnstile-host] * { visibility: visible !important; pointer-events: auto !important; }
+      `;
+      document.documentElement.appendChild(style);
+    } catch {
+      // ignore
+    }
   };
 
   const readExistingTurnstileToken = (): string => {
@@ -542,11 +604,11 @@ function generateImagefreeInPage(options: {
       'textarea[name="cf-turnstile-response"]',
       'input[name="cf-turnstile-response"]',
       '[name="cf-turnstile-response"]',
-      "textarea[id^=\"cf-chl-widget\"]",
     ];
     for (const selector of selectors) {
       const nodes = Array.from(document.querySelectorAll(selector));
       for (const node of nodes) {
+        // Ignore tokens under our host until rendered; prefer any long token.
         const value =
           (node as HTMLInputElement | HTMLTextAreaElement).value ||
           node.getAttribute("value") ||
