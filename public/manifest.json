@@ -37,7 +37,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["index.html", "assets/*"],
+      "resources": ["index.html", "assets/*", "pet/cat/*"],
       "matches": ["<all_urls>"]
     }
   ]

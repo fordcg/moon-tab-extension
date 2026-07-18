@@ -9,6 +9,8 @@ import {
 } from "./browserControlMessageHandler";
 import { createBackgroundToolExecutor, shouldExposeTool, type BackgroundToolExecutorOptions } from "./backgroundToolRuntime";
 import { handleSidePanelRuntimeMessage, initializeSidePanelController } from "./sidePanelController";
+import { handlePetRuntimeMessage } from "./petRuntime";
+import type { PetRuntimeMessage } from "../shared/pet/runtime";
 import { handleChatSendMessage, type ChatSendMessage } from "./modelRequestHandler";
 import {
   handlePageContextListTabsMessage,
@@ -143,6 +145,7 @@ type RuntimeMessage =
   | BrowserControlMessage
   | McpMessage
   | SidePanelRuntimeMessage
+  | PetRuntimeMessage
   | { type: "chat.getActiveStreamSessions" }
   | { type: "sync.restoreStarted" | "sync.restoreCommitted" | "sync.restoreRolledBack" | "sync.restoreFailed" }
   | { type: `networkContext.${string}`; tabId?: number; requestIds?: string[] };
@@ -201,6 +204,12 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
   const sidePanelResponse = handleSidePanelRuntimeMessage(message as SidePanelRuntimeMessage);
   if (sidePanelResponse) {
     void sidePanelResponse.then(sendResponse);
+    return true;
+  }
+
+  const petResponse = handlePetRuntimeMessage(message);
+  if (petResponse) {
+    void petResponse.then(sendResponse);
     return true;
   }
 

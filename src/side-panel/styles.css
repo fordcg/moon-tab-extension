@@ -7874,101 +7874,67 @@ body.sidepanel-stop-requested .composer-abort-button {
   }
 }
 
-/* Side-panel AI pet companion */
-.pet-companion {
-  position: fixed;
-  right: 14px;
-  bottom: 14px;
-  z-index: 40;
-  width: 112px;
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  pointer-events: none;
+/* Side-panel AI pet companion (publisher chip; page hosts the floating pet) */
+.pet-side-chip {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
+  background: color-mix(in srgb, var(--color-surface, #fffaf2) 94%, transparent);
 }
 
-.pet-companion-button,
-.pet-companion-mute {
-  pointer-events: auto;
-}
-
-.pet-companion-bubble {
-  max-width: 168px;
-  padding: 6px 10px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
-  background: color-mix(in srgb, var(--color-surface, #fffaf2) 92%, transparent);
-  color: var(--color-body, #2b241c);
-  box-shadow: 0 10px 28px rgba(43, 36, 28, 0.12);
-  font-size: 11px;
-  line-height: 1.35;
-  text-align: center;
-}
-
-.pet-companion-button {
-  position: relative;
-  width: 88px;
-  height: 88px;
+.pet-side-chip-button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 0;
-  padding: 0;
   background: transparent;
+  color: var(--color-body, #2b241c);
   cursor: pointer;
-  border-radius: 18px;
+  text-align: left;
+  padding: 0;
 }
 
-.pet-companion-img {
-  width: 88px;
-  height: 88px;
-  object-fit: contain;
-  display: block;
-  filter: drop-shadow(0 8px 14px rgba(43, 36, 28, 0.18));
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
-.pet-companion-badge {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
+.pet-side-chip-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--color-surface, #fff) 90%, transparent);
-  background: #9aa0a6;
+  background: #b7b1a6;
+  flex: 0 0 auto;
 }
 
-.pet-companion-badge.is-running { background: #2f9e8f; }
-.pet-companion-badge.is-done { background: #4caf70; }
-.pet-companion-badge.is-interrupted { background: #d95c63; }
-.pet-companion-badge.is-idle { background: #b7b1a6; }
+.pet-side-chip-dot.is-running { background: #2f9e8f; }
+.pet-side-chip-dot.is-done { background: #4caf70; }
+.pet-side-chip-dot.is-interrupted { background: #d95c63; }
+.pet-side-chip-dot.is-idle { background: #b7b1a6; }
 
-.pet-companion-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  pointer-events: auto;
+.pet-side-chip-label {
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.pet-companion-state {
-  font-size: 11px;
-  font-weight: 650;
-  color: color-mix(in srgb, var(--color-body, #2b241c) 78%, transparent);
+.pet-side-chip-hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 48%, transparent);
+  white-space: nowrap;
 }
 
-.pet-companion-mute {
+.pet-side-chip-mute {
   border: 0;
-  background: color-mix(in srgb, var(--color-surface, #fff) 70%, transparent);
+  background: color-mix(in srgb, var(--color-canvas, #f7f1e8) 80%, transparent);
   color: color-mix(in srgb, var(--color-body, #2b241c) 70%, transparent);
   border-radius: 999px;
-  padding: 2px 7px;
+  padding: 4px 8px;
   font-size: 10px;
   cursor: pointer;
-}
-
-.pet-companion-credit {
-  margin: 0;
-  font-size: 9px;
-  color: color-mix(in srgb, var(--color-body, #2b241c) 45%, transparent);
 }
 
 .pet-usage-overlay {

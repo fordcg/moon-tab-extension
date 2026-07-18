@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChatMessage, ChatToolCallRecord } from "../../shared/types";
 import { derivePetState } from "../../shared/pet/derivePetState";
-import type { PetState } from "../../shared/pet/states";
+import {
+  PET_SNAPSHOT_PUBLISH_TYPE,
+  petStateLabel,
+  type PetRuntimeSnapshot,
+} from "../../shared/pet/runtime";
 import { useAppStore } from "../state/appStore";
-import { CAT_ASSET_CREDIT, resolveCatAsset } from "../pet/petAssets";
 import { PetUsagePanel } from "./PetUsagePanel";
 
 const COMPLETED_HOLD_MS = 4_000;
@@ -35,6 +38,26 @@ function latestAssistantSnippet(messages: ChatMessage[]): string | undefined {
   return undefined;
 }
 
+function publishPetSnapshot(snapshot: PetRuntimeSnapshot): void {
+  try {
+    void chrome.runtime?.sendMessage?.(
+      {
+        type: PET_SNAPSHOT_PUBLISH_TYPE,
+        snapshot,
+      },
+      () => {
+        void chrome.runtime?.lastError;
+      },
+    );
+  } catch {
+    // Side panel may run outside extension runtime in unit tests.
+  }
+}
+
+/**
+ * Side-panel publisher + usage entry.
+ * The visible draggable pet lives in the content script on every web page.
+ */
 export function PetCompanion() {
   const activeSessionId = useAppStore((state) => state.activeSessionId);
   const chatSessions = useAppStore((state) => state.chatSessions);
@@ -46,17 +69,11 @@ export function PetCompanion() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const [poolIndex, setPoolIndex] = useState(0);
   const [completedUntil, setCompletedUntil] = useState(0);
   const [prevSending, setPrevSending] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setPoolIndex((value) => value + 1), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -87,7 +104,7 @@ export function PetCompanion() {
       ? "任务失败"
       : failedTool?.errorMessage || (failedTool ? `${failedTool.displayName || failedTool.name} 失败` : null);
 
-  const snapshot = derivePetState({
+  const derived = derivePetState({
     sending: sending || task?.status === "running",
     streamingText,
     tools,
@@ -102,46 +119,45 @@ export function PetCompanion() {
     now,
   });
 
-  const asset = resolveCatAsset(snapshot.state, poolIndex);
-  const stateLabel = stateTitle(snapshot.state);
+  const snapshot: PetRuntimeSnapshot = useMemo(
+    () => ({
+      state: derived.state,
+      bubble: derived.bubble,
+      badge: derived.badge,
+      toolLabel: derived.toolLabel,
+      stateLabel: petStateLabel(derived.state),
+      muted,
+      updatedAt: now,
+    }),
+    [derived.badge, derived.bubble, derived.state, derived.toolLabel, muted, now],
+  );
+
+  useEffect(() => {
+    publishPetSnapshot(snapshot);
+  }, [snapshot]);
 
   return (
     <>
-      <div className="pet-companion" data-state={snapshot.state}>
-        {snapshot.bubble ? (
-          <div className="pet-companion-bubble" role="status" aria-live="polite">
-            {snapshot.bubble}
-          </div>
-        ) : null}
+      <div className="pet-side-chip" data-state={snapshot.state}>
         <button
           type="button"
-          className="pet-companion-button"
-          title={`${stateLabel} · 点击查看用量`}
-          aria-label={`${stateLabel}，打开用量面板`}
+          className="pet-side-chip-button"
           onClick={() => setPanelOpen(true)}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setMuted((value) => !value);
-          }}
+          title="打开用量面板；页面右下角可拖动浮宠"
         >
-          <img className="pet-companion-img" src={asset} alt="" draggable={false} />
-          <span className={`pet-companion-badge is-${snapshot.badge || "idle"}`} aria-hidden="true" />
+          <span className={`pet-side-chip-dot is-${snapshot.badge || "idle"}`} aria-hidden="true" />
+          <span className="pet-side-chip-label">{snapshot.stateLabel}</span>
+          <span className="pet-side-chip-hint">页面浮宠已开</span>
         </button>
-        <div className="pet-companion-meta">
-          <span className="pet-companion-state">{stateLabel}</span>
-          <button
-            type="button"
-            className="pet-companion-mute"
-            onClick={() => setMuted((value) => !value)}
-            title={muted ? "取消静音" : "静音气泡"}
-            aria-pressed={muted}
-          >
-            {muted ? "静音" : "气泡"}
-          </button>
-        </div>
-        <p className="pet-companion-credit" title={CAT_ASSET_CREDIT}>
-          皮肤 @月薪喵
-        </p>
+        <button
+          type="button"
+          className="pet-side-chip-mute"
+          onClick={() => setMuted((value) => !value)}
+          aria-pressed={muted}
+          title={muted ? "取消静音" : "静音气泡"}
+        >
+          {muted ? "静音" : "气泡"}
+        </button>
       </div>
       {panelOpen ? (
         <PetUsagePanel
@@ -152,39 +168,4 @@ export function PetCompanion() {
       ) : null}
     </>
   );
-}
-
-function stateTitle(state: PetState): string {
-  switch (state) {
-    case "working":
-      return "干活中";
-    case "thinking":
-      return "思考中";
-    case "talking":
-      return "回复中";
-    case "juggling":
-      return "并行任务";
-    case "waiting":
-      return "等你授权";
-    case "needsinput":
-      return "等你回复";
-    case "happy":
-      return "完成";
-    case "greet":
-      return "新会话";
-    case "error":
-      return "出错";
-    case "loafing":
-      return "摸鱼";
-    case "roam":
-      return "闲逛";
-    case "sleeping":
-      return "睡觉";
-    case "sweeping":
-      return "清理";
-    case "attention":
-      return "看一眼";
-    default:
-      return "待命";
-  }
 }
