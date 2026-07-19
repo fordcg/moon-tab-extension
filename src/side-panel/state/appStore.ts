@@ -451,9 +451,30 @@ const exampleModel: ProviderModel = {
 };
 
 let modelCatalogRevision = 0;
+const BROWSER_CONTROL_PREFERENCES_SETTING_KEY = "browserControlPreferences";
+
+interface BrowserControlPreferences {
+  enabled: boolean;
+}
 
 function markModelCatalogChanged() {
   modelCatalogRevision += 1;
+}
+
+function normalizeBrowserControlPreferences(value: unknown): BrowserControlPreferences {
+  if (!value || typeof value !== "object") {
+    return { enabled: false };
+  }
+
+  return { enabled: (value as { enabled?: unknown }).enabled === true };
+}
+
+async function saveBrowserControlPreference(enabled: boolean): Promise<void> {
+  await saveAppSetting({
+    key: BROWSER_CONTROL_PREFERENCES_SETTING_KEY,
+    value: { enabled },
+    updatedAt: Date.now(),
+  });
 }
 
 export const useAppStore = create<AppState>()((set, get) => ({
@@ -879,7 +900,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
         browserAutomationMode: previousMode,
         failure: { message: response.message },
       });
+      return;
     }
+
+    await saveBrowserControlPreference(enabled);
   },
   setBrowserAutomationMode: async (mode) => {
     if (!get().browserControlEnabled) {
@@ -926,6 +950,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
   markBrowserControlDetached: () => {
+    void saveBrowserControlPreference(false);
     set({
       browserControlEnabled: false,
       runtimeReadonlyEnabled: false,
@@ -1048,7 +1073,18 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   loadChannelConfig: async () => {
     const revisionAtStart = modelCatalogRevision;
-    const [providers, modelsFromDb, savedDefaultChatModelId, savedChatPreferences, savedAutomationPlaybookSettings, savedSkillPlaybooks, savedMetapiAdminSettings, webSearchSettings, mcpSettings] = await Promise.all([
+    const [
+      providers,
+      modelsFromDb,
+      savedDefaultChatModelId,
+      savedChatPreferences,
+      savedAutomationPlaybookSettings,
+      savedSkillPlaybooks,
+      savedMetapiAdminSettings,
+      webSearchSettings,
+      mcpSettings,
+      savedBrowserControlPreferences,
+    ] = await Promise.all([
       getModelProviders(),
       getProviderModels(),
       getAppSetting<string>("defaultChatModelId"),
@@ -1058,6 +1094,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       getAppSetting<unknown>(METAPI_ADMIN_SETTINGS_KEY),
       getWebSearchSettings(),
       getMcpSettings(),
+      getAppSetting<unknown>(BROWSER_CONTROL_PREFERENCES_SETTING_KEY),
     ]);
     // Auto-upgrade known multimodal models that were saved with supportsVision=false/undefined.
     // Never auto-downgrade an explicit true flag.
@@ -1104,6 +1141,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const knownIds = getRegisteredAutomationPlaybooks(importedSkillPlaybooks).map((item) => item.id);
     const automationPlaybookSettings = normalizeAutomationPlaybookSettings(savedAutomationPlaybookSettings, knownIds);
     const metapiAdminSettings = normalizeMetapiAdminSettings(savedMetapiAdminSettings);
+    const browserControlPreferences = normalizeBrowserControlPreferences(savedBrowserControlPreferences);
 
     set({
       providers: resolvedProviders,
@@ -1122,12 +1160,32 @@ export const useAppStore = create<AppState>()((set, get) => ({
         ...get().pageContext,
         extractMode: resolveDefaultContextMode(chatPreferences),
       },
+      ...(browserControlPreferences.enabled
+        ? {
+            browserControlEnabled: true,
+            browserAutomationMode: "normal_restricted" as const,
+            runtimeReadonlyEnabled: false,
+            pendingBoundaryChoice: undefined,
+          }
+        : {}),
       selectedModelId:
         activeSessionModelId ||
         (selectedModelStillExists
           ? currentSelectedModelId
           : (defaultChatModelId || resolveAvailableModelId("", resolvedModels, resolvedProviders))),
     });
+    if (browserControlPreferences.enabled) {
+      const response = await syncBrowserControlEnabled(true);
+      if (!response.ok) {
+        set({
+          browserControlEnabled: false,
+          browserAutomationMode: "normal_restricted",
+          runtimeReadonlyEnabled: false,
+          pendingBoundaryChoice: undefined,
+          failure: { message: response.message },
+        });
+      }
+    }
   },
   loadChatData: async () => {
     if (globalThis.chrome?.runtime?.id) {

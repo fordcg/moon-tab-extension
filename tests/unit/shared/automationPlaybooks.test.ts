@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getEnabledAutomationPlaybooks,
+  getAutomationPlaybookById,
   getRegisteredAutomationPlaybooks,
   matchAutomationPlaybookByHints,
   normalizeAutomationPlaybookSettings,
@@ -79,5 +80,17 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(matchAutomationPlaybookByHints("开始签到并汇总", playbooks)?.id).toBe("start_all_checkin");
     expect(matchAutomationPlaybookByHints("收录中转站 gpt(name)", playbooks)?.id).toBe("register_relay_site");
     expect(matchAutomationPlaybookByHints("今天天气怎么样", playbooks)).toBeUndefined();
+  });
+
+  it("补签策略在立即签到点击后会快失败并保留诊断证据", () => {
+    const playbook = getAutomationPlaybookById("repair_failed_checkin");
+
+    expect(playbook?.prompt).toEqual(expect.stringContaining("点击「立即签到」后"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("2~5 秒"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("不要反复点击同一个签到入口"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("collect_diagnostics"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("network_list_requests"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("Console"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("metapi_record_browser_checkin"));
   });
 });

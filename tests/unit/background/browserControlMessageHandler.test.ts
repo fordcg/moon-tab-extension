@@ -376,6 +376,31 @@ describe("浏览器控制地基", () => {
     );
   });
 
+  it("页面目标关闭但标签页仍存在时保持浏览器控制开启并重新连接", async () => {
+    const chromeMock = createChromeMock();
+    const connection = new BrowserDebuggerConnection(chromeMock);
+    const manager = new BrowserControlManager(connection, chromeMock);
+
+    await manager.setEnabled(true, 9);
+    chromeMock.debugger.attach.mockClear();
+    chromeMock.runtime.sendMessage.mockClear();
+
+    chromeMock.detachListeners[0]?.({ tabId: 9 }, "target_closed");
+
+    await vi.waitFor(() => {
+      expect(chromeMock.debugger.attach).toHaveBeenCalledWith({ tabId: 9 }, "1.3", expect.any(Function));
+    });
+    expect(manager.getDiagnostics(2)).toMatchObject({
+      browserControlEnabled: true,
+      browserControlAttached: true,
+      tabId: 9,
+    });
+    expect(chromeMock.runtime.sendMessage).not.toHaveBeenCalledWith(
+      { type: "browserControl.detached", tabId: 9, reason: "target_closed" },
+      expect.any(Function),
+    );
+  });
+
   it("启用必要调试 domain 失败时自动 detach 并返回中文错误", async () => {
     const chromeMock = createChromeMock({ sendCommandError: "Runtime.enable failed" });
     const connection = new BrowserDebuggerConnection(chromeMock);
@@ -2501,7 +2526,7 @@ describe("浏览器控制地基", () => {
 
     expect(result.content).toContain("已新建并切换到新页面");
     expect(result.content).not.toContain("12");
-    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: "https://example.com/new", active: true, windowId: 1 });
+    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: "https://example.com/new", active: false, windowId: 1 });
     expect(chromeMock.tabs.group).not.toHaveBeenCalled();
     expect(connection.attachedTabId).toBe(12);
   });

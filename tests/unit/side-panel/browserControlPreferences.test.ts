@@ -9,7 +9,7 @@ describe("浏览器控制全局运行态", () => {
     await clearDatabase();
   });
 
-  it("启动后默认关闭浏览器控制，并忽略历史偏好中的自动化默认模式字段", async () => {
+  it("启动后忽略旧聊天偏好字段，并读取独立浏览器控制偏好恢复开启", async () => {
     await saveAppSetting({
       key: "chatPreferences",
       value: {
@@ -21,11 +21,23 @@ describe("浏览器控制全局运行态", () => {
       },
       updatedAt: 1,
     });
+    await saveAppSetting({
+      key: "browserControlPreferences",
+      value: { enabled: true },
+      updatedAt: 2,
+    });
+    const sendMessage = vi.fn((message: { type: string; enabled?: boolean }, callback: (response: unknown) => void) => {
+      callback({ ok: true, attached: message.enabled === true, tabId: 7, message: "ok" });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
 
     await useAppStore.getState().loadChannelConfig();
 
-    expect(useAppStore.getState().browserControlEnabled).toBe(false);
+    expect(sendMessage).toHaveBeenCalledWith({ type: "browserControl.setEnabled", enabled: true }, expect.any(Function));
+    expect(useAppStore.getState().browserControlEnabled).toBe(true);
     expect(useAppStore.getState().chatPreferences).not.toHaveProperty("defaultBrowserAutomationMode");
+    expect(useAppStore.getState().chatPreferences).not.toHaveProperty("browserControlEnabled");
     expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted");
   });
 
@@ -42,6 +54,7 @@ describe("浏览器控制全局运行态", () => {
     expect(sendMessage).toHaveBeenNthCalledWith(1, { type: "browserControl.setEnabled", enabled: true }, expect.any(Function));
     expect(sendMessage).toHaveBeenNthCalledWith(2, { type: "browserControl.setEnabled", enabled: false }, expect.any(Function));
     expect(await getAppSetting("chatPreferences")).toBeUndefined();
+    expect(await getAppSetting("browserControlPreferences")).toEqual({ enabled: false });
   });
 
   it("自动化模式只走临时 runtime 消息且不持久化", async () => {
@@ -89,10 +102,13 @@ describe("浏览器控制全局运行态", () => {
       enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
     });
 
-    const stored = await getAppSetting("chatPreferences");
-    expect(stored).toMatchObject({
-      enabledToolIds: ["system.current_time", "boundary.request_user_choice", "replay.send_request", "full_access.fetch"],
-    });
+    const stored = await getAppSetting<{ enabledToolIds?: string[] }>("chatPreferences");
+    expect(stored?.enabledToolIds).toEqual(expect.arrayContaining([
+      "system.current_time",
+      "boundary.request_user_choice",
+      "replay.send_request",
+      "full_access.fetch",
+    ]));
     expect(stored).not.toHaveProperty("defaultBrowserAutomationMode");
     expect(stored).not.toHaveProperty("browserControlEnabled");
     expect(stored).not.toHaveProperty("browserAutomationMode");
@@ -127,6 +143,9 @@ describe("浏览器控制全局运行态", () => {
     useAppStore.getState().markBrowserControlDetached();
     expect(useAppStore.getState().browserControlEnabled).toBe(false);
     expect(useAppStore.getState().browserAutomationMode).toBe("normal_restricted");
+    await vi.waitFor(async () => {
+      expect(await getAppSetting("browserControlPreferences")).toEqual({ enabled: false });
+    });
   });
 
   it("background 拒绝开启时回滚全局浏览器控制运行态", async () => {
@@ -140,6 +159,7 @@ describe("浏览器控制全局运行态", () => {
 
     expect(useAppStore.getState().browserControlEnabled).toBe(false);
     expect(useAppStore.getState().failure?.message).toBe("当前页面无法开启浏览器控制");
+    expect(await getAppSetting("browserControlPreferences")).toBeUndefined();
   });
 
   it("刷新浏览器自动化诊断状态", async () => {

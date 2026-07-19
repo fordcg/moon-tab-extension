@@ -6229,6 +6229,23 @@ describe("App", () => {
 
   it("工具架提供浏览器控制开关并更新运行态", async () => {
     const user = userEvent.setup();
+    vi.stubGlobal("chrome", {
+      runtime: {
+        onMessage: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      },
+      storage: {
+        local: {
+          get: vi.fn(async () => ({})),
+        },
+        onChanged: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      },
+    });
     const setBrowserControlEnabled = vi.fn(async (enabled: boolean) => {
       useAppStore.setState({ browserControlEnabled: enabled });
     });

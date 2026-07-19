@@ -888,15 +888,25 @@ export class BrowserControlManager {
         return;
       }
 
-      this.targetTabId = undefined;
+      const normalizedReason = normalizeDetachReason(reason);
+      const shouldRestoreTarget = normalizedReason === "target_closed" && this.desiredEnabled;
+      this.targetTabId = shouldRestoreTarget ? tabId : undefined;
       this.currentOrigin = undefined;
-      this.desiredEnabled = false;
-      this.controlledTabIds.clear();
+      if (!shouldRestoreTarget) {
+        this.desiredEnabled = false;
+        this.controlledTabIds.clear();
+      }
       this.snapshotManager.clearSnapshotCache();
       this.consoleRecorder.stop();
       this.stopNetworkAnalysis();
       this.clearAutomationModeState();
-      this.notifyDetached(tabId, normalizeDetachReason(reason));
+      if (shouldRestoreTarget) {
+        const operationVersion = ++this.operationVersion;
+        void this.restoreAfterTransientDetach(tabId, operationVersion);
+        return;
+      }
+
+      this.notifyDetached(tabId, normalizedReason);
     });
     this.connection.installEventListener();
   }
@@ -977,6 +987,47 @@ export class BrowserControlManager {
     }
 
     return attachResult;
+  }
+
+  private async restoreAfterTransientDetach(tabId: number, operationVersion: number): Promise<void> {
+    const tabResult = await this.resolveTargetTab(tabId);
+    if (!this.isCurrentEnableOperation(operationVersion)) {
+      return;
+    }
+
+    if (!tabResult.ok) {
+      this.handleTransientRestoreFailure(tabId);
+      return;
+    }
+
+    this.targetTabId = tabResult.tab.id;
+    this.currentOrigin = getOriginFromUrl(getBrowserControlTabUrl(tabResult.tab));
+    this.controlledTabIds.add(tabResult.tab.id);
+    const attachResult = await this.connection.attach(tabResult.tab.id, () => this.isCurrentEnableOperation(operationVersion));
+    if (!this.isCurrentEnableOperation(operationVersion)) {
+      await this.connection.detach(tabResult.tab.id);
+      return;
+    }
+
+    if (!attachResult.ok || !("attached" in attachResult) || !attachResult.attached) {
+      this.handleTransientRestoreFailure(tabId);
+      return;
+    }
+
+    this.startNetworkAnalysis(tabResult.tab.id);
+    await this.preserveSidePanelForTab(tabResult.tab.id);
+  }
+
+  private handleTransientRestoreFailure(tabId: number): void {
+    this.targetTabId = undefined;
+    this.currentOrigin = undefined;
+    this.desiredEnabled = false;
+    this.controlledTabIds.clear();
+    this.snapshotManager.clearSnapshotCache();
+    this.consoleRecorder.stop();
+    this.stopNetworkAnalysis();
+    this.clearAutomationModeState();
+    this.notifyDetached(tabId, "target_closed");
   }
 
   getDiagnostics(checkedAt = Date.now()): BrowserControlDiagnostics {
