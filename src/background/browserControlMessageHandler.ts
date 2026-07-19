@@ -3,6 +3,7 @@ import {
   BROWSER_CONTROL_BOUNDARY_CHOICE_RESPOND_MESSAGE_TYPE,
   BROWSER_CONTROL_DETACHED_MESSAGE_TYPE,
   BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE,
+  BROWSER_CONTROL_PREFERENCES_SETTING_KEY,
   BROWSER_CONTROL_SET_AUTOMATION_MODE_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_RUNTIME_READONLY_MESSAGE_TYPE,
@@ -65,8 +66,19 @@ import { FullAccessToolExecutor } from "./browserControl/fullAccessToolExecutor"
 import { BrowserConsoleRecorder } from "./browserControl/consoleRecorder";
 import { handlePageContextMessage, type PageContextExtractResponse } from "./pageContextMessageHandler";
 import { ensureSidePanelForControlledTab, closeAutomationControlBeacon } from "./sidePanelController";
+import { saveAppSetting } from "../shared/storage/repositories";
 
 const FULL_ACCESS_GRANT_TTL_MS = 5 * 60 * 1000;
+
+function persistBrowserControlPreference(enabled: boolean): void {
+  void saveAppSetting({
+    key: BROWSER_CONTROL_PREFERENCES_SETTING_KEY,
+    value: { enabled },
+    updatedAt: Date.now(),
+  }).catch(() => {
+    // 后台状态广播不能因为 IndexedDB 暂时不可用而中断。
+  });
+}
 
 type Debuggee = chrome.debugger.Debuggee;
 type ChromeApi = typeof chrome;
@@ -821,6 +833,7 @@ export class BrowserControlManager {
   private targetTabId: number | undefined;
   private currentOrigin: string | undefined;
   private readonly controlledTabIds = new Set<number>();
+  private readonly internallyClosingTabIds = new Set<number>();
   private suppressNextDetachTabId: number | undefined;
   private desiredEnabled = false;
   private operationVersion = 0;
@@ -912,13 +925,21 @@ export class BrowserControlManager {
   }
 
   handleTabRemoved(tabId: number): void {
-    if (tabId !== this.targetTabId && tabId !== this.connection.attachedTabId) {
+    if (this.internallyClosingTabIds.has(tabId)) {
+      this.controlledTabIds.delete(tabId);
       return;
     }
 
+    if (tabId !== this.targetTabId && tabId !== this.connection.attachedTabId) {
+      this.controlledTabIds.delete(tabId);
+      return;
+    }
+
+    this.operationVersion += 1;
     this.targetTabId = undefined;
     this.currentOrigin = undefined;
-    this.controlledTabIds.delete(tabId);
+    this.desiredEnabled = false;
+    this.controlledTabIds.clear();
     this.snapshotManager.clearSnapshotCache();
     this.consoleRecorder.stop();
     this.stopNetworkAnalysis();
@@ -1867,30 +1888,38 @@ export class BrowserControlManager {
     const page = await this.getControlledPageByIndex(index);
     const closedCurrent = page.id === this.connection.attachedTabId || page.id === this.targetTabId;
     const remainingPages = (await this.getControlledPages()).filter((item) => item.id !== page.id);
+    this.internallyClosingTabIds.add(page.id);
     if (closedCurrent) {
       this.suppressNextDetachTabId = page.id;
     }
 
-    await this.chromeApi?.tabs.remove?.(page.id);
-    this.controlledTabIds.delete(page.id);
-    if (!closedCurrent) {
-      return `已关闭页面 ${index}：${page.title || "无标题"}。`;
-    }
+    try {
+      await this.chromeApi?.tabs.remove?.(page.id);
+      if (!closedCurrent) {
+        return `已关闭页面 ${index}：${page.title || "无标题"}。`;
+      }
 
-    if (!remainingPages.length) {
-      const detachedTabId = this.connection.attachedTabId;
-      await this.connection.detach();
-      this.targetTabId = undefined;
-      this.controlledTabIds.clear();
-      this.snapshotManager.clearSnapshotCache();
-      this.stopNetworkAnalysis();
-      this.clearAutomationModeState();
-      this.notifyDetached(detachedTabId, "tab_removed");
-      return `已关闭当前受控页面 ${index}，浏览器控制后台受控列表内没有其他可控页面。`;
-    }
+      if (!remainingPages.length) {
+        const detachedTabId = this.connection.attachedTabId ?? page.id;
+        this.operationVersion += 1;
+        this.desiredEnabled = false;
+        await this.connection.detach();
+        this.targetTabId = undefined;
+        this.currentOrigin = undefined;
+        this.controlledTabIds.clear();
+        this.snapshotManager.clearSnapshotCache();
+        this.stopNetworkAnalysis();
+        this.clearAutomationModeState();
+        this.notifyDetached(detachedTabId, "tab_removed");
+        return `已关闭当前受控页面 ${index}，浏览器控制后台受控列表内没有其他可控页面。`;
+      }
 
-    await this.switchToTab(remainingPages[0].id);
-    return `已关闭当前受控页面 ${index}，并切换到页面 1：${remainingPages[0].title || "无标题"}。`;
+      await this.switchToTab(remainingPages[0].id);
+      return `已关闭当前受控页面 ${index}，并切换到页面 1：${remainingPages[0].title || "无标题"}。`;
+    } finally {
+      this.internallyClosingTabIds.delete(page.id);
+      this.controlledTabIds.delete(page.id);
+    }
   }
 
   private async switchToTab(tabId: number): Promise<void> {
@@ -2212,6 +2241,8 @@ export class BrowserControlManager {
   }
 
   private notifyDetached(tabId: number | undefined, reason: BrowserControlDetachedReason): void {
+    persistBrowserControlPreference(false);
+
     if (typeof tabId === "number") {
       this.onDetach?.(tabId, reason);
     }

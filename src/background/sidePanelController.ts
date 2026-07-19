@@ -212,13 +212,6 @@ async function syncActiveTabSidePanel(tabId: number | undefined, windowId: numbe
   }
 
   let opened = await getOpenedSidePanelTabs();
-  // If this window already has the side panel on any tab, inherit it to the active tab.
-  // Never auto-close during tab switches — that is what makes browser automation "lose" the panel.
-  if (!opened.has(tabId) && await windowHasOpenedSidePanel(windowId, opened)) {
-    await rememberOpenedSidePanelTab(tabId);
-    opened = await getOpenedSidePanelTabs();
-  }
-
   await syncTabSidePanelOptions(tabId, opened);
   if (opened.has(tabId) || recentlyCreatedTabs.has(tabId)) {
     try {
@@ -229,6 +222,19 @@ async function syncActiveTabSidePanel(tabId: number | undefined, windowId: numbe
       }
     } catch {
       // Best effort only.
+    }
+    return;
+  }
+
+  if (opened.size > 0) {
+    try {
+      if (typeof windowId === "number") {
+        await chrome.sidePanel?.close?.({ windowId });
+      } else {
+        await chrome.sidePanel?.close?.({ tabId });
+      }
+    } catch {
+      // Best effort only; some Chromium builds do not support programmatic close.
     }
   }
 }

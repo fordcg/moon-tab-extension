@@ -601,7 +601,7 @@ function resolveStreamPortFailureMessage(message: ChatStreamPortMessage): string
 function containsSensitiveErrorFragment(message: string): boolean {
   // 端口消息异常时仍按外部输入处理，避免模型供应商原始报文把密钥、鉴权头或连接串带到用户可见错误里。
   // 注意：不要用裸 \btoken\b，否则会把 "Invalid token"、错误码说明等正常诊断也吞掉。
-  return /(?:\bsk-[A-Za-z0-9_-]{8,}|authorization\s*[:=]|bearer\s+[A-Za-z0-9._~+/-]{8,}|api[_-]?key\s*[:=]|secret\s*[:=]|password\s*[:=])/i.test(
+  return /(?:\bsk-[A-Za-z0-9_-]{3,}|authorization\s*[:=]|bearer\s+[A-Za-z0-9._~+/-]{8,}|api[_-]?key\s*[:=]|secret\s*[:=]|password\s*[:=])/i.test(
     message,
   );
 }

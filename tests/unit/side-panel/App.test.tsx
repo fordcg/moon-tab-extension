@@ -2129,13 +2129,16 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
-    const input = screen.getByRole("spinbutton", { name: "全局 浏览器自动化最大工具轮次" });
-    expect(input).not.toHaveAttribute("min");
+    const input = screen.getByRole("spinbutton", { name: "全局 普通模式最大工具轮次" });
+    expect(input).toHaveAttribute("min", "1");
     expect(input).not.toHaveAttribute("max");
 
-    fireEvent.change(input, { target: { value: "48" } });
+    await waitFor(() => {
+      expect(screen.getByRole("spinbutton", { name: "全局 普通模式最大工具轮次" })).toHaveDisplayValue("48");
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "全局 普通模式最大工具轮次" }), { target: { value: "49" } });
 
-    expect(updateChatPreferences).toHaveBeenLastCalledWith({ browserAutomationMaxToolIterations: 48 });
+    expect(updateChatPreferences).toHaveBeenLastCalledWith({ browserAutomationMaxToolIterations: 49 });
   });
 
   it("聊天偏好可以保存新对话默认注入页面上下文", async () => {
@@ -4751,25 +4754,34 @@ describe("App", () => {
 
   it("可以拉取模型列表、添加远端模型并直接在已添加模型行测试模型连通性", async () => {
     const user = userEvent.setup();
-    const sendMessage = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        text: "",
-        truncated: false,
-        usedFallback: true,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        models: [
-          { id: "gpt-4.1", displayName: "GPT-4.1" },
-          { id: "gpt-4.1-mini", displayName: "GPT-4.1 mini" },
-        ],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        message: "模型测试通过",
-      });
+    const sendMessage = vi.fn((message: { type?: string }, callback?: (response: unknown) => void) => {
+      let response: unknown = { ok: true };
+
+      if (message.type === "pageContext.extract") {
+        response = {
+          ok: true,
+          text: "",
+          truncated: false,
+          usedFallback: true,
+        };
+      } else if (message.type === "modelCatalog.list") {
+        response = {
+          ok: true,
+          models: [
+            { id: "gpt-4.1", displayName: "GPT-4.1" },
+            { id: "gpt-4.1-mini", displayName: "GPT-4.1 mini" },
+          ],
+        };
+      } else if (message.type === "modelCatalog.test") {
+        response = {
+          ok: true,
+          message: "模型测试通过",
+        };
+      }
+
+      callback?.(response);
+      return Promise.resolve(response);
+    });
     vi.stubGlobal("chrome", {
       runtime: {
         sendMessage,
@@ -5262,8 +5274,8 @@ describe("App", () => {
     const model: ProviderModel = {
       id: "model-vision",
       providerId: "provider-vision",
-      displayName: "视觉模型",
-      modelId: "gpt-vision",
+      displayName: "文本模型",
+      modelId: "gpt-text-only",
       temperature: 0.7,
       maxTokens: 1024,
       systemPrompt: "你是网页助手",
@@ -5280,8 +5292,9 @@ describe("App", () => {
 
     render(<App />);
 
+    await screen.findByDisplayValue("视觉渠道 / 文本模型");
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(await screen.findByRole("button", { name: "设置 gpt-vision" }));
+    await user.click(await screen.findByRole("button", { name: "设置 gpt-text-only" }));
 
     const modelSettingsDialog = screen.getByRole("dialog", { name: "模型设置" });
     expect(modelSettingsDialog).toBeInTheDocument();
@@ -5362,28 +5375,45 @@ describe("App", () => {
   it("模型连通性测试只让当前模型进入等待态，其他模型仍可测试", async () => {
     let resolveFirstTest: (value: { ok: boolean; message: string }) => void = () => undefined;
     const user = userEvent.setup();
-    const sendMessage = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        text: "",
-        truncated: false,
-        usedFallback: true,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        models: [
-          { id: "gpt-4.1", displayName: "GPT-4.1" },
-          { id: "gpt-4.1-mini", displayName: "GPT-4.1 mini" },
-        ],
-      })
-      .mockReturnValueOnce(new Promise<{ ok: boolean; message: string }>((resolve) => {
-        resolveFirstTest = resolve;
-      }))
-      .mockResolvedValueOnce({
-        ok: true,
-        message: "模型测试通过",
-      });
+    const sendMessage = vi.fn((message: { type?: string; model?: { modelId?: string } }, callback?: (response: unknown) => void) => {
+      let response: unknown = { ok: true };
+
+      if (message.type === "pageContext.extract") {
+        response = {
+          ok: true,
+          text: "",
+          truncated: false,
+          usedFallback: true,
+        };
+      } else if (message.type === "modelCatalog.list") {
+        response = {
+          ok: true,
+          models: [
+            { id: "gpt-4.1", displayName: "GPT-4.1" },
+            { id: "gpt-4.1-mini", displayName: "GPT-4.1 mini" },
+          ],
+        };
+      } else if (message.type === "modelCatalog.test" && message.model?.modelId === "gpt-4.1") {
+        response = new Promise<{ ok: boolean; message: string }>((resolve) => {
+          resolveFirstTest = resolve;
+        });
+      } else if (message.type === "modelCatalog.test") {
+        response = {
+          ok: true,
+          message: "模型测试通过",
+        };
+      }
+
+      if (response && typeof (response as Promise<unknown>).then === "function") {
+        return (response as Promise<unknown>).then((resolved) => {
+          callback?.(resolved);
+          return resolved;
+        });
+      }
+
+      callback?.(response);
+      return Promise.resolve(response);
+    });
     vi.stubGlobal("chrome", {
       runtime: {
         sendMessage,
@@ -5407,7 +5437,10 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" }));
 
-    expect(sendMessage).toHaveBeenCalledTimes(4);
+    const modelTestCalls = sendMessage.mock.calls.filter(
+      ([message]) => (message as { type?: string }).type === "modelCatalog.test",
+    );
+    expect(modelTestCalls).toHaveLength(2);
     resolveFirstTest({ ok: true, message: "模型测试通过" });
     await waitFor(() => expect(screen.getByText("测试成功")).toBeInTheDocument());
   });
@@ -5545,15 +5578,27 @@ describe("App", () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    const sendMessage = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        url: "https://example.com/news/123?from=home",
-        text: "",
-        truncated: false,
-        usedFallback: true,
-      });
+    const sendMessage = vi.fn((message: { type?: string }, callback?: (response: unknown) => void) => {
+      let response: unknown = { ok: true };
+
+      if (message.type === "extractionRule.getCurrentTabUrl") {
+        response = {
+          ok: true,
+          url: "https://example.com/news/123?from=home",
+        };
+      } else if (message.type === "pageContext.extract") {
+        response = {
+          ok: true,
+          url: "https://example.com/news/123?from=home",
+          text: "",
+          truncated: false,
+          usedFallback: true,
+        };
+      }
+
+      callback?.(response);
+      return Promise.resolve(response);
+    });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -5588,7 +5633,9 @@ describe("App", () => {
     await user.type(screen.getByLabelText("CSS/XPath 列表"), "main");
     await user.click(screen.getByRole("button", { name: "AI 生成" }));
 
-    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(
+      sendMessage.mock.calls.filter(([message]) => (message as { type?: string }).type === "extractionRule.getCurrentTabUrl"),
+    ).toHaveLength(0);
     expect(screen.getByText("选择用于生成的模型")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "AI 渠道 / AI 模型" }));
 

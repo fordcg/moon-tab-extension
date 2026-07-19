@@ -1821,7 +1821,7 @@ describe("appStore", () => {
     expect(useAppStore.getState().chatPreferences.injectPageContextByDefault).toBe(true);
     expect(useAppStore.getState().chatPreferences.extractHtmlByDefault).toBe(false);
     expect(useAppStore.getState().chatPreferences.aiRequestRetryCount).toBe(5);
-    expect(useAppStore.getState().chatPreferences.browserAutomationMaxToolIterations).toBe(32);
+    expect(useAppStore.getState().chatPreferences.browserAutomationMaxToolIterations).toBe(48);
     expect(useAppStore.getState().chatPreferences).not.toHaveProperty("defaultBrowserAutomationMode");
     expect(useAppStore.getState().chatPreferences.toolCallingEnabled).toBe(true);
     expect(useAppStore.getState().chatPreferences.enabledToolIds).toEqual(getRegisteredModelTools().map((tool) => tool.id));

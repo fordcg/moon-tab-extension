@@ -7,11 +7,13 @@ import {
   handleBrowserControlTabRemoved,
 } from "../../../src/background/browserControlMessageHandler";
 import {
+  BROWSER_CONTROL_PREFERENCES_SETTING_KEY,
   BROWSER_CONTROL_RUNTIME_READONLY_CHANGED_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE,
   BROWSER_CONTROL_SET_RUNTIME_READONLY_MESSAGE_TYPE,
   isBrowserControlRestrictedUrl,
 } from "../../../src/shared/browserControl";
+import { clearDatabase, getAppSetting, saveAppSetting } from "../../../src/shared/storage/repositories";
 
 function createToolCall(argumentsValue: Record<string, unknown> = {}): ModelToolCall {
   return {
@@ -43,6 +45,7 @@ function createChromeMock(options: {
   delayAttach?: boolean;
   axNodes?: unknown[];
   detachOnRemove?: boolean;
+  onTabRemovedOnRemove?: (tabId: number) => void;
 } = {}) {
   const detachListeners: Array<(source: chrome.debugger.Debuggee, reason: `${chrome.debugger.DetachReason}`) => void> = [];
   const eventListeners: Array<(source: chrome.debugger.Debuggee, method: string, params?: Record<string, unknown>) => void> = [];
@@ -154,6 +157,7 @@ function createChromeMock(options: {
         if (options.detachOnRemove) {
           detachListeners[0]?.({ tabId }, "target_closed");
         }
+        options.onTabRemovedOnRemove?.(tabId);
       }),
       group: vi.fn(async () => 3),
       onRemoved: {
@@ -414,6 +418,12 @@ describe("浏览器控制地基", () => {
   });
 
   it("标签页关闭时清理当前调试连接", async () => {
+    await clearDatabase();
+    await saveAppSetting({
+      key: BROWSER_CONTROL_PREFERENCES_SETTING_KEY,
+      value: { enabled: true },
+      updatedAt: 1,
+    });
     const chromeMock = createChromeMock();
     const connection = new BrowserDebuggerConnection(chromeMock);
     const manager = new BrowserControlManager(connection, chromeMock);
@@ -426,6 +436,16 @@ describe("浏览器控制地基", () => {
       { type: "browserControl.detached", tabId: 9, reason: "tab_removed" },
       expect.any(Function),
     );
+    await vi.waitFor(() => {
+      expect(manager.getDiagnostics(3)).toMatchObject({
+        browserControlEnabled: false,
+        browserControlAttached: false,
+      });
+    });
+    await vi.waitFor(async () => {
+      expect(await getAppSetting(BROWSER_CONTROL_PREFERENCES_SETTING_KEY)).toEqual({ enabled: false });
+    });
+    await clearDatabase();
   });
 
   it("runtime 消息会转发到浏览器控制管理器", async () => {
@@ -2627,8 +2647,10 @@ describe("浏览器控制地基", () => {
   });
 
   it("close_page 关闭当前页触发 debugger detach 时仍切换到剩余受控页", async () => {
+    let manager: BrowserControlManager;
     const chromeMock = createChromeMock({
       detachOnRemove: true,
+      onTabRemovedOnRemove: (tabId) => handleBrowserControlTabRemoved(tabId, manager),
       tabs: [
         { id: 9, title: "任务页 A", url: "https://example.com/a", active: true, windowId: 1, groupId: 4 } as chrome.tabs.Tab & { id: number },
       ],
@@ -2636,16 +2658,73 @@ describe("浏览器控制地基", () => {
     });
     const connection = new BrowserDebuggerConnection(chromeMock);
     const onDetach = vi.fn();
-    const manager = new BrowserControlManager(connection, chromeMock, onDetach);
+    manager = new BrowserControlManager(connection, chromeMock, onDetach);
 
     await manager.setEnabled(true, 9);
     await manager.executeBrowserTool(createNamedToolCall("new_page", { url: "https://example.com/b", background: true }));
+    chromeMock.runtime.sendMessage.mockClear();
     const result = await manager.executeBrowserTool(createNamedToolCall("close_page", { index: 1 }));
 
     expect(result.content).toContain("已关闭当前受控页面 1");
     expect(result.content).toContain("并切换到页面 1");
     expect(connection.attachedTabId).toBe(10);
+    expect(manager.getDiagnostics(4)).toMatchObject({
+      browserControlEnabled: true,
+      browserControlAttached: true,
+      tabId: 10,
+    });
     expect(onDetach).not.toHaveBeenCalled();
+    expect(chromeMock.runtime.sendMessage).not.toHaveBeenCalledWith(
+      { type: "browserControl.detached", tabId: 9, reason: "tab_removed" },
+      expect.any(Function),
+    );
+  });
+
+  it("close_page 关闭最后一个当前页触发 debugger detach 时仍通知原 tabId 并关闭偏好", async () => {
+    await clearDatabase();
+    await saveAppSetting({
+      key: BROWSER_CONTROL_PREFERENCES_SETTING_KEY,
+      value: { enabled: true },
+      updatedAt: 1,
+    });
+    let manager: BrowserControlManager;
+    const chromeMock = createChromeMock({
+      detachOnRemove: true,
+      onTabRemovedOnRemove: (tabId) => handleBrowserControlTabRemoved(tabId, manager),
+      tabs: [
+        { id: 9, title: "任务页 A", url: "https://example.com/a", active: true, windowId: 1, groupId: 4 } as chrome.tabs.Tab & { id: number },
+      ],
+      currentTabId: 9,
+    });
+    const connection = new BrowserDebuggerConnection(chromeMock);
+    const onDetach = vi.fn();
+    manager = new BrowserControlManager(connection, chromeMock, onDetach);
+
+    try {
+      await manager.setEnabled(true, 9);
+      chromeMock.runtime.sendMessage.mockClear();
+
+      const result = await manager.executeBrowserTool(createNamedToolCall("close_page", { index: 1 }));
+
+      expect(result.content).toContain("没有其他可控页面");
+      expect(connection.attachedTabId).toBeUndefined();
+      await vi.waitFor(() => {
+        expect(manager.getDiagnostics(4)).toMatchObject({
+          browserControlEnabled: false,
+          browserControlAttached: false,
+        });
+      });
+      expect(onDetach).toHaveBeenCalledWith(9, "tab_removed");
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith(
+        { type: "browserControl.detached", tabId: 9, reason: "tab_removed" },
+        expect.any(Function),
+      );
+      await vi.waitFor(async () => {
+        expect(await getAppSetting(BROWSER_CONTROL_PREFERENCES_SETTING_KEY)).toEqual({ enabled: false });
+      });
+    } finally {
+      await clearDatabase();
+    }
   });
 
   it("navigate_page 拒绝受限或非 http URL", async () => {

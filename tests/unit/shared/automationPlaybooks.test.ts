@@ -90,6 +90,7 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(playbook?.prompt).toEqual(expect.stringContaining("不要反复点击同一个签到入口"));
     expect(playbook?.prompt).toEqual(expect.stringContaining("collect_diagnostics"));
     expect(playbook?.prompt).toEqual(expect.stringContaining("network_list_requests"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("network_get_request_details"));
     expect(playbook?.prompt).toEqual(expect.stringContaining("Console"));
     expect(playbook?.prompt).toEqual(expect.stringContaining("metapi_record_browser_checkin"));
   });

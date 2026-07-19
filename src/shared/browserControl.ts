@@ -1,6 +1,7 @@
 export const BROWSER_CONTROL_SET_ENABLED_MESSAGE_TYPE = "browserControl.setEnabled";
 export const BROWSER_CONTROL_GET_DIAGNOSTICS_MESSAGE_TYPE = "browserControl.getDiagnostics";
 export const BROWSER_CONTROL_DETACHED_MESSAGE_TYPE = "browserControl.detached";
+export const BROWSER_CONTROL_PREFERENCES_SETTING_KEY = "browserControlPreferences";
 import type { BrowserAutomationGrant, BrowserAutomationMode } from "./toolAuthorization";
 import type { BrowserAutomationNetworkSource } from "./models/types";
 

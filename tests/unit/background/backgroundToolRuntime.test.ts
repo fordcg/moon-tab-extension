@@ -396,10 +396,10 @@ describe("background 工具运行时封装", () => {
     });
   });
 
-  it("浏览器自动化最大轮次只接受有限数字，否则回退默认 32", () => {
+  it("浏览器自动化最大轮次只接受有限数字，否则回退默认 48", () => {
     expect(normalizeBrowserAutomationMaxToolIterations(2.6)).toBe(3);
     expect(normalizeBrowserAutomationMaxToolIterations("5")).toBe(5);
-    expect(normalizeBrowserAutomationMaxToolIterations("bad")).toBe(32);
+    expect(normalizeBrowserAutomationMaxToolIterations("bad")).toBe(48);
   });
 
   it("background 执行器分发浏览器、当前时间、Tavily 和未知工具", async () => {
@@ -687,19 +687,24 @@ describe("background 工具运行时封装", () => {
   });
 
   it("Imagefree runtime 保留数组 JSON 响应的 taskId 诊断兼容", async () => {
-    const { executeImagefreeGenerateTool } = await import("../../../src/background/imagefreeToolRuntime");
+    const { executeImagefreeGenerateTool, setImagefreeTurnstileTokenResolverForTests } = await import("../../../src/background/imagefreeToolRuntime");
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json([{ taskId: "task-1" }]));
 
-    await expect(executeImagefreeGenerateTool(
-      createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, {
-        prompt: "moon",
-      }),
-      fetcher as unknown as typeof fetch,
-    )).resolves.toMatchObject({
-      toolCallId: `call-${IMAGEFREE_GENERATE_IMAGE_TOOL_NAME}`,
-      name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
-      isError: true,
-      content: expect.stringContaining("Imagefree 未返回 taskId：[{\"taskId\":\"task-1\"}]"),
-    });
+    try {
+      setImagefreeTurnstileTokenResolverForTests(async () => "turnstile-test-token");
+      await expect(executeImagefreeGenerateTool(
+        createToolCall(IMAGEFREE_GENERATE_IMAGE_TOOL_NAME, {
+          prompt: "moon",
+        }),
+        fetcher as unknown as typeof fetch,
+      )).resolves.toMatchObject({
+        toolCallId: `call-${IMAGEFREE_GENERATE_IMAGE_TOOL_NAME}`,
+        name: IMAGEFREE_GENERATE_IMAGE_TOOL_NAME,
+        isError: true,
+        content: expect.stringContaining("Imagefree 未返回 taskId：[{\"taskId\":\"task-1\"}]"),
+      });
+    } finally {
+      setImagefreeTurnstileTokenResolverForTests(undefined);
+    }
   });
 });

@@ -2419,7 +2419,7 @@ describe("background 入口", () => {
     ]);
   });
 
-  it("流式聊天端口断开时会终止正在进行的模型请求", async () => {
+  it("流式聊天端口断开时不会终止正在进行的模型请求", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome);
     const fetcher = vi.fn((_url: string, init?: RequestInit) => {
@@ -2465,7 +2465,7 @@ describe("background 入口", () => {
     expect((requestInit.signal as AbortSignal).aborted).toBe(false);
     port.emitDisconnect();
 
-    expect((requestInit.signal as AbortSignal).aborted).toBe(true);
+    expect((requestInit.signal as AbortSignal).aborted).toBe(false);
     expect(port.postMessage).not.toHaveBeenCalled();
   });
 

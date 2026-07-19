@@ -109,7 +109,7 @@ export const METAPI_OPS_PLAYBOOKS: AutomationPlaybook[] = [
       "立即签到后的快失败/诊断：",
       "1) 点击「立即签到」后（或点击「今日签到」/「领取奖励」后），先 wait_for 成功/已签到/错误/失败/请先登录/验证等关键文本 2~5 秒，或用 click includeSnapshot / take_snapshot 立刻确认页面变化；不要一上来长时间等 network_idle。",
       "2) 成功判据必须是明确成功/已签到文本、按钮变成已签到/disabled、余额/日历/积分变化，或相关签到接口成功；点击工具返回成功不等于签到成功。",
-      "3) 若按钮仍在、出现「错误」/失败 toast、余额或日历没有变化，立刻 collect_diagnostics，并用 network_list_requests 定位最近的 signin/checkin/reward/user 相关 POST/fetch；把状态码、接口错误文案、Console 摘要写入 metapi_record_browser_checkin message。",
+      "3) 若按钮仍在、出现「错误」/失败 toast、余额或日历没有变化，立刻 collect_diagnostics，并用 network_list_requests 定位最近的 signin/checkin/reward/user 相关 POST/fetch，再按请求 ID 调 network_get_request_details 读取脱敏详情；把状态码、接口错误文案、Console 摘要写入 metapi_record_browser_checkin message。",
       "4) 不要反复点击同一个签到入口：普通点击最多 1 次；仅在 UID 过期/遮挡等真实点击失败时，重新 take_snapshot 后再试 1 次；页面或后端已经返回错误时直接 record status=failed。",
       "执行：",
       "1) metapi_summarize_checkin_logs 取 mustOpenThisRound",

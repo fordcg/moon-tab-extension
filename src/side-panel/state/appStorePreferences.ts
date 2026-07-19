@@ -221,12 +221,7 @@ export function resolveBrowserAutomationMaxToolIterationsForMode(
 }
 
 function normalizeUserEditableToolIds(value: unknown): string[] {
-  const normalized = normalizeEnabledToolIds(value);
-  // Newly added local Metapi tools should stay available for existing profiles.
-  const metapiToolIds = getRegisteredModelTools()
-    .map((tool) => tool.id)
-    .filter((id) => id.startsWith("metapi."));
-  return Array.from(new Set([...normalized, ...metapiToolIds]));
+  return normalizeEnabledToolIds(value);
 }
 
 export function resolveRuntimeEnabledToolIds(enabledToolIds: string[], browserControlEnabled: boolean, browserAutomationMode: BrowserAutomationMode = "normal_restricted"): string[] {

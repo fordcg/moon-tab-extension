@@ -54,36 +54,39 @@ function latestAssistantSnippet(messages: ChatMessage[]): string | undefined {
 }
 
 function publishPetSnapshot(snapshot: PetRuntimeSnapshot): void {
+  const runtime = globalThis.chrome?.runtime;
+  const storage = globalThis.chrome?.storage;
   try {
-    void chrome.runtime?.sendMessage?.(
+    void runtime?.sendMessage?.(
       {
         type: PET_SNAPSHOT_PUBLISH_TYPE,
         snapshot,
       },
       () => {
-        void chrome.runtime?.lastError;
+        void runtime?.lastError;
       },
     );
   } catch {
     // Side panel may run outside extension runtime in unit tests.
   }
   try {
-    void chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot });
+    void storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot });
   } catch {
     // ignore
   }
 }
 
 async function clearPendingPetChat(pendingId?: string): Promise<void> {
+  const storage = globalThis.chrome?.storage;
   try {
     if (!pendingId) {
-      await chrome.storage?.session?.remove?.(PET_PENDING_CHAT_STORAGE_KEY);
+      await storage?.session?.remove?.(PET_PENDING_CHAT_STORAGE_KEY);
       return;
     }
-    const items = await chrome.storage?.session?.get?.(PET_PENDING_CHAT_STORAGE_KEY);
+    const items = await storage?.session?.get?.(PET_PENDING_CHAT_STORAGE_KEY);
     const pending = items?.[PET_PENDING_CHAT_STORAGE_KEY] as PetPendingChat | undefined;
     if (!pending || pending.id === pendingId) {
-      await chrome.storage?.session?.remove?.(PET_PENDING_CHAT_STORAGE_KEY);
+      await storage?.session?.remove?.(PET_PENDING_CHAT_STORAGE_KEY);
     }
   } catch {
     // ignore
@@ -134,7 +137,8 @@ export function PetCompanion() {
   }, []);
 
   useEffect(() => {
-    void chrome.storage?.local?.get?.(PET_VISIBLE_STORAGE_KEY).then((items) => {
+    const storage = globalThis.chrome?.storage;
+    void storage?.local?.get?.(PET_VISIBLE_STORAGE_KEY)?.then((items) => {
       if (items?.[PET_VISIBLE_STORAGE_KEY] === false) {
         setPetVisible(false);
       }
@@ -144,8 +148,8 @@ export function PetCompanion() {
         setPetVisible(changes[PET_VISIBLE_STORAGE_KEY]?.newValue !== false);
       }
     };
-    chrome.storage?.onChanged?.addListener?.(onChanged);
-    return () => chrome.storage?.onChanged?.removeListener?.(onChanged);
+    storage?.onChanged?.addListener?.(onChanged);
+    return () => storage?.onChanged?.removeListener?.(onChanged);
   }, []);
 
   useEffect(() => {
@@ -227,9 +231,10 @@ export function PetCompanion() {
 
   useEffect(() => {
     let cancelled = false;
+    const storage = globalThis.chrome?.storage;
     const consumePending = async () => {
       try {
-        const items = await chrome.storage?.session?.get?.(PET_PENDING_CHAT_STORAGE_KEY);
+        const items = await storage?.session?.get?.(PET_PENDING_CHAT_STORAGE_KEY);
         const pending = items?.[PET_PENDING_CHAT_STORAGE_KEY] as PetPendingChat | undefined;
         if (!pending?.content || cancelled) {
           return;
@@ -336,7 +341,7 @@ export function PetCompanion() {
 
   const restorePet = () => {
     setPetVisible(true);
-    void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true });
+    void globalThis.chrome?.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true });
   };
 
   // No bottom status chip. Only a restore entry when the page pet was exited,

@@ -7508,8 +7508,8 @@ body:has(.context-dialog) .dialog-overlay {
   border: 1px solid var(--color-hairline, #e5e7eb) !important;
   border-left-width: 3px !important;
   border-left-color: var(--color-primary, #2563eb) !important;
-  border-radius: 0.75rem !important;
-  background: color-mix(in srgb, var(--sidepanel-canvas, #fff) 96%, #fff) !important;
+  border-radius: 0.875rem !important;
+  background: var(--sidepanel-canvas) !important;
   box-shadow:
     0 10px 28px rgb(15 23 42 / 14%),
     0 2px 8px rgb(15 23 42 / 8%) !important;

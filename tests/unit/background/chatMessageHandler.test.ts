@@ -1353,6 +1353,7 @@ describe("聊天模型请求处理", () => {
     expect(result).toMatchObject({ ok: true, content: "已读取页面结构" });
     expect(browserControlManagerMock.takeSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ id: "call-1", name: "take_snapshot", arguments: {} }),
+      undefined,
     );
     const secondBody = JSON.parse(String(fetcher.mock.calls[1][1]?.body)) as { messages: Array<{ role: string; content?: string }> };
     expect(secondBody.messages).toEqual(
@@ -1438,6 +1439,7 @@ describe("聊天模型请求处理", () => {
     expect(result).toMatchObject({ ok: true, content: "按钮已点击" });
     expect(browserControlManagerMock.executeBrowserTool).toHaveBeenCalledWith(
       expect.objectContaining({ id: "call-1", name: "click", arguments: { uid: "1_2", includeSnapshot: true } }),
+      undefined,
     );
     const secondBody = JSON.parse(String(fetcher.mock.calls[1][1]?.body)) as { messages: Array<{ role: string; content?: string }> };
     expect(secondBody.messages).toEqual(
@@ -1744,6 +1746,7 @@ describe("聊天模型请求处理", () => {
     expect(result).toMatchObject({ ok: true, content: "页面已打开" });
     expect(browserControlManagerMock.executeBrowserTool).toHaveBeenCalledWith(
       expect.objectContaining({ id: "call-1", name: "navigate_page", arguments: { action: "goto", url: "https://example.com/docs" } }),
+      undefined,
     );
   });
 
