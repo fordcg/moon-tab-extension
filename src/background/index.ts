@@ -67,6 +67,8 @@ const DEVTOOLS_LEGACY_NETWORK_TOOL_IDS = new Set([
   "network.compare_requests",
   "network.find_parameter_candidates",
   "network.extract_js_candidates",
+  "network.summarize_api_candidates",
+  "network.create_playbook_draft",
 ]);
 const NETWORK_DEVTOOLS_NOT_CONNECTED_RESPONSE = { ok: false, message: "未检测到当前标签页 DevTools Network 连接。" } as const;
 

@@ -382,7 +382,7 @@ describe("background 工具运行时封装", () => {
       content: expect.stringContaining("即使用户没有明确说“当前页面”"),
     });
     expect(result[0]).toMatchObject({
-      content: expect.stringContaining("先调用 network_list_requests"),
+      content: expect.stringContaining("优先调用 network_summarize_api_candidates"),
     });
   });
 

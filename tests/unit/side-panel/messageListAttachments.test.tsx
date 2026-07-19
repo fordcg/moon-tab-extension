@@ -109,6 +109,18 @@ function createAutomationReportAttachment(partial: Partial<ChatAutomationReportT
         status: "error",
       },
     ],
+    checkpoints: [
+      {
+        id: "checkpoint-1",
+        at: 4,
+        label: "需要处理：列出 Network 请求",
+        detail: "Network 500",
+        status: "blocked",
+        relatedToolCallIds: ["call-2"],
+        nextSteps: ["检查失败步骤的参数、页面状态或授权边界后重试。"],
+      },
+    ],
+    nextSteps: ["使用 network_create_playbook_draft 生成可复用草稿。"],
     steps: [
       {
         toolCallId: "call-1",
@@ -175,6 +187,9 @@ describe("MessageList 工具附件展示聚合", () => {
     expect(screen.getByText(/时间线/)).toBeInTheDocument();
     expect(screen.getByText(/调用浏览器页面状态/)).toBeInTheDocument();
     expect(screen.getByText(/失败恢复建议/)).toBeInTheDocument();
+    expect(screen.getByText(/检查点/)).toBeInTheDocument();
+    expect(screen.getByText(/需要处理：列出 Network 请求/)).toBeInTheDocument();
+    expect(screen.getByText(/建议下一步：使用 network_create_playbook_draft/)).toBeInTheDocument();
     expect(screen.getByText("浏览器页面状态")).toBeInTheDocument();
     expect(screen.getByText(/失败工具：列出 Network 请求/)).toBeInTheDocument();
   });

@@ -406,6 +406,18 @@ export interface AutomationFailureSummary {
   recoverableActions: string[];
 }
 
+export type AutomationCheckpointStatus = "complete" | "attention" | "blocked";
+
+export interface AutomationCheckpoint {
+  id: string;
+  at: number;
+  label: string;
+  detail: string;
+  status: AutomationCheckpointStatus;
+  relatedToolCallIds: string[];
+  nextSteps: string[];
+}
+
 export type AutomationReportType = "general" | "page_inspection" | "form_diagnosis" | "interface_analysis";
 
 export interface ChatAutomationReportToolAttachment extends ChatToolAttachmentBase {
@@ -416,6 +428,8 @@ export interface ChatAutomationReportToolAttachment extends ChatToolAttachmentBa
   playbook?: AutomationPlaybookSelection;
   steps: AutomationReportStep[];
   timeline: AutomationTimelineEvent[];
+  checkpoints?: AutomationCheckpoint[];
+  nextSteps?: string[];
   failureSummary?: AutomationFailureSummary;
   fullAccessIncluded: boolean;
 }

@@ -1010,6 +1010,22 @@ function AutomationReportToolAttachmentView({ attachment }: { attachment: ChatTo
           </ol>
         </>
       ) : null}
+      {attachment.checkpoints?.length ? (
+        <>
+          <p className="message-tool-attachment-summary">检查点</p>
+          <ol className="message-automation-report-timeline-list">
+            {attachment.checkpoints.map((checkpoint) => (
+              <li key={checkpoint.id}>
+                <strong>{checkpoint.label}</strong> [{checkpoint.status}]：{checkpoint.detail}
+                {checkpoint.nextSteps.length ? <span>；下一步：{checkpoint.nextSteps.join("；")}</span> : null}
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : null}
+      {attachment.nextSteps?.length ? (
+        <p className="message-tool-attachment-summary">建议下一步：{attachment.nextSteps.join("；")}</p>
+      ) : null}
       <ol className="message-automation-report-step-list">
         {attachment.steps.map((step) => (
           <li key={step.toolCallId}>

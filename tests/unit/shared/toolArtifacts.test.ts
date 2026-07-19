@@ -597,6 +597,18 @@ describe("通用工具附件聚合", () => {
           status: "error",
         },
       ],
+      checkpoints: [
+        {
+          id: "checkpoint-1",
+          at: 4,
+          label: "确认失败原因 token=secret",
+          detail: "接口返回 password=123456",
+          status: "blocked",
+          relatedToolCallIds: ["call-2"],
+          nextSteps: ["读取 Network 详情 token=secret"],
+        },
+      ],
+      nextSteps: ["生成接口 Playbook token=secret"],
       steps: [
         {
           toolCallId: "call-1",
@@ -640,6 +652,14 @@ describe("通用工具附件聚合", () => {
         expect.objectContaining({ detail: "读取 token=[已脱敏]" }),
         expect.objectContaining({ detail: "检查 password=[已脱敏] 后重试" }),
       ],
+      checkpoints: [
+        expect.objectContaining({
+          label: "确认失败原因 token=[已脱敏]",
+          detail: "接口返回 password=[已脱敏]",
+          nextSteps: ["读取 Network 详情 token=[已脱敏]"],
+        }),
+      ],
+      nextSteps: ["生成接口 Playbook token=[已脱敏]"],
       steps: [
         expect.objectContaining({ evidence: "页面已加载 token=[已脱敏]" }),
         expect.objectContaining({ evidence: "请求失败 password=[已脱敏]" }),
@@ -653,6 +673,8 @@ describe("通用工具附件聚合", () => {
     expect(formatToolAttachmentForExport(attachment!)).toContain("本次使用策略：现场诊断");
     expect(formatToolAttachmentForExport(attachment!)).toContain("选择置信度：high");
     expect(formatToolAttachmentForExport(attachment!)).toContain("时间线：");
+    expect(formatToolAttachmentForExport(attachment!)).toContain("检查点：");
+    expect(formatToolAttachmentForExport(attachment!)).toContain("建议下一步：");
     expect(formatToolAttachmentForExport(attachment!)).toContain("失败恢复建议");
     expect(formatToolAttachmentForExport(attachment!)).toContain("失败工具：列出 Network 请求");
     expect(formatToolAttachmentForExport(attachment!)).not.toContain("secret");

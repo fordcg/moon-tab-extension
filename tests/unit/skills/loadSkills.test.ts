@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   executeSkillTool,
+  getSkillLoaderDiagnostics,
   getSkillModelTools,
   getSkillPackages,
   getSkillPlaybooks,
   getSkillToolExecutor,
+  refreshSkillPackages,
 } from "../../../src/skills/loadSkills";
 
 describe("skill package loader", () => {
@@ -26,6 +28,22 @@ describe("skill package loader", () => {
 
     expect(getSkillToolExecutor("metapi.list_sites")).toEqual(expect.any(Function));
     expect(getSkillToolExecutor("metapi_list_sites")).toEqual(expect.any(Function));
+  });
+
+  it("exposes loader diagnostics and supports explicit rescan", () => {
+    const diagnostics = getSkillLoaderDiagnostics();
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        packageId: "metapi-ops",
+        status: "ok",
+        toolCount: expect.any(Number),
+        playbookCount: expect.any(Number),
+        messages: [],
+      }),
+    ]);
+    expect(diagnostics[0]?.toolCount).toBeGreaterThan(0);
+    expect(diagnostics[0]?.playbookCount).toBeGreaterThan(0);
+    expect(refreshSkillPackages().some((pkg) => pkg.id === "metapi-ops")).toBe(true);
   });
 
   it("resolves skill tools by registry id or function name, not random call id", async () => {

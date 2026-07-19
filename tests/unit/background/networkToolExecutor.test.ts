@@ -207,6 +207,66 @@ describe("Network 工具执行器", () => {
     });
   });
 
+  it("summarize/playbook 工具识别接口候选并生成可导入策略草稿", async () => {
+    const details = [
+      createDetail({
+        id: "req-api-1",
+        url: "https://api.example.com/v1/search?q=apple&ts=1700000000",
+        method: "POST",
+        resourceType: "Fetch",
+        status: 200,
+        durationMs: 120,
+        requestHeaders: [{ name: "Content-Type", value: "application/json" }],
+        requestBody: "{\"q\":\"apple\",\"ts\":1700000000,\"sign\":\"abcdef1234567890abcdef1234567890\"}",
+        responseBody: "{\"ok\":true,\"data\":{\"items\":[{\"id\":1}]}}",
+      }),
+      createDetail({
+        id: "req-api-2",
+        url: "https://api.example.com/v1/search?q=banana&ts=1700000001",
+        method: "POST",
+        resourceType: "Fetch",
+        status: 500,
+        durationMs: 2100,
+        requestHeaders: [{ name: "Content-Type", value: "application/json" }],
+        requestBody: "{\"q\":\"banana\",\"ts\":1700000001,\"sign\":\"bbbbbb1234567890abcdef1234567890\"}",
+        responseBody: "{\"ok\":false,\"error\":\"server\"}",
+      }),
+      createDetail({
+        id: "asset-1",
+        url: "https://api.example.com/assets/app.js",
+        method: "GET",
+        resourceType: "Script",
+        mimeType: "application/javascript",
+      }),
+    ];
+    const recorder = {
+      isEnabled: vi.fn(() => true),
+      listRequests: vi.fn(() => details),
+      getDetails: vi.fn(async (ids: string[]) => details.filter((detail) => ids.includes(detail.id))),
+      clear: vi.fn(),
+      waitForRequests: vi.fn(),
+    };
+    const executor = new BrowserNetworkToolExecutor(recorder);
+
+    const summary = await executor.execute(createToolCall("network_summarize_api_candidates", { limit: 20 }));
+    expect(summary.content).toContain("Network API 候选总览");
+    expect(summary.content).toContain("POST https://api.example.com/v1/search");
+    expect(summary.content).toContain("network_create_playbook_draft");
+    expect(summary.content).not.toContain("assets/app.js");
+
+    const draft = await executor.execute(createToolCall("network_create_playbook_draft", {
+      requestIds: ["req-api-1", "req-api-2"],
+      title: "搜索接口复用 token=secret",
+      objective: "沉淀搜索接口分析流程 password=123456",
+    }));
+    expect(draft.content).toContain("接口 Playbook 草稿");
+    expect(draft.content).toContain("\"title\": \"搜索接口复用 token=[已脱敏]\"");
+    expect(draft.content).not.toContain("password=123456");
+    expect(draft.content).toContain("network_summarize_api_candidates");
+    expect(draft.content).toContain("network_compare_requests");
+    expect(draft.toolAttachments).toEqual([expect.objectContaining({ kind: "network" })]);
+  });
+
   it("Network 兼容入口使用统一 JS 判定，避免把 json_data 误识别为 JS", async () => {
     const recorder = {
       isEnabled: vi.fn(() => true),

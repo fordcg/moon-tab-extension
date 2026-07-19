@@ -1,4 +1,5 @@
 import type {
+  AutomationCheckpoint,
   AutomationPlaybookSelection,
   AutomationFailureSummary,
   AutomationReportType,
@@ -97,12 +98,15 @@ export function createAutomationReportToolAttachment(input: {
 }): ChatAutomationReportToolAttachment | undefined {
   const steps = input.records.map((record) => createAutomationReportStep(record, input.attachments ?? []));
   const timeline = createAutomationTimeline(input.records, steps);
+  const reportType = inferAutomationReportType(input.records);
+  const checkpoints = createAutomationCheckpoints(steps);
+  const nextSteps = createAutomationNextSteps(steps, reportType, checkpoints);
   const createdAt = input.createdAt ?? Math.max(...input.records.map((record) => record.completedAt ?? record.startedAt), Date.now());
   const report = normalizeAutomationReportToolAttachment({
     id: `tool-attachment-automation-report-${createdAt}`,
     kind: "automation-report",
     title: "自动化任务报告",
-    reportType: inferAutomationReportType(input.records),
+    reportType,
     objective: input.objective,
     conclusion: input.conclusion,
     playbook: normalizeAutomationReportPlaybook(input.playbook),
@@ -111,6 +115,8 @@ export function createAutomationReportToolAttachment(input: {
     truncated: false,
     steps,
     timeline,
+    checkpoints,
+    nextSteps,
     failureSummary: createAutomationFailureSummary(steps),
     fullAccessIncluded: input.records.some((record) => record.toolId.startsWith("full_access.")),
   } as Partial<ChatToolAttachment>);
@@ -638,6 +644,8 @@ function aggregateAutomationReportToolAttachments(attachments: ChatAutomationRep
 
   const steps = uniqueBy(attachments.flatMap((attachment) => attachment.steps), (step) => step.toolCallId || `${step.toolName}\u0000${step.startedAt}`);
   const timeline = uniqueBy(attachments.flatMap((attachment) => attachment.timeline), (event) => event.id || `${event.type}\u0000${event.at}\u0000${event.label}`);
+  const checkpoints = uniqueBy(attachments.flatMap((attachment) => attachment.checkpoints ?? []), (checkpoint) => checkpoint.id || `${checkpoint.status}\u0000${checkpoint.at}\u0000${checkpoint.label}`);
+  const nextSteps = uniqueNonEmptyStrings(attachments.flatMap((attachment) => attachment.nextSteps ?? [])).slice(0, 12);
   const createdAt = Math.max(...attachments.map((attachment) => attachment.createdAt));
   const fullAccessIncluded = attachments.some((attachment) => attachment.fullAccessIncluded);
   const playbook = attachments.map((attachment) => attachment.playbook).find((item): item is AutomationPlaybookSelection => Boolean(item));
@@ -655,6 +663,8 @@ function aggregateAutomationReportToolAttachments(attachments: ChatAutomationRep
     reportType: aggregateAutomationReportType(attachments),
     steps,
     timeline: timeline.sort((a, b) => a.at - b.at),
+    checkpoints: checkpoints.sort((a, b) => a.at - b.at),
+    nextSteps: nextSteps.length ? nextSteps : createAutomationNextSteps(steps, aggregateAutomationReportType(attachments), checkpoints),
     failureSummary: createAutomationFailureSummary(steps),
     fullAccessIncluded,
   };
@@ -936,6 +946,10 @@ function normalizeAutomationReportToolAttachment(source: Partial<ChatToolAttachm
     return undefined;
   }
 
+  const timeline = normalizeAutomationTimeline(raw.timeline, steps);
+  const reportType = normalizeAutomationReportType(raw.reportType, steps);
+  const checkpoints = normalizeAutomationCheckpoints(raw.checkpoints, steps);
+  const nextSteps = normalizeAutomationNextSteps(raw.nextSteps, steps, reportType, checkpoints);
   const attachment: ChatAutomationReportToolAttachment = {
     id: normalizeId(source.id, `tool-attachment-automation-report-${normalizeTimestamp(source.createdAt)}`),
     kind: "automation-report",
@@ -945,12 +959,14 @@ function normalizeAutomationReportToolAttachment(source: Partial<ChatToolAttachm
     createdAt: normalizeTimestamp(source.createdAt),
     redacted: true,
     truncated: source.truncated === true || steps.some((step) => step.evidence.length >= 500),
-    reportType: normalizeAutomationReportType(raw.reportType, steps),
+    reportType,
     objective: redactAndTruncateAutomationText(raw.objective, 500) || "未记录任务目标",
     conclusion: redactAndTruncateAutomationText(raw.conclusion, 800) || "暂无结论",
     playbook: normalizeAutomationReportPlaybook(raw.playbook),
     steps,
-    timeline: normalizeAutomationTimeline(raw.timeline, steps),
+    timeline,
+    checkpoints,
+    nextSteps,
     failureSummary: normalizeAutomationFailureSummary(raw.failureSummary, steps),
     fullAccessIncluded: raw.fullAccessIncluded === true,
   };
@@ -1183,6 +1199,20 @@ function formatAutomationReportAttachmentForText(attachment: ChatAutomationRepor
     `完全访问原文结果：${attachment.fullAccessIncluded ? "是" : "否"}`,
     "时间线：",
     ...attachment.timeline.map((event, index) => `${index + 1}. [${event.type}] ${event.label} - ${event.detail}`),
+    ...(attachment.checkpoints?.length
+      ? [
+          "检查点：",
+          ...attachment.checkpoints.map((checkpoint, index) =>
+            `${index + 1}. [${checkpoint.status}] ${checkpoint.label} - ${checkpoint.detail}${checkpoint.nextSteps.length ? `；下一步=${checkpoint.nextSteps.join("；")}` : ""}`,
+          ),
+        ]
+      : []),
+    ...(attachment.nextSteps?.length
+      ? [
+          "建议下一步：",
+          ...attachment.nextSteps.map((item, index) => `${index + 1}. ${item}`),
+        ]
+      : []),
     "步骤：",
     ...attachment.steps.map((step, index) =>
       `${index + 1}. [${step.status}] ${step.displayName} (${step.toolName}) - ${step.evidence}${step.attachmentKinds.length ? `；附件=${step.attachmentKinds.join("、")}` : ""}`,
@@ -1361,6 +1391,54 @@ function normalizeAutomationTimelineEvent(value: unknown): AutomationTimelineEve
   };
 }
 
+function normalizeAutomationCheckpoints(value: unknown, steps: AutomationReportStep[]): AutomationCheckpoint[] {
+  const checkpoints = Array.isArray(value)
+    ? value.map(normalizeAutomationCheckpoint).filter((item): item is AutomationCheckpoint => Boolean(item))
+    : [];
+  if (checkpoints.length > 0) {
+    return uniqueBy(checkpoints, (checkpoint) => checkpoint.id).sort((a, b) => a.at - b.at).slice(0, 50);
+  }
+  return createAutomationCheckpoints(steps);
+}
+
+function normalizeAutomationCheckpoint(value: unknown): AutomationCheckpoint | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const source = value as Partial<AutomationCheckpoint>;
+  const status = isAutomationCheckpointStatus(source.status) ? source.status : undefined;
+  const label = redactAndTruncateAutomationText(source.label, 160);
+  const detail = redactAndTruncateAutomationText(source.detail, 500);
+  if (!status || !label || !detail) {
+    return undefined;
+  }
+  return {
+    id: normalizeId(source.id, `automation-checkpoint-${status}-${normalizeTimestamp(source.at)}`),
+    at: normalizeTimestamp(source.at),
+    label,
+    detail,
+    status,
+    relatedToolCallIds: Array.isArray(source.relatedToolCallIds)
+      ? uniqueNonEmptyStrings(source.relatedToolCallIds.filter((item): item is string => typeof item === "string")).slice(0, 20)
+      : [],
+    nextSteps: Array.isArray(source.nextSteps)
+      ? uniqueNonEmptyStrings(source.nextSteps.filter((item): item is string => typeof item === "string").map((item) => redactAndTruncateAutomationText(item, 200))).slice(0, 6)
+      : [],
+  };
+}
+
+function normalizeAutomationNextSteps(
+  value: unknown,
+  steps: AutomationReportStep[],
+  reportType: AutomationReportType,
+  checkpoints: AutomationCheckpoint[],
+): string[] {
+  const normalized = Array.isArray(value)
+    ? uniqueNonEmptyStrings(value.filter((item): item is string => typeof item === "string").map((item) => redactAndTruncateAutomationText(item, 200))).slice(0, 12)
+    : [];
+  return normalized.length ? normalized : createAutomationNextSteps(steps, reportType, checkpoints);
+}
+
 function createAutomationReportStep(record: ChatToolCallRecord, attachments: ChatToolAttachment[]): AutomationReportStep {
   const attachmentKinds = uniqueNonEmptyStrings(
     attachments
@@ -1377,6 +1455,41 @@ function createAutomationReportStep(record: ChatToolCallRecord, attachments: Cha
     evidence: redactAndTruncateAutomationText(record.errorMessage || record.resultSummary || "无工具结果摘要", AUTOMATION_EVIDENCE_LIMIT),
     attachmentKinds,
   };
+}
+
+function createAutomationCheckpoints(steps: AutomationReportStep[]): AutomationCheckpoint[] {
+  return steps.slice(0, 50).map((step, index) => ({
+    id: `automation-checkpoint-${step.toolCallId || index}`,
+    at: step.completedAt ?? step.startedAt,
+    label: createAutomationCheckpointLabel(step),
+    detail: step.evidence,
+    status: step.status === "error" ? "blocked" : step.status === "running" ? "attention" : "complete",
+    relatedToolCallIds: [step.toolCallId],
+    nextSteps: createCheckpointNextSteps(step),
+  }));
+}
+
+function createAutomationCheckpointLabel(step: AutomationReportStep): string {
+  if (step.status === "error") {
+    return `需要处理：${step.displayName}`;
+  }
+  if (step.status === "running") {
+    return `进行中：${step.displayName}`;
+  }
+  return `已完成：${step.displayName}`;
+}
+
+function createCheckpointNextSteps(step: AutomationReportStep): string[] {
+  if (step.status === "error") {
+    return ["检查失败步骤的参数、页面状态或授权边界后重试。"];
+  }
+  if (step.attachmentKinds.includes("network")) {
+    return ["如需继续接口分析，读取关键请求详情、对比样本或生成 Playbook 草稿。"];
+  }
+  if (step.attachmentKinds.includes("browser-screenshot")) {
+    return ["如需继续视觉判断，结合页面快照或元素截图核对目标状态。"];
+  }
+  return [];
 }
 
 function createAutomationTimeline(records: ChatToolCallRecord[], steps: AutomationReportStep[]): AutomationTimelineEvent[] {
@@ -1581,6 +1694,33 @@ function createAutomationFailureSummary(steps: AutomationReportStep[]): Automati
   };
 }
 
+function createAutomationNextSteps(
+  steps: AutomationReportStep[],
+  reportType: AutomationReportType,
+  checkpoints: AutomationCheckpoint[] = [],
+): string[] {
+  const suggestions: string[] = [];
+  const failedSteps = steps.filter((step) => step.status === "error");
+  if (failedSteps.length > 0) {
+    suggestions.push(`先处理失败步骤：${uniqueNonEmptyStrings(failedSteps.map((step) => step.displayName)).join("、")}。`);
+  }
+  if (checkpoints.some((checkpoint) => checkpoint.status === "attention")) {
+    suggestions.push("继续观察进行中的检查点，完成后再交付结论。");
+  }
+  if (reportType === "interface_analysis") {
+    suggestions.push("如需继续接口分析，优先使用 network_summarize_api_candidates 复核候选，再按 requestIds 读取详情。");
+    suggestions.push("同一接口有多个样本时，用 network_compare_requests 和 network_find_parameter_candidates 固化稳定字段、变化字段和关键参数。");
+    suggestions.push("需要复用本次接口分析流程时，用 network_create_playbook_draft 生成可导入策略草稿。");
+  } else if (reportType === "form_diagnosis") {
+    suggestions.push("根据表单诊断结果补齐必填项、解除交互阻塞，提交前继续遵守用户确认边界。");
+  } else if (reportType === "page_inspection") {
+    suggestions.push("需要更强证据时，继续结合页面状态、Console、性能和 Network 摘要复查。");
+  } else {
+    suggestions.push("继续下一步前先复核页面状态、工具证据和用户授权边界。");
+  }
+  return uniqueNonEmptyStrings(suggestions).slice(0, 8);
+}
+
 function redactAndTruncateAutomationText(value: unknown, maxLength: number): string {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) {
@@ -1617,6 +1757,10 @@ function isToolCallStatus(value: unknown): value is AutomationReportStep["status
 
 function isAutomationTimelineEventType(value: unknown): value is AutomationTimelineEvent["type"] {
   return value === "tool_call" || value === "page_change" || value === "wait" || value === "user_confirmation" || value === "failure_recovery";
+}
+
+function isAutomationCheckpointStatus(value: unknown): value is AutomationCheckpoint["status"] {
+  return value === "complete" || value === "attention" || value === "blocked";
 }
 
 function isAutomationReportType(value: unknown): value is AutomationReportType {

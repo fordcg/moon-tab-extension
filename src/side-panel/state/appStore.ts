@@ -1960,16 +1960,18 @@ async function sendChatMessageWithState(input: SendChatMessageWithStateInput): P
       ? state.privateChatSession
       : state.chatSessions.find((session) => session.id === targetSessionId);
   const selectedModelId = baseSession?.selectedModelId || state.selectedModelId;
-  const model = state.models.find((item) => item.id === selectedModelId);
-  const provider = model ? state.providers.find((item) => item.id === model.providerId) : undefined;
-  if (!model || !provider || !model.enabled || !provider.enabled) {
-    input.set({ failure: { message: "请先配置可用模型后再发送" } });
+  const route = resolveChatRequestModel(state, selectedModelId, imageAttachments.length > 0);
+  if (!route) {
+    input.set({
+      failure: {
+        message: imageAttachments.length > 0
+          ? "当前模型不支持视觉理解，无法添加图片"
+          : "请先配置可用模型后再发送",
+      },
+    });
     return false;
   }
-  if (imageAttachments.length > 0 && !model.supportsVision) {
-    input.set({ failure: { message: "当前模型不支持视觉理解，无法添加图片" } });
-    return false;
-  }
+  const { model, provider } = route;
 
   const now = Date.now();
   if (!baseSession && Object.values(state.chatTasksBySessionId).some((task) => task.status === "running")) {
@@ -2062,16 +2064,18 @@ async function regenerateChatMessage(input: RegenerateChatMessageInput): Promise
     return;
   }
 
-  const model = state.models.find((item) => item.id === state.selectedModelId);
-  const provider = model ? state.providers.find((item) => item.id === model.providerId) : undefined;
-  if (!model || !provider || !model.enabled || !provider.enabled) {
-    input.set({ failure: { message: "请先配置可用模型后再发送" } });
+  const route = resolveChatRequestModel(state, state.selectedModelId, (userMessage.attachments?.length ?? 0) > 0);
+  if (!route) {
+    input.set({
+      failure: {
+        message: (userMessage.attachments?.length ?? 0) > 0
+          ? "当前模型不支持视觉理解，无法添加图片"
+          : "请先配置可用模型后再发送",
+      },
+    });
     return;
   }
-  if ((userMessage.attachments?.length ?? 0) > 0 && !model.supportsVision) {
-    input.set({ failure: { message: "当前模型不支持视觉理解，无法添加图片" } });
-    return;
-  }
+  const { model, provider } = route;
 
   const userMessageIndex = session.messages.findIndex((message) => message.id === userMessage.id);
   const existingMessages = session.messages.slice(0, userMessageIndex);
@@ -2122,16 +2126,18 @@ async function editAndRegenerateUserMessage(input: EditAndRegenerateUserMessageI
     return;
   }
 
-  const model = state.models.find((item) => item.id === state.selectedModelId);
-  const provider = model ? state.providers.find((item) => item.id === model.providerId) : undefined;
-  if (!model || !provider || !model.enabled || !provider.enabled) {
-    input.set({ failure: { message: "请先配置可用模型后再发送" } });
+  const route = resolveChatRequestModel(state, state.selectedModelId, (originalUserMessage.attachments?.length ?? 0) > 0);
+  if (!route) {
+    input.set({
+      failure: {
+        message: (originalUserMessage.attachments?.length ?? 0) > 0
+          ? "当前模型不支持视觉理解，无法添加图片"
+          : "请先配置可用模型后再发送",
+      },
+    });
     return;
   }
-  if ((originalUserMessage.attachments?.length ?? 0) > 0 && !model.supportsVision) {
-    input.set({ failure: { message: "当前模型不支持视觉理解，无法添加图片" } });
-    return;
-  }
+  const { model, provider } = route;
 
   const editedUserMessage: ChatMessage = {
     ...originalUserMessage,
@@ -2179,16 +2185,18 @@ async function sendExistingFollowUpMessageWithState(input: {
   }
 
   const selectedModelId = session.selectedModelId || state.selectedModelId;
-  const model = state.models.find((item) => item.id === selectedModelId);
-  const provider = model ? state.providers.find((item) => item.id === model.providerId) : undefined;
-  if (!model || !provider || !model.enabled || !provider.enabled) {
-    input.set({ failure: { message: "请先配置可用模型后再发送" } });
+  const route = resolveChatRequestModel(state, selectedModelId, (userMessage.attachments?.length ?? 0) > 0);
+  if (!route) {
+    input.set({
+      failure: {
+        message: (userMessage.attachments?.length ?? 0) > 0
+          ? "当前模型不支持视觉理解，无法添加图片"
+          : "请先配置可用模型后再发送",
+      },
+    });
     return false;
   }
-  if ((userMessage.attachments?.length ?? 0) > 0 && !model.supportsVision) {
-    input.set({ failure: { message: "当前模型不支持视觉理解，无法添加图片" } });
-    return false;
-  }
+  const { model, provider } = route;
 
   await runChatRequest({
     state,
@@ -2207,6 +2215,24 @@ async function sendExistingFollowUpMessageWithState(input: {
     set: input.set,
   });
   return true;
+}
+
+function resolveChatRequestModel(
+  state: AppState,
+  preferredModelId: string,
+  requireVision: boolean,
+): { model: ProviderModel; provider: ModelProvider } | undefined {
+  const availableModels = state.models
+    .map((model) => ({ model, provider: state.providers.find((provider) => provider.id === model.providerId) }))
+    .filter((item): item is { model: ProviderModel; provider: ModelProvider } => Boolean(item.provider?.enabled && item.model.enabled));
+  const preferred = availableModels.find((item) => item.model.id === preferredModelId);
+  if (preferred && (!requireVision || preferred.model.supportsVision)) {
+    return preferred;
+  }
+  if (requireVision) {
+    return availableModels.find((item) => item.model.supportsVision);
+  }
+  return preferred ?? availableModels[0];
 }
 
 function findPreviousUserMessage(messages: ChatMessage[], startIndex: number): ChatMessage | undefined {

@@ -273,7 +273,7 @@ export function appendBrowserControlPromptIfNeeded(
       : []),
     ...(enabledTools.some((tool) => tool.id.startsWith("network."))
       ? [
-          "- 用户要求分析某项功能的接口、请求参数、响应或调用链，并且对话携带当前页面上下文时，应视为当前页面现场，即使用户没有明确说“当前页面”。先调用 network_list_requests 定位候选请求，再按返回的请求 ID 调用 network_get_request_details；不要用 Tavily 搜索推测当前页面的实际接口。",
+          "- 用户要求分析某项功能的接口、请求参数、响应或调用链，并且对话携带当前页面上下文时，应视为当前页面现场，即使用户没有明确说“当前页面”。优先调用 network_summarize_api_candidates 获取候选接口总览；需要完整列表或兼容旧流程时再调用 network_list_requests。按返回的请求 ID 调用 network_get_request_details；需要沉淀复用流程时调用 network_create_playbook_draft。不要用 Tavily 搜索推测当前页面的实际接口。",
         ]
       : []),
     "- 需要当前页面结构时先调用 take_snapshot。",
@@ -308,6 +308,7 @@ export function appendBrowserControlPromptIfNeeded(
     "- 需要打开元素上下文菜单时，先使用 take_snapshot 获取 UID，再调用 context_click；它只负责打开菜单，不会自动选择菜单项，不要编造菜单结果。",
     "- 需要拖拽元素时，先使用 take_snapshot 获取 sourceUid；目标只能是 targetUid，或有限的 deltaX/deltaY 相对偏移。drag 是高风险操作，不要传绝对坐标、选择器或自定义脚本。",
     "- click、fill、press_key、scroll、hover、double_click、context_click、drag 和 wait_for_state 成功后可按需设置 includeSnapshot=true 获取最新快照；失败时不要编造页面结构或操作结果。",
+    "- 多步自动化过程中，在回答里尽量保留关键检查点：已观察到什么、已操作什么、哪一步失败/需要授权、下一步建议调用哪个工具或请求用户做什么。",
     "- press_key 只能用于白名单按键，并且应确认正确页面或元素已有焦点。",
     "- wait_for 只等待页面可见文本；超时后应重新 take_snapshot 或向用户说明等待失败。",
     "- 需要等待 URL 片段、readyState、UID 元素可见/隐藏或 Network 空闲时调用 wait_for_state；等待元素状态必须先使用 take_snapshot 获取 UID，等待 Network 空闲使用 state=network_idle，不要传 CSS 选择器、XPath 或自定义脚本。",

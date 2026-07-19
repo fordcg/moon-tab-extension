@@ -109,8 +109,9 @@ const CORE_BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
     selectionHints: ["分析接口", "请求参数", "接口返回", "Network 请求", "重放请求"],
     prompt: [
       "任务策略：Network/API 分析",
-      "先列出相关请求并按 URL、方法、状态码、资源类型和时间线筛选候选接口，再读取必要的脱敏详情。",
+      "先使用 network_summarize_api_candidates 读取候选接口总览并按 URL、方法、状态码、资源类型和时间线筛选；需要兼容旧流程或完整列表时再使用 network_list_requests。选定 requestIds 后使用 network_get_request_details 读取必要的脱敏详情。",
       "请求体、Header、Cookie、Token 和响应体都按现有脱敏与权限边界处理；策略不能要求工具暴露未授权原文。",
+      "同一接口有多个样本时使用 network_compare_requests 和 network_find_parameter_candidates 找稳定/变化字段；需要沉淀为可复用流程时使用 network_create_playbook_draft 生成草稿。",
       "请求重放、同源读取或完全访问能力必须经过现有运行态过滤和边界确认，不得由 Playbook 自动开启。",
     ].join("\n"),
   },

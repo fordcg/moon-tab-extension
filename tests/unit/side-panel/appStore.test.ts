@@ -1557,6 +1557,63 @@ describe("appStore", () => {
     ]);
   });
 
+  it("发送图片时当前模型不支持视觉会自动路由到可用视觉模型", async () => {
+    const provider = createProvider();
+    const textModel = { ...createModel(), supportsVision: false };
+    const visionModel = { ...createModel(), id: "model-vision", modelId: "gpt-vision", displayName: "视觉模型", supportsVision: true };
+    const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
+      if (message.type === "pageContext.extract") {
+        callback({
+          ok: true,
+          text: "",
+          truncated: false,
+          usedFallback: false,
+        });
+        return undefined;
+      }
+
+      callback({
+        ok: true,
+        content: "AI 回复",
+      });
+      return undefined;
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+    });
+
+    await saveModelProvider(provider);
+    await saveProviderModel(textModel);
+    await saveProviderModel(visionModel);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    await useAppStore.getState().selectModel(textModel.id);
+    await useAppStore.getState().refreshPageContext();
+    disableDefaultToolCalling();
+    useAppStore.getState().setStreamMode(false);
+
+    await useAppStore.getState().sendChatMessage("看图说明", [
+      {
+        id: "image-1",
+        name: "截图.png",
+        mediaType: "image/png",
+        dataUrl: "data:image/png;base64,QUJD",
+      },
+    ]);
+
+    const chatRequest = sendMessage.mock.calls
+      .map(([message]) => message as { type: string; model?: ProviderModel; messages?: ChatMessage[] })
+      .find((message) => message.type === "chat.send");
+    const state = useAppStore.getState();
+    const activeSession = state.chatSessions.find((session) => session.id === state.activeSessionId);
+
+    expect(chatRequest?.model?.id).toBe("model-vision");
+    expect(chatRequest?.messages?.find((message) => message.role === "user")?.modelId).toBe("model-vision");
+    expect(activeSession?.selectedModelId).toBe("model-vision");
+  });
+
   it("允许发送纯图片消息并写入用户消息历史", async () => {
     const provider = createProvider();
     const model = { ...createModel(), supportsVision: true };

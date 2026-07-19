@@ -76,12 +76,16 @@ export const NETWORK_CLEAR_REQUESTS_TOOL_ID = "network.clear_requests";
 export const NETWORK_CLEAR_REQUESTS_TOOL_NAME = "network_clear_requests";
 export const NETWORK_WAIT_FOR_REQUESTS_TOOL_ID = "network.wait_for_requests";
 export const NETWORK_WAIT_FOR_REQUESTS_TOOL_NAME = "network_wait_for_requests";
+export const NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID = "network.summarize_api_candidates";
+export const NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_NAME = "network_summarize_api_candidates";
 export const NETWORK_COMPARE_REQUESTS_TOOL_ID = "network.compare_requests";
 export const NETWORK_COMPARE_REQUESTS_TOOL_NAME = "network_compare_requests";
 export const NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID = "network.find_parameter_candidates";
 export const NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_NAME = "network_find_parameter_candidates";
 export const NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID = "network.extract_js_candidates";
 export const NETWORK_EXTRACT_JS_CANDIDATES_TOOL_NAME = "network_extract_js_candidates";
+export const NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID = "network.create_playbook_draft";
+export const NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_NAME = "network_create_playbook_draft";
 export const JS_LIST_RESOURCES_TOOL_ID = "js.list_resources";
 export const JS_LIST_RESOURCES_TOOL_NAME = "js_list_resources";
 export const JS_SEARCH_SOURCES_TOOL_ID = "js.search_sources";
@@ -169,9 +173,11 @@ const TOOL_CLASSIFICATION_BY_ID: Record<string, ModelToolClassification> = {
   [NETWORK_WAIT_FOR_REQUESTS_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page", "analyze_site"], risk: "low" },
   [NETWORK_LIST_REQUESTS_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page", "analyze_site"], risk: "low" },
   [NETWORK_GET_REQUEST_DETAILS_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page", "analyze_site"], risk: "medium" },
+  [NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID]: { runtime: "browser_control", capabilities: ["observe_page", "analyze_site", "deliver_result"], risk: "low" },
   [NETWORK_COMPARE_REQUESTS_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site"], risk: "medium" },
   [NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site"], risk: "medium" },
   [NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site"], risk: "medium" },
+  [NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site", "deliver_result"], risk: "medium" },
   [JS_LIST_RESOURCES_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site"], risk: "low" },
   [JS_SEARCH_SOURCES_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site"], risk: "medium" },
   [JS_EXTRACT_CONTEXT_TOOL_ID]: { runtime: "browser_control", capabilities: ["analyze_site"], risk: "medium" },
@@ -947,6 +953,27 @@ const RAW_AVAILABLE_MODEL_TOOLS: Omit<ModelToolRegistryEntry, "toolClassificatio
     },
   },
   {
+    id: NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID,
+    name: NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_NAME,
+    groupId: MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID,
+    requiredCapabilities: ["browser_control", "network_read"],
+    displayName: "接口候选总览",
+    description: "基于 Network 请求元数据识别和排序疑似 API 接口候选，不读取 Header、Body 或响应体原文。适合先判断要深入分析哪些请求。",
+    parameters: {
+      type: "object",
+      properties: {
+        urlIncludes: { type: "string", description: "URL 中需要包含的文本。" },
+        method: { type: "string", description: "请求方法，例如 GET、POST。" },
+        resourceType: { type: "string", description: "资源类型，例如 XHR、Fetch、Script。" },
+        status: { type: "integer", description: "HTTP 状态码。" },
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "最多读取的请求数量。" },
+        includeStaticAssets: { type: "boolean", description: "是否把 Script、Stylesheet、Image、Font 等静态资源也纳入候选排序。" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
     id: NETWORK_COMPARE_REQUESTS_TOOL_ID,
     name: NETWORK_COMPARE_REQUESTS_TOOL_NAME,
     groupId: MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID,
@@ -979,6 +1006,31 @@ const RAW_AVAILABLE_MODEL_TOOLS: Omit<ModelToolRegistryEntry, "toolClassificatio
         urlIncludes: { type: "string", description: "要在 JS 内容中搜索的接口路径或 URL 片段。" },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID,
+    name: NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_NAME,
+    groupId: MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID,
+    requiredCapabilities: ["browser_control", "network_read"],
+    displayName: "生成接口 Playbook 草稿",
+    description: "根据一组 Network 请求详情生成可导入/可复用的自动化任务策略草稿。会读取脱敏 Header、Body 和响应结构；遇到已脱敏字段时仍必须遵守受控增强边界。",
+    parameters: {
+      type: "object",
+      properties: {
+        requestIds: {
+          type: "array",
+          minItems: 1,
+          maxItems: 20,
+          items: { type: "string" },
+          description: "从 Network 请求列表或接口候选总览中选择的请求 ID，最多 20 个。",
+        },
+        title: { type: "string", maxLength: 120, description: "可选，生成策略草稿的标题。" },
+        objective: { type: "string", maxLength: 240, description: "可选，本策略要复用的业务目标或接口分析目标。" },
+        includeResponseHints: { type: "boolean", description: "是否在草稿中包含响应状态、MIME 和 JSON 字段提示。" },
+      },
+      required: ["requestIds"],
       additionalProperties: false,
     },
   },

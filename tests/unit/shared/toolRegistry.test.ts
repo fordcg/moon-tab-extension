@@ -68,10 +68,12 @@ import {
   FULL_ACCESS_REVOKE_TOOL_NAME,
   NETWORK_CLEAR_REQUESTS_TOOL_ID,
   NETWORK_COMPARE_REQUESTS_TOOL_ID,
+  NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID,
   NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID,
   NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID,
   NETWORK_GET_REQUEST_DETAILS_TOOL_ID,
   NETWORK_LIST_REQUESTS_TOOL_ID,
+  NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID,
   NETWORK_WAIT_FOR_REQUESTS_TOOL_ID,
   JS_EXTRACT_CONTEXT_TOOL_ID,
   JS_LIST_RESOURCES_TOOL_ID,
@@ -715,9 +717,11 @@ describe("模型工具注册表", () => {
       NETWORK_GET_REQUEST_DETAILS_TOOL_ID,
       NETWORK_CLEAR_REQUESTS_TOOL_ID,
       NETWORK_WAIT_FOR_REQUESTS_TOOL_ID,
+      NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID,
       NETWORK_COMPARE_REQUESTS_TOOL_ID,
       NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID,
       NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID,
+      NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID,
       JS_LIST_RESOURCES_TOOL_ID,
       JS_SEARCH_SOURCES_TOOL_ID,
       JS_EXTRACT_CONTEXT_TOOL_ID,
@@ -754,6 +758,10 @@ describe("模型工具注册表", () => {
       name: "network_compare_requests",
       parameters: { type: "object", required: ["requestIds"], additionalProperties: false },
     });
+    expect(tools.find((tool) => tool.id === NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID)).toMatchObject({
+      name: "network_summarize_api_candidates",
+      parameters: { type: "object", additionalProperties: false },
+    });
     expect(tools.find((tool) => tool.id === NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID)).toMatchObject({
       name: "network_find_parameter_candidates",
       parameters: { type: "object", required: ["requestIds"], additionalProperties: false },
@@ -761,6 +769,10 @@ describe("模型工具注册表", () => {
     expect(tools.find((tool) => tool.id === NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID)).toMatchObject({
       name: "network_extract_js_candidates",
       parameters: { type: "object", additionalProperties: false },
+    });
+    expect(tools.find((tool) => tool.id === NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID)).toMatchObject({
+      name: "network_create_playbook_draft",
+      parameters: { type: "object", required: ["requestIds"], additionalProperties: false },
     });
     expect(tools.find((tool) => tool.id === NETWORK_WAIT_FOR_REQUESTS_TOOL_ID)?.parameters.properties).toMatchObject({
       limit: { type: "integer", minimum: 1, maximum: 200 },
@@ -899,9 +911,11 @@ describe("模型工具注册表", () => {
         "network_get_request_details",
         "network_clear_requests",
         "network_wait_for_requests",
+        "network_summarize_api_candidates",
         "network_compare_requests",
         "network_find_parameter_candidates",
         "network_extract_js_candidates",
+        "network_create_playbook_draft",
         "js_list_resources",
         "js_search_sources",
         "js_extract_context",
@@ -1095,6 +1109,7 @@ describe("模型工具注册表", () => {
       NETWORK_LIST_REQUESTS_TOOL_ID,
       NETWORK_CLEAR_REQUESTS_TOOL_ID,
       NETWORK_WAIT_FOR_REQUESTS_TOOL_ID,
+      NETWORK_SUMMARIZE_API_CANDIDATES_TOOL_ID,
     ]);
 
     expect(filterModelToolsByClassification(tools, {
