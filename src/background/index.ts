@@ -44,6 +44,7 @@ import { createNetworkDevtoolsBridge } from "./networkDevtoolsBridge";
 import { BrowserNetworkToolExecutor } from "./browserControl/networkToolExecutor";
 import { exportAllDataForSync, recoverInterruptedChatSessions, replaceAllDataFromSync } from "../shared/storage/repositories";
 import { installModelProviderHeaderRules } from "./modelProviderRequestHeaders";
+import { diagnosticDebug } from "../shared/diagnosticLogging";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
 const networkDevtoolsBridge = createNetworkDevtoolsBridge();
@@ -217,7 +218,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
   }
 
   if (message.type === "extractionRule.generateUrlPatterns") {
-    console.debug(`${DEBUG_PREFIX} background 入口收到 runtime 消息`, {
+    diagnosticDebug(DEBUG_PREFIX, "background 入口收到 runtime 消息", {
       type: message.type,
       debugRequestId: message.debugRequestId,
       providerId: message.provider?.id,
@@ -229,7 +230,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
   if (message.type === "extractionRule.generateUrlPatterns") {
     void handleUrlPatternGenerationMessage(message)
       .then((response) => {
-        console.debug(`${DEBUG_PREFIX} background 入口发送 runtime 响应`, {
+        diagnosticDebug(DEBUG_PREFIX, "background 入口发送 runtime 响应", {
           debugRequestId: message.debugRequestId,
           response,
         });
@@ -249,12 +250,12 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | RuntimeAgentTool
   }
 
   if (message.type === "extractionRule.getCurrentTabUrl") {
-    console.debug(`${DEBUG_PREFIX} background 入口收到当前标签页 URL 请求`, {
+    diagnosticDebug(DEBUG_PREFIX, "background 入口收到当前标签页 URL 请求", {
       debugRequestId: message.debugRequestId,
     });
     void handleCurrentTabUrlMessage(message)
       .then((response) => {
-        console.debug(`${DEBUG_PREFIX} background 入口返回当前标签页 URL`, {
+        diagnosticDebug(DEBUG_PREFIX, "background 入口返回当前标签页 URL", {
           debugRequestId: message.debugRequestId,
           response,
         });

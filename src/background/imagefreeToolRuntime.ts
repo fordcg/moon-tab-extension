@@ -382,9 +382,17 @@ async function openImagefreeCaptchaSurface(
         height: 320,
         focused: true,
       });
+      const popupWindowId = typeof popup?.id === "number" ? popup.id : undefined;
       const tabId = popup?.tabs?.find((tab) => typeof tab.id === "number")?.id;
       if (typeof tabId === "number") {
-        return { tabId, windowId: popup.id };
+        return popupWindowId === undefined ? { tabId } : { tabId, windowId: popupWindowId };
+      }
+      if (popupWindowId !== undefined && chromeApi.windows.remove) {
+        try {
+          await chromeApi.windows.remove(popupWindowId);
+        } catch {
+          // Fall through to normal tab.
+        }
       }
     } catch {
       // Fall through to normal tab.

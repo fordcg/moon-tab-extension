@@ -78,8 +78,11 @@ assertContains(imagefreeRuntimeSource, /IMAGEFREE_BASE_URL = "https:\/\/imagefre
 assertContains(imagefreeRuntimeSource, /IMAGEFREE_GENERATE_URL = `\$\{IMAGEFREE_BASE_URL\}\/api\/generate`/, "Imagefree runtime calls the generate endpoint");
 assertContains(imagefreeRuntimeSource, /IMAGEFREE_STATUS_URL = `\$\{IMAGEFREE_GENERATE_URL\}\/status`/, "Imagefree runtime polls the status endpoint");
 assertContains(imagefreeRuntimeSource, /key !== "prompt" && key !== "aspect_ratio"/, "Imagefree runtime rejects caller-provided authentication fields");
-assertContains(imagefreeRuntimeSource, /turnstile_token:\s*null/, "Imagefree runtime follows the public endpoint contract without a caller-provided token");
-assertNotContains(imagefreeRuntimeSource, /IMAGEFREE_TURNSTILE_SITE_KEY|IMAGEFREE_TURNSTILE_BACKGROUND_ATTEMPT_MS/, "Imagefree runtime does not embed the retired Turnstile flow");
+assertContains(imagefreeRuntimeSource, /IMAGEFREE_TURNSTILE_SITE_KEY = "0x4AAAAAACE-XLGoQUckKKm_"/, "Imagefree runtime owns the public Turnstile site key used by imagefree.net");
+assertContains(imagefreeRuntimeSource, /const turnstileToken = await resolveImagefreeTurnstileToken\(\)/, "Imagefree runtime resolves a fresh Turnstile token before fallback fetch");
+assertContains(imagefreeRuntimeSource, /turnstile_token:\s*turnstileToken/, "Imagefree runtime sends the resolved Turnstile token to the public endpoint");
+assertNotContains(imagefreeRuntimeSource, /turnstile_token:\s*null/, "Imagefree runtime must not send the obsolete null Turnstile token");
+assertNotContains(imagefreeRuntimeSource, /IMAGEFREE_TURNSTILE_BACKGROUND_ATTEMPT_MS/, "Imagefree runtime no longer uses the retired background Turnstile attempt window");
 assertContains(imagefreeRuntimeSource, /void migrateImagefreeToolSelection\(\)/, "Imagefree runtime starts selection migration without blocking side panel startup");
 
 assertNotContains(backgroundSource, /src\/ai-assistant/, "background wiring test must not depend on legacy bundle paths");

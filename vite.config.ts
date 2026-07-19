@@ -20,7 +20,6 @@ function copyGameRuntimeStaticAssetsPlugin(): PluginOption {
         filter: (sourcePath) => {
           const relativePath = relative(gameSource, sourcePath).split(sep).join("/");
           if (!relativePath) return true;
-          if (relativePath === "index.html") return false;
           return !/(?:^|\/)(?:tests?|__tests__)(?:\/|$)/.test(relativePath)
             && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(relativePath);
         },
@@ -46,11 +45,6 @@ function buildContentScriptPlugin(): PluginOption {
             formats: ["iife"],
             fileName: () => "index.js",
           },
-          rollupOptions: {
-            output: {
-              inlineDynamicImports: true,
-            },
-          },
         },
       });
     },
@@ -73,7 +67,6 @@ export default defineConfig({
         sidePanel: resolve(rootDir, "index.html"),
         devtools: resolve(rootDir, "src/devtools/network.html"),
         newtab: resolve(rootDir, "src/pages/newtab/index.html"),
-        game: resolve(rootDir, "src/pages/game/index.html"),
         "background/index": resolve(rootDir, "src/background/index.ts"),
       },
       output: {

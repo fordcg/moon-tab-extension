@@ -3,6 +3,7 @@ import {
   parseGeneratedPatterns,
   type UrlPatternGenerationResponse,
 } from "../shared/extractionRules/urlPatternGeneration";
+import { diagnosticDebug } from "../shared/diagnosticLogging";
 import type { ModelProvider, ProviderModel } from "../shared/types";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
@@ -38,7 +39,7 @@ export async function handleUrlPatternGenerationMessage(
   fetcher: typeof fetch = fetch,
 ): Promise<UrlPatternGenerationResponse> {
   try {
-    console.debug(`${DEBUG_PREFIX} 后台收到生成请求`, {
+    diagnosticDebug(DEBUG_PREFIX, "后台收到生成请求", {
       providerId: message.provider.id,
       providerName: message.provider.name,
       endpointType: message.provider.endpointType,
@@ -77,7 +78,7 @@ export async function handleCurrentTabUrlMessage(message: CurrentTabUrlMessage):
 
 async function getCurrentTabUrl(debugRequestId?: string): Promise<string> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  console.debug(`${DEBUG_PREFIX} 读取当前激活标签页 URL`, {
+  diagnosticDebug(DEBUG_PREFIX, "读取当前激活标签页 URL", {
     debugRequestId,
     tabId: tab?.id,
     url: tab?.url,

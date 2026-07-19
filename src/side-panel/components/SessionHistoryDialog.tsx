@@ -1,9 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { Suspense, useEffect, useRef, useState, type RefObject } from "react";
 import { NotificationHost } from "./NotificationHost";
-import { SessionList } from "./SessionList";
 import { SettingsPanel, type SettingsTab } from "./SettingsPanel";
 import { useAppStore } from "../state/appStore";
+import { LazySessionList } from "../lazyComponents";
 
 export type SidePanelDrawerPage = "history" | "settings";
 
@@ -390,7 +390,9 @@ export function SessionHistoryDialog({
                   </div>
                   <div className="history-dialog-body">
                     <div className="history-dialog-scroll">
-                      <SessionList compact compactExpanded={expanded} compactVisibleLimit={RECENT_HISTORY_COMPACT_LIMIT} />
+                      <Suspense fallback={null}>
+                        <LazySessionList compact compactExpanded={expanded} compactVisibleLimit={RECENT_HISTORY_COMPACT_LIMIT} />
+                      </Suspense>
                     </div>
                     {showMoreAction && !expanded ? (
                       <button ref={historyMoreButtonRef} className="sidepanel-history-more-action" type="button" aria-label="查看更多近期对话" onClick={() => transitionHistoryMode("expanded")}>

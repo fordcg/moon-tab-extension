@@ -31,7 +31,7 @@ const SENSITIVE_KEY_PATTERN = /(authorization|cookie|set-cookie|token|access[_-]
 const SENSITIVE_VALUE_PATTERNS = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
   /\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
-  /\bsk-[A-Za-z0-9_-]{8,}\b/g,
+  /\bsk-[A-Za-z0-9_-]{3,}\b/g,
   /\b(cookie|authorization|token|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|password|passwd|session|csrf|xsrf)\b\s*[:=]\s*["']?[^"'\s;,}]{3,}/gi,
 ];
 const DANGEROUS_PATH_SEGMENTS = new Set([

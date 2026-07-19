@@ -45,10 +45,10 @@ describe("扩展构建产物合约", () => {
     expect(viteConfig).toContain('devtools: resolve(rootDir, "src/devtools/network.html")');
     expect(viteConfig).toContain('sidePanel: resolve(rootDir, "index.html")');
     expect(viteConfig).toContain('newtab: resolve(rootDir, "src/pages/newtab/index.html")');
-    expect(viteConfig).toContain('game: resolve(rootDir, "src/pages/game/index.html")');
+    expect(viteConfig).not.toContain('game: resolve(rootDir, "src/pages/game/index.html")');
     expect(viteConfig).toContain("copy-game-runtime-static-assets");
     expect(viteConfig).toContain("await cp(gameSource, gameOutput");
-    expect(viteConfig).toContain('if (relativePath === "index.html") return false');
+    expect(viteConfig).not.toContain('if (relativePath === "index.html") return false');
     expect(viteConfig).not.toContain("matter.min.js");
     expect(viteConfig).toContain('outDir: resolve(rootDir, "dist/content")');
     expect(viteConfig).toContain('entry: resolve(rootDir, "src/content/index.ts")');

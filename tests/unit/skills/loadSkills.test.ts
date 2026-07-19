@@ -8,7 +8,7 @@ import {
 } from "../../../src/skills/loadSkills";
 
 describe("skill package loader", () => {
-  it("loads metapi-ops package tools and playbooks without central hardcoding", () => {
+  it("loads registered metapi-ops package tools and playbooks", () => {
     const packages = getSkillPackages();
     expect(packages.some((pkg) => pkg.id === "metapi-ops")).toBe(true);
 

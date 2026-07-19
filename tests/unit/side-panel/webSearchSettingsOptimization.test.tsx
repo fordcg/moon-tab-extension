@@ -70,7 +70,7 @@ describe("网络搜索设置优化", () => {
 
     expect(screen.queryByRole("region", { name: "当前渠道详情" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /测试渠道/ }));
+    await user.click(await screen.findByRole("button", { name: /测试渠道/ }));
     expect(screen.getByRole("region", { name: "当前渠道详情" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "渠道模型" })).toBeInTheDocument();
     expect(screen.getByLabelText("默认对话模型")).toBeInTheDocument();
@@ -97,7 +97,7 @@ describe("网络搜索设置优化", () => {
     });
 
     render(<SettingsPanel />);
-    expect(screen.getByText("默认渠道")).toBeInTheDocument();
+    expect(await screen.findByText("默认渠道")).toBeInTheDocument();
 
     useAppStore.setState({
       providers: [createProvider()],
@@ -121,7 +121,7 @@ describe("网络搜索设置优化", () => {
 
     render(<SettingsPanel />);
 
-    await user.click(screen.getByRole("button", { name: /测试渠道/ }));
+    await user.click(await screen.findByRole("button", { name: /测试渠道/ }));
 
     const channelManagement = screen.getByRole("region", { name: "渠道管理" });
     const webSearchSection = screen.getByRole("region", { name: "Tavily 搜索工具配置" });
@@ -163,7 +163,7 @@ describe("网络搜索设置优化", () => {
 
     render(<SettingsPanel />);
 
-    const apiKeyInput = screen.getByLabelText("Tavily API Key");
+    const apiKeyInput = await screen.findByLabelText("Tavily API Key");
     expect(apiKeyInput).toHaveAttribute("type", "password");
     const showButton = screen.getByRole("button", { name: "显示 Tavily API Key 明文" });
     expect(showButton.querySelector(".tavily-api-key-visibility-icon-closed")).toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { diagnosticDebug } from "../../shared/diagnosticLogging";
 import { generateUrlPatternsWithModel } from "../../shared/extractionRules/urlPatternGeneration";
 import { validateExtractionRuleDraft } from "../../shared/extractionRules/validation";
 import {
@@ -65,7 +66,7 @@ export async function generateUrlPatternsAction(input: {
 }): Promise<{ ok: true; patterns: string[] } | { ok: false; message: string }> {
   const state = input.get();
   const debugRequestId = `url-pattern-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  console.debug(`${DEBUG_PREFIX} 前端开始生成 URL 正则`, {
+  diagnosticDebug(DEBUG_PREFIX, "前端开始生成 URL 正则", {
     debugRequestId,
     requestedModelId: input.modelId,
     providerCount: state.providers.length,
@@ -99,7 +100,7 @@ export async function generateUrlPatternsAction(input: {
     return { ok: false, message: urlResult.message };
   }
 
-  console.debug(`${DEBUG_PREFIX} 前端准备直接调用模型生成`, {
+  diagnosticDebug(DEBUG_PREFIX, "前端准备直接调用模型生成", {
     debugRequestId,
     providerId: provider.id,
     providerName: provider.name,
@@ -114,7 +115,7 @@ export async function generateUrlPatternsAction(input: {
   try {
     const response = await generateUrlPatternsWithModel(provider, model, urlResult.url, fetch, state.chatPreferences.aiRequestRetryCount);
 
-    console.debug(`${DEBUG_PREFIX} 前端收到生成响应`, {
+    diagnosticDebug(DEBUG_PREFIX, "前端收到生成响应", {
       debugRequestId,
       response,
     });
@@ -130,7 +131,7 @@ export async function generateUrlPatternsAction(input: {
 }
 
 async function getCurrentTabUrlForGeneration(debugRequestId: string): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
-  console.debug(`${DEBUG_PREFIX} 前端请求后台读取当前标签页 URL`, {
+  diagnosticDebug(DEBUG_PREFIX, "前端请求后台读取当前标签页 URL", {
     debugRequestId,
   });
 
@@ -139,7 +140,7 @@ async function getCurrentTabUrlForGeneration(debugRequestId: string): Promise<{ 
     debugRequestId,
   });
 
-  console.debug(`${DEBUG_PREFIX} 前端收到当前标签页 URL 响应`, {
+  diagnosticDebug(DEBUG_PREFIX, "前端收到当前标签页 URL 响应", {
     debugRequestId,
     response,
     runtimeLastError: globalThis.chrome?.runtime?.lastError?.message,

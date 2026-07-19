@@ -14,8 +14,16 @@ describe("chat.stream live broadcast isolation", () => {
     const disconnect = vi.fn();
     const messageListeners: Array<(message: unknown) => void> = [];
     const disconnectListeners: Array<() => void> = [];
+    type TestPort = {
+      name: string;
+      sender: Record<string, unknown>;
+      postMessage: (message: unknown) => void;
+      disconnect: () => void;
+      onMessage: { addListener: (listener: (message: unknown) => void) => void };
+      onDisconnect: { addListener: (listener: () => void) => void };
+    };
 
-    const port = {
+    const port: TestPort = {
       name: "chat.stream",
       sender: {},
       postMessage,
@@ -28,7 +36,7 @@ describe("chat.stream live broadcast isolation", () => {
       },
     };
 
-    const connectListeners: Array<(port: typeof port) => void> = [];
+    const connectListeners: Array<(port: TestPort) => void> = [];
     const runtimeSendMessage = vi.fn(async () => {
       throw new Error("no receiving end");
     });
@@ -40,7 +48,7 @@ describe("chat.stream live broadcast isolation", () => {
     vi.stubGlobal("chrome", {
       runtime: {
         onConnect: {
-          addListener: (listener: (port: typeof port) => void) => connectListeners.push(listener),
+          addListener: (listener: (port: TestPort) => void) => connectListeners.push(listener),
         },
         onMessage: { addListener: vi.fn() },
         onInstalled: { addListener: vi.fn() },

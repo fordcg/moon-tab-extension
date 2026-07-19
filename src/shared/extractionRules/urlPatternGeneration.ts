@@ -1,3 +1,4 @@
+import { diagnosticDebug } from "../diagnosticLogging";
 import { createModelConfig } from "../models/modelCatalog";
 import { createModelRequestPayload } from "../models/modelRequestPayload";
 import { DEFAULT_MODEL_REQUEST_RETRY_COUNT, normalizeModelRequestRetryCount, withModelRequestRetry } from "../models/modelRequestRetry";
@@ -26,7 +27,7 @@ export async function generateUrlPatternsWithModel(
     const model = createModelConfig(provider, providerModel);
     const payload = createModelRequestPayload(model, createGenerationMessages(url, model.id, model.endpointType), false);
 
-    console.debug(`${DEBUG_PREFIX} 准备调用模型接口`, {
+    diagnosticDebug(DEBUG_PREFIX, "准备调用模型接口", {
       resolvedUrl: url,
       endpointUrl: payload.url,
       endpointType: model.endpointType,
@@ -44,7 +45,7 @@ export async function generateUrlPatternsWithModel(
       normalizeModelRequestRetryCount(retryCount),
     );
 
-    console.debug(`${DEBUG_PREFIX} 模型接口响应`, {
+    diagnosticDebug(DEBUG_PREFIX, "模型接口响应", {
       ok: response.ok,
       status: response.status,
       statusText: response.statusText,
@@ -67,7 +68,7 @@ export async function generateUrlPatternsWithModel(
     const responseText = extractResponseText(responseBody);
     const patterns = parseGeneratedPatterns(responseText);
 
-    console.debug(`${DEBUG_PREFIX} 模型响应解析结果`, {
+    diagnosticDebug(DEBUG_PREFIX, "模型响应解析结果", {
       responseTextLength: responseText.length,
       responseTextPreview: responseText.slice(0, 300),
       patternCount: patterns.length,

@@ -938,7 +938,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "设置" }));
     await userEvent.click(screen.getByRole("tab", { name: "聊天偏好" }));
 
-    expect(screen.getByRole("region", { name: "聊天偏好" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "聊天偏好" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "聊天偏好" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "全局系统提示词" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Network 请求相关性筛选 Prompt" })).not.toBeInTheDocument();
@@ -1643,6 +1643,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: false,
         enabledToolIds: [],
         temperature: 0.7,
@@ -1676,6 +1678,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: false,
         enabledToolIds: [],
         temperature: 0.7,
@@ -1709,6 +1713,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: false,
         enabledToolIds: [],
         temperature: 0.7,
@@ -1848,7 +1854,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
-    expect(screen.getByRole("heading", { name: "工具和 MCP" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "工具和 MCP" })).toBeInTheDocument();
     expect(screen.getByText("MySQL")).toBeInTheDocument();
     expect(screen.queryByText("query")).not.toBeInTheDocument();
 
@@ -1866,7 +1872,7 @@ describe("App", () => {
     expect(screen.queryByRole("region", { name: "MySQL 工具列表" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "工具运行要求筛选" }), "mcp_remote");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "工具运行要求筛选" }), "mcp_remote");
     expect(screen.getByRole("checkbox", { name: "启用工具 MySQL.query" })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "启用工具 mcp_mysql_query" })).not.toBeInTheDocument();
 
@@ -2109,6 +2115,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: false,
         enabledToolIds: [],
         temperature: 0.7,
@@ -2149,6 +2157,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: false,
         enabledToolIds: [],
         temperature: 0.7,
@@ -2182,6 +2192,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: false,
         enabledToolIds: [],
         temperature: 0.7,
@@ -4308,7 +4320,7 @@ describe("App", () => {
     expect(styles).toMatch(/\.settings-dialog \.settings-tabs-scroll\s*\{[^}]*scrollbar-width:\s*thin;/s);
     expect(styles).toMatch(/\.settings-dialog \.settings-tabs-scroll::-webkit-scrollbar\s*\{[^}]*display:\s*block/s);
     expect(screen.queryByLabelText("历史会话")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "模型渠道" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "模型渠道" })).toBeInTheDocument();
     expect(screen.getByLabelText("AI 标题生成模型")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新增渠道" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "添加模型" })).toBeInTheDocument();
@@ -4316,20 +4328,20 @@ describe("App", () => {
 
     await user.click(screen.getByRole("tab", { name: "提取规则" }));
 
-    expect(screen.getByRole("button", { name: "新增规则" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "新增规则" })).toBeInTheDocument();
     expect(screen.queryByLabelText("CSS/XPath 列表")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "提示词" }));
-    expect(screen.getByRole("heading", { name: "提示词" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "提示词" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新增提示词" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "任务策略" }));
-    expect(screen.getByRole("heading", { name: "任务策略" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "任务策略" })).toBeInTheDocument();
     expect(screen.getByText("Network/API 分析")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "同步设置" }));
 
-    expect(screen.getByRole("checkbox", { name: "开启同步" })).not.toBeChecked();
+    expect(await screen.findByRole("checkbox", { name: "开启同步" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "开启自动同步" })).not.toBeChecked();
     expect(screen.getByText("备份当前插件域本地存储的全部内容，密钥和远程凭据除外")).toBeInTheDocument();
     expect(screen.getByText("加密关闭时，API Key、聊天记录和配置会以明文进入远程备份")).toBeInTheDocument();
@@ -4344,7 +4356,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(screen.getByRole("tab", { name: "同步设置" }));
 
-    expect(screen.getByRole("checkbox", { name: "开启同步" })).not.toBeChecked();
+    expect(await screen.findByRole("checkbox", { name: "开启同步" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "开启自动同步" })).not.toBeChecked();
     expect(screen.getByText("备份当前插件域本地存储的全部内容，密钥和远程凭据除外")).toBeInTheDocument();
     expect(screen.getByText("加密关闭时，API Key、聊天记录和配置会以明文进入远程备份")).toBeInTheDocument();
@@ -6704,6 +6716,8 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
+        browserAutomationMaxToolIterationsControlledEnhanced: 80,
+        browserAutomationMaxToolIterationsFullAccess: 0,
         toolCallingEnabled: true,
         enabledToolIds: ["browser.take_snapshot"],
         temperature: 0.7,

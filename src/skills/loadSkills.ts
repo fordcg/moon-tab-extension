@@ -1,5 +1,6 @@
 import type { AutomationPlaybook } from "../shared/automationPlaybooks";
 import type { ModelToolCall, ModelToolRegistryEntry, ModelToolResult } from "../shared/models/types";
+import { skill as metapiOpsSkill } from "./metapi-ops";
 import type { SkillPackage, SkillToolExecutor } from "./types";
 
 type SkillModule = {
@@ -7,8 +8,12 @@ type SkillModule = {
   default?: SkillPackage;
 };
 
-// Build-time discovery: each package lives at src/skills/<id>/index.ts
-const skillModules = import.meta.glob("./*/index.ts", { eager: true }) as Record<string, SkillModule>;
+// Keep the registry explicit so this loader works in both Vite builds and
+// Node/jiti legacy tests. `import.meta.glob` is Vite-only and is parsed before
+// any runtime guard can run in CommonJS-style test loaders.
+const skillModules: Record<string, SkillModule> = {
+  "./metapi-ops/index.ts": { skill: metapiOpsSkill },
+};
 
 let cachedPackages: SkillPackage[] | null = null;
 let executorMap: Map<string, SkillToolExecutor> | null = null;

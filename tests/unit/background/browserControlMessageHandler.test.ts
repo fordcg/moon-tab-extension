@@ -45,6 +45,7 @@ function createChromeMock(options: {
   delayAttach?: boolean;
   axNodes?: unknown[];
   detachOnRemove?: boolean;
+  currentTabId?: number;
   onTabRemovedOnRemove?: (tabId: number) => void;
 } = {}) {
   const detachListeners: Array<(source: chrome.debugger.Debuggee, reason: `${chrome.debugger.DetachReason}`) => void> = [];
@@ -131,7 +132,8 @@ function createChromeMock(options: {
           return tabs.filter((tab) => tab.groupId === queryInfo.groupId);
         }
         if (queryInfo?.active) {
-          return tabs.filter((tab) => tab.active);
+          const currentTabId = options.currentTabId ?? tabs.find((tab) => tab.active)?.id;
+          return tabs.filter((tab) => tab.id === currentTabId);
         }
         return tabs;
       }),

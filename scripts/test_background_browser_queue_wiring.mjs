@@ -30,13 +30,13 @@ assert.match(
 
 assert.match(
   source,
-  /async takeSnapshot\(toolCall: ModelToolCall\): Promise<ModelToolResult> \{[\s\S]{0,420}?content: await this\.snapshotManager\.takeSnapshot\(\)/,
+  /async takeSnapshot\(toolCall: ModelToolCall(?:,\s*_signal\?: AbortSignal)?\): Promise<ModelToolResult> \{[\s\S]{0,720}?content: await this\.snapshotManager\.takeSnapshot\(\)/,
   "browser.take_snapshot must be routed through the shared source snapshot manager",
 );
 
 assert.match(
   source,
-  /async executeBrowserTool\(toolCall: ModelToolCall\): Promise<ModelToolResult> \{[\s\S]*?const result = await this\.actionExecutor\.execute\(toolCall\)/,
+  /async executeBrowserTool\(toolCall: ModelToolCall(?:,\s*_signal\?: AbortSignal)?\): Promise<ModelToolResult> \{[\s\S]*?const result = await this\.actionExecutor\.execute\(toolCall\)/,
   "browser.* tools must be routed through the shared source action executor",
 );
 
@@ -48,7 +48,7 @@ assert.match(
 
 assert.match(
   source,
-  /async executeNetworkTool\(toolCall: ModelToolCall\): Promise<ModelToolResult> \{[\s\S]{0,700}?this\.networkToolExecutor\.execute\(toolCall\)/,
+  /async executeNetworkTool\(toolCall: ModelToolCall(?:,\s*signal\?: AbortSignal)?\): Promise<ModelToolResult> \{[\s\S]{0,700}?this\.networkToolExecutor\.execute\(toolCall\)/,
   "browser control network tools must execute through BrowserNetworkToolExecutor",
 );
 

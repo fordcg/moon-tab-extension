@@ -147,6 +147,7 @@ describe("运行时只读工具执行器", () => {
           value: {
             snippet: "Authorization: Bearer very-secret-token-value",
             api: "apiKey = \"sk-runtime-secret\"",
+            shortApiKey: "sk-abc",
             jwt: "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature",
           },
         },
@@ -160,6 +161,7 @@ describe("运行时只读工具执行器", () => {
     expect(result.content).toContain("[REDACTED]");
     expect(result.content).not.toContain("very-secret-token-value");
     expect(result.content).not.toContain("sk-runtime-secret");
+    expect(result.content).not.toContain("sk-abc");
     expect(result.content).not.toContain("eyJhbGciOiJIUzI1NiJ9");
   });
 

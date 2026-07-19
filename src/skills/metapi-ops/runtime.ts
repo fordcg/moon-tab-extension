@@ -47,6 +47,18 @@ import {
 import type { ModelToolCall, ModelToolResult } from "../../shared/models/types";
 import { getAppSetting, saveAppSetting } from "../../shared/storage/repositories";
 
+type CheckinBarrier = ReturnType<typeof detectCheckinBarrier>;
+type BrowserCheckinStatus = MetapiBrowserCheckinResult["status"];
+type RepairCandidate = Record<string, unknown> & {
+  siteUrl: string;
+  externalCheckinUrl: string | null;
+  openUrl: string;
+  barrier: CheckinBarrier;
+  autoRepairable: boolean;
+  officialErrorOnly: boolean;
+  mustOpen: boolean;
+};
+
 export async function executeMetapiTool(
   toolCall: ModelToolCall,
   fetcher: typeof fetch = globalThis.fetch,
@@ -598,7 +610,7 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
       .map((item) => normalizeSiteUrl(item.siteUrl).toLowerCase()),
   );
   const summary = classifyCheckinLogs(filtered);
-  const enrichedCandidates = (summary.repairCandidates as Array<Record<string, unknown>>).map((item) => {
+  const enrichedCandidates: RepairCandidate[] = summary.repairCandidates.map((item) => {
     const message = typeof item.message === "string" ? item.message : "";
     // Official Metapi auto-checkin errors (404/fetch failed/未启用) are NOT browser barriers.
     // They only mean Metapi's own API path failed; browser UI may still have check-in.
@@ -666,7 +678,7 @@ async function summarizeCheckinLogs(toolCall: ModelToolCall, fetcher: typeof fet
 async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolResult> {
   const args = asObject(toolCall.arguments);
   const siteUrl = typeof args.siteUrl === "string" ? normalizeSiteUrl(args.siteUrl) : "";
-  let status = args.status;
+  let status = parseBrowserCheckinStatus(args.status);
   let message = typeof args.message === "string" ? args.message.trim() : undefined;
   if (!siteUrl) {
     return metapiError(toolCall, "siteUrl 不能为空");
@@ -729,8 +741,12 @@ async function recordBrowserCheckin(toolCall: ModelToolCall): Promise<ModelToolR
   });
 }
 
-function inferBrowserCheckinStatus(status: unknown, message?: string): unknown {
-  if (status === "success" || status === "failed" || status === "skipped" || status === "needs_human") {
+function parseBrowserCheckinStatus(status: unknown): BrowserCheckinStatus | undefined {
+  return status === "success" || status === "failed" || status === "skipped" || status === "needs_human" ? status : undefined;
+}
+
+function inferBrowserCheckinStatus(status: BrowserCheckinStatus | undefined, message?: string): BrowserCheckinStatus | undefined {
+  if (status) {
     return status;
   }
   const text = (message || "").trim();
@@ -1117,13 +1133,13 @@ function isOfficialAutoCheckinErrorOnly(message: string): boolean {
   return /(http\s*404|http\s*403|fetch failed|签到功能未启用|timeout|econnreset|econnrefused|network error|networkerror|enotfound|socket|tls|certificate|5\d\d)/i.test(text);
 }
 
-function prioritizeRepairCandidates(candidates: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+function prioritizeRepairCandidates<T extends RepairCandidate>(candidates: T[]): T[] {
   const failed = candidates.filter((item) => item.bucket === "failed" || item.status === "failed");
   const skipped = candidates.filter((item) => item.bucket === "skipped" || item.status === "skipped");
   const rest = candidates.filter((item) => !failed.includes(item) && !skipped.includes(item));
   const merged = [...failed, ...skipped, ...rest];
   const seen = new Set<string>();
-  const unique: Array<Record<string, unknown>> = [];
+  const unique: T[] = [];
   for (const item of merged) {
     const url = typeof item.siteUrl === "string" ? normalizeSiteUrl(item.siteUrl).toLowerCase() : "";
     if (!url || seen.has(url)) {

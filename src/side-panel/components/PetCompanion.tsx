@@ -256,13 +256,12 @@ export function PetCompanion() {
       if (!message || typeof message !== "object" || !("type" in message)) {
         return;
       }
-      if ((message as { type?: string }).type !== PET_CHAT_SEND_TYPE) {
+      const petMessage = message as { type?: string; content?: unknown; pendingId?: unknown };
+      if (petMessage.type !== PET_CHAT_SEND_TYPE) {
         return;
       }
-      const content = String((message as { content?: unknown }).content || "");
-      const pendingId = typeof (message as { pendingId?: unknown }).pendingId === "string"
-        ? (message as { pendingId: string }).pendingId
-        : undefined;
+      const content = String(petMessage.content || "");
+      const pendingId = typeof petMessage.pendingId === "string" ? petMessage.pendingId : undefined;
       void handlePetChat(content, pendingId);
     };
     runtime?.onMessage?.addListener?.(onMessage);

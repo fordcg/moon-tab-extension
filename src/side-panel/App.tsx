@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
 import type { SettingsTab } from "./components/SettingsPanel";
-import { SessionList } from "./components/SessionList";
 import { useAppStore } from "./state/appStore";
-import { PetCompanion } from "./components/PetCompanion";
 import { sendRuntimeMessage } from "./state/runtimeMessage";
+import { LazyPetCompanion, LazySessionList, preloadSidePanelLazyChunks } from "./lazyComponents";
 import {
   BROWSER_CONTROL_AUTOMATION_MODE_CHANGED_MESSAGE_TYPE,
   BROWSER_CONTROL_BOUNDARY_CHOICE_REQUEST_MESSAGE_TYPE,
@@ -23,6 +22,8 @@ interface SidePanelActionResponse {
 
 type SidePanelDrawerPage = "history" | "settings";
 type SidePanelDrawerOrigin = "header" | "history";
+
+void preloadSidePanelLazyChunks();
 
 export function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("channels");
@@ -240,7 +241,9 @@ export function App() {
         </div>
       </section>
       <section className={chatMainLayoutClassName} inert={syncRestoreBarrierActive || undefined}>
-        {historyPanelOpen ? <SessionList /> : <div aria-hidden="true" className="session-list-placeholder" />}
+        <Suspense fallback={<div aria-hidden="true" className="session-list-placeholder" />}>
+          {historyPanelOpen ? <LazySessionList /> : <div aria-hidden="true" className="session-list-placeholder" />}
+        </Suspense>
         <ChatPanel
           drawerOpen={drawerOpen}
           drawerPage={drawerPage}
@@ -256,7 +259,11 @@ export function App() {
         />
       </section>
       {!drawerOpen ? <NotificationHost /> : null}
-      {!syncRestoreBarrierActive ? <PetCompanion /> : null}
+      {!syncRestoreBarrierActive ? (
+        <Suspense fallback={null}>
+          <LazyPetCompanion />
+        </Suspense>
+      ) : null}
     </main>
   );
 }

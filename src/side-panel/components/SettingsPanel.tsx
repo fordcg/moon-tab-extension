@@ -1,12 +1,13 @@
-import { useEffect, useState, type KeyboardEvent, type RefObject } from "react";
-import { ChannelManagement } from "./settings/ChannelManagement";
-import { ChatPreferenceSettings } from "./settings/ChatPreferenceSettings";
-import { ExtractionRules } from "./settings/ExtractionRules";
-import { AutomationPlaybookSettings } from "./settings/AutomationPlaybookSettings";
+import { lazy, Suspense, useEffect, useState, type KeyboardEvent, type RefObject } from "react";
 import { AutomationDiagnostics } from "./settings/AutomationDiagnostics";
-import { PromptTemplateSettings } from "./settings/PromptTemplateSettings";
-import { SyncSettings } from "./settings/SyncSettings";
-import { McpToolSettings } from "./settings/McpToolSettings";
+
+const ChannelManagement = lazy(() => import("./settings/ChannelManagement").then((module) => ({ default: module.ChannelManagement })));
+const ExtractionRules = lazy(() => import("./settings/ExtractionRules").then((module) => ({ default: module.ExtractionRules })));
+const ChatPreferenceSettings = lazy(() => import("./settings/ChatPreferenceSettings").then((module) => ({ default: module.ChatPreferenceSettings })));
+const McpToolSettings = lazy(() => import("./settings/McpToolSettings").then((module) => ({ default: module.McpToolSettings })));
+const AutomationPlaybookSettings = lazy(() => import("./settings/AutomationPlaybookSettings").then((module) => ({ default: module.AutomationPlaybookSettings })));
+const PromptTemplateSettings = lazy(() => import("./settings/PromptTemplateSettings").then((module) => ({ default: module.PromptTemplateSettings })));
+const SyncSettings = lazy(() => import("./settings/SyncSettings").then((module) => ({ default: module.SyncSettings })));
 
 export type SettingsTab = "channels" | "rules" | "chat" | "mcp" | "playbooks" | "prompts" | "sync";
 
@@ -108,13 +109,15 @@ export function SettingsPanel({
         </div>
         <div className="grid min-w-0 gap-4" role="tabpanel" id={`settings-tabpanel-${activeTab}`} aria-labelledby={`settings-tab-${activeTab}`} tabIndex={0}>
           <AutomationDiagnostics />
-          {activeTab === "channels" ? <ChannelManagement /> : null}
-          {activeTab === "rules" ? <ExtractionRules /> : null}
-          {activeTab === "chat" ? <ChatPreferenceSettings /> : null}
-          {activeTab === "mcp" ? <McpToolSettings /> : null}
-          {activeTab === "playbooks" ? <AutomationPlaybookSettings /> : null}
-          {activeTab === "prompts" ? <PromptTemplateSettings /> : null}
-          {activeTab === "sync" ? <SyncSettings /> : null}
+          <Suspense fallback={<div role="status">设置内容加载中…</div>}>
+            {activeTab === "channels" ? <ChannelManagement /> : null}
+            {activeTab === "rules" ? <ExtractionRules /> : null}
+            {activeTab === "chat" ? <ChatPreferenceSettings /> : null}
+            {activeTab === "mcp" ? <McpToolSettings /> : null}
+            {activeTab === "playbooks" ? <AutomationPlaybookSettings /> : null}
+            {activeTab === "prompts" ? <PromptTemplateSettings /> : null}
+            {activeTab === "sync" ? <SyncSettings /> : null}
+          </Suspense>
         </div>
       </div>
     </section>

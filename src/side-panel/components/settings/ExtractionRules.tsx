@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
+import { diagnosticDebug } from "../../../shared/diagnosticLogging";
 import type { ExtractionRule } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { formatModelLabelWithVision } from "../ModelVisionIndicator";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
-
-
 
 export function ExtractionRules() {
   const rules = useAppStore((state) => state.extractionRules);
@@ -92,7 +91,7 @@ export function ExtractionRules() {
     setValidationMessage("");
   };
   const handleOpenGenerationModels = () => {
-    console.debug(`${DEBUG_PREFIX} 用户点击 AI 生成，准备展示模型选择`, {
+    diagnosticDebug(DEBUG_PREFIX, "用户点击 AI 生成，准备展示模型选择", {
       modelCount: generationModels.length,
       models: generationModels,
       pageContextUrl: pageContext.url,
@@ -102,7 +101,7 @@ export function ExtractionRules() {
     setShowGenerationModels(true);
   };
   const handleGeneratePatterns = async (modelId: string) => {
-    console.debug(`${DEBUG_PREFIX} 用户选择模型开始生成`, {
+    diagnosticDebug(DEBUG_PREFIX, "用户选择模型开始生成", {
       modelId,
       pageContextUrl: pageContext.url,
     });
@@ -111,7 +110,7 @@ export function ExtractionRules() {
     setGeneratedPatterns([]);
 
     const result = await generateUrlPatterns(modelId);
-    console.debug(`${DEBUG_PREFIX} UI 收到生成结果`, {
+    diagnosticDebug(DEBUG_PREFIX, "UI 收到生成结果", {
       ok: result.ok,
       patternCount: result.ok ? result.patterns.length : 0,
       message: result.ok ? undefined : result.message,

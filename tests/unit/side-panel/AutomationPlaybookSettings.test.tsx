@@ -11,7 +11,7 @@ function setPlaybookStoreState(overrides: Record<string, unknown> = {}) {
     metapiAdminSettings: { baseUrl: "http://127.0.0.1:4000", authToken: "" },
     updateAutomationPlaybookSettings: vi.fn(async () => undefined),
     updateMetapiAdminSettings: vi.fn(async () => undefined),
-    importSkillPlaybooksFromJson: vi.fn(async () => ({ ok: true, importedCount: 0 })),
+    importSkillPlaybooksFromJson: vi.fn(async (_fileText: string) => ({ ok: true as const, importedCount: 0 })),
     removeImportedSkillPlaybook: vi.fn(async () => undefined),
     addNotification: vi.fn(() => "notification-1"),
     ...overrides,
