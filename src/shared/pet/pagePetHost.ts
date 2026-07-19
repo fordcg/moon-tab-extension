@@ -7,6 +7,7 @@ import {
   PET_SNAPSHOT_GET_TYPE,
   PET_SNAPSHOT_PUBLISH_TYPE,
   PET_SNAPSHOT_STORAGE_KEY,
+  PET_VISIBLE_STORAGE_KEY,
   createDefaultPetSnapshot,
   resolvePublicCatAssetPath,
   type PetRuntimeSnapshot,
@@ -22,6 +23,8 @@ const LOCAL_BUBBLE_MAX_MS = 30_000;
 export interface FloatingPetCompanionController {
   applySnapshot: (snapshot: PetRuntimeSnapshot | null | undefined) => void;
   setMuted: (muted: boolean) => void;
+  hide: () => void;
+  show: () => void;
   destroy: () => void;
 }
 
@@ -49,6 +52,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
   let petSnapshot: PetRuntimeSnapshot = createDefaultPetSnapshot();
   let petMuted = false;
+  let petVisible = true;
   let petPoolIndex = 0;
   let savedPetPosition: { left: number; top: number } | undefined;
   let poolTimer: number | undefined;
@@ -94,6 +98,16 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       };
       petSnapshot = next;
       publishSnapshot(next);
+      renderPagePet();
+    },
+    hide() {
+      petVisible = false;
+      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: false });
+      renderPagePet();
+    },
+    show() {
+      petVisible = true;
+      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true });
       renderPagePet();
     },
     destroy() {
@@ -149,6 +163,10 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         petMuted = changes[PET_MUTED_STORAGE_KEY].newValue === true;
         renderPagePet();
       }
+      if (areaName === "local" && changes[PET_VISIBLE_STORAGE_KEY]) {
+        petVisible = changes[PET_VISIBLE_STORAGE_KEY].newValue !== false;
+        renderPagePet();
+      }
     };
     try {
       chrome.storage?.onChanged?.addListener?.(storageListener as never);
@@ -177,16 +195,6 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         if ((message as { type?: string }).type !== "automation.live") {
           return;
         }
-        const age = Date.now() - (petSnapshot.updatedAt || 0);
-        if (
-          age < 1_500 &&
-          petSnapshot.state !== "idle" &&
-          petSnapshot.state !== "loafing" &&
-          petSnapshot.state !== "sleeping" &&
-          petSnapshot.state !== "roam"
-        ) {
-          return;
-        }
         const payload = (message as { payload?: unknown }).payload;
         if (!payload || typeof payload !== "object" || !("type" in payload)) {
           return;
@@ -206,15 +214,39 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
             muted: petMuted,
             updatedAt: now,
           };
+        } else if (eventType === "tool:complete") {
+          const record = (payload as { record?: { displayName?: string; name?: string; status?: string } }).record;
+          const label = record?.displayName || record?.name || "工具";
+          if (record?.status === "error") {
+            next = {
+              state: "error",
+              badge: "interrupted",
+              stateLabel: "出错",
+              bubble: petMuted ? undefined : `${label} 失败`,
+              toolLabel: label,
+              muted: petMuted,
+              updatedAt: now,
+            };
+          } else {
+            // Stay in a short working/happy pulse; side-panel snapshot will refine soon.
+            next = {
+              state: "working",
+              badge: "running",
+              stateLabel: "干活中",
+              bubble: petMuted ? undefined : `完成 ${label}`,
+              toolLabel: label,
+              muted: petMuted,
+              updatedAt: now,
+            };
+          }
         } else if (eventType === "complete") {
-          // Prefer keeping an existing spoken reply from the side-panel snapshot.
-          // Only fall back to a generic done note when there is no real content yet.
           const existingBubble = petSnapshot.bubble?.trim();
           const looksLikeStatus =
             !existingBubble ||
             existingBubble === "思考中…" ||
             existingBubble === "本轮完成" ||
-            existingBubble.startsWith("正在 ");
+            existingBubble.startsWith("正在 ") ||
+            existingBubble.startsWith("完成 ");
           next = {
             state: looksLikeStatus ? "happy" : "talking",
             badge: "done",
@@ -236,7 +268,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
             muted: petMuted,
             updatedAt: now,
           };
-        } else if (eventType === "chunk" || eventType === "assistant:tool-turn") {
+        } else if (eventType === "assistant:tool-turn") {
           next = {
             ...petSnapshot,
             state: "thinking",
@@ -249,7 +281,6 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         }
         if (next) {
           controller.applySnapshot(next);
-          // Publish so every other page/tab follows the same mood.
           publishSnapshot(next);
         }
       };
@@ -346,6 +377,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
           <button type="button" data-pet-action="chat">对话</button>
           <button type="button" data-pet-action="open">打开侧栏</button>
           <button type="button" data-pet-action="mute">静音气泡</button>
+          <button type="button" data-pet-action="exit">退出宠物</button>
         </div>
         <form class="moon-pet-composer" hidden>
           <input class="moon-pet-input" type="text" maxlength="2000" placeholder="跟宠物说点什么…" autocomplete="off" />
@@ -455,6 +487,10 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         }
         if (action === "mute") {
           controller.setMuted(!petMuted);
+          return;
+        }
+        if (action === "exit") {
+          controller.hide();
         }
       });
     });
@@ -562,6 +598,11 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     if (!host) {
       return;
     }
+    host.hidden = !petVisible;
+    host.style.display = petVisible ? "grid" : "none";
+    if (!petVisible) {
+      return;
+    }
     const img = host.querySelector<HTMLImageElement>(".moon-pet-img");
     const bubble = host.querySelector<HTMLElement>(".moon-pet-bubble");
     const stateEl = host.querySelector<HTMLElement>(".moon-pet-state");
@@ -658,7 +699,11 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
   async function restorePetPrefs(): Promise<void> {
     try {
-      const items = await chrome.storage?.local?.get?.([PET_POSITION_STORAGE_KEY, PET_MUTED_STORAGE_KEY]);
+      const items = await chrome.storage?.local?.get?.([
+        PET_POSITION_STORAGE_KEY,
+        PET_MUTED_STORAGE_KEY,
+        PET_VISIBLE_STORAGE_KEY,
+      ]);
       const position = items?.[PET_POSITION_STORAGE_KEY];
       if (
         position &&
@@ -672,6 +717,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         };
       }
       petMuted = items?.[PET_MUTED_STORAGE_KEY] === true;
+      petVisible = items?.[PET_VISIBLE_STORAGE_KEY] !== false;
     } catch {
       // ignore
     }

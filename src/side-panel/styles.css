@@ -7874,67 +7874,24 @@ body.sidepanel-stop-requested .composer-abort-button {
   }
 }
 
-/* Side-panel AI pet companion (publisher chip; page hosts the floating pet) */
-.pet-side-chip {
+/* Side-panel AI pet companion (headless publisher; page hosts the floating pet) */
+.pet-restore-button {
   position: sticky;
-  bottom: 0;
+  bottom: 8px;
   z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-top: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
-  background: color-mix(in srgb, var(--color-surface, #fffaf2) 94%, transparent);
-}
-
-.pet-side-chip-button {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin: 8px 10px 0 auto;
+  display: inline-flex;
+  align-self: flex-end;
   border: 0;
-  background: transparent;
-  color: var(--color-body, #2b241c);
-  cursor: pointer;
-  text-align: left;
-  padding: 0;
-}
-
-.pet-side-chip-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #b7b1a6;
-  flex: 0 0 auto;
-}
-
-.pet-side-chip-dot.is-running { background: #2f9e8f; }
-.pet-side-chip-dot.is-done { background: #4caf70; }
-.pet-side-chip-dot.is-interrupted { background: #d95c63; }
-.pet-side-chip-dot.is-idle { background: #b7b1a6; }
-
-.pet-side-chip-label {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.pet-side-chip-hint {
-  margin-left: auto;
-  font-size: 10px;
-  color: color-mix(in srgb, var(--color-body, #2b241c) 48%, transparent);
-  white-space: nowrap;
-}
-
-.pet-side-chip-mute {
-  border: 0;
-  background: color-mix(in srgb, var(--color-canvas, #f7f1e8) 80%, transparent);
-  color: color-mix(in srgb, var(--color-body, #2b241c) 70%, transparent);
   border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 650;
   cursor: pointer;
+  color: var(--color-body, #2b241c);
+  background: color-mix(in srgb, var(--color-surface, #fffaf2) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
+  box-shadow: 0 6px 16px rgba(43, 36, 28, 0.08);
 }
 
 .pet-usage-overlay {

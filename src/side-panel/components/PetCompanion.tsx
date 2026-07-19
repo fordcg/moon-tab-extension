@@ -6,6 +6,7 @@ import {
   PET_PENDING_CHAT_STORAGE_KEY,
   PET_SNAPSHOT_PUBLISH_TYPE,
   PET_SNAPSHOT_STORAGE_KEY,
+  PET_VISIBLE_STORAGE_KEY,
   petStateLabel,
   type PetPendingChat,
   type PetRuntimeSnapshot,
@@ -66,8 +67,6 @@ function publishPetSnapshot(snapshot: PetRuntimeSnapshot): void {
   } catch {
     // Side panel may run outside extension runtime in unit tests.
   }
-  // Direct storage write as a second path so newtab/content pick up via onChanged
-  // even if the service worker is mid-restart.
   try {
     void chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot });
   } catch {
@@ -91,9 +90,20 @@ async function clearPendingPetChat(pendingId?: string): Promise<void> {
   }
 }
 
+function mergeToolRecords(base: ChatToolCallRecord[], live: ChatToolCallRecord[]): ChatToolCallRecord[] {
+  const map = new Map<string, ChatToolCallRecord>();
+  for (const record of base) {
+    map.set(record.id, record);
+  }
+  for (const record of live) {
+    map.set(record.id, record);
+  }
+  return Array.from(map.values()).slice(-12);
+}
+
 /**
- * Side-panel publisher + usage entry + pet chat intake.
- * The visible draggable pet lives on webpages / newtab.
+ * Headless side-panel publisher + pet chat intake.
+ * Visual pet lives on webpages/newtab; this component only syncs mood and handles pet chats.
  */
 export function PetCompanion() {
   const activeSessionId = useAppStore((state) => state.activeSessionId);
@@ -109,10 +119,12 @@ export function PetCompanion() {
   const syncRestoreBarrierActive = useAppStore((state) => state.syncRestoreBarrierActive);
   const [panelOpen, setPanelOpen] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [petVisible, setPetVisible] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [completedUntil, setCompletedUntil] = useState(0);
   const [bubbleUntil, setBubbleUntil] = useState(0);
   const [prevSending, setPrevSending] = useState(false);
+  const [liveTools, setLiveTools] = useState<ChatToolCallRecord[]>([]);
   const handlingPetChatRef = useRef(false);
   const handledPendingIdsRef = useRef(new Set<string>());
 
@@ -122,13 +134,65 @@ export function PetCompanion() {
   }, []);
 
   useEffect(() => {
+    void chrome.storage?.local?.get?.(PET_VISIBLE_STORAGE_KEY).then((items) => {
+      if (items?.[PET_VISIBLE_STORAGE_KEY] === false) {
+        setPetVisible(false);
+      }
+    }).catch(() => undefined);
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "local" && PET_VISIBLE_STORAGE_KEY in changes) {
+        setPetVisible(changes[PET_VISIBLE_STORAGE_KEY]?.newValue !== false);
+      }
+    };
+    chrome.storage?.onChanged?.addListener?.(onChanged);
+    return () => chrome.storage?.onChanged?.removeListener?.(onChanged);
+  }, []);
+
+  useEffect(() => {
     if (prevSending && !sending) {
       const stamp = Date.now();
       setCompletedUntil(stamp + COMPLETED_HOLD_MS);
       setBubbleUntil(stamp + BUBBLE_HOLD_MS);
+      setLiveTools([]);
     }
     setPrevSending(sending);
   }, [sending, prevSending]);
+
+  // Live tool events arrive faster than session persistence; merge them for pet mood.
+  useEffect(() => {
+    const runtime = globalThis.chrome?.runtime;
+    if (!runtime?.onMessage?.addListener) {
+      return;
+    }
+    const onMessage = (message: unknown) => {
+      if (!message || typeof message !== "object" || !("type" in message)) {
+        return;
+      }
+      if ((message as { type?: string }).type !== "automation.live") {
+        return;
+      }
+      const payload = (message as { payload?: unknown }).payload;
+      if (!payload || typeof payload !== "object" || !("type" in payload)) {
+        return;
+      }
+      const eventType = (payload as { type?: string }).type;
+      if (eventType === "tool:start" || eventType === "tool:complete") {
+        const record = (payload as { record?: ChatToolCallRecord }).record;
+        if (!record?.id) {
+          return;
+        }
+        setLiveTools((current) => mergeToolRecords(current, [record]));
+        if (eventType === "tool:start") {
+          setBubbleUntil(Date.now() + BUBBLE_HOLD_MS);
+        }
+      }
+      if (eventType === "complete" || eventType === "error" || eventType === "canceled") {
+        setLiveTools([]);
+      }
+    };
+    runtime.onMessage.addListener(onMessage);
+    return () => runtime.onMessage.removeListener?.(onMessage);
+  }, []);
 
   const handlePetChat = async (content: string, pendingId?: string) => {
     const text = content.trim();
@@ -143,7 +207,6 @@ export function PetCompanion() {
     }
     handlingPetChatRef.current = true;
     try {
-      // One-shot memory: every pet chat starts a fresh session with pet persona.
       await createChatSession({
         preserveSelectedModel: true,
         title: "宠物对话",
@@ -213,7 +276,8 @@ export function PetCompanion() {
   }, [activeSessionId, chatSessions, privateChatSession, privateModeActive]);
 
   const messages = activeSession?.messages ?? [];
-  const tools = collectRecentTools(messages);
+  const storeTools = collectRecentTools(messages);
+  const tools = mergeToolRecords(storeTools, liveTools);
   const task = activeSessionId ? chatTasksBySessionId[activeSessionId] : undefined;
   const lastMessage = messages[messages.length - 1];
   const streamingText = Boolean(
@@ -224,13 +288,14 @@ export function PetCompanion() {
     task?.status === "failed"
       ? "任务失败"
       : failedTool?.errorMessage || (failedTool ? `${failedTool.displayName || failedTool.name} 失败` : null);
+  const hasRunningTools = tools.some((tool) => tool.status === "running");
 
   const derived = derivePetState({
     sending: sending || task?.status === "running",
     streamingText,
     tools,
     boundaryPending: Boolean(pendingBoundaryChoice),
-    justCompleted: now < completedUntil || task?.status === "completed",
+    justCompleted: !hasRunningTools && (now < completedUntil || task?.status === "completed"),
     isNewSession: Boolean(activeSession && messages.length === 0),
     lastActivityAt: activeSession?.updatedAt ?? now,
     lastError,
@@ -240,11 +305,11 @@ export function PetCompanion() {
     now,
   });
 
-  // Keep status bubbles while running; spoken replies auto-dismiss after BUBBLE_HOLD_MS.
   const showBubble = Boolean(
     derived.bubble && (
       sending ||
       streamingText ||
+      hasRunningTools ||
       task?.status === "running" ||
       Boolean(pendingBoundaryChoice) ||
       Boolean(lastError) ||
@@ -269,29 +334,25 @@ export function PetCompanion() {
     publishPetSnapshot(snapshot);
   }, [snapshot]);
 
+  const restorePet = () => {
+    setPetVisible(true);
+    void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true });
+  };
+
+  // No bottom status chip. Only a restore entry when the page pet was exited,
+  // plus the optional usage panel.
   return (
     <>
-      <div className="pet-side-chip" data-state={snapshot.state}>
+      {!petVisible ? (
         <button
           type="button"
-          className="pet-side-chip-button"
-          onClick={() => setPanelOpen(true)}
-          title="打开用量面板；页面右键浮宠可对话"
+          className="pet-restore-button"
+          onClick={restorePet}
+          title="重新显示页面浮宠"
         >
-          <span className={`pet-side-chip-dot is-${snapshot.badge || "idle"}`} aria-hidden="true" />
-          <span className="pet-side-chip-label">{snapshot.stateLabel}</span>
-          <span className="pet-side-chip-hint">页面浮宠已开</span>
+          显示宠物
         </button>
-        <button
-          type="button"
-          className="pet-side-chip-mute"
-          onClick={() => setMuted((value) => !value)}
-          aria-pressed={muted}
-          title={muted ? "取消静音" : "静音气泡"}
-        >
-          {muted ? "静音" : "气泡"}
-        </button>
-      </div>
+      ) : null}
       {panelOpen ? (
         <PetUsagePanel
           sessions={chatSessions}
