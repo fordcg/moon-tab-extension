@@ -145,26 +145,32 @@ export function MessageList({
     () => createDisplayAttachmentGroups(messages, toolCallDisplayMode),
     [messages, toolCallDisplayMode],
   );
-  // Only keep the bottom "正在思考" placeholder before the first visible stream tokens.
-  // Once the assistant bubble already has thinking/content, the placeholder looks misplaced.
+  // Only keep the bottom "正在思考" placeholder while waiting for the first visible
+  // assistant output of the current turn. If any assistant bubble/thinking is already
+  // on screen after the latest user message, the placeholder is misplaced.
   const showThinkingPlaceholder = useMemo(() => {
     if (!regenerating) {
       return false;
     }
+
+    let lastUserIndex = -1;
     for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === "user") {
+        lastUserIndex = index;
+        break;
+      }
+    }
+
+    for (let index = lastUserIndex + 1; index < messages.length; index += 1) {
       const message = messages[index];
-      if (message.role !== "assistant") {
+      if (message?.role !== "assistant") {
         continue;
       }
-      if (message.streaming && (message.content.trim() || message.thinking?.trim())) {
+      if (message.content.trim() || message.thinking?.trim()) {
         return false;
       }
-      // A finished intermediate assistant bubble with visible text means output is already on screen.
-      if (message.assistantMessageKind !== "tool_call_turn" && message.content.trim()) {
-        return false;
-      }
-      break;
     }
+
     return true;
   }, [messages, regenerating]);
 
