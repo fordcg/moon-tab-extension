@@ -1749,6 +1749,7 @@ describe("App", () => {
       {
         id: "web_search.tavily",
         name: "tavily_search",
+        displayName: "Tavily 搜索",
         description: "搜索公开网页",
         parameters: { type: "object", properties: {}, additionalProperties: false },
         toolClassification: { runtime: "external_web", capabilities: ["search_public_web"], risk: "low" },
@@ -1756,6 +1757,7 @@ describe("App", () => {
       {
         id: "browser.take_snapshot",
         name: "take_snapshot",
+        displayName: "浏览器页面快照",
         description: "读取当前页面结构快照",
         parameters: { type: "object", properties: {}, additionalProperties: false },
         toolClassification: { runtime: "browser_control", capabilities: ["observe_page"], risk: "low" },
@@ -1763,6 +1765,7 @@ describe("App", () => {
       {
         id: "browser.click",
         name: "click",
+        displayName: "浏览器点击元素",
         description: "点击页面上的目标元素",
         parameters: { type: "object", properties: {}, additionalProperties: false },
         toolClassification: { runtime: "browser_control", capabilities: ["operate_page"], risk: "medium" },
@@ -1791,13 +1794,16 @@ describe("App", () => {
         },
       }));
     });
-    await user.selectOptions(screen.getByRole("combobox", { name: "工具能力筛选" }), "observe_page");
+    const capabilityFilterSelect = await screen.findByRole("combobox", { name: "工具能力筛选" });
+    await user.selectOptions(capabilityFilterSelect, "observe_page");
     await user.selectOptions(screen.getByRole("combobox", { name: "工具运行要求筛选" }), "browser_control");
     await user.selectOptions(screen.getByRole("combobox", { name: "工具风险筛选" }), "low");
 
-    expect(screen.getByRole("checkbox", { name: "启用工具 take_snapshot" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "启用工具 take_snapshot" })).toBeEnabled();
-    expect(screen.queryByRole("checkbox", { name: "启用工具 click" })).not.toBeInTheDocument();
+    expect(screen.getByText("页面观察")).toBeInTheDocument();
+    expect(screen.queryByText("系统内置")).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "启用工具 浏览器页面快照" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "启用工具 浏览器页面快照" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox", { name: "启用工具 浏览器点击元素" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "启用筛选结果" }));
 

@@ -268,7 +268,7 @@ export function ChatPreferenceSettings() {
               <div key={group.id} className="chat-preference-tool-group">
                 <div className="chat-preference-tool-group-title">{group.label}</div>
                 {group.tools.map((tool) => {
-                  const toolDisplayName = tool.groupId === "mcp_remote" ? (tool.displayName ?? tool.name) : tool.name;
+                  const toolDisplayName = tool.displayName ?? tool.name;
                   return (
                     <label key={tool.id} className="chat-preference-network-type-chip">
                       <input

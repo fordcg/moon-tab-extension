@@ -1479,28 +1479,111 @@ export function getRegisteredModelTools(mcpSettings?: McpSettings): ModelToolReg
   return mcpSettings ? [...AVAILABLE_MODEL_TOOLS, ...createMcpToolRegistryEntries(mcpSettings.servers)] : AVAILABLE_MODEL_TOOLS;
 }
 
-export function getModelToolGroups(tools: ModelToolRegistryEntry[] = getRegisteredModelTools()): ModelToolGroup[] {
-  const systemTools = tools.filter((tool) => (tool.groupId ?? MODEL_TOOL_GROUP_SYSTEM_ID) === MODEL_TOOL_GROUP_SYSTEM_ID && !isBrowserAutomationToolId(tool.id));
-  const browserTools = tools.filter((tool) => (tool.groupId ?? (isBrowserAutomationToolId(tool.id) ? MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID : MODEL_TOOL_GROUP_SYSTEM_ID)) === MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID);
-  const mcpTools = tools.filter((tool) => (tool.groupId ?? "") === MODEL_TOOL_GROUP_MCP_REMOTE_ID);
+const BROWSER_OBSERVATION_TOOL_IDS = new Set<string>([
+  BROWSER_TAKE_SNAPSHOT_TOOL_ID,
+  BROWSER_GET_PAGE_STATE_TOOL_ID,
+  BROWSER_EXTRACT_CONTENT_TOOL_ID,
+  BROWSER_GET_CONSOLE_MESSAGES_TOOL_ID,
+  BROWSER_INSPECT_ELEMENT_TOOL_ID,
+  BROWSER_FIND_ELEMENTS_TOOL_ID,
+  BROWSER_SCREENSHOT_TOOL_ID,
+  BROWSER_ANALYZE_INTERACTION_BLOCKER_TOOL_ID,
+  BROWSER_ANALYZE_FORM_TOOL_ID,
+  BROWSER_GET_PERFORMANCE_SUMMARY_TOOL_ID,
+  BROWSER_COLLECT_DIAGNOSTICS_TOOL_ID,
+  BROWSER_WAIT_FOR_TOOL_ID,
+  BROWSER_WAIT_FOR_STATE_TOOL_ID,
+  BROWSER_LIST_PAGES_TOOL_ID,
+]);
 
-  return [
-    {
-      id: MODEL_TOOL_GROUP_SYSTEM_ID,
-      label: "系统内置",
-      tools: systemTools,
-    },
-    {
-      id: MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID,
-      label: "浏览器自动化",
-      tools: browserTools,
-    },
-    {
-      id: MODEL_TOOL_GROUP_MCP_REMOTE_ID,
-      label: "MCP 远程工具",
-      tools: mcpTools,
-    },
-  ].filter((group) => group.tools.length > 0);
+const BROWSER_OPERATION_TOOL_IDS = new Set<string>([
+  BROWSER_SCROLL_TOOL_ID,
+  BROWSER_HOVER_TOOL_ID,
+  BROWSER_DOUBLE_CLICK_TOOL_ID,
+  BROWSER_CONTEXT_CLICK_TOOL_ID,
+  BROWSER_DRAG_TOOL_ID,
+  BROWSER_CLICK_TOOL_ID,
+  BROWSER_FILL_TOOL_ID,
+  BROWSER_PRESS_KEY_TOOL_ID,
+  BROWSER_NAVIGATE_PAGE_TOOL_ID,
+  BROWSER_NEW_PAGE_TOOL_ID,
+  BROWSER_SELECT_PAGE_TOOL_ID,
+  BROWSER_CLOSE_PAGE_TOOL_ID,
+]);
+
+interface ModelToolGroupDefinition {
+  id: string;
+  label: string;
+  matches: (tool: ModelToolRegistryEntry) => boolean;
+}
+
+const MODEL_TOOL_GROUP_DEFINITIONS: ModelToolGroupDefinition[] = [
+  {
+    id: "basic_tools",
+    label: "基础工具",
+    matches: (tool) =>
+      resolveModelToolGroupId(tool) === MODEL_TOOL_GROUP_SYSTEM_ID &&
+      !isMetapiToolId(tool.id) &&
+      !isBrowserAutomationToolId(tool.id),
+  },
+  {
+    id: "metapi_ops",
+    label: "Metapi 运维",
+    matches: (tool) => isMetapiToolId(tool.id),
+  },
+  {
+    id: "page_observation",
+    label: "页面观察",
+    matches: (tool) => BROWSER_OBSERVATION_TOOL_IDS.has(tool.id),
+  },
+  {
+    id: "page_operation",
+    label: "页面操作",
+    matches: (tool) => BROWSER_OPERATION_TOOL_IDS.has(tool.id),
+  },
+  {
+    id: "network_api",
+    label: "网络与接口",
+    matches: (tool) => tool.id.startsWith("network."),
+  },
+  {
+    id: "source_runtime",
+    label: "源码与运行时",
+    matches: (tool) => tool.id.startsWith("js.") || tool.id.startsWith("sourcemap.") || tool.id.startsWith("runtime."),
+  },
+  {
+    id: "controlled_enhanced",
+    label: "受控增强",
+    matches: (tool) => tool.id.startsWith("boundary.") || tool.id.startsWith("replay."),
+  },
+  {
+    id: "full_access_tools",
+    label: "完全访问",
+    matches: (tool) => tool.id.startsWith("full_access."),
+  },
+  {
+    id: MODEL_TOOL_GROUP_MCP_REMOTE_ID,
+    label: "MCP 远程",
+    matches: (tool) => resolveModelToolGroupId(tool) === MODEL_TOOL_GROUP_MCP_REMOTE_ID,
+  },
+  {
+    id: "other_tools",
+    label: "其他工具",
+    matches: () => true,
+  },
+];
+
+export function getModelToolGroups(tools: ModelToolRegistryEntry[] = getRegisteredModelTools()): ModelToolGroup[] {
+  const assignedToolIds = new Set<string>();
+  return MODEL_TOOL_GROUP_DEFINITIONS.map((definition) => {
+    const groupTools = tools.filter((tool) => !assignedToolIds.has(tool.id) && definition.matches(tool));
+    groupTools.forEach((tool) => assignedToolIds.add(tool.id));
+    return {
+      id: definition.id,
+      label: definition.label,
+      tools: groupTools,
+    };
+  }).filter((group) => group.tools.length > 0);
 }
 
 export function isBrowserAutomationToolId(toolId: string): boolean {
@@ -1512,6 +1595,14 @@ export function isBrowserAutomationToolId(toolId: string): boolean {
     toolId.startsWith("boundary.") ||
     toolId.startsWith("replay.") ||
     toolId.startsWith("full_access.");
+}
+
+function isMetapiToolId(toolId: string): boolean {
+  return toolId.startsWith("metapi.");
+}
+
+function resolveModelToolGroupId(tool: ModelToolRegistryEntry): string {
+  return tool.groupId ?? (isBrowserAutomationToolId(tool.id) ? MODEL_TOOL_GROUP_BROWSER_AUTOMATION_ID : MODEL_TOOL_GROUP_SYSTEM_ID);
 }
 
 export function isRuntimeReadonlyToolId(toolId: string): boolean {

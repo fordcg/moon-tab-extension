@@ -56,6 +56,7 @@ import {
   BROWSER_CLOSE_PAGE_TOOL_NAME,
   CURRENT_TIME_TOOL_ID,
   CURRENT_TIME_TOOL_NAME,
+  IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
   FULL_ACCESS_EXECUTE_SCRIPT_TOOL_ID,
   FULL_ACCESS_EXECUTE_SCRIPT_TOOL_NAME,
   FULL_ACCESS_FETCH_TOOL_ID,
@@ -678,15 +679,39 @@ describe("模型工具注册表", () => {
     });
   });
 
-  it("浏览器自动化工具归入浏览器自动化分组，便于检索和识别", () => {
+  it("工具分组使用任务分类并去掉系统内置标题", () => {
     const groups = getModelToolGroups(getRegisteredModelTools());
-    const browserGroup = groups.find((group) => group.id === "browser_automation");
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    const groupedToolIds = groups.flatMap((group) => group.tools.map((tool) => tool.id));
+    const registeredToolIds = getRegisteredModelTools().map((tool) => tool.id);
 
-    expect(browserGroup).toMatchObject({
-      id: "browser_automation",
-      label: "浏览器自动化",
+    expect(groups.map((group) => group.label)).not.toContain("系统内置");
+    expect(new Set(groupedToolIds)).toEqual(new Set(registeredToolIds));
+    expect(groupedToolIds).toHaveLength(registeredToolIds.length);
+
+    expect(groupById.get("basic_tools")).toMatchObject({
+      id: "basic_tools",
+      label: "基础工具",
     });
-    expect(browserGroup?.tools.map((tool) => tool.id)).toEqual([
+    expect(groupById.get("basic_tools")?.tools.map((tool) => tool.id)).toEqual([
+      CURRENT_TIME_TOOL_ID,
+      TAVILY_SEARCH_TOOL_ID,
+      IMAGEFREE_GENERATE_IMAGE_TOOL_ID,
+    ]);
+
+    expect(groupById.get("metapi_ops")).toMatchObject({
+      id: "metapi_ops",
+      label: "Metapi 运维",
+    });
+    expect(groupById.get("metapi_ops")?.tools.map((tool) => tool.id)).toEqual(
+      expect.arrayContaining(["metapi.list_sites", "metapi.list_model_marketplace_sites"]),
+    );
+
+    expect(groupById.get("page_observation")).toMatchObject({
+      id: "page_observation",
+      label: "页面观察",
+    });
+    expect(groupById.get("page_observation")?.tools.map((tool) => tool.id)).toEqual([
       BROWSER_TAKE_SNAPSHOT_TOOL_ID,
       BROWSER_GET_PAGE_STATE_TOOL_ID,
       BROWSER_EXTRACT_CONTENT_TOOL_ID,
@@ -698,6 +723,16 @@ describe("模型工具注册表", () => {
       BROWSER_ANALYZE_FORM_TOOL_ID,
       BROWSER_GET_PERFORMANCE_SUMMARY_TOOL_ID,
       BROWSER_COLLECT_DIAGNOSTICS_TOOL_ID,
+      BROWSER_WAIT_FOR_TOOL_ID,
+      BROWSER_WAIT_FOR_STATE_TOOL_ID,
+      BROWSER_LIST_PAGES_TOOL_ID,
+    ]);
+
+    expect(groupById.get("page_operation")).toMatchObject({
+      id: "page_operation",
+      label: "页面操作",
+    });
+    expect(groupById.get("page_operation")?.tools.map((tool) => tool.id)).toEqual([
       BROWSER_SCROLL_TOOL_ID,
       BROWSER_HOVER_TOOL_ID,
       BROWSER_DOUBLE_CLICK_TOOL_ID,
@@ -706,13 +741,17 @@ describe("模型工具注册表", () => {
       BROWSER_CLICK_TOOL_ID,
       BROWSER_FILL_TOOL_ID,
       BROWSER_PRESS_KEY_TOOL_ID,
-      BROWSER_WAIT_FOR_TOOL_ID,
-      BROWSER_WAIT_FOR_STATE_TOOL_ID,
       BROWSER_NAVIGATE_PAGE_TOOL_ID,
       BROWSER_NEW_PAGE_TOOL_ID,
-      BROWSER_LIST_PAGES_TOOL_ID,
       BROWSER_SELECT_PAGE_TOOL_ID,
       BROWSER_CLOSE_PAGE_TOOL_ID,
+    ]);
+
+    expect(groupById.get("network_api")).toMatchObject({
+      id: "network_api",
+      label: "网络与接口",
+    });
+    expect(groupById.get("network_api")?.tools.map((tool) => tool.id)).toEqual([
       NETWORK_LIST_REQUESTS_TOOL_ID,
       NETWORK_GET_REQUEST_DETAILS_TOOL_ID,
       NETWORK_CLEAR_REQUESTS_TOOL_ID,
@@ -722,6 +761,13 @@ describe("模型工具注册表", () => {
       NETWORK_FIND_PARAMETER_CANDIDATES_TOOL_ID,
       NETWORK_EXTRACT_JS_CANDIDATES_TOOL_ID,
       NETWORK_CREATE_PLAYBOOK_DRAFT_TOOL_ID,
+    ]);
+
+    expect(groupById.get("source_runtime")).toMatchObject({
+      id: "source_runtime",
+      label: "源码与运行时",
+    });
+    expect(groupById.get("source_runtime")?.tools.map((tool) => tool.id)).toEqual([
       JS_LIST_RESOURCES_TOOL_ID,
       JS_SEARCH_SOURCES_TOOL_ID,
       JS_EXTRACT_CONTEXT_TOOL_ID,
@@ -731,10 +777,24 @@ describe("模型工具注册表", () => {
       RUNTIME_INSPECT_GLOBALS_TOOL_ID,
       RUNTIME_SEARCH_MODULES_TOOL_ID,
       RUNTIME_DESCRIBE_FUNCTION_TOOL_ID,
+    ]);
+
+    expect(groupById.get("controlled_enhanced")).toMatchObject({
+      id: "controlled_enhanced",
+      label: "受控增强",
+    });
+    expect(groupById.get("controlled_enhanced")?.tools.map((tool) => tool.id)).toEqual([
       BOUNDARY_REQUEST_USER_CHOICE_TOOL_ID,
       REPLAY_PREPARE_REQUEST_TOOL_ID,
       REPLAY_SEND_REQUEST_TOOL_ID,
       REPLAY_COMPARE_RESPONSES_TOOL_ID,
+    ]);
+
+    expect(groupById.get("full_access_tools")).toMatchObject({
+      id: "full_access_tools",
+      label: "完全访问",
+    });
+    expect(groupById.get("full_access_tools")?.tools.map((tool) => tool.id)).toEqual([
       FULL_ACCESS_EXECUTE_SCRIPT_TOOL_ID,
       FULL_ACCESS_FETCH_TOOL_ID,
       FULL_ACCESS_GET_NETWORK_DETAILS_TOOL_ID,
