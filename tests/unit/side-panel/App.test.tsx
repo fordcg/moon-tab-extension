@@ -6918,6 +6918,71 @@ describe("App", () => {
     expect(document.querySelector(".message-list")).toHaveClass("message-list-thinking");
   });
 
+  it("发送中只有工具调用过程时继续显示正在思考", async () => {
+    await saveAppSetting({
+      key: "chatPreferences",
+      value: {
+        ...useAppStore.getState().chatPreferences,
+        toolCallDisplayMode: "assistant_grouped",
+        showToolCallProcessInAssistantMode: true,
+      },
+      updatedAt: 2,
+    });
+    await saveChatSession(
+      createChatSession({
+        id: "session-thinking-after-tools",
+        title: "工具调用后继续思考",
+        messages: [
+          createChatMessage({
+            id: "message-thinking-after-tools-user",
+            role: "user",
+            content: "查询其他模型站点",
+            createdAt: 1,
+          }),
+          createChatMessage({
+            id: "message-thinking-after-tools-turn",
+            role: "assistant",
+            assistantMessageKind: "tool_call_turn",
+            content: "",
+            thinking: "工具轮内部思考不在聊天面板显示。",
+            toolCallRecords: [
+              {
+                id: "call-marketplace-sites",
+                toolId: "metapi.list_model_marketplace_sites",
+                name: "metapi_list_model_marketplace_sites",
+                displayName: "查询模型可用站点",
+                arguments: {},
+                status: "success",
+                startedAt: 2,
+                completedAt: 3,
+                resultSummary: "查询完成",
+              },
+              {
+                id: "call-metapi-sites",
+                toolId: "metapi.list_sites",
+                name: "metapi_list_sites",
+                displayName: "Metapi 站点列表",
+                arguments: {},
+                status: "success",
+                startedAt: 4,
+                completedAt: 5,
+                resultSummary: "查询完成",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+    useAppStore.setState({ sending: true });
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "已调用 查询模型可用站点" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已调用 Metapi 站点列表" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "正在思考" })).toBeInTheDocument();
+    expect(screen.queryByText("工具轮内部思考不在聊天面板显示。")).not.toBeInTheDocument();
+  });
+
   it("浏览器自动化工具样式只跟随浏览器控制运行态激活", async () => {
     const user = userEvent.setup();
     registeredModelToolsMock.tools = [

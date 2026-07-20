@@ -166,13 +166,17 @@ export function MessageList({
       if (message?.role !== "assistant") {
         continue;
       }
-      if (message.content.trim() || message.thinking?.trim()) {
+      const isToolCallTurn = message.assistantMessageKind === "tool_call_turn";
+      const hideToolTurnContent = shouldHideToolTurnContent(message, toolCallDisplayMode);
+      const hasVisibleContent = Boolean(message.content.trim()) && !hideToolTurnContent;
+      const hasVisibleThinking = Boolean(message.thinking?.trim()) && !isToolCallTurn && !hideToolTurnContent;
+      if (hasVisibleContent || hasVisibleThinking) {
         return false;
       }
     }
 
     return true;
-  }, [messages, regenerating]);
+  }, [messages, regenerating, toolCallDisplayMode]);
 
   useModalDialogFocus({
     dialogRef: previewDialogRef,
