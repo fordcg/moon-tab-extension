@@ -58,6 +58,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
   let poolTimer: number | undefined;
   let bubbleClearTimer: number | undefined;
   let localBubbleHidden = false;
+  let extensionContextInvalidated = false;
   let runtimeListener:
     | ((message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => void)
     | undefined;
@@ -68,6 +69,9 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
   const controller: FloatingPetCompanionController = {
     applySnapshot(snapshot) {
+      if (extensionContextInvalidated) {
+        return;
+      }
       if (!snapshot) {
         return;
       }
@@ -87,8 +91,11 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       renderPagePet();
     },
     setMuted(muted) {
+      if (extensionContextInvalidated) {
+        return;
+      }
       petMuted = muted;
-      void chrome.storage?.local?.set?.({ [PET_MUTED_STORAGE_KEY]: petMuted });
+      runExtensionPromise(() => chrome.storage?.local?.set?.({ [PET_MUTED_STORAGE_KEY]: petMuted }));
       // Keep muted flag on the shared snapshot so every page agrees.
       const next: PetRuntimeSnapshot = {
         ...petSnapshot,
@@ -101,16 +108,22 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       renderPagePet();
     },
     hide() {
+      if (extensionContextInvalidated) {
+        return;
+      }
       petVisible = false;
       hideMenu();
       hideComposer();
-      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: false }).catch(() => undefined);
+      runExtensionPromise(() => chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: false }));
       // Also clear any local host immediately so exit is not delayed by storage lag.
       renderPagePet();
     },
     show() {
+      if (extensionContextInvalidated) {
+        return;
+      }
       petVisible = true;
-      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true }).catch(() => undefined);
+      runExtensionPromise(() => chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true }));
       renderPagePet();
     },
     destroy() {
@@ -123,19 +136,32 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         bubbleClearTimer = undefined;
       }
       if (runtimeListener) {
-        chrome.runtime?.onMessage?.removeListener?.(runtimeListener as never);
+        try {
+          chrome.runtime?.onMessage?.removeListener?.(runtimeListener as never);
+        } catch {
+          // The extension context may already be gone; cleanup should remain best-effort.
+        }
         runtimeListener = undefined;
       }
       if (automationListener) {
-        chrome.runtime?.onMessage?.removeListener?.(automationListener as never);
+        try {
+          chrome.runtime?.onMessage?.removeListener?.(automationListener as never);
+        } catch {
+          // The extension context may already be gone; cleanup should remain best-effort.
+        }
         automationListener = undefined;
       }
       if (storageListener) {
-        chrome.storage?.onChanged?.removeListener?.(storageListener as never);
+        try {
+          chrome.storage?.onChanged?.removeListener?.(storageListener as never);
+        } catch {
+          // The extension context may already be gone; cleanup should remain best-effort.
+        }
         storageListener = undefined;
       }
       document.querySelectorAll(PET_HOST_SELECTOR).forEach((node) => node.remove());
       document.getElementById(PET_STYLE_ID)?.remove();
+      extensionContextInvalidated = true;
       sharedController = null;
     },
   };
@@ -146,11 +172,23 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
   async function bootstrap(): Promise<void> {
     await restorePetPrefs();
+    if (extensionContextInvalidated) {
+      return;
+    }
     mountPagePet();
+    if (extensionContextInvalidated) {
+      return;
+    }
     await hydrateSnapshotFromStorage();
+    if (extensionContextInvalidated) {
+      return;
+    }
     requestLatestSnapshot();
     if (poolTimer == null) {
       poolTimer = window.setInterval(() => {
+        if (extensionContextInvalidated) {
+          return;
+        }
         petPoolIndex += 1;
         renderPagePet();
       }, 60_000);
@@ -179,13 +217,9 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         renderPagePet();
       }
     };
-    try {
-      chrome.storage?.onChanged?.addListener?.(storageListener as never);
-    } catch {
-      // ignore
-    }
+    callExtensionApi(() => chrome.storage?.onChanged?.addListener?.(storageListener as never));
 
-    if (listenRuntimeMessages) {
+    if (listenRuntimeMessages && !extensionContextInvalidated) {
       runtimeListener = (message) => {
         if (!message || typeof message !== "object" || !("type" in message)) {
           return;
@@ -196,9 +230,9 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         const snapshot = (message as { snapshot?: PetRuntimeSnapshot | null }).snapshot;
         controller.applySnapshot(snapshot);
       };
-      chrome.runtime?.onMessage?.addListener?.(runtimeListener as never);
+      callExtensionApi(() => chrome.runtime?.onMessage?.addListener?.(runtimeListener as never));
     }
-    if (listenAutomationLive) {
+    if (listenAutomationLive && !extensionContextInvalidated) {
       automationListener = (message) => {
         if (!message || typeof message !== "object" || !("type" in message)) {
           return;
@@ -295,7 +329,7 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
           publishSnapshot(next);
         }
       };
-      chrome.runtime?.onMessage?.addListener?.(automationListener as never);
+      callExtensionApi(() => chrome.runtime?.onMessage?.addListener?.(automationListener as never));
     }
   }
 
@@ -306,8 +340,8 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       if (value && typeof value === "object" && typeof value.state === "string") {
         controller.applySnapshot(value);
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      handleExtensionApiError(error);
     }
   }
 
@@ -333,38 +367,40 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
   }
 
   function requestLatestSnapshot(): void {
-    try {
+    callExtensionApi(() => {
+      if (!chrome.runtime?.sendMessage) {
+        return;
+      }
       void chrome.runtime.sendMessage({ type: PET_SNAPSHOT_GET_TYPE }, (response) => {
-        void chrome.runtime.lastError;
+        void readRuntimeLastErrorMessage();
         const snapshot =
           response && typeof response === "object"
             ? (response as { snapshot?: PetRuntimeSnapshot }).snapshot
             : undefined;
         controller.applySnapshot(snapshot);
       });
-    } catch {
-      // ignore
-    }
+    });
   }
 
   function publishSnapshot(snapshot: PetRuntimeSnapshot): void {
-    try {
+    const posted = callExtensionApi(() => {
+      if (!chrome.runtime?.sendMessage) {
+        return false;
+      }
       void chrome.runtime.sendMessage(
         {
           type: PET_SNAPSHOT_PUBLISH_TYPE,
           snapshot,
         },
         () => {
-          void chrome.runtime.lastError;
+          void readRuntimeLastErrorMessage();
         },
       );
-    } catch {
-      // Fallback: write storage directly when runtime is unavailable.
-      try {
-        void chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot });
-      } catch {
-        // ignore
-      }
+      return true;
+    });
+
+    if (!posted && !extensionContextInvalidated) {
+      runExtensionPromise(() => chrome.storage?.session?.set?.({ [PET_SNAPSHOT_STORAGE_KEY]: snapshot }));
     }
   }
 
@@ -588,20 +624,18 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     };
     controller.applySnapshot(next);
     publishSnapshot(next);
-    try {
-      void chrome.runtime.sendMessage(
+    callExtensionApi(() => {
+      void chrome.runtime?.sendMessage?.(
         {
           type: PET_CHAT_SEND_TYPE,
           content,
           source: options.openSidePanel ? "newtab" : "page",
         },
         () => {
-          void chrome.runtime.lastError;
+          void readRuntimeLastErrorMessage();
         },
       );
-    } catch {
-      // ignore
-    }
+    });
   }
 
   function renderPagePet(): void {
@@ -626,7 +660,10 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
 
     if (img) {
       const path = resolvePublicCatAssetPath(petSnapshot.state, petPoolIndex);
-      const src = chrome.runtime.getURL(path);
+      const src = resolveExtensionUrl(path);
+      if (!src) {
+        return;
+      }
       if (img.getAttribute("src") !== src) {
         img.src = src;
       }
@@ -703,8 +740,8 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     }
     try {
       await chrome.storage?.local?.set?.({ [PET_POSITION_STORAGE_KEY]: savedPetPosition });
-    } catch {
-      // ignore
+    } catch (error) {
+      handleExtensionApiError(error);
     }
   }
 
@@ -729,8 +766,8 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       }
       petMuted = items?.[PET_MUTED_STORAGE_KEY] === true;
       petVisible = items?.[PET_VISIBLE_STORAGE_KEY] !== false;
-    } catch {
-      // ignore
+    } catch (error) {
+      handleExtensionApiError(error);
     }
   }
 
@@ -739,13 +776,63 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
       options.openSidePanel();
       return;
     }
-    try {
-      void chrome.runtime.sendMessage({ type: PET_OPEN_SIDE_PANEL_TYPE }, () => {
-        void chrome.runtime.lastError;
+    callExtensionApi(() => {
+      void chrome.runtime?.sendMessage?.({ type: PET_OPEN_SIDE_PANEL_TYPE }, () => {
+        void readRuntimeLastErrorMessage();
       });
-    } catch {
-      // ignore
+    });
+  }
+
+  function callExtensionApi<T>(operation: () => T): T | undefined {
+    if (extensionContextInvalidated) {
+      return undefined;
     }
+    try {
+      return operation();
+    } catch (error) {
+      handleExtensionApiError(error);
+      return undefined;
+    }
+  }
+
+  function runExtensionPromise(operation: () => Promise<unknown> | void): void {
+    if (extensionContextInvalidated) {
+      return;
+    }
+    try {
+      const result = operation();
+      if (result && typeof result.catch === "function") {
+        void result.catch((error) => {
+          handleExtensionApiError(error);
+        });
+      }
+    } catch (error) {
+      handleExtensionApiError(error);
+    }
+  }
+
+  function readRuntimeLastErrorMessage(): string | undefined {
+    try {
+      return chrome.runtime?.lastError?.message;
+    } catch (error) {
+      handleExtensionApiError(error);
+      return undefined;
+    }
+  }
+
+  function resolveExtensionUrl(path: string): string | undefined {
+    return callExtensionApi(() => chrome.runtime?.getURL?.(path));
+  }
+
+  function handleExtensionApiError(error: unknown): boolean {
+    if (!isExtensionContextInvalidatedError(error)) {
+      return false;
+    }
+    if (!extensionContextInvalidated) {
+      extensionContextInvalidated = true;
+      controller.destroy();
+    }
+    return true;
   }
 
   function ensurePetStyles(): void {
@@ -872,4 +959,9 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     `;
     document.documentElement.appendChild(style);
   }
+}
+
+function isExtensionContextInvalidatedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /extension context invalidated/i.test(message);
 }

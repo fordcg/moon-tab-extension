@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtractionRule } from "../../../src/shared/types";
 import { PET_SNAPSHOT_EVENT_TYPE } from "../../../src/shared/pet/runtime";
 
@@ -28,6 +28,11 @@ describe("content 脚本消息", () => {
       configurable: true,
       value: new URL("https://example.com/article"),
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   function stubChrome() {
@@ -114,6 +119,28 @@ describe("content 脚本消息", () => {
     expect(host).toBeTruthy();
     expect(host!.querySelector(".moon-pet-button")).toBeTruthy();
     expect(host!.querySelector(".moon-pet-img")).toBeTruthy();
+  });
+
+  it("扩展上下文失效后清理浮宠定时重绘", async () => {
+    vi.useFakeTimers();
+    stubChrome();
+    const getURL = vi.mocked(chrome.runtime.getURL);
+    await import("../../../src/content/index");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector("[data-moon-tab-ai-pet-host]")).toBeTruthy();
+
+    getURL.mockImplementation(() => {
+      throw new Error("Extension context invalidated.");
+    });
+
+    expect(() => vi.advanceTimersByTime(60_000)).not.toThrow();
+    expect(document.querySelector("[data-moon-tab-ai-pet-host]")).toBeNull();
+
+    const callCountAfterCleanup = getURL.mock.calls.length;
+    vi.advanceTimersByTime(120_000);
+    expect(getURL).toHaveBeenCalledTimes(callCountAfterCleanup);
   });
 
   it("收到 pet snapshot 事件后更新状态文案", async () => {

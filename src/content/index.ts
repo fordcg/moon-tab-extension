@@ -49,7 +49,7 @@ function isSidePanelContentMessage(message: unknown): message is SidePanelConten
 // Floating AI pet on normal web pages (newtab mounts the same host separately).
 mountFloatingPetCompanion();
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+const handleContentRuntimeMessage = (message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
   if (isSidePanelContentMessage(message)) {
     if (message.type === SIDE_PANEL_FLOATING_CLOSE_TYPE) {
       closeFloatingAssistantFrame();
@@ -83,7 +83,15 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   });
 
   return false;
-});
+};
+
+try {
+  chrome.runtime.onMessage.addListener(handleContentRuntimeMessage);
+} catch (error) {
+  if (!isExtensionContextInvalidatedError(error)) {
+    throw error;
+  }
+}
 
 function attachFloatingAssistantFrame(url: string): { ok: true } | { ok: false; message: string } {
   if (!isTrustedFloatingFrameUrl(url)) {
@@ -152,6 +160,11 @@ function isTrustedFloatingFrameUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isExtensionContextInvalidatedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /extension context invalidated/i.test(message);
 }
 
 export { getPagePetHostSelectorForTests };
