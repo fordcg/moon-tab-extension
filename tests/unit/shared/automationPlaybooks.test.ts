@@ -20,6 +20,7 @@ describe("浏览器自动化 Playbook 注册表", () => {
       "network_api_analysis",
       "source_runtime_analysis",
       "register_relay_site",
+      "query_model_marketplace_sites",
       "start_all_checkin",
       "repair_failed_checkin",
     ]);
@@ -69,6 +70,7 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(shouldRunAutomationPlaybookSelection("帮我补签失败的站")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("开始签到")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("收录中转站")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("看看 gpt-4o 模型哪些站点有")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("React useMemo 是什么")).toBe(false);
     expect(shouldRunAutomationPlaybookSelection("当前时间是多少")).toBe(false);
     expect(shouldRunAutomationPlaybookSelection("JS 的闭包是什么")).toBe(false);
@@ -79,6 +81,7 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(matchAutomationPlaybookByHints("请帮我补签", playbooks)?.id).toBe("repair_failed_checkin");
     expect(matchAutomationPlaybookByHints("开始签到并汇总", playbooks)?.id).toBe("start_all_checkin");
     expect(matchAutomationPlaybookByHints("收录中转站 gpt(name)", playbooks)?.id).toBe("register_relay_site");
+    expect(matchAutomationPlaybookByHints("看看 gpt-4o 模型哪些站点有", playbooks)?.id).toBe("query_model_marketplace_sites");
     expect(matchAutomationPlaybookByHints("今天天气怎么样", playbooks)).toBeUndefined();
   });
 

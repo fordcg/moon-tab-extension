@@ -27,6 +27,8 @@ import {
   METAPI_GET_CHECKIN_LOGS_TOOL_NAME,
   METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID,
   METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME,
+  METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_ID,
+  METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_NAME,
   METAPI_LIST_SITES_TOOL_ID,
   METAPI_LIST_SITES_TOOL_NAME,
   METAPI_PARSE_REGISTER_ARGS_TOOL_ID,
@@ -49,6 +51,8 @@ import { getAppSetting, saveAppSetting } from "../../shared/storage/repositories
 
 type CheckinBarrier = ReturnType<typeof detectCheckinBarrier>;
 type BrowserCheckinStatus = MetapiBrowserCheckinResult["status"];
+type MarketplaceMatchMode = "auto" | "exact" | "fuzzy";
+type MarketplaceMatchType = "exact" | "fuzzy";
 type RepairCandidate = Record<string, unknown> & {
   siteUrl: string;
   externalCheckinUrl: string | null;
@@ -58,6 +62,45 @@ type RepairCandidate = Record<string, unknown> & {
   officialErrorOnly: boolean;
   mustOpen: boolean;
 };
+
+type MarketplaceModelContext = {
+  ids: string[];
+  names: string[];
+  aliases: string[];
+};
+
+type MarketplaceSiteContext = {
+  siteId?: string | number;
+  siteName?: string;
+  siteUrl?: string;
+  provider?: string;
+  platform?: string;
+};
+
+type MarketplaceTraversalContext = {
+  model: MarketplaceModelContext;
+  site: MarketplaceSiteContext;
+};
+
+type MarketplaceEntry = MarketplaceTraversalContext & {
+  path: string;
+  raw: Record<string, unknown>;
+};
+
+type MarketplaceMatchedEntry = MarketplaceEntry & {
+  matchType: MarketplaceMatchType;
+  confidence: number;
+  matchedValues: string[];
+};
+
+type MarketplaceCache = {
+  key: string;
+  fetchedAt: number;
+  data: unknown;
+};
+
+const MARKETPLACE_CACHE_TTL_MS = 60_000;
+let marketplaceCache: MarketplaceCache | undefined;
 
 export async function executeMetapiTool(
   toolCall: ModelToolCall,
@@ -73,6 +116,9 @@ export async function executeMetapiTool(
     }
     if (toolCall.id === METAPI_LIST_SITES_TOOL_ID || toolName === METAPI_LIST_SITES_TOOL_NAME) {
       return listSites(toolCall, fetcher);
+    }
+    if (toolCall.id === METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_ID || toolName === METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_NAME) {
+      return listModelMarketplaceSites(toolCall, fetcher);
     }
     if (toolCall.id === METAPI_DETECT_SITE_TOOL_ID || toolName === METAPI_DETECT_SITE_TOOL_NAME) {
       return detectSite(toolCall, fetcher);
@@ -158,6 +204,651 @@ async function listSites(toolCall: ModelToolCall, fetcher: typeof fetch): Promis
     existingSite: existing ?? null,
     sites: sites.map((site) => sanitizeSite(site)),
   });
+}
+
+async function listModelMarketplaceSites(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
+  const args = asObject(toolCall.arguments);
+  const model = typeof args.model === "string" ? args.model.trim() : "";
+  if (!model) {
+    return metapiError(toolCall, "model 不能为空");
+  }
+
+  const matchMode = parseMarketplaceMatchMode(args.matchMode);
+  const limit = clampInt(args.limit, 1, 100, 20);
+  const includeRawMatches = args.includeRawMatches === true;
+  const refresh = args.refresh === true;
+  const settings = await loadSettings();
+  const fetched = await fetchModelMarketplace(settings, fetcher, refresh);
+  if (!fetched.ok) {
+    return metapiError(toolCall, fetched.message, fetched.detail);
+  }
+
+  const entries = extractMarketplaceEntries(fetched.data);
+  const exactMatches = matchMarketplaceEntries(entries, model, "exact");
+  const fuzzyMatches = matchMarketplaceEntries(entries, model, "fuzzy");
+  const selectedMatches = matchMode === "auto"
+    ? (exactMatches.length > 0 ? exactMatches : fuzzyMatches)
+    : matchMode === "exact"
+      ? exactMatches
+      : fuzzyMatches;
+  const selectedMatchMode: MarketplaceMatchType | "none" = exactMatches.length > 0 && matchMode !== "fuzzy"
+    ? "exact"
+    : selectedMatches.length > 0
+      ? selectedMatches.some((item) => item.matchType === "exact")
+        ? "exact"
+        : "fuzzy"
+      : "none";
+  const groupedSites = groupMarketplaceMatchesBySite(selectedMatches, limit);
+  const matchStatus = selectedMatchMode === "exact"
+    ? "exact"
+    : selectedMatchMode === "fuzzy"
+      ? "fuzzy_candidates"
+      : "not_found";
+
+  return metapiOk(toolCall, {
+    query: model,
+    endpoint: "GET /api/models/marketplace",
+    requestedMatchMode: matchMode,
+    matchStatus,
+    count: groupedSites.length,
+    totalMarketplaceEntries: entries.length,
+    exactMatchCount: exactMatches.length,
+    fuzzyCandidateCount: fuzzyMatches.length,
+    sites: groupedSites,
+    rawMatches: includeRawMatches
+      ? selectedMatches.slice(0, Math.min(limit, 20)).map((item) => ({
+          path: item.path,
+          matchType: item.matchType,
+          confidence: item.confidence,
+          matchedValues: item.matchedValues,
+          raw: sanitizeMarketplaceRaw(item.raw),
+        }))
+      : undefined,
+    fetch: {
+      fromCache: fetched.fromCache,
+      cacheAgeSeconds: fetched.cacheAgeSeconds,
+      cacheTtlSeconds: MARKETPLACE_CACHE_TTL_MS / 1000,
+    },
+    precision: {
+      backendExactQueryApiAvailable: false,
+      method: "full_marketplace_local_filter",
+      note:
+        "当前 Metapi 只提供 marketplace 全量接口；本工具先拉取全量列表，再在本地做大小写/空白归一化匹配。精确未命中时只返回模糊候选，不把候选伪装成后端精确查询结果。",
+    },
+    solutionForNoExactApi: [
+      "短期：使用 GET /api/models/marketplace 拉全量数据，本地归一化过滤；默认 auto 模式先 exact，未命中再 fuzzy，并在输出里标记 matchStatus。",
+      "性能：工具内置 60 秒内存缓存；需要最新数据时传 refresh=true 强制刷新。",
+      "长期：建议 Metapi 后端新增精确查询接口，例如 GET /api/models/marketplace?model=<modelId> 或 GET /api/models/:modelId/sites，由后端基于规范模型 ID 查询并返回权威结果。",
+    ],
+    guidance: buildMarketplaceGuidance(matchStatus),
+  });
+}
+
+function parseMarketplaceMatchMode(value: unknown): MarketplaceMatchMode {
+  return value === "exact" || value === "fuzzy" || value === "auto" ? value : "auto";
+}
+
+async function fetchModelMarketplace(
+  settings: MetapiAdminSettings,
+  fetcher: typeof fetch,
+  refresh: boolean,
+): Promise<
+  | { ok: true; data: unknown; fromCache: boolean; cacheAgeSeconds: number }
+  | { ok: false; message: string; detail?: unknown }
+> {
+  const cacheKey = `${settings.baseUrl}\0${settings.authToken}`;
+  const now = Date.now();
+  if (!refresh && marketplaceCache?.key === cacheKey && now - marketplaceCache.fetchedAt <= MARKETPLACE_CACHE_TTL_MS) {
+    return {
+      ok: true,
+      data: marketplaceCache.data,
+      fromCache: true,
+      cacheAgeSeconds: Math.max(0, Math.round((now - marketplaceCache.fetchedAt) / 1000)),
+    };
+  }
+
+  const result = await metapiAdminFetch({
+    settings,
+    path: "/api/models/marketplace",
+    method: "GET",
+    fetcher,
+  });
+  if (!result.ok) {
+    return { ok: false, message: result.message, detail: result };
+  }
+  marketplaceCache = {
+    key: cacheKey,
+    fetchedAt: now,
+    data: result.data,
+  };
+  return { ok: true, data: result.data, fromCache: false, cacheAgeSeconds: 0 };
+}
+
+function extractMarketplaceEntries(data: unknown): MarketplaceEntry[] {
+  const entries: MarketplaceEntry[] = [];
+  visitMarketplaceValue(data, [], createMarketplaceContext(), entries);
+  return dedupeMarketplaceEntries(entries);
+}
+
+function visitMarketplaceValue(
+  value: unknown,
+  path: string[],
+  inheritedContext: MarketplaceTraversalContext,
+  entries: MarketplaceEntry[],
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => visitMarketplaceValue(item, [...path, String(index)], inheritedContext, entries));
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  const row = value as Record<string, unknown>;
+  const context = mergeMarketplaceContexts(inheritedContext, extractMarketplaceContextFromObject(row, path));
+  if (hasMarketplaceModelContext(context.model) && hasMarketplaceSiteContext(context.site)) {
+    entries.push({
+      path: path.length ? path.join(".") : "$",
+      model: cloneMarketplaceModelContext(context.model),
+      site: { ...context.site },
+      raw: row,
+    });
+  }
+
+  for (const [key, child] of Object.entries(row)) {
+    if (!child || (typeof child !== "object" && !Array.isArray(child))) {
+      continue;
+    }
+    const childPath = [...path, key];
+    const childContext = applyMarketplaceMapKeyContext(context, key, child, path);
+    visitMarketplaceValue(child, childPath, childContext, entries);
+  }
+}
+
+function createMarketplaceContext(): MarketplaceTraversalContext {
+  return {
+    model: { ids: [], names: [], aliases: [] },
+    site: {},
+  };
+}
+
+function extractMarketplaceContextFromObject(row: Record<string, unknown>, path: string[]): MarketplaceTraversalContext {
+  const context = createMarketplaceContext();
+  const directModelIds = collectStringsFromKeys(row, [
+    "modelId",
+    "model_id",
+    "modelKey",
+    "model_key",
+    "modelSlug",
+    "model_slug",
+    "modelCode",
+    "model_code",
+  ]);
+  const directModelNames = collectStringsFromKeys(row, [
+    "model",
+    "modelName",
+    "model_name",
+    "modelDisplayName",
+    "model_display_name",
+    "displayModelName",
+    "display_model_name",
+  ]);
+  const directModelAliases = collectStringsFromKeys(row, [
+    "alias",
+    "aliases",
+    "modelAlias",
+    "model_alias",
+    "modelAliases",
+    "model_aliases",
+  ]);
+
+  appendUniqueStrings(context.model.ids, directModelIds);
+  appendUniqueStrings(context.model.names, directModelNames);
+  appendUniqueStrings(context.model.aliases, directModelAliases);
+
+  const nestedModel = firstRecordValue(row, ["model", "models_model", "modelInfo", "model_info", "metadata"]);
+  if (nestedModel) {
+    const nested = extractNamedModelContext(nestedModel);
+    appendUniqueStrings(context.model.ids, nested.ids);
+    appendUniqueStrings(context.model.names, nested.names);
+    appendUniqueStrings(context.model.aliases, nested.aliases);
+  }
+
+  if (isMarketplaceModelLikeObject(row, path)) {
+    appendUniqueStrings(context.model.ids, collectStringsFromKeys(row, ["id", "key", "slug", "code"]));
+    appendUniqueStrings(context.model.names, collectStringsFromKeys(row, ["name", "displayName", "display_name", "title"]));
+  }
+
+  context.site = {
+    ...context.site,
+    ...extractDirectMarketplaceSiteContext(row, path),
+  };
+  const nestedSite = firstRecordValue(row, [
+    "site",
+    "sites_site",
+    "siteInfo",
+    "site_info",
+    "provider",
+    "providerInfo",
+    "provider_info",
+    "channel",
+    "channelInfo",
+    "channel_info",
+  ]);
+  if (nestedSite) {
+    context.site = mergeMarketplaceSiteContext(context.site, extractNamedMarketplaceSiteContext(nestedSite));
+  }
+
+  return context;
+}
+
+function extractNamedModelContext(row: Record<string, unknown>): MarketplaceModelContext {
+  return {
+    ids: collectStringsFromKeys(row, ["id", "modelId", "model_id", "key", "slug", "code"]),
+    names: collectStringsFromKeys(row, ["name", "model", "modelName", "model_name", "displayName", "display_name", "title"]),
+    aliases: collectStringsFromKeys(row, ["alias", "aliases", "modelAlias", "model_alias", "modelAliases", "model_aliases"]),
+  };
+}
+
+function extractDirectMarketplaceSiteContext(row: Record<string, unknown>, path: string[]): MarketplaceSiteContext {
+  const siteId = firstString(...collectStringsFromKeys(row, ["siteId", "site_id", "providerId", "provider_id", "channelId", "channel_id"]));
+  const siteName = firstString(...collectStringsFromKeys(row, ["siteName", "site_name", "providerName", "provider_name", "channelName", "channel_name"]));
+  const siteUrl = firstString(...collectStringsFromKeys(row, ["siteUrl", "site_url", "siteOrigin", "site_origin", "origin", "domain", "host"]));
+  const provider = firstString(...collectStringsFromKeys(row, ["provider", "providerCode", "provider_code", "source", "vendor"]));
+  const platform = firstString(...collectStringsFromKeys(row, ["platform", "sitePlatform", "site_platform"]));
+
+  const context: MarketplaceSiteContext = {};
+  if (siteId) context.siteId = siteId;
+  if (siteName) context.siteName = siteName;
+  if (siteUrl) context.siteUrl = normalizeMarketplaceSiteUrl(siteUrl);
+  if (provider) context.provider = provider;
+  if (platform) context.platform = platform;
+
+  if (isMarketplaceSiteLikeObject(row, path)) {
+    const id = firstString(...collectStringsFromKeys(row, ["id", "key"]));
+    const name = firstString(...collectStringsFromKeys(row, ["name", "displayName", "display_name", "title"]));
+    const url = firstString(...collectStringsFromKeys(row, ["url", "baseUrl", "base_url", "endpoint", "apiBaseUrl", "api_base_url"]));
+    if (!context.siteId && id) context.siteId = id;
+    if (!context.siteName && name) context.siteName = name;
+    if (!context.siteUrl && url) context.siteUrl = normalizeMarketplaceSiteUrl(url);
+  }
+
+  return context;
+}
+
+function extractNamedMarketplaceSiteContext(row: Record<string, unknown>): MarketplaceSiteContext {
+  const direct = extractDirectMarketplaceSiteContext(row, ["site"]);
+  const id = firstString(...collectStringsFromKeys(row, ["id", "siteId", "site_id", "providerId", "provider_id", "channelId", "channel_id"]));
+  const name = firstString(...collectStringsFromKeys(row, ["name", "siteName", "site_name", "providerName", "provider_name", "channelName", "channel_name", "displayName", "display_name", "title"]));
+  const url = firstString(...collectStringsFromKeys(row, ["url", "siteUrl", "site_url", "baseUrl", "base_url", "origin", "domain", "host"]));
+  return {
+    siteId: direct.siteId ?? (id || undefined),
+    siteName: direct.siteName ?? (name || undefined),
+    siteUrl: direct.siteUrl ?? (url ? normalizeMarketplaceSiteUrl(url) : undefined),
+    provider: direct.provider,
+    platform: direct.platform,
+  };
+}
+
+function isMarketplaceModelLikeObject(row: Record<string, unknown>, path: string[]): boolean {
+  if (hasAnyKey(row, ["modelId", "model_id", "modelName", "model_name", "model", "modelKey", "model_key"])) {
+    return true;
+  }
+  const pathHint = lastNamedPathSegment(path);
+  if (pathHint === "model" || pathHint === "models") {
+    return true;
+  }
+  return Boolean(row.sites || row.siteList || row.site_list || row.providers || row.channels) && !hasAnyKey(row, ["siteUrl", "site_url", "siteName", "site_name", "url"]);
+}
+
+function isMarketplaceSiteLikeObject(row: Record<string, unknown>, path: string[]): boolean {
+  if (hasAnyKey(row, ["siteId", "site_id", "siteName", "site_name", "siteUrl", "site_url", "providerName", "provider_name", "channelName", "channel_name"])) {
+    return true;
+  }
+  const pathHint = lastNamedPathSegment(path);
+  if (["site", "sites", "provider", "providers", "channel", "channels"].includes(pathHint)) {
+    return true;
+  }
+  return Boolean(row.models || row.modelList || row.model_list) && hasAnyKey(row, ["url", "baseUrl", "base_url", "origin", "domain", "host", "name"]);
+}
+
+function applyMarketplaceMapKeyContext(
+  context: MarketplaceTraversalContext,
+  childKey: string,
+  child: unknown,
+  parentPath: string[],
+): MarketplaceTraversalContext {
+  const next = mergeMarketplaceContexts(createMarketplaceContext(), context);
+  if (/^\d+$/.test(parentPath[parentPath.length - 1] ?? "")) {
+    return next;
+  }
+  const parentKey = lastNamedPathSegment(parentPath);
+  if (!isMeaningfulMarketplaceMapKey(childKey, parentKey)) {
+    return next;
+  }
+  if (["model", "models", "modelMap", "model_map", "modelMarketplace", "model_marketplace"].includes(parentKey)) {
+    appendUniqueString(next.model.ids, childKey);
+    appendUniqueString(next.model.names, childKey);
+  } else if (["site", "sites", "provider", "providers", "channel", "channels"].includes(parentKey)) {
+    if (/^\d+$/.test(childKey)) {
+      next.site.siteId = next.site.siteId ?? childKey;
+    } else {
+      next.site.siteName = next.site.siteName ?? childKey;
+    }
+  } else if (Array.isArray(child)) {
+    // Common shape: { "gpt-4o": [{ site... }] } or { "站点A": [{ model... }] }.
+    if (looksLikeModelIdentifier(childKey)) {
+      appendUniqueString(next.model.ids, childKey);
+      appendUniqueString(next.model.names, childKey);
+    }
+  }
+  return next;
+}
+
+function matchMarketplaceEntries(
+  entries: MarketplaceEntry[],
+  query: string,
+  matchType: MarketplaceMatchType,
+): MarketplaceMatchedEntry[] {
+  const normalizedQuery = normalizeMarketplaceModelText(query);
+  const compactQuery = compactMarketplaceModelText(query);
+  if (!normalizedQuery && !compactQuery) {
+    return [];
+  }
+  const matches: MarketplaceMatchedEntry[] = [];
+  for (const entry of entries) {
+    const values = marketplaceModelCandidateValues(entry);
+    const matchedValues: string[] = [];
+    let confidence = 0;
+    for (const value of values) {
+      const normalizedValue = normalizeMarketplaceModelText(value);
+      const compactValue = compactMarketplaceModelText(value);
+      const exact = Boolean(normalizedValue && normalizedValue === normalizedQuery) || Boolean(compactValue && compactValue === compactQuery);
+      if (matchType === "exact") {
+        if (exact) {
+          matchedValues.push(value);
+          confidence = Math.max(confidence, 1);
+        }
+        continue;
+      }
+      if (exact) {
+        if (matchType === "fuzzy") {
+          continue;
+        }
+        matchedValues.push(value);
+        confidence = Math.max(confidence, 1);
+      } else if (normalizedValue.includes(normalizedQuery) || normalizedQuery.includes(normalizedValue)) {
+        matchedValues.push(value);
+        confidence = Math.max(confidence, 0.82);
+      } else if (compactValue.includes(compactQuery) || compactQuery.includes(compactValue)) {
+        matchedValues.push(value);
+        confidence = Math.max(confidence, 0.78);
+      } else if (allMarketplaceQueryTokensMatch(normalizedQuery, normalizedValue)) {
+        matchedValues.push(value);
+        confidence = Math.max(confidence, 0.7);
+      }
+    }
+    if (matchedValues.length > 0) {
+      const effectiveType: MarketplaceMatchType = confidence >= 1 ? "exact" : "fuzzy";
+      if (matchType === "fuzzy" || effectiveType === "exact") {
+        matches.push({
+          ...entry,
+          matchType: effectiveType,
+          confidence,
+          matchedValues: uniqueStrings(matchedValues),
+        });
+      }
+    }
+  }
+  return matches.sort((left, right) => right.confidence - left.confidence || left.path.localeCompare(right.path));
+}
+
+function groupMarketplaceMatchesBySite(matches: MarketplaceMatchedEntry[], limit: number): Array<Record<string, unknown>> {
+  const groups = new Map<string, MarketplaceMatchedEntry[]>();
+  for (const match of matches) {
+    const key = marketplaceSiteGroupKey(match.site, match.path);
+    const existing = groups.get(key) ?? [];
+    existing.push(match);
+    groups.set(key, existing);
+  }
+
+  return Array.from(groups.values())
+    .map((items) => {
+      const best = items.reduce((current, item) => (item.confidence > current.confidence ? item : current), items[0]);
+      const matchType: MarketplaceMatchType = items.some((item) => item.matchType === "exact") ? "exact" : "fuzzy";
+      return {
+        siteId: best.site.siteId ?? null,
+        siteName: best.site.siteName ?? best.site.provider ?? null,
+        siteUrl: best.site.siteUrl ?? null,
+        provider: best.site.provider ?? null,
+        platform: best.site.platform ?? null,
+        matchType,
+        confidence: Math.round(Math.max(...items.map((item) => item.confidence)) * 100) / 100,
+        matchedValues: uniqueStrings(items.flatMap((item) => item.matchedValues)).slice(0, 12),
+        models: uniqueStrings(items.flatMap((item) => marketplaceModelCandidateValues(item))).slice(0, 12),
+        matchCount: items.length,
+        samplePaths: items.map((item) => item.path).slice(0, 5),
+      };
+    })
+    .sort((left, right) => {
+      const leftExact = left.matchType === "exact" ? 1 : 0;
+      const rightExact = right.matchType === "exact" ? 1 : 0;
+      if (leftExact !== rightExact) return rightExact - leftExact;
+      const confidenceDelta = Number(right.confidence) - Number(left.confidence);
+      if (confidenceDelta !== 0) return confidenceDelta;
+      return String(left.siteName ?? left.siteUrl ?? "").localeCompare(String(right.siteName ?? right.siteUrl ?? ""));
+    })
+    .slice(0, limit);
+}
+
+function buildMarketplaceGuidance(matchStatus: "exact" | "fuzzy_candidates" | "not_found"): string {
+  if (matchStatus === "exact") {
+    return "已按本地归一化精确匹配模型，sites 即为 marketplace 全量数据中命中的站点/渠道。";
+  }
+  if (matchStatus === "fuzzy_candidates") {
+    return "未获得后端精确查询结果；当前只返回本地模糊候选。需要人工确认模型 ID 是否同义或版本别名一致。";
+  }
+  return "marketplace 全量数据中未找到该模型。建议检查模型 ID 拼写，或传 refresh=true 刷新后重试；长期应补后端精确查询 API。";
+}
+
+function hasMarketplaceModelContext(model: MarketplaceModelContext): boolean {
+  return model.ids.length > 0 || model.names.length > 0 || model.aliases.length > 0;
+}
+
+function hasMarketplaceSiteContext(site: MarketplaceSiteContext): boolean {
+  return Boolean(site.siteUrl || site.siteName || site.siteId || site.provider || site.platform);
+}
+
+function mergeMarketplaceContexts(
+  left: MarketplaceTraversalContext,
+  right: MarketplaceTraversalContext,
+): MarketplaceTraversalContext {
+  return {
+    model: {
+      ids: uniqueStrings([...left.model.ids, ...right.model.ids]),
+      names: uniqueStrings([...left.model.names, ...right.model.names]),
+      aliases: uniqueStrings([...left.model.aliases, ...right.model.aliases]),
+    },
+    site: mergeMarketplaceSiteContext(left.site, right.site),
+  };
+}
+
+function mergeMarketplaceSiteContext(left: MarketplaceSiteContext, right: MarketplaceSiteContext): MarketplaceSiteContext {
+  return {
+    siteId: right.siteId ?? left.siteId,
+    siteName: right.siteName ?? left.siteName,
+    siteUrl: right.siteUrl ?? left.siteUrl,
+    provider: right.provider ?? left.provider,
+    platform: right.platform ?? left.platform,
+  };
+}
+
+function cloneMarketplaceModelContext(model: MarketplaceModelContext): MarketplaceModelContext {
+  return {
+    ids: [...model.ids],
+    names: [...model.names],
+    aliases: [...model.aliases],
+  };
+}
+
+function dedupeMarketplaceEntries(entries: MarketplaceEntry[]): MarketplaceEntry[] {
+  const seen = new Set<string>();
+  const unique: MarketplaceEntry[] = [];
+  for (const entry of entries) {
+    const key = [
+      marketplaceSiteGroupKey(entry.site, entry.path),
+      uniqueStrings(marketplaceModelCandidateValues(entry)).map((item) => normalizeMarketplaceModelText(item)).sort().join("|"),
+      entry.path,
+    ].join("::");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(entry);
+  }
+  return unique;
+}
+
+function marketplaceModelCandidateValues(entry: MarketplaceEntry): string[] {
+  return uniqueStrings([...entry.model.ids, ...entry.model.names, ...entry.model.aliases]).filter(Boolean);
+}
+
+function marketplaceSiteGroupKey(site: MarketplaceSiteContext, fallback: string): string {
+  if (site.siteUrl) return `url:${site.siteUrl.toLowerCase()}`;
+  if (site.siteId !== undefined && site.siteId !== null) return `id:${String(site.siteId).toLowerCase()}`;
+  if (site.siteName) return `name:${site.siteName.toLowerCase()}`;
+  if (site.provider) return `provider:${site.provider.toLowerCase()}`;
+  if (site.platform) return `platform:${site.platform.toLowerCase()}`;
+  return `path:${fallback}`;
+}
+
+function normalizeMarketplaceModelText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function compactMarketplaceModelText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function allMarketplaceQueryTokensMatch(query: string, candidate: string): boolean {
+  const tokens = query.split(/[\s,;/|]+/).map((item) => item.trim()).filter((item) => item.length >= 2);
+  if (tokens.length < 2 || !candidate) {
+    return false;
+  }
+  return tokens.every((token) => candidate.includes(token));
+}
+
+function looksLikeModelIdentifier(value: string): boolean {
+  return /[a-z]+[-_/]?[0-9]|gpt|claude|gemini|deepseek|qwen|llama|mistral|kimi|yi-|glm|o\d/i.test(value);
+}
+
+function isMeaningfulMarketplaceMapKey(key: string, parentKey: string): boolean {
+  if (/^\d+$/.test(key)) {
+    return ["site", "sites", "provider", "providers", "channel", "channels"].includes(parentKey);
+  }
+  return !["data", "items", "results", "records", "list", "rows"].includes(key);
+}
+
+function lastNamedPathSegment(path: string[]): string {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const item = path[index];
+    if (!/^\d+$/.test(item)) {
+      return item;
+    }
+  }
+  return "";
+}
+
+function firstRecordValue(row: Record<string, unknown>, keys: string[]): Record<string, unknown> | undefined {
+  for (const key of keys) {
+    const value = row[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+function collectStringsFromKeys(row: Record<string, unknown>, keys: string[]): string[] {
+  const values: string[] = [];
+  for (const key of keys) {
+    appendUniqueStrings(values, collectStringValues(row[key]));
+  }
+  return values;
+}
+
+function collectStringValues(value: unknown): string[] {
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return [String(value)];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectStringValues(item));
+  }
+  return [];
+}
+
+function hasAnyKey(row: Record<string, unknown>, keys: string[]): boolean {
+  return keys.some((key) => row[key] !== undefined);
+}
+
+function appendUniqueStrings(target: string[], values: string[]): void {
+  for (const value of values) {
+    appendUniqueString(target, value);
+  }
+}
+
+function appendUniqueString(target: string[], value: string): void {
+  const normalized = value.trim();
+  if (!normalized) {
+    return;
+  }
+  if (!target.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
+    target.push(normalized);
+  }
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const output: string[] = [];
+  appendUniqueStrings(output, values);
+  return output;
+}
+
+function normalizeMarketplaceSiteUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return normalizeSiteUrl(trimmed);
+  }
+  if (/^[a-z0-9.-]+(?::\d+)?$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  return trimmed;
+}
+
+function sanitizeMarketplaceRaw(value: unknown, depth = 0): unknown {
+  if (depth > 4) {
+    return "[truncated]";
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeMarketplaceRaw(item, depth + 1));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/(token|secret|password|cookie|authorization|apikey|api_key|accesskey|access_key)/i.test(key)) {
+      output[key] = "[redacted]";
+    } else {
+      output[key] = sanitizeMarketplaceRaw(child, depth + 1);
+    }
+  }
+  return output;
 }
 
 async function detectSite(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {

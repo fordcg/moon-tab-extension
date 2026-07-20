@@ -439,7 +439,7 @@ export function shouldRunAutomationPlaybookSelection(userContent: string): boole
   // Natural-language skill triggers (no slash command required).
   // Covers Metapi ops and common automation intents so the model can auto-pick playbooks.
   if (
-    /补签|开始签到|全部签到|启动签到|签到巡检|收录中转站|收录站点|添加中转站|删除站点|关闭签到|开启签到|checkin|repair\s*checkin|register\s*relay|metapi/.test(
+    /补签|开始签到|全部签到|启动签到|签到巡检|收录中转站|收录站点|添加中转站|删除站点|关闭签到|开启签到|模型.*(?:站点|渠道|marketplace)|(?:哪些站点|哪些渠道).*(?:有|支持).*模型|model\s*marketplace|models\s*marketplace|checkin|repair\s*checkin|register\s*relay|metapi/.test(
       text,
     )
   ) {

@@ -20,14 +20,18 @@ describe("skill package loader", () => {
     expect(tools.some((tool) => tool.id === "metapi.trigger_checkin")).toBe(true);
     expect(tools.some((tool) => tool.id === "metapi.get_checkin_logs")).toBe(true);
     expect(tools.some((tool) => tool.id === "metapi.summarize_checkin_logs")).toBe(true);
+    expect(tools.some((tool) => tool.id === "metapi.list_model_marketplace_sites")).toBe(true);
 
     const playbooks = getSkillPlaybooks();
     expect(playbooks.some((playbook) => playbook.id === "register_relay_site")).toBe(true);
+    expect(playbooks.some((playbook) => playbook.id === "query_model_marketplace_sites")).toBe(true);
     expect(playbooks.some((playbook) => playbook.id === "start_all_checkin")).toBe(true);
     expect(playbooks.some((playbook) => playbook.id === "repair_failed_checkin")).toBe(true);
 
     expect(getSkillToolExecutor("metapi.list_sites")).toEqual(expect.any(Function));
     expect(getSkillToolExecutor("metapi_list_sites")).toEqual(expect.any(Function));
+    expect(getSkillToolExecutor("metapi.list_model_marketplace_sites")).toEqual(expect.any(Function));
+    expect(getSkillToolExecutor("metapi_list_model_marketplace_sites")).toEqual(expect.any(Function));
   });
 
   it("exposes loader diagnostics and supports explicit rescan", () => {

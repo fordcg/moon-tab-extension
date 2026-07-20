@@ -14,6 +14,8 @@ import {
   METAPI_GET_CHECKIN_LOGS_TOOL_NAME,
   METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_ID,
   METAPI_LIST_BROWSER_CHECKIN_RESULTS_TOOL_NAME,
+  METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_ID,
+  METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_NAME,
   METAPI_LIST_SITES_TOOL_ID,
   METAPI_LIST_SITES_TOOL_NAME,
   METAPI_PARSE_REGISTER_ARGS_TOOL_ID,
@@ -92,6 +94,45 @@ export const METAPI_OPS_TOOLS: SkillToolDefinition[] = [
         },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_ID,
+    name: METAPI_LIST_MODEL_MARKETPLACE_SITES_TOOL_NAME,
+    groupId: SYSTEM_GROUP_ID,
+    displayName: "查询模型可用站点",
+    description:
+      "调用 GET /api/models/marketplace 拉取全量模型市场，并在本地查询某个模型在哪些站点/渠道可用。由于当前 Metapi 没有精确查询 API，工具会优先精确匹配，必要时返回模糊候选并标明置信度。",
+    toolClassification: { runtime: "local", capabilities: ["deliver_result"], risk: "low" },
+    parameters: {
+      type: "object",
+      properties: {
+        model: {
+          type: "string",
+          description: "要查询的模型 ID 或名称，例如 gpt-4o、claude-3-5-sonnet。",
+        },
+        matchMode: {
+          type: "string",
+          enum: ["auto", "exact", "fuzzy"],
+          description: "匹配模式：auto 默认先 exact，未命中再 fuzzy；exact 只返回精确匹配；fuzzy 只返回模糊候选。",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 100,
+          description: "返回站点/候选上限，默认 20。",
+        },
+        includeRawMatches: {
+          type: "boolean",
+          description: "是否返回少量脱敏原始匹配行，默认 false。",
+        },
+        refresh: {
+          type: "boolean",
+          description: "是否跳过短期缓存，强制重新请求 marketplace。默认 false。",
+        },
+      },
+      required: ["model"],
       additionalProperties: false,
     },
   },
