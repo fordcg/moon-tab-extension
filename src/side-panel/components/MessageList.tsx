@@ -145,6 +145,28 @@ export function MessageList({
     () => createDisplayAttachmentGroups(messages, toolCallDisplayMode),
     [messages, toolCallDisplayMode],
   );
+  // Only keep the bottom "正在思考" placeholder before the first visible stream tokens.
+  // Once the assistant bubble already has thinking/content, the placeholder looks misplaced.
+  const showThinkingPlaceholder = useMemo(() => {
+    if (!regenerating) {
+      return false;
+    }
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role !== "assistant") {
+        continue;
+      }
+      if (message.streaming && (message.content.trim() || message.thinking?.trim())) {
+        return false;
+      }
+      // A finished intermediate assistant bubble with visible text means output is already on screen.
+      if (message.assistantMessageKind !== "tool_call_turn" && message.content.trim()) {
+        return false;
+      }
+      break;
+    }
+    return true;
+  }, [messages, regenerating]);
 
   useModalDialogFocus({
     dialogRef: previewDialogRef,
@@ -342,7 +364,7 @@ export function MessageList({
 
   return (
     <div className="message-list-shell">
-      <section aria-label="消息列表" className={regenerating ? "message-list message-list-thinking" : "message-list"} ref={messageListRef} onScroll={handleMessageListScroll}>
+      <section aria-label="消息列表" className={showThinkingPlaceholder ? "message-list message-list-thinking" : "message-list"} ref={messageListRef} onScroll={handleMessageListScroll}>
         {messages.map((message) => {
           const isToolCallTurn = message.role === "assistant" && message.assistantMessageKind === "tool_call_turn";
           const toolCallRecords = message.toolCallRecords ?? [];
@@ -581,7 +603,7 @@ export function MessageList({
           </div>
         );
         })}
-        {regenerating ? (
+        {showThinkingPlaceholder ? (
           <div className="sidepanel-thinking" role="status" aria-live="polite" aria-atomic="true" aria-label="正在思考">
             <span className="sidepanel-thinking-dots" aria-hidden="true" />
             <span className="sidepanel-thinking-text">正在思考</span>
