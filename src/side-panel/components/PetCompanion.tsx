@@ -340,11 +340,10 @@ export function PetCompanion() {
 
   const restorePet = () => {
     setPetVisible(true);
-    void globalThis.chrome?.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true });
+    void globalThis.chrome?.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true }).catch(() => undefined);
   };
 
-  // No bottom status chip. Only a restore entry when the page pet was exited,
-  // plus the optional usage panel.
+  // No bottom status chip. Restore entry sits top-right when the page pet is hidden.
   return (
     <>
       {!petVisible ? (

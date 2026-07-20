@@ -102,12 +102,15 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
     },
     hide() {
       petVisible = false;
-      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: false });
+      hideMenu();
+      hideComposer();
+      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: false }).catch(() => undefined);
+      // Also clear any local host immediately so exit is not delayed by storage lag.
       renderPagePet();
     },
     show() {
       petVisible = true;
-      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true });
+      void chrome.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true }).catch(() => undefined);
       renderPagePet();
     },
     destroy() {
@@ -164,7 +167,15 @@ export function mountFloatingPetCompanion(options: MountOptions = {}): FloatingP
         renderPagePet();
       }
       if (areaName === "local" && changes[PET_VISIBLE_STORAGE_KEY]) {
-        petVisible = changes[PET_VISIBLE_STORAGE_KEY].newValue !== false;
+        const nextVisible = changes[PET_VISIBLE_STORAGE_KEY].newValue !== false;
+        if (nextVisible === petVisible) {
+          return;
+        }
+        petVisible = nextVisible;
+        if (!petVisible) {
+          hideMenu();
+          hideComposer();
+        }
         renderPagePet();
       }
     };
