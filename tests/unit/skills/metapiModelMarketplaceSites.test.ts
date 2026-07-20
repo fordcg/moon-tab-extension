@@ -139,6 +139,51 @@ describe("metapi model marketplace site lookup", () => {
     ]);
   });
 
+  it("支持真实 Metapi models -> accounts[].site 的 marketplace 结构", async () => {
+    const marketplace = {
+      models: [
+        {
+          name: "grok-4.20-multi-agent-xhigh",
+          accountCount: 2,
+          tokenCount: 1,
+          accounts: [
+            { id: 34, site: "chy（qwen nsfw或kimi）", username: "Ycgg", latency: 1419, tokens: [{ id: 39, name: "default" }] },
+            { id: 64, site: "grok和glm5.2", username: "Ycgg", latency: 1121, tokens: [] },
+          ],
+        },
+      ],
+      meta: { refreshRequested: false },
+    };
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(marketplace),
+    });
+
+    await configureMetapi(fetcher);
+    const result = await executeSkillTool(
+      {
+        id: "marketplace-models-accounts",
+        name: "metapi_list_model_marketplace_sites",
+        arguments: { model: "grok-4.20-multi-agent-xhigh", refresh: true },
+      },
+      fetcher as unknown as typeof fetch,
+      "metapi.list_model_marketplace_sites",
+    );
+
+    expect(result?.isError).not.toBe(true);
+    const body = JSON.parse(String(result?.content ?? "{}"));
+    expect(body.matchStatus).toBe("exact");
+    expect(body.totalMarketplaceEntries).toBe(2);
+    expect(body.count).toBe(2);
+    expect(body.fetch.status).toBe(200);
+    expect(body.sites.map((item: { siteName: string }) => item.siteName).sort()).toEqual([
+      "chy（qwen nsfw或kimi）",
+      "grok和glm5.2",
+    ]);
+    expect(body.sites[0].matchedValues).toContain("grok-4.20-multi-agent-xhigh");
+  });
+
   it("默认复用短期 marketplace 缓存，refresh=true 可强制刷新", async () => {
     let responseIndex = 0;
     const responses = [
@@ -211,6 +256,40 @@ describe("metapi model marketplace site lookup", () => {
     expect(body.matchStatus).toBe("not_found");
     expect(body.count).toBe(0);
     expect(body.solutionForNoExactApi.join("\n")).toContain("GET /api/models/:modelId/sites");
+  });
+
+  it("marketplace 成功但解析为空时返回脱敏响应摘要", async () => {
+    const marketplace = {
+      models: [],
+      meta: { refreshRequested: false },
+      authToken: "should-not-leak",
+    };
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(marketplace),
+    });
+
+    await configureMetapi(fetcher);
+    const result = await executeSkillTool(
+      {
+        id: "marketplace-empty-summary",
+        name: "metapi_list_model_marketplace_sites",
+        arguments: { model: "gpt-4o", refresh: true },
+      },
+      fetcher as unknown as typeof fetch,
+      "metapi.list_model_marketplace_sites",
+    );
+
+    expect(result?.isError).not.toBe(true);
+    const body = JSON.parse(String(result?.content ?? "{}"));
+    expect(body.totalMarketplaceEntries).toBe(0);
+    expect(body.fetch.status).toBe(200);
+    expect(body.marketplaceResponseSummary.topLevelKeys).toEqual(["models", "meta", "authToken"]);
+    expect(body.marketplaceResponseSummary.containers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "$.models", type: "array", length: 0 }),
+    ]));
+    expect(body.marketplaceResponseSummary.sample.authToken).toBe("[redacted]");
   });
 
   it("marketplace 接口失败时返回中文错误", async () => {

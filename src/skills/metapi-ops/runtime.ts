@@ -97,6 +97,23 @@ type MarketplaceCache = {
   key: string;
   fetchedAt: number;
   data: unknown;
+  status?: number;
+};
+
+type MarketplaceResponseContainerSummary = {
+  path: string;
+  type: "array" | "object";
+  length?: number;
+  keys?: string[];
+};
+
+type MarketplaceResponseSummary = {
+  type: string;
+  note: string;
+  topLevelArrayLength?: number;
+  topLevelKeys?: string[];
+  containers: MarketplaceResponseContainerSummary[];
+  sample: unknown;
 };
 
 const MARKETPLACE_CACHE_TTL_MS = 60_000;
@@ -264,8 +281,12 @@ async function listModelMarketplaceSites(toolCall: ModelToolCall, fetcher: typeo
           raw: sanitizeMarketplaceRaw(item.raw),
         }))
       : undefined,
+    marketplaceResponseSummary: entries.length === 0
+      ? summarizeMarketplaceResponse(fetched.data)
+      : undefined,
     fetch: {
       fromCache: fetched.fromCache,
+      status: fetched.status ?? null,
       cacheAgeSeconds: fetched.cacheAgeSeconds,
       cacheTtlSeconds: MARKETPLACE_CACHE_TTL_MS / 1000,
     },
@@ -293,7 +314,7 @@ async function fetchModelMarketplace(
   fetcher: typeof fetch,
   refresh: boolean,
 ): Promise<
-  | { ok: true; data: unknown; fromCache: boolean; cacheAgeSeconds: number }
+  | { ok: true; data: unknown; fromCache: boolean; cacheAgeSeconds: number; status?: number }
   | { ok: false; message: string; detail?: unknown }
 > {
   const cacheKey = `${settings.baseUrl}\0${settings.authToken}`;
@@ -303,6 +324,7 @@ async function fetchModelMarketplace(
       ok: true,
       data: marketplaceCache.data,
       fromCache: true,
+      status: marketplaceCache.status,
       cacheAgeSeconds: Math.max(0, Math.round((now - marketplaceCache.fetchedAt) / 1000)),
     };
   }
@@ -320,14 +342,119 @@ async function fetchModelMarketplace(
     key: cacheKey,
     fetchedAt: now,
     data: result.data,
+    status: typeof result.status === "number" ? result.status : undefined,
   };
-  return { ok: true, data: result.data, fromCache: false, cacheAgeSeconds: 0 };
+  return {
+    ok: true,
+    data: result.data,
+    fromCache: false,
+    status: typeof result.status === "number" ? result.status : undefined,
+    cacheAgeSeconds: 0,
+  };
 }
 
 function extractMarketplaceEntries(data: unknown): MarketplaceEntry[] {
   const entries: MarketplaceEntry[] = [];
   visitMarketplaceValue(data, [], createMarketplaceContext(), entries);
   return dedupeMarketplaceEntries(entries);
+}
+
+function summarizeMarketplaceResponse(data: unknown): MarketplaceResponseSummary {
+  const summary: MarketplaceResponseSummary = {
+    type: describeMarketplaceValueType(data),
+    note: "marketplace 请求 HTTP 成功，但本地解析器未识别到同时包含模型和站点上下文的条目。",
+    containers: collectMarketplaceContainerSummaries(data),
+    sample: summarizeMarketplaceSample(data),
+  };
+  if (Array.isArray(data)) {
+    summary.topLevelArrayLength = data.length;
+  } else if (data && typeof data === "object") {
+    summary.topLevelKeys = Object.keys(data as Record<string, unknown>).slice(0, 30);
+  }
+  return summary;
+}
+
+function describeMarketplaceValueType(value: unknown): string {
+  if (Array.isArray(value)) {
+    return "array";
+  }
+  if (value === null) {
+    return "null";
+  }
+  return typeof value;
+}
+
+function collectMarketplaceContainerSummaries(data: unknown): MarketplaceResponseContainerSummary[] {
+  const summaries: MarketplaceResponseContainerSummary[] = [];
+  visitMarketplaceSummaryContainer(data, "$", 0, summaries);
+  return summaries;
+}
+
+function visitMarketplaceSummaryContainer(
+  value: unknown,
+  path: string,
+  depth: number,
+  summaries: MarketplaceResponseContainerSummary[],
+): void {
+  if (depth > 3 || summaries.length >= 12) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    summaries.push({ path, type: "array", length: value.length });
+    for (const [index, item] of value.slice(0, 3).entries()) {
+      visitMarketplaceSummaryContainer(item, `${path}.${index}`, depth + 1, summaries);
+      if (summaries.length >= 12) {
+        return;
+      }
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  const row = value as Record<string, unknown>;
+  if (path !== "$") {
+    summaries.push({ path, type: "object", keys: Object.keys(row).slice(0, 20) });
+  }
+  for (const [key, child] of Object.entries(row).slice(0, 20)) {
+    if (!child || (typeof child !== "object" && !Array.isArray(child))) {
+      continue;
+    }
+    visitMarketplaceSummaryContainer(child, `${path}.${key}`, depth + 1, summaries);
+    if (summaries.length >= 12) {
+      return;
+    }
+  }
+}
+
+function summarizeMarketplaceSample(value: unknown, depth = 0): unknown {
+  if (depth > 3) {
+    return "[truncated]";
+  }
+  if (Array.isArray(value)) {
+    return {
+      type: "array",
+      length: value.length,
+      sample: value.slice(0, 2).map((item) => summarizeMarketplaceSample(item, depth + 1)),
+    };
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string" && value.length > 300) {
+      return `${value.slice(0, 300)}...`;
+    }
+    return value;
+  }
+
+  const output: Record<string, unknown> = {};
+  const entries = Object.entries(value as Record<string, unknown>);
+  for (const [key, child] of entries.slice(0, 12)) {
+    output[key] = isSensitiveMetapiKey(key) ? "[redacted]" : summarizeMarketplaceSample(child, depth + 1);
+  }
+  if (entries.length > 12) {
+    output.__truncatedKeys = entries.length - 12;
+  }
+  return output;
 }
 
 function visitMarketplaceValue(
@@ -359,10 +486,24 @@ function visitMarketplaceValue(
     if (!child || (typeof child !== "object" && !Array.isArray(child))) {
       continue;
     }
+    if (isMarketplaceMetadataChildKey(key)) {
+      continue;
+    }
     const childPath = [...path, key];
     const childContext = applyMarketplaceMapKeyContext(context, key, child, path);
     visitMarketplaceValue(child, childPath, childContext, entries);
   }
+}
+
+function isMarketplaceMetadataChildKey(key: string): boolean {
+  return [
+    "tags",
+    "tokens",
+    "pricingSources",
+    "pricing_sources",
+    "supportedEndpointTypes",
+    "supported_endpoint_types",
+  ].includes(key);
 }
 
 function createMarketplaceContext(): MarketplaceTraversalContext {
@@ -452,7 +593,7 @@ function extractNamedModelContext(row: Record<string, unknown>): MarketplaceMode
 
 function extractDirectMarketplaceSiteContext(row: Record<string, unknown>, path: string[]): MarketplaceSiteContext {
   const siteId = firstString(...collectStringsFromKeys(row, ["siteId", "site_id", "providerId", "provider_id", "channelId", "channel_id"]));
-  const siteName = firstString(...collectStringsFromKeys(row, ["siteName", "site_name", "providerName", "provider_name", "channelName", "channel_name"]));
+  const siteName = firstString(...collectStringsFromKeys(row, ["siteName", "site_name", "site", "providerName", "provider_name", "channelName", "channel_name"]));
   const siteUrl = firstString(...collectStringsFromKeys(row, ["siteUrl", "site_url", "siteOrigin", "site_origin", "origin", "domain", "host"]));
   const provider = firstString(...collectStringsFromKeys(row, ["provider", "providerCode", "provider_code", "source", "vendor"]));
   const platform = firstString(...collectStringsFromKeys(row, ["platform", "sitePlatform", "site_platform"]));
@@ -506,7 +647,7 @@ function isMarketplaceSiteLikeObject(row: Record<string, unknown>, path: string[
     return true;
   }
   const pathHint = lastNamedPathSegment(path);
-  if (["site", "sites", "provider", "providers", "channel", "channels"].includes(pathHint)) {
+  if (["site", "sites", "account", "accounts", "provider", "providers", "channel", "channels"].includes(pathHint)) {
     return true;
   }
   return Boolean(row.models || row.modelList || row.model_list) && hasAnyKey(row, ["url", "baseUrl", "base_url", "origin", "domain", "host", "name"]);
@@ -842,13 +983,17 @@ function sanitizeMarketplaceRaw(value: unknown, depth = 0): unknown {
   }
   const output: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (/(token|secret|password|cookie|authorization|apikey|api_key|accesskey|access_key)/i.test(key)) {
+    if (isSensitiveMetapiKey(key)) {
       output[key] = "[redacted]";
     } else {
       output[key] = sanitizeMarketplaceRaw(child, depth + 1);
     }
   }
   return output;
+}
+
+function isSensitiveMetapiKey(key: string): boolean {
+  return /(token|secret|password|cookie|authorization|apikey|api_key|accesskey|access_key)/i.test(key);
 }
 
 async function detectSite(toolCall: ModelToolCall, fetcher: typeof fetch): Promise<ModelToolResult> {
