@@ -1809,7 +1809,7 @@ describe("App", () => {
 
     expect(updateChatPreferences).toHaveBeenCalledWith({ enabledToolIds: ["browser.take_snapshot"] });
   });
-  it("MCP 设置页可以新增 Server 并通过工具列表按钮展开已发现工具", async () => {
+  it("工具和 MCP 页隐藏外部 Server 管理但保留已配置远程工具", async () => {
     const user = userEvent.setup();
     const updateChatPreferences = vi.fn(async () => undefined);
     registeredModelToolsMock.tools = [
@@ -1861,21 +1861,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
     expect(await screen.findByRole("heading", { name: "工具和 MCP" })).toBeInTheDocument();
-    expect(screen.getByText("MySQL")).toBeInTheDocument();
-    expect(screen.queryByText("query")).not.toBeInTheDocument();
-
-    const toggleButton = screen.getByRole("button", { name: "工具列表" });
-    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
-    await user.click(toggleButton);
-    expect(toggleButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("region", { name: "MySQL 工具列表" })).toBeInTheDocument();
-    expect(screen.getByText("query")).toBeInTheDocument();
-    expect(screen.getByText("执行 SQL 查询")).toBeInTheDocument();
-    expect(screen.getByTitle("query · 执行 SQL 查询")).toBeInTheDocument();
-
-    await user.click(toggleButton);
-    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("region", { name: "MySQL 工具列表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "MCP Server 管理" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MCP Server 名称")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MCP Server 地址")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MCP Bearer Token")).not.toBeInTheDocument();
+    expect(screen.queryByText("MySQL")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
     await user.selectOptions(await screen.findByRole("combobox", { name: "工具运行要求筛选" }), "mcp_remote");
@@ -1961,114 +1951,6 @@ describe("App", () => {
     expect(await screen.findByText("内置工具健康")).toBeInTheDocument();
     expect(screen.getByText("Network 请求列表")).toBeInTheDocument();
     expect(screen.getByText("浏览器控制未开启。")).toBeInTheDocument();
-  });
-
-  it("MCP 设置页可以在 Server 列表中禁用远程工具注册", async () => {
-    const user = userEvent.setup();
-    registeredModelToolsMock.tools = [
-      {
-        id: "mcp.mysql.query",
-        name: "mcp_mysql_query",
-        displayName: "MySQL.query",
-        description: "执行 SQL 查询",
-        groupId: "mcp_remote",
-        parameters: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] },
-        toolClassification: { runtime: "mcp_remote", capabilities: ["call_remote_tool"], risk: "medium" },
-      },
-    ];
-    await saveAppSetting({
-      key: MCP_SETTINGS_KEY,
-      value: {
-        servers: [
-          {
-            id: "mysql",
-            name: "MySQL",
-            endpointUrl: "http://127.0.0.1:3000/mcp",
-            enabled: true,
-            tools: [
-              {
-                name: "query",
-                description: "执行 SQL 查询",
-                inputSchema: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] },
-              },
-            ],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      },
-      updatedAt: 1,
-    });
-    await saveAppSetting({
-      key: "chatPreferences",
-      value: {
-        ...useAppStore.getState().chatPreferences,
-        toolCallingEnabled: true,
-        enabledToolIds: ["mcp.mysql.query"],
-      },
-      updatedAt: 1,
-    });
-    await useAppStore.getState().loadChannelConfig();
-
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
-
-    expect(screen.getByRole("checkbox", { name: "禁用 MCP Server MySQL" })).toBeChecked();
-    const serverCard = screen.getByText("MySQL").closest(".mcp-server-card");
-    expect(serverCard).not.toBeNull();
-    expect(within(serverCard as HTMLElement).getByRole("button", { name: "刷新工具" })).toBeEnabled();
-
-    await user.click(screen.getByRole("checkbox", { name: "禁用 MCP Server MySQL" }));
-
-    await waitFor(() => expect(screen.getByRole("checkbox", { name: "启用 MCP Server MySQL" })).not.toBeChecked());
-    expect(screen.getByText("状态：已禁用 · 已发现工具：1")).toBeInTheDocument();
-    expect(within(serverCard as HTMLElement).getByRole("button", { name: "刷新工具" })).toBeDisabled();
-    await expect(getAppSetting("chatPreferences")).resolves.toMatchObject({ enabledToolIds: [] });
-
-    registeredModelToolsMock.tools = [];
-    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "工具运行要求筛选" }), "mcp_remote");
-
-    expect(screen.queryByRole("checkbox", { name: "启用工具 MySQL.query" })).not.toBeInTheDocument();
-  });
-
-  it("MCP 设置页删除 Server 需要二次确认", async () => {
-    const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
-    await saveAppSetting({
-      key: MCP_SETTINGS_KEY,
-      value: {
-        servers: [
-          {
-            id: "mysql",
-            name: "MySQL",
-            endpointUrl: "http://127.0.0.1:3000/mcp",
-            enabled: true,
-            tools: [],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      },
-      updatedAt: 1,
-    });
-    await useAppStore.getState().loadChannelConfig();
-
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("tab", { name: "工具和 MCP" }));
-
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("MySQL")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
-    await waitFor(() => expect(screen.queryByText("MySQL")).not.toBeInTheDocument());
-    confirmSpy.mockRestore();
   });
 
   it("聊天偏好可以保存工具调用展示方式", async () => {

@@ -3,15 +3,6 @@ import type { ModelToolAvailabilityStatus } from "../../../shared/models/types";
 import type { McpServerConfig } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { sendRuntimeMessage } from "../../state/runtimeMessage";
-import { useComposedTextInput } from "../useComposedTextInput";
-
-interface McpServerDraft {
-  id?: string;
-  name: string;
-  endpointUrl: string;
-  bearerToken: string;
-  enabled: boolean;
-}
 
 interface BuiltInToolHealth {
   id: string;
@@ -44,13 +35,6 @@ interface AgentToolsStatusResponse {
   tools?: unknown[];
 }
 
-const EMPTY_DRAFT: McpServerDraft = {
-  name: "",
-  endpointUrl: "",
-  bearerToken: "",
-  enabled: true,
-};
-
 const GROK_PRESET_SERVER_ID = "grok-search-127-0-0-1-17333";
 const GROK_PRESET_ENDPOINT_URL = "http://127.0.0.1:17333/";
 const DEFAULT_GROK_API_BASE_URL = "https://api.x.ai/v1";
@@ -58,15 +42,7 @@ const DEFAULT_GROK_MODEL = "grok-4.20-multi-agent-xhigh";
 
 export function McpToolSettings() {
   const mcpSettings = useAppStore((state) => state.mcpSettings);
-  const mcpBearerTokens = useAppStore((state) => state.mcpBearerTokens);
   const loadChannelConfig = useAppStore((state) => state.loadChannelConfig);
-  const updateMcpServer = useAppStore((state) => state.updateMcpServer);
-  const setMcpServerEnabled = useAppStore((state) => state.setMcpServerEnabled);
-  const deleteMcpServer = useAppStore((state) => state.deleteMcpServer);
-  const refreshMcpServerTools = useAppStore((state) => state.refreshMcpServerTools);
-  const [draft, setDraft] = useState<McpServerDraft>(EMPTY_DRAFT);
-  const [message, setMessage] = useState("");
-  const [expandedToolServerIds, setExpandedToolServerIds] = useState<string[]>([]);
   const [builtInTools, setBuiltInTools] = useState<BuiltInToolHealth[]>([]);
   const [status, setStatus] = useState<AgentToolsStatusResponse>({});
   const [statusLoading, setStatusLoading] = useState(true);
@@ -75,9 +51,6 @@ export function McpToolSettings() {
   const [grokModelInput, setGrokModelInput] = useState(DEFAULT_GROK_MODEL);
   const [grokEnabled, setGrokEnabled] = useState(false);
   const [grokBusy, setGrokBusy] = useState(false);
-  const nameInput = useComposedTextInput(draft.name, (name) => setDraft((current) => ({ ...current, name })));
-  const endpointInput = useComposedTextInput(draft.endpointUrl, (endpointUrl) => setDraft((current) => ({ ...current, endpointUrl })));
-  const tokenInput = useComposedTextInput(draft.bearerToken, (bearerToken) => setDraft((current) => ({ ...current, bearerToken })));
   const unavailableBuiltInTools = builtInTools.filter((tool) => tool.availability && !tool.availability.available);
   const statusServers = useMemo(() => normalizeArray(status.settings?.mcp?.servers), [status.settings?.mcp?.servers]);
   const auditLog = useMemo(() => normalizeArray(status.auditLog), [status.auditLog]);
@@ -141,46 +114,6 @@ export function McpToolSettings() {
     setGrokEnabled(grokServer ? getBoolean(grokServer, "enabled", true) : getBoolean(status.settings?.mcp, "enabled", false));
   }, [grokServer, status.settings?.mcp, statusLoading]);
 
-  const editServer = (server: McpServerConfig) => {
-    setDraft({
-      id: server.id,
-      name: server.name,
-      endpointUrl: server.endpointUrl,
-      bearerToken: mcpBearerTokens[server.id] ?? "",
-      enabled: server.enabled,
-    });
-    setMessage("");
-  };
-  const saveDraft = async () => {
-    const result = await updateMcpServer(draft.id, draft);
-    if (!result.ok) {
-      setMessage(result.message);
-      return;
-    }
-
-    setDraft(EMPTY_DRAFT);
-    setMessage("MCP Server 已保存");
-    await loadStatus();
-  };
-  const handleDeleteServer = async (serverId: string) => {
-    if (!window.confirm("确认删除这个 MCP Server 吗？")) {
-      return;
-    }
-
-    await deleteMcpServer(serverId);
-    setMessage("");
-    await loadStatus();
-  };
-  const toggleToolList = (serverId: string) => {
-    setExpandedToolServerIds((current) =>
-      current.includes(serverId) ? current.filter((id) => id !== serverId) : [...current, serverId],
-    );
-  };
-  const toggleServerEnabled = async (server: McpServerConfig, enabled: boolean) => {
-    await setMcpServerEnabled(server.id, enabled);
-    setMessage(enabled ? "MCP Server 已启用" : "MCP Server 已禁用");
-    await loadStatus();
-  };
   const saveGrokConfig = async (clearGrokApiKey = false) => {
     setGrokBusy(true);
     const mcpConfig: Record<string, unknown> = {
@@ -216,21 +149,10 @@ export function McpToolSettings() {
     await reloadChatRuntimeConfig();
     setGrokBusy(false);
   };
-  const addGrokPreset = async () => {
-    if (grokServer) {
-      return;
-    }
-    setGrokBusy(true);
-    await configureGrokPreset(statusServers.length > 0 ? statusServers : mcpSettings.servers);
-    await loadStatus();
-    await reloadChatRuntimeConfig();
-    setGrokBusy(false);
-  };
-
   return (
     <section className="grid w-full gap-4" aria-label="工具和 MCP">
       <h3 className="text-base font-semibold">工具和 MCP</h3>
-      <p className="ui-muted text-xs">管理 MCP Server、Grok 搜索预设和最近工具调用。模型可调用的工具总开关仍在“聊天偏好”。</p>
+      <p className="ui-muted text-xs">查看工具状态、Grok 搜索预设和最近工具调用。模型可调用的工具总开关仍在“聊天偏好”。</p>
 
       <div className="sidepanel-agent-tools-status-row mcp-tools-status-row">
         <span className={["sidepanel-agent-tools-status", statusTone].filter(Boolean).join(" ")}>{statusLoading ? "读取中" : statusLabel}</span>
@@ -254,144 +176,6 @@ export function McpToolSettings() {
           )}
         </section>
       ) : null}
-
-      <section className="grid gap-3" aria-label="MCP Server 管理">
-        <h4 className="text-sm font-semibold">MCP Server</h4>
-        <p className="ui-muted text-xs">MVP 仅支持 HTTP/Streamable HTTP MCP Tools。启用 Server 后，可在聊天偏好中选择具体工具。</p>
-        <div className="grid gap-3">
-          <label className="grid gap-1 text-sm">
-            名称
-            <input className="ui-input" aria-label="MCP Server 名称" {...nameInput} />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Endpoint URL
-            <input className="ui-input" aria-label="MCP Server 地址" placeholder="http://127.0.0.1:3000/mcp" {...endpointInput} />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Bearer Token
-            <input className="ui-input" aria-label="MCP Bearer Token" type="password" {...tokenInput} />
-          </label>
-          <label className="chat-preference-switch">
-            <input
-              className="chat-preference-switch-input"
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
-            />
-            <span className="chat-preference-switch-control" aria-hidden="true">
-              <span className="chat-preference-switch-thumb" />
-            </span>
-            <span className="chat-preference-switch-label">启用 MCP Server</span>
-          </label>
-          <div className="chat-preference-tool-bulk-actions">
-            <button className="ui-button-primary" type="button" onClick={() => void saveDraft()}>
-              {draft.id ? "保存 MCP Server" : "新增 MCP Server"}
-            </button>
-            {draft.id ? (
-              <button className="ui-button-secondary" type="button" onClick={() => setDraft(EMPTY_DRAFT)}>
-                取消编辑
-              </button>
-            ) : null}
-            <button
-              className="ui-button-secondary"
-              type="button"
-              disabled={Boolean(grokServer) || grokBusy}
-              title={grokServer ? "Grok 搜索预设已添加" : "一键添加本地 Grok Search MCP Bridge（http://127.0.0.1:17333/）"}
-              onClick={() => void addGrokPreset()}
-            >
-              {grokServer ? "Grok 搜索预设已添加" : "添加 Grok 搜索预设"}
-            </button>
-            <button className="ui-button-secondary" type="button" disabled={grokBusy} onClick={() => void refreshGrokTools()}>
-              刷新工具
-            </button>
-          </div>
-          {!grokServer ? (
-            <p className="ui-muted text-xs">
-              首次接入时点“添加 Grok 搜索预设”。本地 Bridge 需先启动（默认 http://127.0.0.1:17333/），再填 API Key 并保存。
-            </p>
-          ) : null}
-          {message ? <p className="text-sm text-[var(--color-warning)]">{message}</p> : null}
-        </div>
-        <div className="chat-preference-tool-group-list">
-          {mcpSettings.servers.length === 0 ? <p className="ui-muted text-xs">暂无 MCP Server</p> : null}
-          {mcpSettings.servers.map((server) => {
-            const toolListExpanded = expandedToolServerIds.includes(server.id);
-            return (
-              <article key={server.id} className="mcp-server-card">
-                <div className="mcp-server-card-header">
-                  <div className="mcp-server-card-title-block">
-                    <div className="chat-preference-tool-group-title">{server.name}</div>
-                    <p className="ui-muted text-xs">{server.endpointUrl}</p>
-                    {server.lastRefreshError ? <p className="text-xs text-[var(--color-error)]">{server.lastRefreshError}</p> : null}
-                    <p className="ui-muted text-xs">
-                      状态：{server.enabled ? "已启用" : "已禁用"} · 已发现工具：{server.tools.length}
-                    </p>
-                  </div>
-                  <div className="chat-preference-tool-bulk-actions">
-                    <label
-                      className="chat-preference-switch"
-                      title={server.enabled ? "禁用后不会向模型注册该 MCP Server 的远程工具" : "启用后会重新注册该 MCP Server 的缓存工具"}
-                    >
-                      <input
-                        className="chat-preference-switch-input"
-                        type="checkbox"
-                        aria-label={`${server.enabled ? "禁用" : "启用"} MCP Server ${server.name}`}
-                        checked={server.enabled}
-                        onChange={(event) => void toggleServerEnabled(server, event.target.checked)}
-                      />
-                      <span className="chat-preference-switch-control" aria-hidden="true">
-                        <span className="chat-preference-switch-thumb" />
-                      </span>
-                      <span className="chat-preference-switch-label">{server.enabled ? "已启用" : "已禁用"}</span>
-                    </label>
-                    <button className="ui-button-secondary" type="button" onClick={() => editServer(server)}>
-                      编辑
-                    </button>
-                    <button
-                      className="ui-button-secondary"
-                      type="button"
-                      disabled={!server.enabled}
-                      onClick={() => void refreshMcpServerTools(server.id).then(loadStatus)}
-                    >
-                      刷新工具
-                    </button>
-                    <button className="ui-button-secondary" type="button" onClick={() => void handleDeleteServer(server.id)}>
-                      删除
-                    </button>
-                    <button
-                      className="ui-button-secondary"
-                      type="button"
-                      aria-expanded={toolListExpanded}
-                      aria-controls={`mcp-tool-list-${server.id}`}
-                      onClick={() => toggleToolList(server.id)}
-                    >
-                      {toolListExpanded ? "收起工具列表" : "工具列表"}
-                    </button>
-                  </div>
-                </div>
-                {toolListExpanded ? (
-                  <section id={`mcp-tool-list-${server.id}`} className="mcp-server-tool-list" aria-label={`${server.name} 工具列表`}>
-                    {server.tools.length > 0 ? (
-                      server.tools.map((tool) => (
-                        <div
-                          key={tool.name}
-                          className="mcp-server-tool-item"
-                          title={tool.description ? `${tool.name} · ${tool.description}` : tool.name}
-                        >
-                          <span className="mcp-server-tool-item-title">{tool.name}</span>
-                          {tool.description ? <span className="mcp-server-tool-item-description">{tool.description}</span> : null}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="ui-muted text-xs">暂无已发现工具</p>
-                    )}
-                  </section>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </section>
 
       <section className="grid gap-3" aria-label="最近工具调用">
         <h4 className="text-sm font-semibold">最近工具调用</h4>
@@ -476,7 +260,11 @@ export function McpToolSettings() {
             onChange={(event) => setGrokModelInput(event.target.value)}
           />
         </label>
-        <p className="ui-muted text-xs">{`本地 Bridge 固定使用 ${bridgeBaseUrl}。留空保存不会改动已保存 Key；只有“清除已保存 Key”会删除。`}</p>
+        <p className="ui-muted text-xs">
+          {grokServer
+            ? `本地 Bridge 固定使用 ${bridgeBaseUrl}。留空保存不会改动已保存 Key；只有“清除已保存 Key”会删除。`
+            : `保存并刷新会自动接入本地 Bridge（${bridgeBaseUrl}）。请先启动 Bridge，再填写 API Key。`}
+        </p>
         <div className="chat-preference-tool-bulk-actions">
           <button className="ui-button-primary" type="button" disabled={grokBusy} onClick={() => void saveGrokConfig()}>
             保存并刷新
@@ -537,20 +325,6 @@ function formatAuditArguments(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-async function configureGrokPreset(servers: unknown[]) {
-  const nextServers = upsertGrokPresetServer(servers, {
-    endpointUrl: GROK_PRESET_ENDPOINT_URL,
-    enabled: true,
-  });
-  await sendRuntimeMessage({
-    type: "agentTools.configureMcp",
-    mcp: {
-      servers: nextServers,
-      baseUrl: GROK_PRESET_ENDPOINT_URL,
-    },
-  });
 }
 
 function upsertGrokPresetServer(servers: unknown[], overrides: Record<string, unknown> = {}): unknown[] {

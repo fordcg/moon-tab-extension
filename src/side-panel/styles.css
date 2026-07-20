@@ -2125,20 +2125,6 @@ body {
     @apply flex w-full flex-wrap gap-2;
   }
 
-  .mcp-server-card {
-    @apply grid min-w-0 gap-3 overflow-hidden rounded-lg p-3;
-    background: var(--color-surface-soft);
-    border: 1px solid var(--color-hairline);
-  }
-
-  .mcp-server-card-header {
-    @apply grid min-w-0 gap-3;
-  }
-
-  .mcp-server-card-title-block {
-    @apply grid min-w-0 gap-1;
-  }
-
   .mcp-server-tool-list {
     @apply grid min-w-0 gap-2 pl-1;
   }
