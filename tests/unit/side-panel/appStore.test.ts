@@ -3584,6 +3584,72 @@ describe("appStore", () => {
     expect(activeSession.messages[1].reasoningContent).toBe("DeepSeek 工具调用思考原文");
   });
 
+  it("扩展上下文失效时流式连接不会抛出未捕获异常", async () => {
+    const provider = createProvider();
+    const model = createModel();
+    vi.stubGlobal("chrome", {
+      runtime: {
+        connect: vi.fn(() => {
+          throw new Error("Extension context invalidated.");
+        }),
+        sendMessage: vi.fn((_message: unknown, callback: (response: unknown) => void) => {
+          callback({ ok: true });
+          return undefined;
+        }),
+      },
+    });
+
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    disableDefaultToolCalling();
+
+    await expect(useAppStore.getState().sendChatMessage("测试失效上下文")).resolves.toBeUndefined();
+
+    expect(useAppStore.getState().failure?.message).toBe("扩展已更新，请重新打开侧边栏后重试");
+    expect(useAppStore.getState().sending).toBe(false);
+  });
+
+  it("扩展在流式首包发送前失效时会结束占位消息", async () => {
+    const provider = createProvider();
+    const model = createModel();
+    const port = {
+      postMessage: vi.fn(() => {
+        throw new Error("Extension context invalidated.");
+      }),
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn() },
+      onDisconnect: { addListener: vi.fn() },
+    };
+    vi.stubGlobal("chrome", {
+      runtime: {
+        connect: vi.fn(() => port),
+        sendMessage: vi.fn((_message: unknown, callback: (response: unknown) => void) => {
+          callback({ ok: true });
+          return undefined;
+        }),
+      },
+    });
+
+    await saveModelProvider(provider);
+    await saveProviderModel(model);
+    await useAppStore.getState().loadChannelConfig();
+    await useAppStore.getState().loadChatData();
+    disableDefaultToolCalling();
+
+    await useAppStore.getState().sendChatMessage("测试首包失效");
+
+    const activeSession = useAppStore.getState().chatSessions.find((session) => session.id === useAppStore.getState().activeSessionId);
+    expect(activeSession?.messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "扩展已更新，请重新打开侧边栏后重试",
+      streaming: false,
+    });
+    expect(useAppStore.getState().failure?.message).toBe("扩展已更新，请重新打开侧边栏后重试");
+    expect(port.disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it("流式端口返回明确错误时保留 background 错误原因", async () => {
     const provider = createProvider();
     const model = createModel();

@@ -9,6 +9,7 @@ import {
 import { normalizeSiteUrl, parseRegisterRelaySiteArgs } from "../../shared/metapiAdmin";
 import type { ChatImageAttachment, ChatPromptInvocation, ChatTokenUsage, SendShortcut, WorkflowTaskTemplate } from "../../shared/types";
 import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "../state/appStore";
+import { sendRuntimeMessage } from "../state/runtimeMessage";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
 import { PromptInlineEditor } from "./PromptInlineEditor";
@@ -1502,53 +1503,6 @@ function parseInlineRegisterRelayCommand(
     return undefined;
   }
   return { content: parsed.content };
-}
-
-function sendRuntimeMessage<T>(message: { type: string }): Promise<T | undefined> {
-  return new Promise((resolve, reject) => {
-    const runtime = globalThis.chrome?.runtime;
-    if (!runtime?.sendMessage) {
-      reject(new Error("Chrome runtime 不可用"));
-      return;
-    }
-
-    let settled = false;
-    const finish = (response: T | undefined) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(response);
-    };
-    const fail = (error: unknown) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      reject(error);
-    };
-
-    try {
-      // 真实 Chrome 扩展环境可能走 callback 形态；保留 Promise 兼容是为了适配测试环境和不同浏览器实现。
-      const maybePromise = runtime.sendMessage(message, (response: T) => {
-        const lastError = runtime.lastError;
-        if (lastError) {
-          fail(new Error(lastError.message));
-          return;
-        }
-
-        finish(response);
-      }) as Promise<T> | undefined;
-
-      if (maybePromise && typeof maybePromise.then === "function") {
-        void maybePromise.then(finish).catch(fail);
-      }
-    } catch (error) {
-      fail(error);
-    }
-  });
 }
 
 function isSendShortcut(event: ReactKeyboardEvent<HTMLElement>, shortcut: SendShortcut): boolean {

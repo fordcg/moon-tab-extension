@@ -13,6 +13,7 @@ import type {
 } from "../../shared/types";
 import type { AppChatSendMessage, AppState, ChatRetryProgress, StoreSetter } from "./appStore";
 import { upsertSession } from "./appStoreSessionUtils";
+import { resolveRuntimeErrorMessage } from "./runtimeMessage";
 
 const STREAM_FAILURE_MESSAGE = "流式响应异常中断，请重新生成后重试";
 const STREAM_CANCELED_MESSAGE = "已终止本次生成。";
@@ -163,8 +164,24 @@ async function createAssistantPlaceholder(input: AssistantPlaceholderInput): Pro
 }
 
 export async function sendStreamingChatMessage(input: StreamingChatInput): Promise<StreamingChatResult> {
-  if (!globalThis.chrome?.runtime?.connect) {
+  let runtime: typeof chrome.runtime | undefined;
+  try {
+    runtime = globalThis.chrome?.runtime;
+  } catch (error) {
+    reportStreamStartFailure(input, resolveRuntimeErrorMessage(error, STREAM_FAILURE_MESSAGE));
+    return { completed: true, failed: true };
+  }
+
+  if (!runtime?.connect) {
     return { completed: false };
+  }
+
+  let port: chrome.runtime.Port;
+  try {
+    port = runtime.connect({ name: "chat.stream" });
+  } catch (error) {
+    reportStreamStartFailure(input, resolveRuntimeErrorMessage(error, STREAM_FAILURE_MESSAGE));
+    return { completed: true, failed: true };
   }
 
   const usesTools = Boolean(input.request.enabledToolIds?.length);
@@ -176,7 +193,6 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
   }
 
   return new Promise<StreamingChatResult>((resolve) => {
-    const port = globalThis.chrome.runtime.connect({ name: "chat.stream" });
     let settled = false;
     let receivedFinalComplete = false;
     let receivedTerminalFailure = false;
@@ -193,7 +209,11 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
 
       settled = true;
       if (options.disconnect) {
-        port.disconnect();
+        try {
+          port.disconnect();
+        } catch {
+          // The extension may have been reloaded while this stream was active.
+        }
       }
       resolve(result);
     };
@@ -418,10 +438,22 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       }).then(() => finish({ completed: true, failed: true, unconsumedFollowUpIds: Array.from(pendingFollowUpIds) }, { disconnect: false }));
     });
 
-    port.postMessage({
-      type: "chat.stream.start",
-      payload: input.request,
-    });
+    try {
+      port.postMessage({
+        type: "chat.stream.start",
+        payload: input.request,
+      });
+    } catch (error) {
+      const failureMessage = resolveRuntimeErrorMessage(error, STREAM_FAILURE_MESSAGE);
+      reportStreamStartFailure(input, failureMessage);
+      void enqueueWrite(async () => {
+        const finalAssistantMessage = await ensureFinalAssistantMessage();
+        if (finalAssistantMessage) {
+          await failAssistantMessage(input.sessionId, finalAssistantMessage.id, failureMessage, input.set, input.privateMode);
+        }
+      }).then(() => finish({ completed: true, failed: true }));
+      return;
+    }
 
     // Bind abort/follow-up only after start is queued, so a stale pending abort cannot cancel
     // before the background handler has begun the request.
@@ -459,6 +491,12 @@ export async function sendStreamingChatMessage(input: StreamingChatInput): Promi
       }
     });
   });
+}
+
+function reportStreamStartFailure(input: StreamingChatInput, message: string): void {
+  if (input.shouldShowFailure?.() ?? true) {
+    input.set({ failure: { message } });
+  }
 }
 
 function previewTokenUsageEntriesInState(
