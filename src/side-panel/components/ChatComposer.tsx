@@ -128,6 +128,8 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
   const workflowMenuRef = useRef<HTMLDivElement | null>(null);
   const workflowMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  const chatInputShellRef = useRef<HTMLDivElement | null>(null);
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
   const sendShortcut = useAppStore((state) => state.chatPreferences.sendShortcut);
   const followUpBehavior = useAppStore((state) => state.chatPreferences.followUpBehavior);
@@ -207,6 +209,66 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [slashQuery, slashMenuOpen]);
 
   useEffect(() => {
+    if (!slashMenuOpen && !workflowMenuOpen && !toolShelfOpen && !modeMenuOpen) {
+      return undefined;
+    }
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setSlashMenuOpen(false);
+        setWorkflowMenuOpen(false);
+        setToolShelfOpen(false);
+        setModeMenuOpen(false);
+        return;
+      }
+
+      // Slash menu is tied to the input shell: keep it open while interacting there.
+      if (slashMenuOpen) {
+        if (slashMenuRef.current?.contains(target) || chatInputShellRef.current?.contains(target)) {
+          // still allow other menus to close when clicking into slash/input
+        } else {
+          setSlashMenuOpen(false);
+        }
+      }
+
+      if (workflowMenuOpen) {
+        if (!(workflowMenuRef.current?.contains(target) || workflowMenuButtonRef.current?.contains(target))) {
+          setWorkflowMenuOpen(false);
+        }
+      }
+
+      if (toolShelfOpen) {
+        if (!(target instanceof Element && target.closest(".composer-switches, .sidepanel-tools-toggle, .composer-mode-menu"))) {
+          setToolShelfOpen(false);
+          setModeMenuOpen(false);
+        }
+      } else if (modeMenuOpen) {
+        if (!(modeMenuRef.current?.contains(target) || modeMenuButtonRef.current?.contains(target))) {
+          setModeMenuOpen(false);
+        }
+      }
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      setSlashMenuOpen(false);
+      setWorkflowMenuOpen(false);
+      setToolShelfOpen(false);
+      setModeMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [modeMenuOpen, slashMenuOpen, toolShelfOpen, workflowMenuOpen]);
+
+  useEffect(() => {
     if (!contextDialogOpen) {
       return undefined;
     }
@@ -265,97 +327,14 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       return undefined;
     }
 
-    const closeOnPointerDown = (event: PointerEvent) => {
-      if (
-        modeMenuRef.current?.contains(event.target as Node) ||
-        modeMenuButtonRef.current?.contains(event.target as Node)
-      ) {
-        return;
-      }
-
-      setModeMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setModeMenuOpen(false);
-      }
-    };
-
     updateModeMenuPosition();
-    document.addEventListener("pointerdown", closeOnPointerDown);
-    document.addEventListener("keydown", closeOnEscape);
     window.addEventListener("resize", updateModeMenuPosition);
     window.addEventListener("scroll", updateModeMenuPosition, true);
     return () => {
-      document.removeEventListener("pointerdown", closeOnPointerDown);
-      document.removeEventListener("keydown", closeOnEscape);
       window.removeEventListener("resize", updateModeMenuPosition);
       window.removeEventListener("scroll", updateModeMenuPosition, true);
     };
   }, [modeMenuOpen]);
-
-  useEffect(() => {
-    if (!toolShelfOpen) {
-      return undefined;
-    }
-
-    const closeOnPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        setToolShelfOpen(false);
-        setModeMenuOpen(false);
-        return;
-      }
-      if (target instanceof Element && target.closest(".composer-switches, .sidepanel-tools-toggle, .composer-mode-menu")) {
-        return;
-      }
-
-      setToolShelfOpen(false);
-      setModeMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setToolShelfOpen(false);
-        setModeMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", closeOnPointerDown);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnPointerDown);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [toolShelfOpen]);
-
-  useEffect(() => {
-    if (!workflowMenuOpen) {
-      return undefined;
-    }
-
-    const closeOnPointerDown = (event: PointerEvent) => {
-      if (
-        workflowMenuRef.current?.contains(event.target as Node) ||
-        workflowMenuButtonRef.current?.contains(event.target as Node)
-      ) {
-        return;
-      }
-
-      setWorkflowMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setWorkflowMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", closeOnPointerDown);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnPointerDown);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [workflowMenuOpen]);
 
   const submit = async () => {
     let content = input.trim();
@@ -511,6 +490,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       return;
     }
 
+    // Slash menu and other composer popups are mutually exclusive.
+    setWorkflowMenuOpen(false);
+    setToolShelfOpen(false);
+    setModeMenuOpen(false);
+    setContextDialogOpen(false);
     setSlashMenuOpen(true);
     setSlashQuery(slashInfo.query);
     setSlashStartIndex(slashInfo.startIndex);
@@ -639,37 +623,49 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     });
   };
 
+  const closeComposerPopups = (except?: "slash" | "workflow" | "tools" | "mode" | "context") => {
+    if (except !== "slash") {
+      setSlashMenuOpen(false);
+    }
+    if (except !== "workflow") {
+      setWorkflowMenuOpen(false);
+    }
+    if (except !== "tools") {
+      setToolShelfOpen(false);
+    }
+    if (except !== "mode") {
+      setModeMenuOpen(false);
+    }
+    if (except !== "context") {
+      setContextDialogOpen(false);
+    }
+  };
+
   const toggleModeMenu = () => {
     if (!modeMenuOpen) {
-      setWorkflowMenuOpen(false);
+      closeComposerPopups("mode");
       updateModeMenuPosition();
     }
     setModeMenuOpen((value) => !value);
   };
 
   const toggleToolShelf = () => {
-    setModeMenuOpen(false);
-    setWorkflowMenuOpen(false);
-    setContextDialogOpen(false);
+    closeComposerPopups("tools");
     setToolShelfOpen((open) => !open);
   };
 
   const toggleWorkflowMenu = () => {
-    setToolShelfOpen(false);
-    setModeMenuOpen(false);
-    setContextDialogOpen(false);
+    closeComposerPopups("workflow");
     setWorkflowMenuOpen((value) => !value);
   };
 
   const toggleContextDialog = () => {
-    setToolShelfOpen(false);
-    setModeMenuOpen(false);
-    setWorkflowMenuOpen(false);
     if (contextDialogOpen) {
       setContextDialogOpen(false);
       return;
     }
 
+    closeComposerPopups("context");
     setContextDialogOpen(true);
     void loadContextTabs();
   };
@@ -845,7 +841,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       {pageContext.truncated ? <p className="text-sm text-[var(--color-warning)]">内容已截断，请细化 CSS/XPath</p> : null}
       {pageContext.error ? <p className="text-sm text-[var(--color-error)]">{pageContext.error}</p> : null}
       {attachmentError ? <p className="text-sm text-[var(--color-error)]">{attachmentError}</p> : null}
-      <div className="chat-input-shell">
+      <div className="chat-input-shell" ref={chatInputShellRef}>
         <input
           id={imageInputId}
           className="sr-only"
@@ -873,7 +869,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           }}
         />
         {slashMenuOpen ? (
-          <div className="slash-command-menu" role="listbox" aria-label="任务策略命令">
+          <div className="slash-command-menu" role="listbox" aria-label="任务策略命令" ref={slashMenuRef}>
             {filteredSkillPlaybooks.length > 0 ? (
               filteredSkillPlaybooks.map((playbook, index) => (
                 <button
