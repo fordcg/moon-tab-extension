@@ -1604,19 +1604,19 @@ body {
   }
 
   .prompt-token-link {
-    @apply inline-flex max-w-full items-center gap-1 truncate rounded-sm px-0.5 py-0 text-sm font-medium align-middle;
+    @apply inline-flex max-w-full items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-sm font-medium align-middle;
     display: inline-flex;
-    color: var(--color-link);
-    background: transparent;
+    color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 72%, white);
+    background: color-mix(in srgb, var(--sidepanel-blue-soft, #eef4ff) 88%, white);
     border: 0;
-    line-height: 1.4;
+    line-height: 1.25;
     pointer-events: auto;
   }
 
   .prompt-token-icon,
   .prompt-token-title {
-    @apply shrink-0 font-semibold;
-    color: var(--color-link);
+    @apply shrink-0 font-medium;
+    color: inherit;
   }
 
   .prompt-token-title {
