@@ -1608,23 +1608,26 @@ body {
   .prompt-inline-editor-text .prompt-token-link,
   .prompt-inline-editor-text .mention-token-link {
     display: inline-flex;
-    margin: 0 0.15em;
+    align-items: center;
+    margin: 0 0.2em;
     max-width: min(12rem, 70%);
-    vertical-align: baseline;
+    /* middle keeps capsule/body bottoms closer than baseline (favicon shifts baseline up) */
+    vertical-align: middle;
     user-select: none;
   }
 
   .prompt-token-link {
-    @apply inline-flex items-center rounded px-1 font-medium;
+    @apply inline-flex items-center rounded-md font-medium;
     display: inline-flex;
     width: fit-content;
     max-width: min(12rem, 70%);
     color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 68%, white);
     background: var(--sidepanel-blue-soft, #eef4ff);
     border: 0;
-    font-size: 0.75rem;
-    line-height: 1.125rem;
-    padding: 0.05rem 0.35rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    height: 1.375rem;
+    padding: 0 0.4rem;
     white-space: nowrap;
     pointer-events: auto;
   }
@@ -1633,6 +1636,8 @@ body {
   .prompt-token-title {
     @apply min-w-0 truncate font-medium;
     color: inherit;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .prompt-token-title {
@@ -1648,9 +1653,10 @@ body {
     border-radius: 999px;
     background: var(--sidepanel-blue-soft, #eef4ff);
     color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 72%, #1f2937);
-    font-size: 0.75rem;
-    line-height: 1.125rem;
-    padding: 0.05rem 0.35rem 0.05rem 0.2rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    height: 1.375rem;
+    padding: 0 0.4rem 0 0.2rem;
     white-space: nowrap;
     pointer-events: auto;
   }
@@ -1660,8 +1666,10 @@ body {
     border-radius: 999px;
     flex: 0 0 auto;
     height: 0.875rem;
-    object-fit: cover;
     width: 0.875rem;
+    object-fit: cover;
+    /* prevent image baseline from lifting the whole capsule */
+    display: block;
   }
 
   .mention-token-favicon[hidden] {
@@ -1671,7 +1679,8 @@ body {
   .mention-token-title {
     @apply min-w-0 truncate font-medium;
     color: inherit;
-    font-size: 0.8125rem;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .slash-command-menu {
