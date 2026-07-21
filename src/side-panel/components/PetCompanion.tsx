@@ -355,12 +355,13 @@ export function PetCompanion() {
           title="重新显示页面浮宠"
         >
           <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8.2 5.2 6.5 8.4" />
-            <path d="m15.8 5.2 1.7 3.2" />
-            <path d="M7 10.5c0-2.8 2.2-4.8 5-4.8s5 2 5 4.8v3.2c0 2.6-2.4 4.5-5 4.5s-5-1.9-5-4.5v-3.2Z" />
-            <path d="M9.6 12.2h.01" />
-            <path d="M14.4 12.2h.01" />
-            <path d="M10.2 15c.5.5 1.1.8 1.8.8s1.3-.3 1.8-.8" />
+            {/* Clean cat mark: upright ears + rounded head + simple face */}
+            <path d="M7.5 9.6 5.8 5.2 10.4 7.5" />
+            <path d="m16.5 9.6 1.7-4.4-4.6 2.3" />
+            <ellipse cx="12" cy="13.2" rx="5.4" ry="5" />
+            <circle cx="9.7" cy="12.6" r="0.85" />
+            <circle cx="14.3" cy="12.6" r="0.85" />
+            <path d="M10.4 15.2c.45.55 1 .85 1.6.85s1.15-.3 1.6-.85" />
           </svg>
         </button>
       ) : null}
