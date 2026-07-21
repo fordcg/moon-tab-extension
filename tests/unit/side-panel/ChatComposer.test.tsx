@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ChatComposer, removeSlashCommandSegment } from "../../../src/side-panel/components/ChatComposer";
+import {
+  ChatComposer,
+  removeSlashCommandSegment,
+  resolveComposerModeMenuPosition,
+} from "../../../src/side-panel/components/ChatComposer";
 import { useAppStore } from "../../../src/side-panel/state/appStore";
 
 describe("ChatComposer", () => {
@@ -16,6 +20,20 @@ describe("ChatComposer", () => {
     expect(removeSlashCommandSegment("前缀 /fengxian", 3)).toBe("前缀");
     // multi-arg register command keeps trailing args outside the slash token removal helper's old behavior
     expect(removeSlashCommandSegment("/风险 后续内容", 0)).toBe("后续内容");
+  });
+
+  it("模式菜单定位到触发按钮正上方而不是再上移一整屏高度", () => {
+    const position = resolveComposerModeMenuPosition({
+      triggerRect: { left: 24, top: 420, bottom: 456 },
+      viewportWidth: 400,
+      viewportHeight: 800,
+      menuWidth: 272,
+      menuHeight: 220,
+      gap: 8,
+      margin: 12,
+    });
+
+    expect(position).toEqual({ left: 24, top: 192 });
   });
 
   it("打开浏览器自动化模式菜单时保持工具架展开", async () => {

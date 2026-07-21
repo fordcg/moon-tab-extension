@@ -614,14 +614,13 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       return;
     }
 
-    const menuWidth = Math.min(window.innerWidth - 24, 272);
-    const menuHeight = Math.min(window.innerHeight - 24, 256);
-    const preferredLeft = rect.left;
-    const preferredTop = rect.top - 12;
-    setModeMenuPosition({
-      left: Math.max(12, Math.min(preferredLeft, window.innerWidth - menuWidth - 12)),
-      top: Math.max(12, Math.min(preferredTop, window.innerHeight - menuHeight - 12)),
-    });
+    setModeMenuPosition(
+      resolveComposerModeMenuPosition({
+        triggerRect: rect,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }),
+    );
   };
 
   const closeComposerPopups = (except?: "slash" | "workflow" | "tools" | "mode" | "context") => {
@@ -1360,6 +1359,34 @@ function findSlashCommand(value: string): { startIndex: number; query: string } 
   }
 
   return { startIndex, query };
+}
+
+export function resolveComposerModeMenuPosition(input: {
+  triggerRect: Pick<DOMRect, "left" | "top" | "bottom">;
+  viewportWidth: number;
+  viewportHeight: number;
+  menuWidth?: number;
+  menuHeight?: number;
+  gap?: number;
+  margin?: number;
+}): { left: number; top: number } {
+  const gap = input.gap ?? 8;
+  const margin = input.margin ?? 12;
+  const menuWidth = Math.min(input.viewportWidth - margin * 2, input.menuWidth ?? 272);
+  const menuHeight = Math.min(input.viewportHeight - margin * 2, input.menuHeight ?? 256);
+  const preferredLeft = input.triggerRect.left;
+  // Anchor the menu just above the trigger; fall back below when there is no room above.
+  const preferredTopAbove = input.triggerRect.top - gap - menuHeight;
+  const preferredTopBelow = input.triggerRect.bottom + gap;
+  const top =
+    preferredTopAbove >= margin
+      ? preferredTopAbove
+      : Math.min(preferredTopBelow, input.viewportHeight - menuHeight - margin);
+
+  return {
+    left: Math.max(margin, Math.min(preferredLeft, input.viewportWidth - menuWidth - margin)),
+    top: Math.max(margin, top),
+  };
 }
 
 export function removeSlashCommandSegment(value: string, fallbackStartIndex?: number): string {
