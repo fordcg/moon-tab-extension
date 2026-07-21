@@ -644,7 +644,9 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
 
   const toggleModeMenu = () => {
     if (!modeMenuOpen) {
+      // Mode menu is nested inside the tools shelf — keep the shelf open while choosing a mode.
       closeComposerPopups("mode");
+      setToolShelfOpen(true);
       updateModeMenuPosition();
     }
     setModeMenuOpen((value) => !value);
