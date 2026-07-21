@@ -50,11 +50,10 @@ export function SoftTooltipLayer() {
 
       const rect = target.getBoundingClientRect();
       const estimatedHeight = Math.min(120, 18 + Math.ceil(text.length / 18) * 16);
-      const spaceAbove = rect.top - VIEWPORT_MARGIN;
+      const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+      // Prefer below; only flip above when there is not enough room under the target.
       const placement: "above" | "below" =
-        spaceAbove >= estimatedHeight + 8 || spaceAbove >= window.innerHeight - rect.bottom
-          ? "above"
-          : "below";
+        spaceBelow >= estimatedHeight + 8 ? "below" : "above";
 
       const centerX = rect.left + rect.width / 2;
       const left = Math.max(
