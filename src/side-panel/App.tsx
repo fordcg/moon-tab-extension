@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
+import { SoftTooltipLayer } from "./components/SoftTooltipLayer";
 import type { SettingsTab } from "./components/SettingsPanel";
 import { useAppStore } from "./state/appStore";
 import { sendRuntimeMessage } from "./state/runtimeMessage";
@@ -259,6 +260,7 @@ export function App() {
         />
       </section>
       {!drawerOpen ? <NotificationHost /> : null}
+      <SoftTooltipLayer />
       {!syncRestoreBarrierActive ? (
         <Suspense fallback={null}>
           <LazyPetCompanion />

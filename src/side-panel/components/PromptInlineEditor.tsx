@@ -322,7 +322,10 @@ function createCommandNode(prompt: ChatPromptInvocation, ariaLabelPrefix: string
   node.dataset.promptTitle = prompt.title;
   node.dataset.promptSnapshot = prompt.contentSnapshot || prompt.title;
   node.setAttribute("aria-label", `${ariaLabelPrefix}：${prompt.title}`);
-  node.title = prompt.contentSnapshot || prompt.title;
+  const tooltip = prompt.contentSnapshot || prompt.title;
+  if (tooltip) {
+    node.setAttribute("data-soft-tooltip", tooltip);
+  }
   node.textContent = prompt.title;
   return node;
 }
@@ -338,7 +341,10 @@ function createMentionNode(mention: ComposerTabMention): HTMLSpanElement {
     node.dataset.tabFavicon = mention.favIconUrl;
   }
   node.setAttribute("aria-label", `已引用标签页：${mention.title}`);
-  node.title = mention.url || mention.title;
+  const tooltip = mention.url || mention.title;
+  if (tooltip) {
+    node.setAttribute("data-soft-tooltip", tooltip);
+  }
 
   if (mention.favIconUrl) {
     const icon = document.createElement("img");

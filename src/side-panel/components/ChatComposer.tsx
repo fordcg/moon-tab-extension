@@ -81,6 +81,7 @@ interface SharedContextTab {
 }
 
 function ComposerSwitch({ ariaLabel, checked, disabled, icon, label, title, onToggle }: ComposerSwitchProps) {
+  const tooltip = title ?? label;
   return (
     <button
       className="composer-switch"
@@ -89,8 +90,8 @@ function ComposerSwitch({ ariaLabel, checked, disabled, icon, label, title, onTo
       aria-label={ariaLabel}
       aria-checked={checked}
       data-label={label}
+      data-soft-tooltip={tooltip}
       disabled={disabled}
-      title={title ?? label}
       onClick={onToggle}
     >
       <svg className="composer-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1038,7 +1039,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   type="button"
                   role="option"
                   aria-selected={index === slashActiveIndex}
-                  title={playbook.description}
+                  data-soft-tooltip={playbook.description}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => handleSelectSkillPlaybook(playbook)}
                 >
@@ -1064,7 +1065,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   type="button"
                   role="option"
                   aria-selected={index === atActiveIndex}
-                  title={tab.url}
+                  data-soft-tooltip={tab.url}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => handleSelectAtTab(tab)}
                 >

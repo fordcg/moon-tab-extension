@@ -1683,6 +1683,68 @@ body {
     line-height: inherit;
   }
 
+  .soft-tooltip {
+    position: fixed;
+    z-index: 120;
+    max-width: min(15rem, calc(100vw - 1rem));
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--sidepanel-line, var(--color-hairline)) 88%, white);
+    background: color-mix(in srgb, var(--sidepanel-blue-soft, #eef4ff) 72%, white);
+    color: color-mix(in srgb, var(--sidepanel-ink, var(--color-ink)) 92%, #1f2937);
+    box-shadow:
+      0 8px 20px rgb(15 23 42 / 10%),
+      0 1px 2px rgb(15 23 42 / 6%);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    letter-spacing: 0.01em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    transform: translate(-50%, -100%);
+    opacity: 0;
+    animation: soft-tooltip-in 140ms ease-out forwards;
+  }
+
+  .soft-tooltip-below {
+    transform: translate(-50%, 0);
+  }
+
+  .soft-tooltip-above {
+    transform: translate(-50%, -100%);
+  }
+
+  @keyframes soft-tooltip-in {
+    from {
+      opacity: 0;
+      filter: blur(1px);
+      transform: translate(-50%, calc(-100% + 4px));
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate(-50%, -100%);
+    }
+  }
+
+  .soft-tooltip-below {
+    animation-name: soft-tooltip-in-below;
+  }
+
+  @keyframes soft-tooltip-in-below {
+    from {
+      opacity: 0;
+      filter: blur(1px);
+      transform: translate(-50%, -4px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate(-50%, 0);
+    }
+  }
+
   .slash-command-menu {
     @apply absolute bottom-full left-0 right-0 z-30 mb-2 grid max-h-56 gap-1 overflow-y-auto rounded-lg p-2;
     background: var(--color-canvas);
