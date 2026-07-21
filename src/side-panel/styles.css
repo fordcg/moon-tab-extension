@@ -1607,24 +1607,31 @@ body {
 
   .prompt-inline-editor-text .prompt-token-link,
   .prompt-inline-editor-text .mention-token-link {
-    margin: 0 0.125rem;
-    vertical-align: middle;
+    display: inline-flex;
+    margin: 0 0.15em;
+    max-width: min(12rem, 70%);
+    vertical-align: baseline;
     user-select: none;
   }
 
   .prompt-token-link {
-    @apply inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-sm font-medium align-middle;
+    @apply inline-flex items-center rounded px-1 font-medium;
     display: inline-flex;
+    width: fit-content;
+    max-width: min(12rem, 70%);
     color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 68%, white);
     background: var(--sidepanel-blue-soft, #eef4ff);
     border: 0;
-    line-height: 1.25;
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+    padding: 0.05rem 0.35rem;
+    white-space: nowrap;
     pointer-events: auto;
   }
 
   .prompt-token-icon,
   .prompt-token-title {
-    @apply shrink-0 font-medium;
+    @apply min-w-0 truncate font-medium;
     color: inherit;
   }
 
@@ -1633,15 +1640,18 @@ body {
   }
 
   .mention-token-link {
-    @apply inline-flex max-w-[10.5rem] items-center gap-1 truncate align-middle;
+    @apply inline-flex items-center gap-1 font-medium;
     display: inline-flex;
+    width: fit-content;
+    max-width: min(10.5rem, 70%);
     border: 0;
     border-radius: 999px;
     background: var(--sidepanel-blue-soft, #eef4ff);
     color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 72%, #1f2937);
-    line-height: 1.25;
-    max-width: 10.5rem;
-    padding: 0.125rem 0.5rem 0.125rem 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+    padding: 0.05rem 0.35rem 0.05rem 0.2rem;
+    white-space: nowrap;
     pointer-events: auto;
   }
 
