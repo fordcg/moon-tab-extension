@@ -1604,10 +1604,10 @@ body {
   }
 
   .prompt-token-link {
-    @apply inline-flex max-w-full items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-sm font-medium align-middle;
+    @apply inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-sm font-medium align-middle;
     display: inline-flex;
-    color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 72%, white);
-    background: color-mix(in srgb, var(--sidepanel-blue-soft, #eef4ff) 88%, white);
+    color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 68%, white);
+    background: var(--sidepanel-blue-soft, #eef4ff);
     border: 0;
     line-height: 1.25;
     pointer-events: auto;
@@ -1621,6 +1621,38 @@ body {
 
   .prompt-token-title {
     @apply min-w-0 truncate;
+  }
+
+  .mention-token-link {
+    @apply inline-flex max-w-[10.5rem] items-center gap-1 truncate align-middle;
+    display: inline-flex;
+    border: 0;
+    border-radius: 999px;
+    background: var(--sidepanel-blue-soft, #eef4ff);
+    color: color-mix(in srgb, var(--sidepanel-blue, var(--color-link)) 72%, #1f2937);
+    line-height: 1.25;
+    max-width: 10.5rem;
+    padding: 0.125rem 0.5rem 0.125rem 0.25rem;
+    pointer-events: auto;
+  }
+
+  .mention-token-favicon {
+    background: color-mix(in srgb, var(--sidepanel-blue-soft, #eef4ff) 40%, white);
+    border-radius: 999px;
+    flex: 0 0 auto;
+    height: 0.875rem;
+    object-fit: cover;
+    width: 0.875rem;
+  }
+
+  .mention-token-favicon[hidden] {
+    display: none !important;
+  }
+
+  .mention-token-title {
+    @apply min-w-0 truncate font-medium;
+    color: inherit;
+    font-size: 0.8125rem;
   }
 
   .slash-command-menu {

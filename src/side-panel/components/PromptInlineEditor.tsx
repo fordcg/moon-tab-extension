@@ -6,14 +6,23 @@ import type {
 } from "react";
 import type { ChatPromptInvocation } from "../../shared/types";
 
+export interface ComposerTabMention {
+  tabId: number;
+  title: string;
+  url: string;
+  favIconUrl?: string;
+}
+
 interface PromptInlineEditorProps {
   ariaLabel: string;
   className?: string;
   value: string;
   promptInvocations: ChatPromptInvocation[];
+  tabMentions?: ComposerTabMention[];
   promptAriaLabelPrefix: string;
   onChange: (value: string) => void;
   onRemovePrompt: (index: number) => void;
+  onRemoveTabMention?: (index: number) => void;
   onKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
   onPaste?: (event: ReactClipboardEvent<HTMLElement>) => void;
   onCompositionStart?: (event: ReactCompositionEvent<HTMLElement>) => void;
@@ -25,9 +34,11 @@ export function PromptInlineEditor({
   className,
   value,
   promptInvocations,
+  tabMentions = [],
   promptAriaLabelPrefix,
   onChange,
   onRemovePrompt,
+  onRemoveTabMention,
   onKeyDown,
   onPaste,
   onCompositionStart,
@@ -52,10 +63,17 @@ export function PromptInlineEditor({
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key === "Backspace" && promptInvocations.length > 0 && isSelectionAtTextStart(editorRef.current)) {
-      event.preventDefault();
-      onRemovePrompt(promptInvocations.length - 1);
-      return;
+    if (event.key === "Backspace" && isSelectionAtTextStart(editorRef.current)) {
+      if (tabMentions.length > 0) {
+        event.preventDefault();
+        onRemoveTabMention?.(tabMentions.length - 1);
+        return;
+      }
+      if (promptInvocations.length > 0) {
+        event.preventDefault();
+        onRemovePrompt(promptInvocations.length - 1);
+        return;
+      }
     }
 
     onKeyDown?.(event);
@@ -90,15 +108,36 @@ export function PromptInlineEditor({
     <div className={`prompt-inline-editor${className ? ` ${className}` : ""}`} onClick={() => editorRef.current?.focus()}>
       {promptInvocations.map((prompt, index) => (
         <button
-          key={`${prompt.promptId}-${index}`}
+          key={`prompt-${prompt.promptId}-${index}`}
           className="prompt-token-link"
           type="button"
           aria-label={`${promptAriaLabelPrefix}：${prompt.title}`}
+          title={prompt.contentSnapshot || prompt.title}
           contentEditable={false}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onRemovePrompt(index)}
         >
-          <PromptTokenContent title={prompt.title} />
+          <span className="prompt-token-title">{prompt.title}</span>
+        </button>
+      ))}
+      {tabMentions.map((mention, index) => (
+        <button
+          key={`mention-${mention.tabId}-${index}`}
+          className="mention-token-link"
+          type="button"
+          aria-label={`已引用标签页：${mention.title}`}
+          title={mention.url || mention.title}
+          contentEditable={false}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onRemoveTabMention?.(index)}
+        >
+          <img
+            className="mention-token-favicon"
+            src={mention.favIconUrl || undefined}
+            alt=""
+            hidden={!mention.favIconUrl}
+          />
+          <span className="mention-token-title">{mention.title || mention.url}</span>
         </button>
       ))}
       <span
@@ -120,14 +159,7 @@ export function PromptInlineEditor({
 }
 
 export function PromptTokenContent({ title }: { title: string }) {
-  return (
-    <>
-      <span className="prompt-token-icon" aria-hidden="true">
-        ◈
-      </span>
-      <span className="prompt-token-title">{title}</span>
-    </>
-  );
+  return <span className="prompt-token-title">{title}</span>;
 }
 
 function isSelectionAtTextStart(editor: HTMLElement | null): boolean {

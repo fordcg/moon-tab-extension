@@ -12,7 +12,7 @@ import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "..
 import { sendRuntimeMessage } from "../state/runtimeMessage";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
-import { PromptInlineEditor } from "./PromptInlineEditor";
+import { PromptInlineEditor, type ComposerTabMention } from "./PromptInlineEditor";
 import { WorkflowTemplateMenu } from "./WorkflowTemplateMenu";
 import { useModalDialogFocus } from "./useModalDialogFocus";
 
@@ -103,6 +103,7 @@ function ComposerSwitch({ ariaLabel, checked, disabled, icon, label, title, onTo
 export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [input, setInput] = useState("");
   const [promptInvocations, setPromptInvocations] = useState<ChatPromptInvocation[]>([]);
+  const [tabMentions, setTabMentions] = useState<ComposerTabMention[]>([]);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashStartIndex, setSlashStartIndex] = useState<number | undefined>();
@@ -207,8 +208,13 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [sharedBannerOpen, sharedContextTabs.length]);
 
   useEffect(() => {
-    setComposerHasDraft(input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0);
-  }, [attachments.length, input, promptInvocations.length, setComposerHasDraft]);
+    setComposerHasDraft(
+      input.trim().length > 0 ||
+        attachments.length > 0 ||
+        promptInvocations.length > 0 ||
+        tabMentions.length > 0,
+    );
+  }, [attachments.length, input, promptInvocations.length, setComposerHasDraft, tabMentions.length]);
 
   useEffect(() => {
     setSlashActiveIndex(0);
@@ -363,20 +369,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       ? sendingPromptInvocations[sendingPromptInvocations.length - 1]?.promptId
       : undefined;
 
-    // Resolve inline slash commands kept in the text, e.g. "/页面阅读 总结一下 /补签".
-    const playbooks = getEnabledAutomationPlaybooks(automationPlaybookSettings, importedSkillPlaybooks);
-    const resolvedCommands = resolveInlinePlaybookCommands(
-      content,
-      playbooks,
-      pageContext.url,
-      pageContext.title,
-    );
-    if (resolvedCommands) {
-      content = resolvedCommands.content;
-      forcedPlaybookId = resolvedCommands.playbookId ?? forcedPlaybookId;
-      if (resolvedCommands.invocations.length > 0) {
-        sendingPromptInvocations = resolvedCommands.invocations;
-      }
+    // Keep special full-line commands for Metapi helpers; normal strategies use chips.
+    const inlineCommand = parseInlineSkillCommand(content, pageContext.url, pageContext.title);
+    if (inlineCommand) {
+      content = inlineCommand.content;
+      forcedPlaybookId = inlineCommand.playbookId;
+      sendingPromptInvocations = [
+        {
+          promptId: inlineCommand.playbookId,
+          title: inlineCommand.title,
+          contentSnapshot: inlineCommand.description,
+        },
+      ];
     }
 
     if (!content && attachments.length === 0 && sendingPromptInvocations.length === 0) {
@@ -385,6 +389,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
 
     setInput("");
     setPromptInvocations([]);
+    setTabMentions([]);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     const sendingAttachments = attachments;
@@ -401,6 +406,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setWorkflowMenuOpen(false);
     setInput("");
     setPromptInvocations([]);
+    setTabMentions([]);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     setSlashQuery("");
@@ -420,18 +426,16 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     }
     let content = input.trim();
     let sendingPromptInvocations = promptInvocations;
-    const playbooks = getEnabledAutomationPlaybooks(automationPlaybookSettings, importedSkillPlaybooks);
-    const resolvedCommands = resolveInlinePlaybookCommands(
-      content,
-      playbooks,
-      pageContext.url,
-      pageContext.title,
-    );
-    if (resolvedCommands) {
-      content = resolvedCommands.content;
-      if (resolvedCommands.invocations.length > 0) {
-        sendingPromptInvocations = resolvedCommands.invocations;
-      }
+    const inlineCommand = parseInlineSkillCommand(content, pageContext.url, pageContext.title);
+    if (inlineCommand) {
+      content = inlineCommand.content;
+      sendingPromptInvocations = [
+        {
+          promptId: inlineCommand.playbookId,
+          title: inlineCommand.title,
+          contentSnapshot: inlineCommand.description,
+        },
+      ];
     }
     if (!content && attachments.length === 0 && sendingPromptInvocations.length === 0) {
       return;
@@ -439,6 +443,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
 
     setInput("");
     setPromptInvocations([]);
+    setTabMentions([]);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     const sendingAttachments = attachments;
@@ -506,7 +511,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     }
 
     event.preventDefault();
-    const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
+    const hasDraft =
+    input.trim().length > 0 ||
+    attachments.length > 0 ||
+    promptInvocations.length > 0 ||
+    tabMentions.length > 0;
     if (!hasDraft || syncRestoreBarrierActive || (!sending && !canSend)) {
       return;
     }
@@ -587,6 +596,20 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     if (!tab.selected) {
       toggleContextTabSelection(tab.tabId);
     }
+    setTabMentions((current) => {
+      if (current.some((item) => item.tabId === tab.tabId)) {
+        return current;
+      }
+      return [
+        ...current,
+        {
+          tabId: tab.tabId,
+          title: tab.title || tab.url,
+          url: tab.url,
+          favIconUrl: tab.favIconUrl,
+        },
+      ];
+    });
     setInput((current) => removeAtMentionSegment(current, atStartIndex));
     setAtMenuOpen(false);
     setAtQuery("");
@@ -596,10 +619,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   };
 
   const handleSelectSkillPlaybook = (playbook: AutomationPlaybook) => {
-    // Insert as inline text: "/页面阅读 用户补充说明" instead of a separate chip.
+    // Keep selected strategy as a soft blue chip next to free text (no leading slash).
+    setPromptInvocations((current) => [
+      ...current.filter((item) => item.promptId !== playbook.id),
+      {
+        promptId: playbook.id,
+        title: playbook.title,
+        contentSnapshot: playbook.description || playbook.title,
+      },
+    ]);
     setInput((current) => {
+      const remaining = removeSlashCommandSegment(current, slashStartIndex);
       if (playbook.id === "register_relay_site") {
-        const remaining = removeSlashCommandSegment(current, slashStartIndex);
         return buildRegisterRelaySiteInput({
           remainingText: remaining,
           slashQuery,
@@ -607,13 +638,26 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           pageTitle: pageContext.title,
         });
       }
-      return replaceSlashCommandWithTitle(current, playbook.title, slashStartIndex);
+      if (playbook.id === "start_all_checkin" || playbook.id === "repair_failed_checkin") {
+        return remaining.trim();
+      }
+      return remaining;
     });
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     setSlashQuery("");
     setSlashStartIndex(undefined);
     setSlashActiveIndex(0);
+  };
+
+  const handleRemoveTabMention = (index: number) => {
+    setTabMentions((current) => {
+      const target = current[index];
+      if (target && contextTabs.some((tab) => tab.tabId === target.tabId && tab.selected)) {
+        toggleContextTabSelection(target.tabId);
+      }
+      return current.filter((_, itemIndex) => itemIndex !== index);
+    });
   };
 
   const handleCaptureVisibleTab = async () => {
@@ -769,7 +813,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   );
   const filteredSkillPlaybooks = filterSkillPlaybooks(enabledSkillPlaybooks, slashQuery);
   const filteredAtTabs = filterContextTabsByQuery(contextTabs, atQuery);
-  const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
+  const hasDraft =
+    input.trim().length > 0 ||
+    attachments.length > 0 ||
+    promptInvocations.length > 0 ||
+    tabMentions.length > 0;
   const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
   // Syncing used to toggle `is-syncing-selection`, which hid non-current rows via
   // visibility:hidden and made dialog text flicker on open/select. Keep the list
@@ -945,9 +993,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           ariaLabel="对话输入"
           value={input}
           promptInvocations={promptInvocations}
+          tabMentions={tabMentions}
           promptAriaLabelPrefix="已选用任务策略"
           onChange={handleInputChange}
           onRemovePrompt={(index) => setPromptInvocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+          onRemoveTabMention={handleRemoveTabMention}
           onPaste={handlePaste}
           onKeyDown={handleInputKeyDown}
           onCompositionStart={() => setComposing(true)}
@@ -1701,111 +1751,6 @@ function parseInlineSkillCommand(
   }
 
   return undefined;
-}
-
-/**
- * Keep selected slash commands as plain text in the input:
- * "/页面阅读 总结一下 /补签"
- * On send, map titles/ids to playbook invocations and leave residual free text.
- */
-function resolveInlinePlaybookCommands(
-  content: string,
-  playbooks: AutomationPlaybook[],
-  pageUrl?: string,
-  pageTitle?: string,
-): { content: string; playbookId?: string; invocations: ChatPromptInvocation[] } | undefined {
-  const special = parseInlineSkillCommand(content, pageUrl, pageTitle);
-  if (special) {
-    return {
-      content: special.content,
-      playbookId: special.playbookId,
-      invocations: [
-        {
-          promptId: special.playbookId,
-          title: special.title,
-          contentSnapshot: special.description,
-        },
-      ],
-    };
-  }
-
-  if (!content.includes("/")) {
-    return undefined;
-  }
-
-  const aliases = new Map<string, AutomationPlaybook>();
-  for (const playbook of playbooks) {
-    aliases.set(playbook.id.toLowerCase(), playbook);
-    aliases.set(playbook.title.toLowerCase(), playbook);
-    for (const hint of playbook.selectionHints ?? []) {
-      const normalizedHint = hint.trim().toLowerCase();
-      if (normalizedHint) {
-        aliases.set(normalizedHint, playbook);
-      }
-    }
-  }
-
-  // Prefer longer aliases so "/页面阅读" wins over "/页面".
-  const aliasEntries = Array.from(aliases.entries()).sort((left, right) => right[0].length - left[0].length);
-  const matched = new Map<string, AutomationPlaybook>();
-  let residual = content;
-  let replaced = false;
-
-  for (const [alias, playbook] of aliasEntries) {
-    const pattern = new RegExp(`(?:^|\\s)/\\s*${escapeRegExp(alias)}(?=\\s|/|$)`, "giu");
-    if (!pattern.test(residual)) {
-      continue;
-    }
-    residual = residual.replace(pattern, " ");
-    matched.set(playbook.id, playbook);
-    replaced = true;
-  }
-
-  if (!replaced) {
-    return undefined;
-  }
-
-  const invocations = Array.from(matched.values()).map((playbook) => ({
-    promptId: playbook.id,
-    title: playbook.title,
-    contentSnapshot: playbook.description || playbook.title,
-  }));
-  const cleaned = residual.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  const last = invocations[invocations.length - 1];
-
-  return {
-    content: cleaned,
-    playbookId: last?.promptId,
-    invocations,
-  };
-}
-
-function replaceSlashCommandWithTitle(value: string, title: string, fallbackStartIndex?: number): string {
-  const slashInfo = findSlashCommand(value);
-  const startIndex = slashInfo?.startIndex ?? fallbackStartIndex;
-  if (startIndex === undefined || startIndex < 0) {
-    const prefix = value && !/\s$/.test(value) ? " " : "";
-    return `${value}${prefix}/${title} `;
-  }
-
-  const afterSlashText = value.slice(startIndex + 1);
-  const nextBoundary = afterSlashText.search(/[\s/]/);
-  const endIndex = nextBoundary < 0 ? value.length : startIndex + 1 + nextBoundary;
-  const before = value.slice(0, startIndex);
-  const after = value.slice(endIndex);
-  const needsLeadingSpace = Boolean(before) && !/\s$/.test(before);
-  const insertion = `${needsLeadingSpace ? " " : ""}/${title} `;
-  if (!after) {
-    return `${before}${insertion}`;
-  }
-  if (/^\s/.test(after)) {
-    return `${before}${insertion.trimEnd()}${after}`;
-  }
-  return `${before}${insertion}${after}`;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function parseInlineRegisterRelayCommand(
