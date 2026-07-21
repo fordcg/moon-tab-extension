@@ -213,15 +213,15 @@ export function App() {
             <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
               {floatingMode ? (
                 <>
-                  <rect x="3" y="5" width="14" height="11" rx="1.8" />
-                  <rect x="11" y="12" width="9" height="7" rx="1.4" />
-                  <path d="M13.5 14.5h4" />
-                  <path d="M13.5 16.5h2.5" />
+                  <rect x="2.5" y="4" width="15.5" height="12" rx="2" />
+                  <rect x="10" y="11" width="11" height="8.5" rx="1.6" />
+                  <path d="M12.5 13.6h5.5" />
+                  <path d="M12.5 16h3.5" />
                 </>
               ) : (
                 <>
-                  <rect x="3" y="5" width="14" height="11" rx="1.8" />
-                  <rect x="11" y="12" width="9" height="7" rx="1.4" />
+                  <rect x="2.5" y="4" width="15.5" height="12" rx="2" />
+                  <rect x="10" y="11" width="11" height="8.5" rx="1.6" />
                 </>
               )}
             </svg>
