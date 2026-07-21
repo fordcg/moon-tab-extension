@@ -12,7 +12,7 @@ import { useAppStore, type ChatFollowUpItem, type ContextTabCandidate } from "..
 import { sendRuntimeMessage } from "../state/runtimeMessage";
 import { BoundaryChoiceDialog } from "./BoundaryChoiceDialog";
 import { ModelSelector } from "./ModelSelector";
-import { PromptInlineEditor, type ComposerTabMention } from "./PromptInlineEditor";
+import { PromptInlineEditor, type ComposerTabMention, type PromptInlineEditorHandle } from "./PromptInlineEditor";
 import { WorkflowTemplateMenu } from "./WorkflowTemplateMenu";
 import { useModalDialogFocus } from "./useModalDialogFocus";
 
@@ -104,6 +104,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [input, setInput] = useState("");
   const [promptInvocations, setPromptInvocations] = useState<ChatPromptInvocation[]>([]);
   const [tabMentions, setTabMentions] = useState<ComposerTabMention[]>([]);
+  const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashStartIndex, setSlashStartIndex] = useState<number | undefined>();
@@ -137,6 +138,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const atMenuRef = useRef<HTMLDivElement | null>(null);
   const chatInputShellRef = useRef<HTMLDivElement | null>(null);
+  const promptEditorRef = useRef<PromptInlineEditorHandle | null>(null);
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
   const sendShortcut = useAppStore((state) => state.chatPreferences.sendShortcut);
   const followUpBehavior = useAppStore((state) => state.chatPreferences.followUpBehavior);
@@ -390,6 +392,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setInput("");
     setPromptInvocations([]);
     setTabMentions([]);
+    setEditorResetVersion((value) => value + 1);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     const sendingAttachments = attachments;
@@ -407,6 +410,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setInput("");
     setPromptInvocations([]);
     setTabMentions([]);
+    setEditorResetVersion((value) => value + 1);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     setSlashQuery("");
@@ -444,6 +448,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setInput("");
     setPromptInvocations([]);
     setTabMentions([]);
+    setEditorResetVersion((value) => value + 1);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     const sendingAttachments = attachments;
@@ -547,13 +552,37 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     });
   };
 
-  const handleInputChange = (value: string, options: { forceSlashDetection?: boolean } = {}) => {
-    setInput(value);
+  const handleInputChange = (
+    document: { text: string; promptInvocations: ChatPromptInvocation[]; tabMentions: ComposerTabMention[] },
+    options: { forceSlashDetection?: boolean } = {},
+  ) => {
+    setInput(document.text);
+    setPromptInvocations(document.promptInvocations);
+    const previousMentionIds = new Set(tabMentions.map((item) => item.tabId));
+    const nextMentionIds = new Set(document.tabMentions.map((item) => item.tabId));
+    for (const mention of document.tabMentions) {
+      if (!previousMentionIds.has(mention.tabId)) {
+        const tab = contextTabs.find((item) => item.tabId === mention.tabId);
+        if (tab && !tab.selected) {
+          toggleContextTabSelection(tab.tabId);
+        }
+      }
+    }
+    for (const previousId of previousMentionIds) {
+      if (!nextMentionIds.has(previousId)) {
+        const tab = contextTabs.find((item) => item.tabId === previousId);
+        if (tab?.selected) {
+          toggleContextTabSelection(previousId);
+        }
+      }
+    }
+    setTabMentions(document.tabMentions);
+
     if (composing && !options.forceSlashDetection) {
       return;
     }
 
-    const atInfo = findAtMention(value);
+    const atInfo = findAtMention(document.text);
     if (atInfo) {
       setSlashMenuOpen(false);
       setSlashQuery("");
@@ -574,7 +603,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       setAtStartIndex(undefined);
     }
 
-    const slashInfo = findSlashCommand(value);
+    const slashInfo = findSlashCommand(document.text);
     if (!slashInfo) {
       setSlashMenuOpen(false);
       setSlashQuery("");
@@ -596,21 +625,12 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     if (!tab.selected) {
       toggleContextTabSelection(tab.tabId);
     }
-    setTabMentions((current) => {
-      if (current.some((item) => item.tabId === tab.tabId)) {
-        return current;
-      }
-      return [
-        ...current,
-        {
-          tabId: tab.tabId,
-          title: tab.title || tab.url,
-          url: tab.url,
-          favIconUrl: tab.favIconUrl,
-        },
-      ];
+    promptEditorRef.current?.insertMention({
+      tabId: tab.tabId,
+      title: tab.title || tab.url,
+      url: tab.url,
+      favIconUrl: tab.favIconUrl,
     });
-    setInput((current) => removeAtMentionSegment(current, atStartIndex));
     setAtMenuOpen(false);
     setAtQuery("");
     setAtStartIndex(undefined);
@@ -619,45 +639,50 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   };
 
   const handleSelectSkillPlaybook = (playbook: AutomationPlaybook) => {
-    // Keep selected strategy as a soft blue chip next to free text (no leading slash).
-    setPromptInvocations((current) => [
-      ...current.filter((item) => item.promptId !== playbook.id),
-      {
-        promptId: playbook.id,
-        title: playbook.title,
-        contentSnapshot: playbook.description || playbook.title,
-      },
-    ]);
-    setInput((current) => {
-      const remaining = removeSlashCommandSegment(current, slashStartIndex);
-      if (playbook.id === "register_relay_site") {
+    if (playbook.id === "register_relay_site") {
+      // Keep special Metapi command as free text args after removing the slash token.
+      setInput((current) => {
+        const remaining = removeSlashCommandSegment(current, slashStartIndex);
         return buildRegisterRelaySiteInput({
           remainingText: remaining,
           slashQuery,
           pageUrl: pageContext.url,
           pageTitle: pageContext.title,
         });
-      }
-      if (playbook.id === "start_all_checkin" || playbook.id === "repair_failed_checkin") {
-        return remaining.trim();
-      }
-      return remaining;
+      });
+      setSlashMenuOpen(false);
+      setAtMenuOpen(false);
+      setSlashQuery("");
+      setSlashStartIndex(undefined);
+      setSlashActiveIndex(0);
+      return;
+    }
+
+    if (playbook.id === "start_all_checkin" || playbook.id === "repair_failed_checkin") {
+      promptEditorRef.current?.insertCommand({
+        promptId: playbook.id,
+        title: playbook.title,
+        contentSnapshot: playbook.description || playbook.title,
+      });
+      setSlashMenuOpen(false);
+      setAtMenuOpen(false);
+      setSlashQuery("");
+      setSlashStartIndex(undefined);
+      setSlashActiveIndex(0);
+      return;
+    }
+
+    // Inline styled token (no leading slash) mixed into the free-text stream.
+    promptEditorRef.current?.insertCommand({
+      promptId: playbook.id,
+      title: playbook.title,
+      contentSnapshot: playbook.description || playbook.title,
     });
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
     setSlashQuery("");
     setSlashStartIndex(undefined);
     setSlashActiveIndex(0);
-  };
-
-  const handleRemoveTabMention = (index: number) => {
-    setTabMentions((current) => {
-      const target = current[index];
-      if (target && contextTabs.some((tab) => tab.tabId === target.tabId && tab.selected)) {
-        toggleContextTabSelection(target.tabId);
-      }
-      return current.filter((_, itemIndex) => itemIndex !== index);
-    });
   };
 
   const handleCaptureVisibleTab = async () => {
@@ -989,21 +1014,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           onChange={handleImageInputChange}
         />
         <PromptInlineEditor
+          ref={promptEditorRef}
           className="ui-input chat-input"
           ariaLabel="对话输入"
-          value={input}
-          promptInvocations={promptInvocations}
-          tabMentions={tabMentions}
+          resetVersion={editorResetVersion}
           promptAriaLabelPrefix="已选用任务策略"
           onChange={handleInputChange}
-          onRemovePrompt={(index) => setPromptInvocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-          onRemoveTabMention={handleRemoveTabMention}
           onPaste={handlePaste}
           onKeyDown={handleInputKeyDown}
           onCompositionStart={() => setComposing(true)}
-          onCompositionEnd={(value) => {
+          onCompositionEnd={(document) => {
             setComposing(false);
-            handleInputChange(value, { forceSlashDetection: true });
+            handleInputChange(document, { forceSlashDetection: true });
           }}
         />
         {slashMenuOpen ? (

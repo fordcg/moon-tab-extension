@@ -1598,9 +1598,16 @@ body {
   }
 
   .prompt-inline-editor-text {
-    @apply min-w-20 flex-1 outline-none;
+    @apply min-h-[1.5rem] w-full min-w-0 flex-1 outline-none;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  .prompt-inline-editor-text .prompt-token-link,
+  .prompt-inline-editor-text .mention-token-link {
+    margin: 0 0.125rem;
+    vertical-align: middle;
+    user-select: none;
   }
 
   .prompt-token-link {

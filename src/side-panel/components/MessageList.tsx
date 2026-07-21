@@ -471,11 +471,14 @@ export function MessageList({
                   <PromptInlineEditor
                     className="ui-input message-edit-input"
                     ariaLabel="编辑用户消息"
-                    value={editingContent}
-                    promptInvocations={editingPromptInvocations}
+                    resetVersion={editingMessageId ? 1 : 0}
+                    seedText={editingContent}
+                    seedPromptInvocations={editingPromptInvocations}
                     promptAriaLabelPrefix="编辑消息提示词"
-                    onChange={setEditingContent}
-                    onRemovePrompt={(index) => setEditingPromptInvocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                    onChange={(document) => {
+                      setEditingContent(document.text);
+                      setEditingPromptInvocations(document.promptInvocations);
+                    }}
                   />
                   <div className="message-edit-actions">
                     <button
