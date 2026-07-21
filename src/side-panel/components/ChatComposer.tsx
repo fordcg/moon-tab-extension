@@ -673,9 +673,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   };
 
   const contextModeLabel = contextMode === "all" ? "提取所有" : "提取文本";
-  const browserControlTitle = browserControlEnabled
-    ? "浏览器控制已开启。关闭会立即断开调试会话。"
-    : "浏览器控制已关闭。开启后扩展会通过 Chrome 调试协议连接当前普通网页，浏览器会显示正在调试提示。";
+  const browserControlTitle = "浏览器控制";
   const browserAutomationModeOption = BROWSER_AUTOMATION_MODE_OPTIONS.find((option) => option.mode === effectiveBrowserAutomationMode) ?? BROWSER_AUTOMATION_MODE_OPTIONS[0];
   const browserAutomationModeLabel = browserAutomationModeOption.label;
   const enabledSkillPlaybooks = getEnabledAutomationPlaybooks(
@@ -943,20 +941,15 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               className={`image-upload-button${currentModelSupportsVision ? "" : " image-upload-button-disabled"}`}
               htmlFor={imageInputId}
               data-label="上传图片"
-              title={
-                currentModelSupportsVision
-                  ? "上传图片作为附件，随消息一起发给模型；也可直接粘贴或拖拽图片。"
-                  : "当前模型不支持视觉理解。切换到带视觉能力的模型（如带「视觉」标签的模型）后可上传图片。"
-              }
+              title="上传图片"
             >
               <span aria-hidden="true">▣</span>
             </label>
             <ComposerSwitch
-              ariaLabel={browserControlTitle}
+              ariaLabel="浏览器控制"
               checked={browserControlEnabled}
               icon="browserControl"
               label="浏览器控制"
-              title={browserControlTitle}
               onToggle={() => void setBrowserControlEnabled(!browserControlEnabled)}
             />
             <div className="composer-mode-menu-wrap">
@@ -1016,18 +1009,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                 </div>
               ) : null}
             </div>
-            <ComposerSwitch
-              ariaLabel="流式响应"
-              checked={streamMode}
-              icon="stream"
-              label="流式响应"
-              title={
-                streamMode
-                  ? "流式响应已开启。模型边生成边显示回答，可提前看到内容、随时终止。"
-                  : "流式响应已关闭。等模型完整生成后再一次性显示，适合网络不稳定或需要完整结果的场景。"
-              }
-              onToggle={() => setStreamMode(!streamMode)}
-            />
+            <ComposerSwitch ariaLabel="流式响应" checked={streamMode} icon="stream" label="流式响应" onToggle={() => setStreamMode(!streamMode)} />
             <ComposerSwitch
               ariaLabel="拼接上下文"
               checked={appendPageContextToSystemPrompt}
