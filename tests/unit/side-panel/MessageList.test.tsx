@@ -6,10 +6,10 @@ import type { ChatMessage } from "../../../src/shared/types";
 
 type MessageListProps = ComponentProps<typeof MessageList>;
 
-function createChatMessage(id: string, content: string): ChatMessage {
+function createChatMessage(id: string, content: string, role: ChatMessage["role"] = "assistant"): ChatMessage {
   return {
     id,
-    role: "assistant",
+    role,
     content,
     createdAt: 1,
     modelId: "model-1",
@@ -150,5 +150,26 @@ describe("MessageList 滚动跟随", () => {
     }));
 
     expect(messageList.scrollTop).toBe(620);
+  });
+
+  it("用户上滚后发送新提问会强制回到底部", () => {
+    const { rerender } = renderMessageList([
+      createChatMessage("assistant-1", "旧回复"),
+      createChatMessage("user-1", "旧提问", "user"),
+    ]);
+    const messageList = screen.getByLabelText("消息列表");
+    setScrollMetrics(messageList, { clientHeight: 200, scrollHeight: 500, scrollTop: 80 });
+    fireEvent.scroll(messageList);
+
+    setScrollMetrics(messageList, { clientHeight: 200, scrollHeight: 780, scrollTop: 80 });
+    rerender(createMessageListElement({
+      messages: [
+        createChatMessage("assistant-1", "旧回复"),
+        createChatMessage("user-1", "旧提问", "user"),
+        createChatMessage("user-2", "新的提问", "user"),
+      ],
+    }));
+
+    expect(messageList.scrollTop).toBe(780);
   });
 });

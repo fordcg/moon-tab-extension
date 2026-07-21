@@ -135,6 +135,8 @@ export function MessageList({
   const messageListRef = useRef<HTMLElement>(null);
   // 初次进入会话时默认贴底；一旦用户主动上滚，滚动事件会把它改为 false，避免后续更新抢回底部。
   const shouldStickToBottomRef = useRef(true);
+  // 记录已见过的最新用户消息 id：新提问入列时强制贴底，即使用户之前上滚过历史。
+  const lastSeenUserMessageIdRef = useRef<string | undefined>(undefined);
   const regeneratePopoverRef = useRef<HTMLDivElement>(null);
   const toolCallPopoverRef = useRef<HTMLDivElement>(null);
   const regenerateTimerRef = useRef<number | undefined>(undefined);
@@ -198,7 +200,18 @@ export function MessageList({
 
   useLayoutEffect(() => {
     const messageList = messageListRef.current;
-    if (!messageList || !shouldStickToBottomRef.current) {
+    if (!messageList) {
+      return;
+    }
+
+    const latestUserMessageId = findLatestUserMessageId(messages);
+    if (latestUserMessageId && latestUserMessageId !== lastSeenUserMessageIdRef.current) {
+      // 用户发出新提问后应回到底部，与此前是否上滚历史无关。
+      lastSeenUserMessageIdRef.current = latestUserMessageId;
+      shouldStickToBottomRef.current = true;
+    }
+
+    if (!shouldStickToBottomRef.current) {
       return;
     }
 
@@ -659,6 +672,16 @@ function isLongUserMessageContent(content: string): boolean {
 
 function isMessageListAtBottom(messageList: HTMLElement): boolean {
   return messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight <= MESSAGE_LIST_BOTTOM_THRESHOLD;
+}
+
+function findLatestUserMessageId(messages: ChatMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "user") {
+      return message.id;
+    }
+  }
+  return undefined;
 }
 
 function MessageRetryProgress({ progress }: { progress: ChatRetryProgress }) {
