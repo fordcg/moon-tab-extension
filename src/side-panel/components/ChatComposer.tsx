@@ -943,7 +943,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               className={`image-upload-button${currentModelSupportsVision ? "" : " image-upload-button-disabled"}`}
               htmlFor={imageInputId}
               data-label="上传图片"
-              title={currentModelSupportsVision ? "上传图片" : "当前模型不支持视觉理解"}
+              title={
+                currentModelSupportsVision
+                  ? "上传图片作为附件，随消息一起发给模型；也可直接粘贴或拖拽图片。"
+                  : "当前模型不支持视觉理解。切换到带视觉能力的模型（如带「视觉」标签的模型）后可上传图片。"
+              }
             >
               <span aria-hidden="true">▣</span>
             </label>
@@ -1012,12 +1016,28 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                 </div>
               ) : null}
             </div>
-            <ComposerSwitch ariaLabel="流式响应" checked={streamMode} icon="stream" label="流式响应" onToggle={() => setStreamMode(!streamMode)} />
+            <ComposerSwitch
+              ariaLabel="流式响应"
+              checked={streamMode}
+              icon="stream"
+              label="流式响应"
+              title={
+                streamMode
+                  ? "流式响应已开启。模型边生成边显示回答，可提前看到内容、随时终止。"
+                  : "流式响应已关闭。等模型完整生成后再一次性显示，适合网络不稳定或需要完整结果的场景。"
+              }
+              onToggle={() => setStreamMode(!streamMode)}
+            />
             <ComposerSwitch
               ariaLabel="拼接上下文"
               checked={appendPageContextToSystemPrompt}
               icon="appendContext"
               label="拼接上下文"
+              title={
+                appendPageContextToSystemPrompt
+                  ? "拼接上下文已开启。发送时会把当前页面正文附到系统提示，让模型知道你在看什么。"
+                  : "拼接上下文已关闭。模型不会自动看到当前页面内容，只用你输入的文字回答。"
+              }
               onToggle={() => setAppendPageContextToSystemPrompt(!appendPageContextToSystemPrompt)}
             />
             <ComposerSwitch
@@ -1025,7 +1045,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               checked={contextMode === "all"}
               icon={contextMode === "all" ? "extractAll" : "extractText"}
               label={contextModeLabel}
-              title={contextModeLabel}
+              title={
+                contextMode === "all"
+                  ? "当前为「提取所有」。抓取页面完整 HTML，保留结构和链接，适合表格/表单/带样式的页面，但更长更耗 token。"
+                  : "当前为「提取文本」。只抓页面可见正文，长度短、token 省，适合阅读文章类页面。点击切换到「提取所有」。"
+              }
               onToggle={() => setContextMode(contextMode === "all" ? "text" : "all")}
             />
           </div>
