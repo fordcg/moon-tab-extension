@@ -1601,6 +1601,8 @@ body {
     @apply min-h-[1.5rem] w-full min-w-0 flex-1 outline-none;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    color: inherit;
+    caret-color: currentColor;
   }
 
   .prompt-inline-editor-text .prompt-token-link,

@@ -469,11 +469,12 @@ export function MessageList({
               {editingMessageId === message.id ? (
                 <div className="message-edit-panel">
                   <PromptInlineEditor
+                    key={message.id}
                     className="ui-input message-edit-input"
                     ariaLabel="编辑用户消息"
-                    resetVersion={editingMessageId ? 1 : 0}
-                    seedText={editingContent}
-                    seedPromptInvocations={editingPromptInvocations}
+                    resetVersion={0}
+                    seedText={message.content}
+                    seedPromptInvocations={message.promptInvocations ?? []}
                     promptAriaLabelPrefix="编辑消息提示词"
                     onChange={(document) => {
                       setEditingContent(document.text);

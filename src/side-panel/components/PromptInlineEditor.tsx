@@ -62,6 +62,19 @@ export const PromptInlineEditor = forwardRef<PromptInlineEditorHandle, PromptInl
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
     const lastSignatureRef = useRef("");
+    // Keep seeds in refs so hydrate can read latest values without re-running on every keystroke.
+    const seedRef = useRef({
+      text: seedText,
+      promptInvocations: seedPromptInvocations,
+      tabMentions: seedTabMentions,
+      promptAriaLabelPrefix,
+    });
+    seedRef.current = {
+      text: seedText,
+      promptInvocations: seedPromptInvocations,
+      tabMentions: seedTabMentions,
+      promptAriaLabelPrefix,
+    };
 
     const readDocument = (): PromptInlineDocument => {
       if (!editorRef.current) {
@@ -80,14 +93,14 @@ export const PromptInlineEditor = forwardRef<PromptInlineEditorHandle, PromptInl
       onChange(documentValue);
     };
 
-    const hydrate = (documentValue: PromptInlineDocument) => {
+    const hydrate = (documentValue: PromptInlineDocument, labelPrefix: string) => {
       const editor = editorRef.current;
       if (!editor) {
         return;
       }
       editor.innerHTML = "";
       for (const prompt of documentValue.promptInvocations) {
-        editor.appendChild(createCommandNode(prompt, promptAriaLabelPrefix));
+        editor.appendChild(createCommandNode(prompt, labelPrefix));
         editor.appendChild(document.createTextNode(" "));
       }
       for (const mention of documentValue.tabMentions) {
@@ -138,15 +151,20 @@ export const PromptInlineEditor = forwardRef<PromptInlineEditorHandle, PromptInl
       },
     }));
 
+    // Only re-seed when the parent bumps resetVersion (send / open edit).
+    // Do NOT depend on seed arrays: default [] is a new reference every render and would wipe typing.
     useLayoutEffect(() => {
-      hydrate({
-        text: seedText,
-        promptInvocations: seedPromptInvocations,
-        tabMentions: seedTabMentions,
-      });
-      // Parent controls reseeding via resetVersion / seed props.
+      const seed = seedRef.current;
+      hydrate(
+        {
+          text: seed.text,
+          promptInvocations: seed.promptInvocations,
+          tabMentions: seed.tabMentions,
+        },
+        seed.promptAriaLabelPrefix,
+      );
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [resetVersion, seedText, seedPromptInvocations, seedTabMentions, promptAriaLabelPrefix]);
+    }, [resetVersion]);
 
     const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
       if (event.key === "Backspace" && !event.nativeEvent.isComposing) {
