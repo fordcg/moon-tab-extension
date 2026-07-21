@@ -355,11 +355,10 @@ export function PetCompanion() {
           title="重新显示页面浮宠"
         >
           <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
-            {/* Minimal cat, fuller in 24px box to match history/floating optical size */}
-            <path d="M8.6 9 6.8 5.4 11.2 7.6" />
-            <path d="M15.4 9 17.2 5.4 12.8 7.6" />
-            <circle cx="12" cy="13.4" r="5" />
-            <path d="M10.2 15c.5.65 1.1 1 1.8 1s1.3-.35 1.8-1" />
+            {/* Sparse cat: open ear V's sit above the head circle so strokes never pile up */}
+            <path d="M8 9.1 6 4.8 10.8 8.3" />
+            <path d="M16 9.1 18 4.8 13.2 8.3" />
+            <circle cx="12" cy="14.3" r="4.6" />
           </svg>
         </button>
       ) : null}
