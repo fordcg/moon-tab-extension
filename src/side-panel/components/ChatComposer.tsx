@@ -107,6 +107,10 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const [slashQuery, setSlashQuery] = useState("");
   const [slashStartIndex, setSlashStartIndex] = useState<number | undefined>();
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  const [atMenuOpen, setAtMenuOpen] = useState(false);
+  const [atQuery, setAtQuery] = useState("");
+  const [atStartIndex, setAtStartIndex] = useState<number | undefined>();
+  const [atActiveIndex, setAtActiveIndex] = useState(0);
   const [attachments, setAttachments] = useState<ChatImageAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
   const [previewAttachment, setPreviewAttachment] = useState<ChatImageAttachment | undefined>();
@@ -130,6 +134,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   const workflowMenuRef = useRef<HTMLDivElement | null>(null);
   const workflowMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  const atMenuRef = useRef<HTMLDivElement | null>(null);
   const chatInputShellRef = useRef<HTMLDivElement | null>(null);
   const currentModelSupportsVision = useAppStore((state) => Boolean(state.models.find((model) => model.id === state.selectedModelId)?.supportsVision));
   const sendShortcut = useAppStore((state) => state.chatPreferences.sendShortcut);
@@ -210,7 +215,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
   }, [slashQuery, slashMenuOpen]);
 
   useEffect(() => {
-    if (!slashMenuOpen && !workflowMenuOpen && !toolShelfOpen && !modeMenuOpen) {
+    setAtActiveIndex(0);
+  }, [atQuery, atMenuOpen]);
+
+  useEffect(() => {
+    if (!slashMenuOpen && !workflowMenuOpen && !toolShelfOpen && !modeMenuOpen && !atMenuOpen) {
       return undefined;
     }
 
@@ -218,6 +227,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       const target = event.target;
       if (!(target instanceof Node)) {
         setSlashMenuOpen(false);
+        setAtMenuOpen(false);
         setWorkflowMenuOpen(false);
         setToolShelfOpen(false);
         setModeMenuOpen(false);
@@ -230,6 +240,14 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
           // still allow other menus to close when clicking into slash/input
         } else {
           setSlashMenuOpen(false);
+        }
+      }
+
+      if (atMenuOpen) {
+        if (atMenuRef.current?.contains(target) || chatInputShellRef.current?.contains(target)) {
+          // keep open while interacting inside the mention menu or the input
+        } else {
+          setAtMenuOpen(false);
         }
       }
 
@@ -256,6 +274,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
         return;
       }
       setSlashMenuOpen(false);
+      setAtMenuOpen(false);
       setWorkflowMenuOpen(false);
       setToolShelfOpen(false);
       setModeMenuOpen(false);
@@ -267,7 +286,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       document.removeEventListener("pointerdown", closeOnPointerDown);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [modeMenuOpen, slashMenuOpen, toolShelfOpen, workflowMenuOpen]);
+  }, [atMenuOpen, modeMenuOpen, slashMenuOpen, toolShelfOpen, workflowMenuOpen]);
 
   useEffect(() => {
     if (!contextDialogOpen) {
@@ -366,6 +385,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setInput("");
     setPromptInvocations([]);
     setSlashMenuOpen(false);
+    setAtMenuOpen(false);
     const sendingAttachments = attachments;
     setAttachments([]);
     setAttachmentError("");
@@ -381,6 +401,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setInput("");
     setPromptInvocations([]);
     setSlashMenuOpen(false);
+    setAtMenuOpen(false);
     setSlashQuery("");
     setSlashStartIndex(undefined);
     try {
@@ -404,6 +425,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setInput("");
     setPromptInvocations([]);
     setSlashMenuOpen(false);
+    setAtMenuOpen(false);
     const sendingAttachments = attachments;
     const sendingPromptInvocations = promptInvocations;
     setAttachments([]);
@@ -413,6 +435,31 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
 
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     const isComposingInput = composing || event.nativeEvent.isComposing;
+    if (atMenuOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setAtMenuOpen(false);
+        return;
+      }
+      if (!isComposingInput && (event.key === "ArrowDown" || event.key === "ArrowUp") && filteredAtTabs.length > 0) {
+        event.preventDefault();
+        setAtActiveIndex((current) =>
+          event.key === "ArrowDown"
+            ? (current + 1) % filteredAtTabs.length
+            : (current - 1 + filteredAtTabs.length) % filteredAtTabs.length,
+        );
+        return;
+      }
+      if (!isComposingInput && (event.key === "Enter" || event.key === "Tab") && filteredAtTabs[atActiveIndex]) {
+        event.preventDefault();
+        handleSelectAtTab(filteredAtTabs[atActiveIndex]);
+        return;
+      }
+      if (isComposingInput && event.key === "Enter") {
+        event.preventDefault();
+        return;
+      }
+    }
     if (slashMenuOpen) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -483,6 +530,27 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       return;
     }
 
+    const atInfo = findAtMention(value);
+    if (atInfo) {
+      setSlashMenuOpen(false);
+      setSlashQuery("");
+      setSlashStartIndex(undefined);
+      setWorkflowMenuOpen(false);
+      setToolShelfOpen(false);
+      setModeMenuOpen(false);
+      setContextDialogOpen(false);
+      setAtMenuOpen(true);
+      setAtQuery(atInfo.query);
+      setAtStartIndex(atInfo.startIndex);
+      void loadContextTabs();
+      return;
+    }
+    if (atMenuOpen) {
+      setAtMenuOpen(false);
+      setAtQuery("");
+      setAtStartIndex(undefined);
+    }
+
     const slashInfo = findSlashCommand(value);
     if (!slashInfo) {
       setSlashMenuOpen(false);
@@ -499,6 +567,18 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     setSlashMenuOpen(true);
     setSlashQuery(slashInfo.query);
     setSlashStartIndex(slashInfo.startIndex);
+  };
+
+  const handleSelectAtTab = (tab: ContextTabCandidate) => {
+    if (!tab.selected) {
+      toggleContextTabSelection(tab.tabId);
+    }
+    setInput((current) => removeAtMentionSegment(current, atStartIndex));
+    setAtMenuOpen(false);
+    setAtQuery("");
+    setAtStartIndex(undefined);
+    setAtActiveIndex(0);
+    setSlashMenuOpen(false);
   };
 
   const handleSelectSkillPlaybook = (playbook: AutomationPlaybook) => {
@@ -527,6 +607,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
       return remaining;
     });
     setSlashMenuOpen(false);
+    setAtMenuOpen(false);
     setSlashQuery("");
     setSlashStartIndex(undefined);
     setSlashActiveIndex(0);
@@ -623,9 +704,12 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     );
   };
 
-  const closeComposerPopups = (except?: "slash" | "workflow" | "tools" | "mode" | "context") => {
+  const closeComposerPopups = (except?: "slash" | "at" | "workflow" | "tools" | "mode" | "context") => {
     if (except !== "slash") {
       setSlashMenuOpen(false);
+    }
+    if (except !== "at") {
+      setAtMenuOpen(false);
     }
     if (except !== "workflow") {
       setWorkflowMenuOpen(false);
@@ -681,6 +765,7 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
     importedSkillPlaybooks,
   );
   const filteredSkillPlaybooks = filterSkillPlaybooks(enabledSkillPlaybooks, slashQuery);
+  const filteredAtTabs = filterContextTabsByQuery(contextTabs, atQuery);
   const hasDraft = input.trim().length > 0 || attachments.length > 0 || promptInvocations.length > 0;
   const contextStripClassName = sharedContextTabs.length > 0 ? "context-strip has-page-banner" : "context-strip is-page-banner-empty";
   // Syncing used to toggle `is-syncing-selection`, which hid non-current rows via
@@ -887,6 +972,38 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
               ))
             ) : (
               <p className="slash-command-empty">未找到已启用的任务策略</p>
+            )}
+          </div>
+        ) : null}
+        {atMenuOpen ? (
+          <div className="slash-command-menu at-mention-menu" role="listbox" aria-label="标签页提及" ref={atMenuRef}>
+            {contextTabsLoading && contextTabs.length === 0 ? (
+              <p className="slash-command-empty">正在读取标签页...</p>
+            ) : contextTabsError ? (
+              <p className="slash-command-empty">{contextTabsError}</p>
+            ) : filteredAtTabs.length > 0 ? (
+              filteredAtTabs.map((tab, index) => (
+                <button
+                  key={tab.tabId}
+                  className={index === atActiveIndex ? "slash-command-option slash-command-option-active" : "slash-command-option"}
+                  type="button"
+                  role="option"
+                  aria-selected={index === atActiveIndex}
+                  title={tab.url}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleSelectAtTab(tab)}
+                >
+                  <span className="at-mention-option-row">
+                    <BannerFavicon src={tab.favIconUrl} className="sidepanel-tab-favicon" />
+                    <span className="slash-command-title">{tab.title || tab.url}</span>
+                    {tab.active ? <span className="at-mention-badge">当前</span> : null}
+                    {tab.selected ? <span className="at-mention-badge at-mention-badge-selected">已选</span> : null}
+                  </span>
+                  <span className="slash-command-content">{tab.url}</span>
+                </button>
+              ))
+            ) : (
+              <p className="slash-command-empty">未找到可注入的标签页</p>
             )}
           </div>
         ) : null}
@@ -1365,6 +1482,62 @@ function findSlashCommand(value: string): { startIndex: number; query: string } 
   }
 
   return { startIndex, query };
+}
+
+function findAtMention(value: string): { startIndex: number; query: string } | undefined {
+  const startIndex = value.lastIndexOf("@");
+  if (startIndex < 0) {
+    return undefined;
+  }
+  // Only trigger when @ is at the start of a token (start of input or after whitespace).
+  if (startIndex > 0 && !/\s/.test(value.charAt(startIndex - 1))) {
+    return undefined;
+  }
+
+  const query = value.slice(startIndex + 1);
+  // Keep the menu open only while the query has no whitespace (filter as you type).
+  if (/\s/.test(query)) {
+    return undefined;
+  }
+
+  return { startIndex, query };
+}
+
+export function removeAtMentionSegment(value: string, fallbackStartIndex?: number): string {
+  const atInfo = findAtMention(value);
+  const startIndex = atInfo?.startIndex ?? fallbackStartIndex;
+  if (startIndex === undefined || startIndex < 0) {
+    return value;
+  }
+
+  const afterAtText = value.slice(startIndex + 1);
+  const nextWhitespaceIndex = afterAtText.search(/\s/);
+  const endIndex = nextWhitespaceIndex < 0 ? value.length : startIndex + 1 + nextWhitespaceIndex;
+  const before = value.slice(0, startIndex);
+  const after = value.slice(endIndex);
+  if (!before) {
+    return after.replace(/^\s+/, "");
+  }
+  if (!after) {
+    return before.replace(/\s+$/, "");
+  }
+  if (/\s$/.test(before) && /^\s/.test(after)) {
+    return `${before}${after.replace(/^\s+/, "")}`;
+  }
+
+  return `${before}${after}`;
+}
+
+function filterContextTabsByQuery(tabs: ContextTabCandidate[], query: string): ContextTabCandidate[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return tabs;
+  }
+
+  return tabs.filter((tab) => {
+    const searchableText = [tab.title, tab.url].join("\n").toLowerCase();
+    return searchableText.includes(normalizedQuery);
+  });
 }
 
 export function resolveComposerModeMenuPosition(input: {
