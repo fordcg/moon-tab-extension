@@ -880,11 +880,11 @@ export function ChatComposer({ canSend, matchedRuleLabel }: ChatComposerProps) {
                   type="button"
                   role="option"
                   aria-selected={index === slashActiveIndex}
+                  title={playbook.description}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => handleSelectSkillPlaybook(playbook)}
                 >
                   <span className="slash-command-title">{playbook.title}</span>
-                  <span className="slash-command-content">{playbook.description}</span>
                 </button>
               ))
             ) : (
