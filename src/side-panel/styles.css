@@ -1594,7 +1594,7 @@ body {
   }
 
   .prompt-inline-editor {
-    @apply flex cursor-text flex-wrap content-start items-center gap-x-1 gap-y-1 overflow-y-auto whitespace-pre-wrap break-words text-sm;
+    @apply flex cursor-text flex-wrap content-start items-start gap-x-1 gap-y-1 overflow-y-auto whitespace-pre-wrap break-words text-sm;
   }
 
   .prompt-inline-editor-text {
