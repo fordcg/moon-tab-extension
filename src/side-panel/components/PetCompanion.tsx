@@ -343,17 +343,25 @@ export function PetCompanion() {
     void globalThis.chrome?.storage?.local?.set?.({ [PET_VISIBLE_STORAGE_KEY]: true }).catch(() => undefined);
   };
 
-  // No bottom status chip. Restore entry sits top-right when the page pet is hidden.
+  // Restore entry sits in the top-right icon cluster when the page pet is hidden.
   return (
     <>
       {!petVisible ? (
         <button
           type="button"
-          className="pet-restore-button"
+          className="ui-button-secondary app-header-icon-button"
           onClick={restorePet}
+          aria-label="显示宠物"
           title="重新显示页面浮宠"
         >
-          显示宠物
+          <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8.2 5.2 6.5 8.4" />
+            <path d="m15.8 5.2 1.7 3.2" />
+            <path d="M7 10.5c0-2.8 2.2-4.8 5-4.8s5 2 5 4.8v3.2c0 2.6-2.4 4.5-5 4.5s-5-1.9-5-4.5v-3.2Z" />
+            <path d="M9.6 12.2h.01" />
+            <path d="M14.4 12.2h.01" />
+            <path d="M10.2 15c.5.5 1.1.8 1.8.8s1.3-.3 1.8-.8" />
+          </svg>
         </button>
       ) : null}
       {panelOpen ? (

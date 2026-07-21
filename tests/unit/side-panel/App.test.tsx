@@ -2182,9 +2182,12 @@ describe("App", () => {
     expect(styles).toMatch(/\.sidebar-shell \.chat-history-panel-toggle\s*\{[^}]*clip:\s*rect\(0, 0, 0, 0\);/s);
     expect(styles).toMatch(/\.sidebar-shell \.chat-model-row\s*\{[^}]*right:\s*8\.125rem;/s);
     expect(styles).toMatch(/\.sidebar-shell \.app-header-icon-button\[aria-label="新建对话"\]\s*\{[^}]*right:\s*5\.75rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell:has\(\.app-header-icon-button\[aria-label="显示宠物"\]\) \.app-header-icon-button\[aria-label="新建对话"\]\s*\{[^}]*right:\s*8\.25rem;/s);
     expect(styles).toMatch(/\.sidebar-shell:not\(:has\(\.message-entry\)\) \.app-header-icon-button\[aria-label="新建对话"\]\s*\{[^}]*display:\s*none;/s);
     expect(styles).toMatch(/\.sidebar-shell \.chat-history-trigger\s*\{[^}]*position:\s*fixed;[^}]*right:\s*3\.25rem;/s);
+    expect(styles).toMatch(/\.sidebar-shell:has\(\.app-header-icon-button\[aria-label="显示宠物"\]\) \.chat-history-trigger\s*\{[^}]*right:\s*5\.75rem;/s);
     expect(styles).toMatch(/\.sidebar-shell \.app-header-icon-button\[aria-label="打开悬浮助手"\],[\s\S]*right:\s*0\.75rem;/);
+    expect(styles).toMatch(/\.sidebar-shell \.app-header-icon-button\[aria-label="显示宠物"\]\s*\{[^}]*right:\s*3\.25rem;/s);
     expect(styles).toMatch(/\.sidebar-shell \.chat-drawer-trigger,[\s\S]*\.sidebar-shell \.chat-private-trigger\s*\{[^}]*display:\s*none !important;/);
     expect(styles).toMatch(/\.sidebar-shell:has\(\.message-entry\) \.chat-model-row\s*\{[^}]*right:\s*8\.125rem;/s);
     expect(styles).toMatch(/\.sidebar-shell \.chat-input\s*\{[^}]*min-height:\s*3rem;/s);

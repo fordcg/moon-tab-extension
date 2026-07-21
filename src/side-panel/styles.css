@@ -3140,6 +3140,10 @@ body {
   right: 5.75rem;
 }
 
+.sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .app-header-icon-button[aria-label="新建对话"] {
+  right: 8.25rem;
+}
+
 .sidebar-shell:not(:has(.message-entry)) .app-header-icon-button[aria-label="新建对话"] {
   display: none;
 }
@@ -3147,6 +3151,10 @@ body {
 .sidebar-shell .app-header-icon-button[aria-label="打开悬浮助手"],
 .sidebar-shell .app-header-icon-button[aria-label="关闭悬浮助手"] {
   right: 0.75rem;
+}
+
+.sidebar-shell .app-header-icon-button[aria-label="显示宠物"] {
+  right: 3.25rem;
 }
 
 .sidebar-shell .app-header-icon-button[aria-label="浏览器控制"],
@@ -3170,6 +3178,10 @@ body {
   left: 1rem;
   right: 8.125rem;
   justify-content: flex-end;
+}
+
+.sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .chat-model-row {
+  right: 10.625rem;
 }
 
 .sidebar-shell .chat-history-panel-toggle {
@@ -3203,6 +3215,10 @@ body {
   font-size: 0;
   line-height: 0;
   box-shadow: none;
+}
+
+.sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .chat-history-trigger {
+  right: 5.75rem;
 }
 
 .sidebar-shell .chat-history-trigger::before {
@@ -3520,8 +3536,16 @@ body {
     top: 0.625rem;
   }
 
+  .sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .chat-model-row {
+    right: 8rem;
+  }
+
   .sidebar-shell:has(.message-entry) .chat-model-row {
     right: 8.125rem;
+  }
+
+  .sidebar-shell:has(.message-entry):has(.app-header-icon-button[aria-label="显示宠物"]) .chat-model-row {
+    right: 10.625rem;
   }
 
   .sidebar-shell .message-list {
@@ -7863,24 +7887,6 @@ body.sidepanel-stop-requested .composer-abort-button {
 }
 
 /* Side-panel AI pet companion (headless publisher; page hosts the floating pet) */
-.pet-restore-button {
-  position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 35;
-  display: inline-flex;
-  border: 0;
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--color-body, #2b241c);
-  background: color-mix(in srgb, var(--color-surface, #fffaf2) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
-  box-shadow: 0 6px 16px rgba(43, 36, 28, 0.08);
-}
-
 .pet-usage-overlay {
   position: fixed;
   inset: 0;
