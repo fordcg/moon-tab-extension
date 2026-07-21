@@ -355,10 +355,10 @@ export function PetCompanion() {
           title="重新显示页面浮宠"
         >
           <svg className="app-header-icon" viewBox="0 0 24 24" aria-hidden="true">
-            {/* Sparse cat: open ear V's sit above the head circle so strokes never pile up */}
-            <path d="M8 9.1 6 4.8 10.8 8.3" />
-            <path d="M16 9.1 18 4.8 13.2 8.3" />
-            <circle cx="12" cy="14.3" r="4.6" />
+            {/* Closed cat silhouette: ears merge into the head so nothing overlaps at 18px. */}
+            <path d="M5 3 L8.5 8 Q12 7.5 15.5 8 L19 3 L17.5 9 Q19.5 15 12 19.5 Q4.5 15 6.5 9 Z" />
+            <circle cx="9.8" cy="13" r="1" style={{ fill: "currentColor", stroke: "none" }} />
+            <circle cx="14.2" cy="13" r="1" style={{ fill: "currentColor", stroke: "none" }} />
           </svg>
         </button>
       ) : null}
