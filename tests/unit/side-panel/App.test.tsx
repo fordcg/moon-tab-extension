@@ -4238,10 +4238,11 @@ describe("App", () => {
     expect(styles).toMatch(/\.settings-dialog \.settings-tabs-scroll::-webkit-scrollbar\s*\{[^}]*display:\s*block/s);
     expect(screen.queryByLabelText("历史会话")).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "模型渠道" })).toBeInTheDocument();
-    expect(screen.getByLabelText("AI 标题生成模型")).toBeInTheDocument();
+    expect(screen.queryByLabelText("AI 标题生成模型")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("默认对话模型")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新增渠道" })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "添加模型" })).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByText(/还没有渠道/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "提取规则" }));
 
@@ -4477,7 +4478,7 @@ describe("App", () => {
     expect(restoreNow).toHaveBeenCalledWith("browserAiAssistantBackup:home:2");
   });
 
-  it("可以在渠道管理中选择和取消 AI 标题生成模型", async () => {
+  it("可以在聊天偏好中选择和取消 AI 标题生成模型", async () => {
     const user = userEvent.setup();
     const provider: ModelProvider = {
       id: "provider-title",
@@ -4515,23 +4516,28 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    const titleModelSelect = await screen.findByLabelText("AI 标题生成模型");
-
-    await user.selectOptions(titleModelSelect, "model-title");
+    expect(screen.queryByLabelText("AI 标题生成模型")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
+    const titleModelTrigger = await screen.findByRole("button", { name: "AI 标题生成模型菜单" });
+    await user.click(titleModelTrigger);
+    const titleMenu = screen.getByRole("listbox", { name: "AI 标题生成模型" });
+    await user.click(within(titleMenu).getByRole("option", { name: /标题渠道 \/ 标题模型/ }));
 
     await waitFor(() => {
       expect(useAppStore.getState().models.find((model) => model.id === "model-title")?.isTitleModel).toBe(true);
       expect(useAppStore.getState().models.find((model) => model.id === "model-chat")?.isTitleModel).toBe(false);
     });
 
-    await user.selectOptions(titleModelSelect, "");
+    await user.click(screen.getByRole("button", { name: "AI 标题生成模型菜单" }));
+    const clearedTitleMenu = screen.getByRole("listbox", { name: "AI 标题生成模型" });
+    await user.click(within(clearedTitleMenu).getByRole("option", { name: "不开启自动标题生成" }));
 
     await waitFor(() => {
       expect(useAppStore.getState().models.every((model) => !model.isTitleModel)).toBe(true);
     });
   });
 
-  it("可以在渠道管理中选择默认对话模型且位置在 AI 标题生成模型上方", async () => {
+  it("可以在聊天偏好中选择默认对话模型且位置在 AI 标题生成模型上方", async () => {
     const user = userEvent.setup();
     const provider: ModelProvider = {
       id: "provider-default",
@@ -4559,7 +4565,7 @@ describe("App", () => {
     const defaultModel: ProviderModel = {
       ...chatModel,
       id: "model-default",
-      displayName: "默认对话模型",
+      displayName: "默认模型",
       modelId: "gpt-default",
     };
     await saveModelProvider(provider);
@@ -4569,18 +4575,23 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    const defaultModelSelect = await screen.findByLabelText("默认对话模型");
-    const titleModelSelect = screen.getByLabelText("AI 标题生成模型");
+    await user.click(screen.getByRole("tab", { name: "聊天偏好" }));
+    const defaultModelField = await screen.findByText("默认对话模型", { selector: "span" });
+    const titleModelField = screen.getByText("AI 标题生成模型", { selector: "span" });
+    expect(defaultModelField.compareDocumentPosition(titleModelField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(defaultModelSelect.compareDocumentPosition(titleModelSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    await user.selectOptions(defaultModelSelect, "model-default");
+    const defaultModelTrigger = screen.getByRole("button", { name: "默认对话模型菜单" });
+    await user.click(defaultModelTrigger);
+    const defaultMenu = screen.getByRole("listbox", { name: "默认对话模型" });
+    await user.click(within(defaultMenu).getByRole("option", { name: /默认渠道 \/ 默认模型/ }));
 
     await waitFor(() => {
       expect(useAppStore.getState().defaultChatModelId).toBe("model-default");
     });
 
-    await user.selectOptions(defaultModelSelect, "");
+    await user.click(screen.getByRole("button", { name: "默认对话模型菜单" }));
+    const clearedDefaultMenu = screen.getByRole("listbox", { name: "默认对话模型" });
+    await user.click(within(clearedDefaultMenu).getByRole("option", { name: "使用第一个可用模型" }));
 
     await waitFor(() => {
       expect(useAppStore.getState().defaultChatModelId).toBe("");
@@ -4624,7 +4635,7 @@ describe("App", () => {
 
   it("可以在渠道模型中立即清空当前渠道所有模型", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm");
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
@@ -4635,11 +4646,11 @@ describe("App", () => {
     expect(useAppStore.getState().models.map((model) => model.modelId)).toEqual(["gpt-4.1-mini", "qwen-plus", "deepseek-chat"]);
     await user.click(screen.getByRole("button", { name: "清空所有" }));
 
+    expect(confirmSpy).toHaveBeenCalledWith("确认清空当前渠道下的所有模型吗？");
     expect(useAppStore.getState().models).toEqual([]);
     expect(screen.queryByText("gpt-4.1-mini")).not.toBeInTheDocument();
     expect(screen.queryByText("qwen-plus")).not.toBeInTheDocument();
     expect(screen.queryByText("deepseek-chat")).not.toBeInTheDocument();
-    expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
 
