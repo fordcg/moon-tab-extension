@@ -269,6 +269,51 @@ Prompt2 的内容
     }
   });
 
+  it("导出和复制完全访问 Network 原始附件前会脱敏签名字段", () => {
+    const message = createMessage({
+      id: "message-full-access-network-export",
+      role: "assistant",
+      content: "签名实验完成：sign=raw-final-sign",
+      toolAttachments: [
+        {
+          id: "tool-full-access-network",
+          kind: "network",
+          title: "Network 请求详情",
+          summary: "原始详情 sign=raw-summary-sign",
+          createdAt: 1700000000000,
+          redacted: false,
+          fullAccess: true,
+          truncated: false,
+          requests: [
+            {
+              id: "req-1",
+              url: "https://example.com/api?sign=raw-url-sign&nonce=raw-url-nonce",
+              method: "POST",
+              requestBody: "{\"signature\":\"raw-body-sign\",\"nonce\":\"raw-body-nonce\"}",
+              responseBody: "{\"sig\":\"raw-response-sig\"}",
+              redacted: false,
+              truncated: false,
+            },
+          ],
+        },
+      ],
+      createdAt: 1700000000000,
+    });
+    const session = createSession({
+      title: "签名实验",
+      messages: [message],
+    });
+
+    const markdown = createChatSessionMarkdown(session, 1700000200000);
+    const printHtml = createChatSessionPrintHtml(session, 1700000200000);
+    const copied = createChatMessageMarkdown(message);
+
+    for (const exportedText of [markdown, printHtml, copied]) {
+      expect(exportedText).toContain("[已脱敏]");
+      expect(exportedText).not.toMatch(/raw-final-sign|raw-summary-sign|raw-url-sign|raw-url-nonce|raw-body-sign|raw-body-nonce|raw-response-sig/);
+    }
+  });
+
   it("复制助手消息时包含思考过程、正文、Network 附件和网络搜索附件", () => {
     const message = createMessage({
       id: "message-copy-assistant",
