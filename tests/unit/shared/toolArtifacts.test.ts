@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectMessageToolAttachments, collectRawMessageToolAttachments, createAutomationReportToolAttachment, formatToolAttachmentForExport, formatToolAttachmentForPrompt, normalizeToolAttachment } from "../../../src/shared/toolArtifacts";
+import { collectMessageToolAttachments, collectRawMessageToolAttachments, createAutomationReportToolAttachment, formatToolAttachmentForExport, formatToolAttachmentForPrompt, formatToolAttachmentForPromptSummary, normalizeToolAttachment } from "../../../src/shared/toolArtifacts";
 import type { ChatMessage, ChatToolCallRecord } from "../../../src/shared/types";
 
 function createAssistantMessage(partial: Partial<ChatMessage>): ChatMessage {
@@ -70,7 +70,7 @@ describe("通用工具附件聚合", () => {
     expect(formatToolAttachmentForExport(attachment)).toContain("[已脱敏]");
   });
 
-  it("完全访问 Network 附件归一化和聚合后仍保留原文", () => {
+  it("完全访问 Network 附件在原始收集保留原文，提示摘要和导出默认脱敏", () => {
     const message = createAssistantMessage({
       toolAttachments: [
         {
@@ -86,11 +86,11 @@ describe("通用工具附件聚合", () => {
           requests: [
             {
               id: "req-1",
-              url: "https://example.com/login?token=secret",
+              url: "https://example.com/login?sign=raw-signature&nonce=raw-nonce&token=secret",
               method: "POST",
               requestHeaders: [{ name: "Authorization", value: "Bearer secret" }],
-              requestBody: "{\"password\":\"123456\"}",
-              responseBody: "{\"token\":\"secret\",\"ok\":true}",
+              requestBody: "{\"password\":\"123456\",\"sign\":\"raw-body-sign\",\"nonce\":\"raw-body-nonce\"}",
+              responseBody: "{\"signature\":\"raw-response-sign\",\"ok\":true}",
               redacted: false,
               truncated: false,
             },
@@ -99,14 +99,21 @@ describe("通用工具附件聚合", () => {
       ],
     });
 
+    const [rawAttachment] = collectRawMessageToolAttachments(message);
     const [attachment] = collectMessageToolAttachments(message);
 
+    expect(rawAttachment).toMatchObject({ kind: "network", redacted: false, fullAccess: true });
+    expect(JSON.stringify(rawAttachment)).toContain("raw-signature");
+    expect(JSON.stringify(rawAttachment)).toContain("Bearer secret");
     expect(attachment).toMatchObject({ kind: "network", redacted: false, fullAccess: true });
-    expect(formatToolAttachmentForPrompt(attachment)).toContain("123456");
-    expect(formatToolAttachmentForPrompt(attachment)).toContain("Bearer secret");
-    expect(formatToolAttachmentForExport(attachment)).toContain("123456");
-    expect(formatToolAttachmentForExport(attachment)).toContain("Bearer secret");
-    expect(formatToolAttachmentForExport(attachment)).not.toContain("[已脱敏]");
+    for (const text of [
+      formatToolAttachmentForPrompt(attachment),
+      formatToolAttachmentForPromptSummary(attachment),
+      formatToolAttachmentForExport(attachment),
+    ]) {
+      expect(text).toContain("[已脱敏]");
+      expect(text).not.toMatch(/raw-signature|raw-nonce|secret|123456|raw-body-sign|raw-body-nonce|raw-response-sign/);
+    }
   });
 
   it("混合工具附件聚合会结构化脱敏 fullAccess Network 和 raw generic 内容", () => {

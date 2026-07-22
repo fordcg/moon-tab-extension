@@ -208,7 +208,7 @@ export function formatToolAttachmentForPrompt(attachment: ChatToolAttachment): s
   }
 
   if (isNetworkToolAttachment(attachment)) {
-    const requests = shouldPreserveNetworkAttachmentRaw(attachment) ? attachment.requests : attachment.requests.map(redactNetworkRequestDetail);
+    const requests = redactNetworkAttachmentRequestsForSharedText(attachment);
     return ["后续追问需要继续参考以下历史 Network 请求详情：", formatNetworkAttachmentForExport(requests)].join("\n");
   }
 
@@ -247,7 +247,8 @@ export function formatToolAttachmentForPromptSummary(attachment: ChatToolAttachm
   }
 
   if (isNetworkToolAttachment(attachment)) {
-    const summary = formatNetworkAttachmentSummary(attachment.requests).trim();
+    const requests = redactNetworkAttachmentRequestsForSharedText(attachment);
+    const summary = formatNetworkAttachmentSummary(requests).trim();
     return summary
       ? [
           "后续追问可参考以下历史 Network 请求摘要；完整 body/header 仅保存在附件弹窗，不默认注入模型上下文：",
@@ -298,7 +299,7 @@ export function formatToolAttachmentForExport(attachment: ChatToolAttachment): s
   }
 
   if (isNetworkToolAttachment(attachment)) {
-    const requests = shouldPreserveNetworkAttachmentRaw(attachment) ? attachment.requests : attachment.requests.map(redactNetworkRequestDetail);
+    const requests = redactNetworkAttachmentRequestsForSharedText(attachment);
     return ["# Network 请求详情附件", "", formatNetworkAttachmentSummary(requests), "", formatNetworkAttachmentForExport(requests)].join("\n");
   }
 
@@ -902,6 +903,12 @@ function normalizeNetworkToolAttachment(source: Partial<ChatToolAttachment>): Ch
 
 function shouldPreserveNetworkAttachmentRaw(attachment: ChatNetworkToolAttachment): boolean {
   return attachment.fullAccess === true && attachment.redacted === false;
+}
+
+function redactNetworkAttachmentRequestsForSharedText(
+  attachment: ChatNetworkToolAttachment,
+): ChatNetworkToolAttachment["requests"] {
+  return attachment.requests.map(redactNetworkRequestDetail);
 }
 
 function isFullAccessNetworkAttachmentSource(source: Partial<ChatToolAttachment>): source is Partial<ChatNetworkToolAttachment> {
