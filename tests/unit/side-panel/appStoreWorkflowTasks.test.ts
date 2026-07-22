@@ -512,6 +512,43 @@ describe("appStore 工作流任务", () => {
     expect(researchArtifacts[1]?.content).toContain("| 指标 | 结果 |");
   });
 
+  it("签名实验工作流会生成脱敏调试报告产物", () => {
+    const task = createWorkflowTaskFixture({
+      template: "debug",
+      contextItems: [{
+        id: "context-network",
+        kind: "network",
+        title: "Network 摘要",
+        summary: "sign=[已脱敏]",
+        capturedAt: 1,
+        redacted: true,
+        truncated: false,
+        sensitive: false,
+      }],
+      steps: [{
+        id: "step-signature",
+        title: "Full Access 签名实验室 full_access.fetch",
+        status: "completed",
+        updatedAt: 2,
+      }],
+    });
+
+    const artifact = createWorkflowArtifactFromAssistantMessage(
+      task,
+      createAssistantMessage("sign=raw-workflow-sign\nnonce=raw-workflow-nonce\nAuthorization: Bearer raw-workflow-token"),
+      30,
+    );
+
+    expect(artifact).toMatchObject({
+      kind: "debug-report",
+      title: "调试报告",
+      contextItemIds: ["context-network"],
+      createdAt: 30,
+    });
+    expect(artifact?.content).toContain("[已脱敏]");
+    expect(artifact?.content).not.toMatch(/raw-workflow-sign|raw-workflow-nonce|raw-workflow-token/);
+  });
+
   it("工作流流错误进入失败状态，原子取消会终止所属请求", async () => {
     const session = createSession();
     const provider = createProvider();
