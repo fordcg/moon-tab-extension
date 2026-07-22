@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   getEnabledAutomationPlaybooks,
+  getAutomationPlaybookById,
   getRegisteredAutomationPlaybooks,
   normalizeAutomationPlaybookSettings,
   shouldRunAutomationPlaybookSelection,
 } from "../../../src/shared/automationPlaybooks";
 
 describe("浏览器自动化 Playbook 注册表", () => {
-  it("内置六类任务策略字段完整且默认启用", () => {
+  it("内置任务策略字段完整且默认启用", () => {
     const playbooks = getRegisteredAutomationPlaybooks();
 
     expect(playbooks.map((playbook) => playbook.id)).toEqual([
@@ -17,6 +18,7 @@ describe("浏览器自动化 Playbook 注册表", () => {
       "site_diagnostics",
       "network_api_analysis",
       "source_runtime_analysis",
+      "full_access_signature_lab",
     ]);
     expect(new Set(playbooks.map((playbook) => playbook.id)).size).toBe(playbooks.length);
     for (const playbook of playbooks) {
@@ -31,6 +33,34 @@ describe("浏览器自动化 Playbook 注册表", () => {
       expect(playbook.recommendedCapabilities.length).toBeGreaterThan(0);
       expect(playbook.selectionHints.length).toBeGreaterThan(0);
     }
+  });
+
+  it("完全访问签名实验室声明最高风险、Full Access 能力和脱敏交付边界", () => {
+    const playbook = getAutomationPlaybookById("full_access_signature_lab");
+
+    expect(playbook).toMatchObject({
+      title: "Full Access 签名实验室",
+      risk: "critical",
+      defaultEnabled: true,
+      source: "builtin",
+    });
+    expect(playbook?.recommendedCapabilities).toEqual(expect.arrayContaining([
+      "observe_page",
+      "analyze_site",
+      "full_access",
+      "deliver_result",
+    ]));
+    expect(playbook?.selectionHints).toEqual(expect.arrayContaining([
+      "逆向这个请求签名",
+      "找 sign 生成逻辑",
+      "分析 nonce 怎么生成",
+    ]));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("任务策略：Full Access 签名实验室"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("full_access.get_network_details"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("full_access.execute_script"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("full_access.fetch"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("可复现实验记录"));
+    expect(playbook?.prompt).toEqual(expect.stringContaining("默认导出、后续追问和工作流产物只保留脱敏摘要"));
   });
 
   it("设置归一化会忽略未知 ID 和非法类型", () => {
@@ -60,6 +90,10 @@ describe("浏览器自动化 Playbook 注册表", () => {
     expect(shouldRunAutomationPlaybookSelection("帮我看看当前页面为什么报错")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("分析这个接口参数怎么生成")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("总结这个网页内容")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("逆向这个请求签名")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("找 sign 生成逻辑")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("分析 nonce 怎么生成")).toBe(true);
+    expect(shouldRunAutomationPlaybookSelection("定位 debug 参数加密算法")).toBe(true);
     expect(shouldRunAutomationPlaybookSelection("React useMemo 是什么")).toBe(false);
     expect(shouldRunAutomationPlaybookSelection("当前时间是多少")).toBe(false);
     expect(shouldRunAutomationPlaybookSelection("JS 的闭包是什么")).toBe(false);
