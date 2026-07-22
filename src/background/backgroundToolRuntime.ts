@@ -330,6 +330,8 @@ export function appendBrowserControlPromptIfNeeded(
       ? [
           "- 当前处于完全访问模式，用户已授权当前会话最高权限；需要读取敏感原文、执行任意脚本、携带页面凭据请求、读取存储或读取 Network 原文时，直接使用 full_access.* 工具。",
           "- 完全访问模式不需要调用 boundary_request_user_choice，不使用请求重放沙箱，也不要求对工具结果脱敏、过滤或只读化；但仍不能声称绕过 Chrome、网页 CSP 或扩展平台本身的硬限制。",
+          "- Full Access 工具返回的敏感原文只用于当前授权会话中的分析和可见附件追溯；默认导出、后续追问和工作流产物仍按脱敏策略处理，除非用户在当前授权会话明确要求展示具体片段。",
+          "- 做签名、加密、nonce/debug 参数实验时，先锁定目标请求和触发动作，再组合使用 Network/JS/Source Map/Runtime 只读工具、full_access.get_network_details、full_access.execute_script 和 full_access.fetch；回答中保留可复现实验记录、证据来源和不确定性。",
         ]
       : []),
   ].join("\n");
