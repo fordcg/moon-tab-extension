@@ -100,6 +100,9 @@ export function ChatPreferenceSettings() {
   const systemPromptInput = useComposedTextInput(chatPreferences.systemPrompt, (systemPrompt) => {
     void updateChatPreferences({ systemPrompt });
   });
+  const contextCompressionPromptInput = useComposedTextInput(chatPreferences.contextCompressionPrompt, (contextCompressionPrompt) => {
+    void updateChatPreferences({ contextCompressionPrompt });
+  });
   const handleToolToggle = (toolId: string, checked: boolean) => {
     const nextToolIds = checked ? [...chatPreferences.enabledToolIds, toolId] : chatPreferences.enabledToolIds.filter((id) => id !== toolId);
     void updateChatPreferences({ enabledToolIds: Array.from(new Set(nextToolIds)) });
@@ -149,6 +152,14 @@ export function ChatPreferenceSettings() {
           {...systemPromptInput}
         />
       </label>
+      <label className="grid gap-1 text-sm">
+        上下文压缩 Prompt
+        <textarea
+          className="ui-input min-h-32"
+          aria-label="全局上下文压缩 Prompt"
+          {...contextCompressionPromptInput}
+        />
+      </label>
       <div className="chat-preference-grid">
         <GlobalPreferenceNumberInput
           label="AI 请求失败重试次数"
@@ -188,11 +199,33 @@ export function ChatPreferenceSettings() {
           onChange={(value) => void updateChatPreferences({ temperature: value })}
         />
         <GlobalPreferenceNumberInput
-          label="max_token"
+          label="模型输出上限 max_tokens"
           value={chatPreferences.maxTokens}
           min={1}
           step={1}
           onChange={(value) => void updateChatPreferences({ maxTokens: value })}
+        />
+        <GlobalPreferenceNumberInput
+          label="最大聊天上下文（token）"
+          value={chatPreferences.maxContextTokens}
+          min={1}
+          step={1}
+          onChange={(value) => void updateChatPreferences({ maxContextTokens: value })}
+        />
+        <GlobalPreferenceNumberInput
+          label="自动压缩阈值（%）"
+          value={chatPreferences.contextCompressionThresholdPercent}
+          min={1}
+          max={100}
+          step={1}
+          onChange={(value) => void updateChatPreferences({ contextCompressionThresholdPercent: value })}
+        />
+        <GlobalPreferenceNumberInput
+          label="工具附件详情池保留上限"
+          value={chatPreferences.toolDetailPoolKeepLimit}
+          min={0}
+          step={1}
+          onChange={(value) => void updateChatPreferences({ toolDetailPoolKeepLimit: value })}
         />
         <GlobalPreferenceNumberInput
           label="top_k"

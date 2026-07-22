@@ -123,18 +123,61 @@ export function createAutomationReportToolAttachment(input: {
   return report;
 }
 
-export function collectMessageToolAttachments(message: ChatMessage): ChatToolAttachment[] {
-  return aggregateToolAttachments(collectRawMessageToolAttachments(message), message.toolCallRecords);
+export type ChatToolAttachmentsById = Record<string, ChatToolAttachment>;
+
+export function shouldExpandMessageToolAttachmentsForModelContext(
+  message: Pick<ChatMessage, "role" | "assistantMessageKind">,
+): boolean {
+  // 最终回答会保留工具附件引用供 UI/导出，但后续模型请求只展开工具过程消息，避免大附件摘要被最终回答重新带回上下文。
+  return message.role === "assistant" && message.assistantMessageKind === "tool_call_turn";
+}
+
+export function collectMessageToolAttachments(
+  message: ChatMessage,
+  toolAttachmentsById?: ChatToolAttachmentsById,
+): ChatToolAttachment[] {
+  return aggregateToolAttachments(collectRawMessageToolAttachments(message, toolAttachmentsById), message.toolCallRecords);
 }
 
 // 原始附件用于工具调用详情追溯；聚合附件用于消息展示、导出和后续追问，避免同一轮多次工具调用撑开附件区。
-export function collectRawMessageToolAttachments(message: ChatMessage): ChatToolAttachment[] {
-  const attachments = uniqueToolAttachmentsById(message.toolAttachments ?? []);
+export function collectRawMessageToolAttachments(
+  message: ChatMessage,
+  toolAttachmentsById?: ChatToolAttachmentsById,
+): ChatToolAttachment[] {
+  const inlineAttachments = uniqueToolAttachmentsById(message.toolAttachments ?? []);
+  const referencedAttachments = resolveReferencedToolAttachments(message, toolAttachmentsById);
+  const attachments = uniqueToolAttachmentsById([...inlineAttachments, ...referencedAttachments]);
   const legacyAttachments: ChatToolAttachment[] = [];
   if (message.networkContextAttachment) {
     legacyAttachments.push(createNetworkToolAttachment(message.networkContextAttachment));
   }
   return mergeCompatibleToolAttachments(attachments, legacyAttachments);
+}
+
+function resolveReferencedToolAttachments(
+  message: ChatMessage,
+  toolAttachmentsById?: ChatToolAttachmentsById,
+): ChatToolAttachment[] {
+  if (!toolAttachmentsById) {
+    return [];
+  }
+
+  const ids = new Set<string>();
+  for (const attachmentId of message.toolAttachmentIds ?? []) {
+    ids.add(attachmentId);
+  }
+  for (const attachment of message.toolAttachments ?? []) {
+    ids.add(attachment.id);
+  }
+  for (const record of message.toolCallRecords ?? []) {
+    for (const attachmentId of record.attachmentIds ?? []) {
+      ids.add(attachmentId);
+    }
+  }
+
+  return [...ids]
+    .map((id) => toolAttachmentsById[id])
+    .filter((attachment): attachment is ChatToolAttachment => Boolean(attachment));
 }
 
 export function aggregateToolAttachments(attachments: ChatToolAttachment[], records: ChatToolCallRecord[] = []): ChatToolAttachment[] {
@@ -194,6 +237,59 @@ export function formatToolAttachmentForPrompt(attachment: ChatToolAttachment): s
   }
 
   return safeAttachment.summary.trim() ? [`后续追问需要继续参考以下历史工具附件：${safeAttachment.title}`, safeAttachment.summary.trim()].join("\n") : undefined;
+}
+
+/** 压缩/预算估算用的摘要注入：只带 summary，不展开完整 body/源码。 */
+export function formatToolAttachmentForPromptSummary(attachment: ChatToolAttachment): string | undefined {
+  if (isWebSearchToolAttachment(attachment)) {
+    const summary = formatTavilySearchAttachmentSummary(attachment).trim();
+    return summary ? ["后续追问可参考以下历史网络搜索摘要：", summary].join("\n") : undefined;
+  }
+
+  if (isNetworkToolAttachment(attachment)) {
+    const summary = formatNetworkAttachmentSummary(attachment.requests).trim();
+    return summary
+      ? [
+          "后续追问可参考以下历史 Network 请求摘要；完整 body/header 仅保存在附件弹窗，不默认注入模型上下文：",
+          summary,
+        ].join("\n")
+      : undefined;
+  }
+
+  if (isJsSourceToolAttachment(attachment)) {
+    const summary = formatJsSourceAttachmentSummary(attachment).trim();
+    return summary
+      ? [
+          "后续追问可参考以下历史 JS 资源摘要；完整源码仅保存在附件弹窗，不默认注入模型上下文：",
+          summary,
+        ].join("\n")
+      : undefined;
+  }
+
+  if (isSourceMapToolAttachment(attachment)) {
+    const summary = formatSourceMapAttachmentSummary(attachment).trim();
+    return summary
+      ? [
+          "后续追问可参考以下历史 Source Map 摘要；完整原始片段仅保存在附件弹窗，不默认注入模型上下文：",
+          summary,
+        ].join("\n")
+      : undefined;
+  }
+
+  if (isBrowserScreenshotToolAttachment(attachment)) {
+    return [
+      "后续追问可参考一张历史浏览器截图附件；正文只保留元数据，不注入图片 base64：",
+      formatBrowserScreenshotAttachmentSummary(attachment),
+    ].join("\n");
+  }
+
+  if (isAutomationReportToolAttachment(attachment)) {
+    return ["后续追问可参考以下自动化任务报告摘要：", formatAutomationReportSummary(attachment)].join("\n");
+  }
+
+  const safeAttachment = sanitizeGenericToolAttachment(attachment);
+  const summary = safeAttachment.summary.trim();
+  return summary ? [`后续追问可参考以下历史工具附件摘要：${safeAttachment.title}`, summary].join("\n") : undefined;
 }
 
 export function formatToolAttachmentForExport(attachment: ChatToolAttachment): string {

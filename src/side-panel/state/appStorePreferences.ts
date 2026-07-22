@@ -1,3 +1,8 @@
+import {
+  DEFAULT_CONTEXT_COMPRESSION_PROMPT,
+  DEFAULT_CONTEXT_COMPRESSION_THRESHOLD_PERCENT,
+  normalizeContextCompressionThresholdPercent,
+} from "../../shared/chat/contextCompression";
 import { DEFAULT_MODEL_REQUEST_RETRY_COUNT, normalizeModelRequestRetryCount } from "../../shared/models/modelRequestRetry";
 import { getRegisteredModelTools, isToolRuntimeAvailable, normalizeEnabledToolIds } from "../../shared/models/toolRegistry";
 import type { BrowserAutomationMode } from "../../shared/toolAuthorization";
@@ -9,9 +14,15 @@ import type {
   SendShortcut,
 } from "../../shared/types";
 
+export const DEFAULT_MAX_CONTEXT_TOKENS = 256_000;
+export const DEFAULT_TOOL_DETAIL_POOL_KEEP_LIMIT = 500;
+
 export function createDefaultChatPreferences(): ChatPreferenceValues {
   return {
     systemPrompt: "你是网页助手",
+    contextCompressionPrompt: DEFAULT_CONTEXT_COMPRESSION_PROMPT,
+    contextCompressionThresholdPercent: DEFAULT_CONTEXT_COMPRESSION_THRESHOLD_PERCENT,
+    toolDetailPoolKeepLimit: DEFAULT_TOOL_DETAIL_POOL_KEEP_LIMIT,
     aiRequestRetryCount: DEFAULT_MODEL_REQUEST_RETRY_COUNT,
     browserAutomationMaxToolIterations: 48,
     browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -22,6 +33,7 @@ export function createDefaultChatPreferences(): ChatPreferenceValues {
     showToolCallProcessInAssistantMode: false,
     temperature: 0.7,
     maxTokens: 1024,
+    maxContextTokens: DEFAULT_MAX_CONTEXT_TOKENS,
     topK: undefined,
     sendShortcut: "enter",
     followUpBehavior: "queue",
@@ -38,6 +50,9 @@ export type EffectiveChatPreferences = Required<
   Pick<
     ChatSessionPreferenceOverrides,
     | "systemPrompt"
+    | "contextCompressionPrompt"
+    | "contextCompressionThresholdPercent"
+    | "toolDetailPoolKeepLimit"
     | "aiRequestRetryCount"
     | "browserAutomationMaxToolIterations"
     | "browserAutomationMaxToolIterationsControlledEnhanced"
@@ -46,6 +61,7 @@ export type EffectiveChatPreferences = Required<
     | "enabledToolIds"
     | "temperature"
     | "maxTokens"
+    | "maxContextTokens"
   >
 > &
   Pick<ChatSessionPreferenceOverrides, "topK">;
@@ -58,6 +74,17 @@ export function normalizeChatPreferences(value?: Partial<ChatPreferenceValues>):
       typeof value?.systemPrompt === "string" && value.systemPrompt.trim()
         ? value.systemPrompt.trim()
         : defaults.systemPrompt,
+    contextCompressionPrompt:
+      typeof value?.contextCompressionPrompt === "string" && value.contextCompressionPrompt.trim()
+        ? value.contextCompressionPrompt.trim()
+        : defaults.contextCompressionPrompt,
+    contextCompressionThresholdPercent: normalizeContextCompressionThresholdPercent(
+      value?.contextCompressionThresholdPercent ?? defaults.contextCompressionThresholdPercent,
+    ),
+    toolDetailPoolKeepLimit: normalizeIntegerWithoutRange(
+      value?.toolDetailPoolKeepLimit,
+      defaults.toolDetailPoolKeepLimit,
+    ),
     aiRequestRetryCount: normalizeModelRequestRetryCount(value?.aiRequestRetryCount, defaults.aiRequestRetryCount),
     browserAutomationMaxToolIterations: normalizeIntegerWithoutRange(
       value?.browserAutomationMaxToolIterations,
@@ -80,6 +107,7 @@ export function normalizeChatPreferences(value?: Partial<ChatPreferenceValues>):
     ),
     temperature: normalizeNumber(value?.temperature, defaults.temperature, 0, 2),
     maxTokens: Math.round(normalizeNumber(value?.maxTokens, defaults.maxTokens, 1, 200_000)),
+    maxContextTokens: Math.round(normalizeNumber(value?.maxContextTokens, defaults.maxContextTokens, 1, 1_000_000)),
     topK: normalizeOptionalInteger(value?.topK, 1, 1_000),
     sendShortcut: normalizeSendShortcut(value?.sendShortcut),
     followUpBehavior: normalizeFollowUpBehavior(value?.followUpBehavior),
@@ -119,6 +147,20 @@ export function normalizeChatPreferenceOverrides(value?: ChatSessionPreferenceOv
   if (typeof value?.systemPrompt === "string" && value.systemPrompt.trim()) {
     overrides.systemPrompt = value.systemPrompt.trim();
   }
+  if (typeof value?.contextCompressionPrompt === "string" && value.contextCompressionPrompt.trim()) {
+    overrides.contextCompressionPrompt = value.contextCompressionPrompt.trim();
+  }
+  if (value?.contextCompressionThresholdPercent !== undefined) {
+    overrides.contextCompressionThresholdPercent = normalizeContextCompressionThresholdPercent(
+      value.contextCompressionThresholdPercent,
+    );
+  }
+  if (value?.toolDetailPoolKeepLimit !== undefined) {
+    overrides.toolDetailPoolKeepLimit = normalizeIntegerWithoutRange(
+      value.toolDetailPoolKeepLimit,
+      DEFAULT_CHAT_PREFERENCES.toolDetailPoolKeepLimit,
+    );
+  }
   if (value?.aiRequestRetryCount !== undefined) {
     overrides.aiRequestRetryCount = normalizeModelRequestRetryCount(value.aiRequestRetryCount, DEFAULT_CHAT_PREFERENCES.aiRequestRetryCount);
   }
@@ -152,6 +194,11 @@ export function normalizeChatPreferenceOverrides(value?: ChatSessionPreferenceOv
   if (value?.maxTokens !== undefined) {
     overrides.maxTokens = Math.round(normalizeNumber(value.maxTokens, DEFAULT_CHAT_PREFERENCES.maxTokens, 1, 200_000));
   }
+  if (value?.maxContextTokens !== undefined) {
+    overrides.maxContextTokens = Math.round(
+      normalizeNumber(value.maxContextTokens, DEFAULT_CHAT_PREFERENCES.maxContextTokens, 1, 1_000_000),
+    );
+  }
   if (value?.topK !== undefined) {
     overrides.topK = normalizeOptionalInteger(value.topK, 1, 1_000);
   }
@@ -165,6 +212,10 @@ export function resolveEffectiveChatPreferences(
 ): EffectiveChatPreferences {
   const normalizedOverrides = normalizeChatPreferenceOverrides({
     systemPrompt: overrides?.systemPrompt ?? preferences.systemPrompt,
+    contextCompressionPrompt: overrides?.contextCompressionPrompt ?? preferences.contextCompressionPrompt,
+    contextCompressionThresholdPercent:
+      overrides?.contextCompressionThresholdPercent ?? preferences.contextCompressionThresholdPercent,
+    toolDetailPoolKeepLimit: overrides?.toolDetailPoolKeepLimit ?? preferences.toolDetailPoolKeepLimit,
     aiRequestRetryCount: overrides?.aiRequestRetryCount ?? preferences.aiRequestRetryCount,
     browserAutomationMaxToolIterations: overrides?.browserAutomationMaxToolIterations ?? preferences.browserAutomationMaxToolIterations,
     browserAutomationMaxToolIterationsControlledEnhanced:
@@ -177,11 +228,16 @@ export function resolveEffectiveChatPreferences(
     enabledToolIds: overrides?.enabledToolIds ?? preferences.enabledToolIds,
     temperature: overrides?.temperature ?? preferences.temperature,
     maxTokens: overrides?.maxTokens ?? preferences.maxTokens,
+    maxContextTokens: overrides?.maxContextTokens ?? preferences.maxContextTokens,
     topK: overrides?.topK ?? preferences.topK,
   });
 
   return {
     systemPrompt: normalizedOverrides.systemPrompt ?? preferences.systemPrompt,
+    contextCompressionPrompt: normalizedOverrides.contextCompressionPrompt ?? preferences.contextCompressionPrompt,
+    contextCompressionThresholdPercent:
+      normalizedOverrides.contextCompressionThresholdPercent ?? preferences.contextCompressionThresholdPercent,
+    toolDetailPoolKeepLimit: normalizedOverrides.toolDetailPoolKeepLimit ?? preferences.toolDetailPoolKeepLimit,
     aiRequestRetryCount: normalizedOverrides.aiRequestRetryCount ?? preferences.aiRequestRetryCount,
     browserAutomationMaxToolIterations: normalizedOverrides.browserAutomationMaxToolIterations ?? preferences.browserAutomationMaxToolIterations,
     browserAutomationMaxToolIterationsControlledEnhanced:
@@ -194,6 +250,7 @@ export function resolveEffectiveChatPreferences(
     enabledToolIds: normalizedOverrides.enabledToolIds ?? preferences.enabledToolIds,
     temperature: normalizedOverrides.temperature ?? preferences.temperature,
     maxTokens: normalizedOverrides.maxTokens ?? preferences.maxTokens,
+    maxContextTokens: normalizedOverrides.maxContextTokens ?? preferences.maxContextTokens,
     topK: normalizedOverrides.topK,
   };
 }

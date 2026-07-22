@@ -1,5 +1,13 @@
 import { create, type StoreApi } from "zustand";
 import { buildChatRequestMessages } from "../../shared/chat/buildChatRequestMessages";
+import {
+  createContextCompressionMessages,
+  createContextCompressionToolCallRecord,
+  createContextCompressionToolTurnMessage,
+  createContextSummaryMessage,
+  estimateModelRequestContextTokens,
+  getMessagesFromLatestContextSummary,
+} from "../../shared/chat/contextCompression";
 import { createModelConfig } from "../../shared/chat/modelConfig";
 import { detectModelSupportsVision } from "../../shared/models/modelVision";
 import {
@@ -125,7 +133,10 @@ import {
   confirmDeleteChatSessionAction,
   renameChatSessionAction,
   requestDeleteChatSessionAction,
+  archiveChatSessionsAction,
+  deleteChatSessionsAction
 } from "./appStoreChatSessions";
+import type { ChatSessionBatchPartition } from "./appStoreChatSessions";
 import {
   deleteRuleAction,
   generateUrlPatternsAction,
@@ -160,6 +171,7 @@ import {
   resolveEffectiveChatPreferences,
   resolveBrowserAutomationMaxToolIterationsForMode,
   resolveRuntimeEnabledToolIds,
+  type EffectiveChatPreferences,
 } from "./appStorePreferences";
 import { upsertSession } from "./appStoreSessionUtils";
 import {
@@ -185,7 +197,7 @@ import {
   unregisterChatTaskFollowUpHandle,
   upsertChatTask,
 } from "./appStoreChatTasks";
-import { sendStreamingChatMessage } from "./appStoreStreaming";
+import { sendPortChatMessage, sendStreamingChatMessage } from "./appStoreStreaming";
 import {
   backupNowAction,
   loadRemoteBackupsAction,
@@ -355,6 +367,8 @@ export interface AppState {
   selectChatSession: (sessionId: string, options?: { discardPrivateSession?: boolean }) => void;
   renameChatSession: (sessionId: string, title: string) => Promise<void>;
   archiveChatSession: (sessionId: string) => Promise<void>;
+  archiveChatSessions: (sessionIds: string[]) => Promise<boolean>;
+  deleteChatSessions: (sessionIds: string[], partition: ChatSessionBatchPartition) => Promise<boolean>;
   requestDeleteChatSession: (sessionId: string) => void;
   confirmDeleteChatSession: (sessionId: string) => Promise<void>;
   clearPendingDeleteSession: () => void;
@@ -1410,6 +1424,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
   archiveChatSession: (sessionId) => get().syncRestoreBarrierActive
     ? Promise.resolve()
     : archiveChatSessionAction({ sessionId, get, set }),
+  archiveChatSessions: (sessionIds) => get().syncRestoreBarrierActive
+    ? Promise.resolve(false)
+    : archiveChatSessionsAction({ sessionIds, get, set }),
+  deleteChatSessions: (sessionIds, partition) => get().syncRestoreBarrierActive
+    ? Promise.resolve(false)
+    : deleteChatSessionsAction({ sessionIds, partition, get, set }),
   requestDeleteChatSession: (sessionId) => {
     if (!get().syncRestoreBarrierActive) {
       requestDeleteChatSessionAction({ sessionId, set });
@@ -2245,6 +2265,209 @@ function findPreviousUserMessage(messages: ChatMessage[], startIndex: number): C
   return undefined;
 }
 
+
+class ContextCompressionError extends Error {}
+class ContextCompressionCanceledError extends Error {}
+
+type PreparedContextCompressionResult = {
+  requestExistingMessages: ChatMessage[];
+  sessionMessages: ChatMessage[];
+  tokenUsageEntries?: ChatTokenUsageEntry[];
+};
+
+async function prepareContextCompression(input: {
+  input: RunChatRequestInput;
+  modelConfig: ReturnType<typeof createModelConfig>;
+  effectiveChatPreferences: EffectiveChatPreferences;
+  chatTaskId: string;
+}): Promise<PreparedContextCompressionResult | undefined> {
+  const scopedMessages = getMessagesFromLatestContextSummary([...input.input.existingMessages, input.input.userMessage]);
+  const requestMessages = buildChatRequestMessages({
+    model: input.modelConfig,
+    pageContext: input.input.pageContextPrompt,
+    existingMessages: input.input.existingMessages,
+    userMessage: input.input.userMessage,
+    systemPrompt: input.effectiveChatPreferences.systemPrompt,
+    appendPageContextToSystemPrompt: input.input.state.appendPageContextToSystemPrompt,
+    maxContextTokens: input.effectiveChatPreferences.maxContextTokens,
+  });
+  const estimatedContextTokens = estimateModelRequestContextTokens(requestMessages);
+  const compressionThresholdTokens = Math.floor(
+    input.effectiveChatPreferences.maxContextTokens * (input.effectiveChatPreferences.contextCompressionThresholdPercent / 100),
+  );
+  if (estimatedContextTokens < compressionThresholdTokens) {
+    return undefined;
+  }
+
+  const compressionArguments = {
+    maxContextTokens: input.effectiveChatPreferences.maxContextTokens,
+    thresholdPercent: input.effectiveChatPreferences.contextCompressionThresholdPercent,
+    triggerThresholdTokens: compressionThresholdTokens,
+    estimatedContextTokens,
+    scopedMessageCount: scopedMessages.length,
+  };
+
+  const messagesToCompress = getMessagesFromLatestContextSummary(input.input.existingMessages);
+  if (messagesToCompress.length === 0) {
+    input.input.set({
+      failure: {
+        message: "当前消息超过最大聊天上下文，且没有可压缩的历史消息。请缩短本次输入或调大最大聊天上下文后重试。",
+      },
+    });
+    throw new ContextCompressionError("没有可压缩的历史消息");
+  }
+
+  const compressionStartedAt = Date.now();
+  const compressionMessageId = `message-${compressionStartedAt}-context-compression`;
+  const compressionToolCallId = `tool-call-${compressionStartedAt}-context-compression`;
+  const runningCompressionRecord = createContextCompressionToolCallRecord({
+    id: compressionToolCallId,
+    status: "running",
+    startedAt: compressionStartedAt,
+    arguments: compressionArguments,
+  });
+  const runningCompressionMessage = createContextCompressionToolTurnMessage({
+    id: compressionMessageId,
+    record: runningCompressionRecord,
+    createdAt: compressionStartedAt,
+    model: input.modelConfig,
+    systemPrompt: input.effectiveChatPreferences.systemPrompt,
+    contextMode: input.input.state.contextMode,
+  });
+  const sessionWithRunningCompression: ChatSession = {
+    ...input.input.session,
+    messages: [...input.input.existingMessages, input.input.userMessage, runningCompressionMessage],
+  };
+
+  if (input.input.privateMode) {
+    input.input.set({ privateChatSession: sessionWithRunningCompression });
+  } else {
+    await saveChatSession(sessionWithRunningCompression);
+    input.input.set((current) => ({
+      chatSessions: upsertSession(current.chatSessions, sessionWithRunningCompression),
+      sending: isSessionTaskRunning(current.chatTasksBySessionId, sessionWithRunningCompression.id),
+    }));
+  }
+
+  const saveFailedCompressionMessage = async (message: string): Promise<void> => {
+    const failedCompressionRecord = createContextCompressionToolCallRecord({
+      id: compressionToolCallId,
+      status: "error",
+      startedAt: compressionStartedAt,
+      completedAt: Date.now(),
+      arguments: compressionArguments,
+      errorMessage: message,
+    });
+    const failedCompressionMessage: ChatMessage = {
+      ...runningCompressionMessage,
+      toolCallRecords: [failedCompressionRecord],
+    };
+    const failedCompressionSession: ChatSession = {
+      ...sessionWithRunningCompression,
+      updatedAt: Date.now(),
+      messages: [...input.input.existingMessages, input.input.userMessage, failedCompressionMessage],
+    };
+    if (input.input.privateMode) {
+      input.input.set({ privateChatSession: failedCompressionSession });
+      return;
+    }
+    await saveChatSession(failedCompressionSession);
+    input.input.set((current) => ({ chatSessions: upsertSession(current.chatSessions, failedCompressionSession) }));
+  };
+
+  const compressionRequest = {
+    type: "chat.send" as const,
+    model: input.modelConfig,
+    messages: createContextCompressionMessages({
+      model: input.modelConfig,
+      compressionPrompt: input.effectiveChatPreferences.contextCompressionPrompt,
+      messages: messagesToCompress,
+    }),
+    stream: false,
+    retryCount: input.effectiveChatPreferences.aiRequestRetryCount,
+    tokenUsageSource: "context_compression" as const,
+  };
+
+  const portResponse = await sendPortChatMessage({
+    request: compressionRequest,
+    onAbortHandle: (handle) => registerChatTaskAbortHandle(sessionWithRunningCompression.id, input.chatTaskId, handle),
+  });
+  const response = portResponse ?? await sendRuntimeMessage<
+    | { ok: true; content: string; tokenUsageEntries?: ChatTokenUsageEntry[] }
+    | { ok: false; message: string; canceled?: boolean }
+    | undefined
+  >(compressionRequest);
+
+  if (!response) {
+    const message = "聊天上下文压缩失败，请稍后重试";
+    input.input.set({ failure: { message } });
+    await saveFailedCompressionMessage(message);
+    throw new ContextCompressionError("上下文压缩失败");
+  }
+  if (!response.ok && "canceled" in response && response.canceled) {
+    await saveFailedCompressionMessage(response.message);
+    throw new ContextCompressionCanceledError("上下文压缩已取消");
+  }
+  if (!response.ok) {
+    input.input.set({ failure: { message: response.message } });
+    await saveFailedCompressionMessage(response.message);
+    throw new ContextCompressionError("上下文压缩失败");
+  }
+  if (!response.content.trim()) {
+    const message = "聊天上下文压缩失败，请稍后重试";
+    input.input.set({ failure: { message } });
+    await saveFailedCompressionMessage(message);
+    throw new ContextCompressionError("上下文压缩失败");
+  }
+  if (!isSessionTaskRunning(input.input.get().chatTasksBySessionId, sessionWithRunningCompression.id)) {
+    await saveFailedCompressionMessage("已终止本次生成。");
+    throw new ContextCompressionCanceledError("上下文压缩已取消");
+  }
+
+  const summaryCreatedAt = Date.now();
+  const summaryMessage = createContextSummaryMessage({
+    content: response.content,
+    createdAt: summaryCreatedAt,
+    model: input.modelConfig,
+    systemPrompt: input.effectiveChatPreferences.systemPrompt,
+    contextMode: input.input.state.contextMode,
+    tokenUsageEntries: response.tokenUsageEntries,
+  });
+  const completedCompressionRecord = createContextCompressionToolCallRecord({
+    id: compressionToolCallId,
+    status: "success",
+    startedAt: compressionStartedAt,
+    completedAt: summaryCreatedAt,
+    arguments: compressionArguments,
+    resultSummary: summaryMessage.content,
+  });
+  const completedCompressionMessage: ChatMessage = {
+    ...runningCompressionMessage,
+    toolCallRecords: [completedCompressionRecord],
+  };
+  const sessionWithCompletedCompression: ChatSession = {
+    ...sessionWithRunningCompression,
+    updatedAt: summaryCreatedAt,
+    messages: [...input.input.existingMessages, summaryMessage, input.input.userMessage, completedCompressionMessage],
+    tokenUsageEntries: mergeTokenUsageEntries(sessionWithRunningCompression.tokenUsageEntries, response.tokenUsageEntries),
+  };
+  if (input.input.privateMode) {
+    input.input.set({ privateChatSession: sessionWithCompletedCompression });
+  } else {
+    await saveChatSession(sessionWithCompletedCompression);
+    input.input.set((current) => ({
+      chatSessions: upsertSession(current.chatSessions, sessionWithCompletedCompression),
+      sending: isSessionTaskRunning(current.chatTasksBySessionId, sessionWithCompletedCompression.id),
+    }));
+  }
+
+  return {
+    requestExistingMessages: [summaryMessage],
+    sessionMessages: sessionWithCompletedCompression.messages,
+    tokenUsageEntries: response.tokenUsageEntries,
+  };
+}
+
 async function runChatRequest(input: RunChatRequestInput): Promise<void> {
   const effectiveChatPreferences = resolveEffectiveChatPreferences(input.state.chatPreferences, input.session.chatPreferenceOverrides);
   const modelConfig = createModelConfig(input.provider, input.model, effectiveChatPreferences);
@@ -2338,13 +2561,37 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       effectiveChatPreferences,
       input.state.browserAutomationMode ?? "normal_restricted",
     );
+    let requestExistingMessages = input.existingMessages;
+    try {
+      const compression = await prepareContextCompression({
+        input,
+        modelConfig,
+        effectiveChatPreferences,
+        chatTaskId: chatTask.id,
+      });
+      if (compression) {
+        requestExistingMessages = compression.requestExistingMessages;
+      }
+    } catch (error) {
+      if (error instanceof ContextCompressionCanceledError) {
+        taskStatus = "canceled";
+        restoreCanceled = true;
+        return;
+      }
+      if (error instanceof ContextCompressionError) {
+        taskStatus = "failed";
+        return;
+      }
+      throw error;
+    }
     const requestMessages = buildChatRequestMessages({
       model: modelConfig,
       pageContext: input.pageContextPrompt,
-      existingMessages: input.existingMessages,
+      existingMessages: requestExistingMessages,
       userMessage: input.userMessage,
       systemPrompt: effectiveChatPreferences.systemPrompt,
       appendPageContextToSystemPrompt: input.state.appendPageContextToSystemPrompt,
+      maxContextTokens: effectiveChatPreferences.maxContextTokens,
     });
     const loggingEnabled = Boolean(input.state.chatPreferences.workspaceRequestLoggingEnabled);
     const request: AppChatSendMessage = {

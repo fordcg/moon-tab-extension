@@ -1,3 +1,4 @@
+import { getModelStopReasonFailureMessage } from "./modelResponseStopReason";
 import { parseAssistantResponse } from "../shared/chat/parseAssistantResponse";
 import { createTokenUsageEntry, maxTokenUsage, normalizeModelTokenUsage } from "../shared/chat/tokenUsage";
 import { shouldPassDeepSeekReasoningContent } from "../shared/models/openaiChatAdapter";
@@ -30,6 +31,7 @@ export async function readModelStreamResponse(
   let visibleThinking = "";
   let sawDone = false;
   let tokenUsage: ChatTokenUsage | undefined;
+  let stopReason: string | undefined;
   const contentChunkFilter = new DsmlStreamChunkFilter();
   const thinkingChunkFilter = new DsmlStreamChunkFilter();
 
@@ -43,6 +45,7 @@ export async function readModelStreamResponse(
     const parsed = consumeSseBuffer(buffer, model.endpointType);
     buffer = parsed.remaining;
     tokenUsage = maxTokenUsage(tokenUsage, parsed.tokenUsage);
+    stopReason = parsed.stopReason ?? stopReason;
     for (const chunk of parsed.contentChunks) {
       rawContent += chunk;
       const visibleChunk = contentChunkFilter.push(chunk);
@@ -71,6 +74,7 @@ export async function readModelStreamResponse(
   const tail = consumeSseBuffer(`${buffer}\n\n`, model.endpointType);
   sawDone = sawDone || tail.done;
   tokenUsage = maxTokenUsage(tokenUsage, tail.tokenUsage);
+  stopReason = tail.stopReason ?? stopReason;
   for (const chunk of tail.contentChunks) {
     rawContent += chunk;
     const visibleChunk = contentChunkFilter.push(chunk);
@@ -111,6 +115,11 @@ export async function readModelStreamResponse(
   if (finalVisibleThinkingChunk) {
     visibleThinking += finalVisibleThinkingChunk;
     callbacks.onThinkingChunk?.(finalVisibleThinkingChunk);
+  }
+
+  const stopReasonFailureMessage = getModelStopReasonFailureMessage(stopReason);
+  if (stopReasonFailureMessage) {
+    return { ok: false, message: stopReasonFailureMessage };
   }
 
   const parsedContent = parseAssistantResponse(visibleContent || rawContent);
@@ -255,11 +264,12 @@ function isPotentialDsmlToolCallStartPrefix(value: string): boolean {
 function consumeSseBuffer(
   buffer: string,
   endpointType: ModelConfig["endpointType"],
-): { contentChunks: string[]; thinkingChunks: string[]; tokenUsage?: ChatTokenUsage; done: boolean; remaining: string } {
+): { contentChunks: string[]; thinkingChunks: string[]; tokenUsage?: ChatTokenUsage; done: boolean; stopReason?: string; remaining: string } {
   const contentChunks: string[] = [];
   const thinkingChunks: string[] = [];
   let tokenUsage: ChatTokenUsage | undefined;
   let done = false;
+  let stopReason: string | undefined;
   let remaining = buffer;
 
   while (true) {
@@ -274,16 +284,17 @@ function consumeSseBuffer(
     contentChunks.push(...parsed.contentChunks);
     thinkingChunks.push(...parsed.thinkingChunks);
     tokenUsage = maxTokenUsage(tokenUsage, parsed.tokenUsage);
+    stopReason = parsed.stopReason ?? stopReason;
     done = done || parsed.done;
   }
 
-  return { contentChunks, thinkingChunks, tokenUsage, done, remaining };
+  return { contentChunks, thinkingChunks, tokenUsage, done, ...(stopReason ? { stopReason } : {}), remaining };
 }
 
 function parseSseEventBlock(
   eventBlock: string,
   endpointType: ModelConfig["endpointType"],
-): { contentChunks: string[]; thinkingChunks: string[]; tokenUsage?: ChatTokenUsage; done: boolean } {
+): { contentChunks: string[]; thinkingChunks: string[]; tokenUsage?: ChatTokenUsage; done: boolean; stopReason?: string } {
   const dataLines = eventBlock
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -294,6 +305,7 @@ function parseSseEventBlock(
   const thinkingChunks: string[] = [];
   let tokenUsage: ChatTokenUsage | undefined;
   let done = false;
+  let stopReason: string | undefined;
 
   for (const dataLine of dataLines) {
     if (!dataLine) {
@@ -317,13 +329,16 @@ function parseSseEventBlock(
       tokenUsage = maxTokenUsage(tokenUsage, normalizeModelTokenUsage(data));
 
       // 部分 OpenAI 兼容网关（含本地代理）在 finish_reason 后直接关流，不补 data: [DONE]。
-      done = done || isAnthropicStreamStop(data) || hasOpenAIStreamFinishReason(data);
+      const openAiStopReason = getOpenAIStreamStopReason(data);
+      const anthropicStopReason = getAnthropicStreamStopReason(data);
+      stopReason = openAiStopReason ?? anthropicStopReason ?? stopReason;
+      done = done || isAnthropicStreamStop(data) || Boolean(openAiStopReason) || hasOpenAIStreamFinishReason(data);
     } catch {
       // 第三方 SSE 偶发心跳或非 JSON 片段时忽略，避免单个畸形片段中断整次回复。
     }
   }
 
-  return { contentChunks, thinkingChunks, tokenUsage, done };
+  return { contentChunks, thinkingChunks, tokenUsage, done, ...(stopReason ? { stopReason } : {}) };
 }
 
 function extractOpenAIStreamChunk(data: unknown): { content: string; thinking: string } {
@@ -381,4 +396,28 @@ function hasOpenAIStreamFinishReason(data: unknown): boolean {
     const finishReason = choice.finish_reason;
     return typeof finishReason === "string" && finishReason.trim().length > 0 && finishReason !== "null";
   });
+}
+
+function getOpenAIStreamStopReason(data: unknown): string | undefined {
+  if (!data || typeof data !== "object" || !("choices" in data) || !Array.isArray(data.choices)) {
+    return undefined;
+  }
+  const firstChoice = data.choices[0];
+  if (!firstChoice || typeof firstChoice !== "object" || !("finish_reason" in firstChoice)) {
+    return undefined;
+  }
+  return typeof firstChoice.finish_reason === "string" ? firstChoice.finish_reason : undefined;
+}
+
+function getAnthropicStreamStopReason(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") {
+    return undefined;
+  }
+  if ("delta" in data && data.delta && typeof data.delta === "object" && "stop_reason" in data.delta && typeof data.delta.stop_reason === "string") {
+    return data.delta.stop_reason;
+  }
+  if ("stop_reason" in data && typeof data.stop_reason === "string") {
+    return data.stop_reason;
+  }
+  return undefined;
 }

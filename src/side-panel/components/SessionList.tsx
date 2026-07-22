@@ -3,7 +3,9 @@ import type { DragEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ChatFolder, ChatSession } from "../../shared/types";
 import { useAppStore } from "../state/appStore";
+import type { ChatSessionBatchPartition } from "../state/appStoreChatSessions";
 import type { ChatTaskMap, ChatTaskStatus } from "../state/appStoreChatTasks";
+import { SessionBatchControls, type SessionBatchOperation } from "./SessionBatchControls";
 
 interface SessionListProps {
   compact?: boolean;
@@ -59,6 +61,11 @@ interface SessionFolderProps {
   onSessionRenameSave: () => void;
   onSessionRenameCommit: () => void;
   isCompactSessionHidden?: (sessionId: string) => boolean;
+  batchMode?: boolean;
+  selectionEnabled?: boolean;
+  selectedSessionIds?: ReadonlySet<string>;
+  onToggleSessionSelection?: (sessionId: string) => void;
+  onToggleFolderSelection?: (sessionIds: string[]) => void;
 }
 
 interface SessionItemProps {
@@ -84,6 +91,10 @@ interface SessionItemProps {
   onRenameCancel: () => void;
   onRenameSave: () => void;
   onRenameCommit: () => void;
+  batchMode?: boolean;
+  selected?: boolean;
+  selectionEnabled?: boolean;
+  onToggleSelection?: (sessionId: string) => void;
 }
 
 function positionFloatingSessionMenu(menu: HTMLElement, button: HTMLElement) {
@@ -125,6 +136,11 @@ function positionFloatingSessionMenu(menu: HTMLElement, button: HTMLElement) {
 export function SessionList({ compact = false, compactExpanded = false, compactVisibleLimit = 5 }: SessionListProps) {
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(new Set());
   const [archivedCollapsed, setArchivedCollapsed] = useState(true);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchPartition, setBatchPartition] = useState<ChatSessionBatchPartition>("active");
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [batchConfirmOperation, setBatchConfirmOperation] = useState<SessionBatchOperation>();
+  const [batchOperationPending, setBatchOperationPending] = useState(false);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string>();
   const [openMenuFolderId, setOpenMenuFolderId] = useState<string>();
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<string>();
@@ -151,8 +167,10 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
   const renameChatSession = useAppStore((state) => state.renameChatSession);
   const selectChatSession = useAppStore((state) => state.selectChatSession);
   const archiveChatSession = useAppStore((state) => state.archiveChatSession);
+  const archiveChatSessions = useAppStore((state) => state.archiveChatSessions);
   const requestDeleteChatSession = useAppStore((state) => state.requestDeleteChatSession);
   const confirmDeleteChatSession = useAppStore((state) => state.confirmDeleteChatSession);
+  const deleteChatSessions = useAppStore((state) => state.deleteChatSessions);
   const clearPendingDeleteSession = useAppStore((state) => state.clearPendingDeleteSession);
   const createChatFolder = useAppStore((state) => state.createChatFolder);
   const renameChatFolder = useAppStore((state) => state.renameChatFolder);
@@ -177,6 +195,10 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
 
   const activeSessions = chatSessions.filter((session) => !session.archived);
   const archivedSessions = chatSessions.filter((session) => session.archived);
+  const batchTargetSessions = batchPartition === "active" ? activeSessions : archivedSessions;
+  const selectedBatchSessionIds = batchTargetSessions
+    .filter((session) => selectedSessionIds.has(session.id))
+    .map((session) => session.id);
   const defaultSessions = activeSessions.filter((session) => !session.folderId);
   const sessionsByFolder = useMemo(() => {
     return new Map(chatFolders.map((folder) => [folder.id, activeSessions.filter((session) => session.folderId === folder.id)]));
@@ -416,6 +438,83 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
     }
   };
 
+  const exitBatchMode = () => {
+    setBatchMode(false);
+    setBatchPartition("active");
+    setSelectedSessionIds(new Set());
+    setBatchConfirmOperation(undefined);
+    setBatchOperationPending(false);
+  };
+
+  const enterBatchMode = () => {
+    setOpenMenuSessionId(undefined);
+    setOpenMenuFolderId(undefined);
+    setPendingDeleteFolderId(undefined);
+    setBatchPartition("active");
+    setSelectedSessionIds(new Set());
+    setBatchMode(true);
+  };
+
+  const changeBatchPartition = (partition: ChatSessionBatchPartition) => {
+    setBatchPartition(partition);
+    setSelectedSessionIds(new Set());
+    setBatchConfirmOperation(undefined);
+    setArchivedCollapsed(partition !== "archived");
+  };
+
+  const toggleBatchSessionSelection = (sessionId: string) => {
+    const eligible = batchTargetSessions.some((session) => session.id === sessionId);
+    if (!eligible) {
+      return;
+    }
+    setSelectedSessionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
+  const toggleBatchFolderSelection = (sessionIds: string[]) => {
+    const eligibleSessionIds = sessionIds.filter((sessionId) =>
+      batchTargetSessions.some((session) => session.id === sessionId),
+    );
+    if (eligibleSessionIds.length === 0) {
+      return;
+    }
+    setSelectedSessionIds((current) => {
+      const next = new Set(current);
+      const allSelected = eligibleSessionIds.every((sessionId) => current.has(sessionId));
+      for (const sessionId of eligibleSessionIds) {
+        if (allSelected) {
+          next.delete(sessionId);
+        } else {
+          next.add(sessionId);
+        }
+      }
+      return next;
+    });
+  };
+
+  const confirmBatchOperation = async () => {
+    if (!batchConfirmOperation || selectedBatchSessionIds.length === 0) {
+      return;
+    }
+    setBatchOperationPending(true);
+    const succeeded = batchConfirmOperation === "archive"
+      ? await archiveChatSessions(selectedBatchSessionIds)
+      : await deleteChatSessions(selectedBatchSessionIds, batchPartition);
+    if (succeeded) {
+      exitBatchMode();
+      return;
+    }
+    setBatchOperationPending(false);
+    setBatchConfirmOperation(undefined);
+  };
+
   const handleDropSession = (folderId: DropTargetFolderId, event: DragEvent<HTMLElement>) => {
     const sessionId = draggingSessionId ?? event.dataTransfer?.getData("text/plain").trim();
     setDragOverFolderId(undefined);
@@ -430,13 +529,47 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
       <div className="session-list-header">
         <p className="session-list-title">历史对话</p>
         <div className="session-list-header-actions">
-          <button className="ui-button-secondary session-header-button" type="button" aria-label="新建文件夹" onClick={() => void handleCreateFolder()}>
+          <button
+            className="ui-button-secondary session-header-button session-batch-toggle"
+            type="button"
+            aria-label="批量操作"
+            aria-pressed={batchMode}
+            disabled={batchOperationPending}
+            onClick={batchMode ? exitBatchMode : enterBatchMode}
+          >
+            批量操作
+          </button>
+          <button
+            className="ui-button-secondary session-header-button"
+            type="button"
+            aria-label="新建文件夹"
+            disabled={batchMode || batchOperationPending}
+            onClick={() => void handleCreateFolder()}
+          >
             新建文件夹
           </button>
-          <button className="ui-button-secondary session-header-button" type="button" aria-label="新对话" onClick={() => void createChatSession({ preserveSelectedModel: composerHasDraft })}>
+          <button
+            className="ui-button-secondary session-header-button"
+            type="button"
+            aria-label="新对话"
+            disabled={batchMode || batchOperationPending}
+            onClick={() => void createChatSession({ preserveSelectedModel: composerHasDraft })}
+          >
             新建
           </button>
         </div>
+        {batchMode ? (
+          <SessionBatchControls
+            partition={batchPartition}
+            selectedCount={selectedBatchSessionIds.length}
+            pending={batchOperationPending}
+            confirmOperation={batchConfirmOperation}
+            onPartitionChange={changeBatchPartition}
+            onRequestOperation={setBatchConfirmOperation}
+            onCancelConfirm={() => setBatchConfirmOperation(undefined)}
+            onConfirm={() => void confirmBatchOperation()}
+          />
+        ) : null}
       </div>
       <div className="session-list-scroll">
         <div className="session-folder-stack-scroll">
@@ -481,6 +614,11 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
               onSessionRenameSave={saveRenameSessionOnBlur}
               onSessionRenameCommit={commitRenameSessionByKey}
               isCompactSessionHidden={isCompactSessionHidden}
+              batchMode={batchMode}
+              selectionEnabled={batchMode}
+              selectedSessionIds={selectedSessionIds}
+              onToggleSessionSelection={toggleBatchSessionSelection}
+              onToggleFolderSelection={toggleBatchFolderSelection}
             />
             {chatFolders.map((folder) => (
               <SessionFolder
@@ -530,6 +668,11 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
                 onSessionRenameSave={saveRenameSessionOnBlur}
                 onSessionRenameCommit={commitRenameSessionByKey}
                 isCompactSessionHidden={isCompactSessionHidden}
+              batchMode={batchMode}
+              selectionEnabled={batchMode}
+              selectedSessionIds={selectedSessionIds}
+              onToggleSessionSelection={toggleBatchSessionSelection}
+              onToggleFolderSelection={toggleBatchFolderSelection}
               />
             ))}
           </div>
@@ -570,6 +713,11 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
             onSessionRenameSave={saveRenameSessionOnBlur}
             onSessionRenameCommit={commitRenameSessionByKey}
             isCompactSessionHidden={isCompactSessionHidden}
+              batchMode={batchMode}
+              selectionEnabled={batchMode}
+              selectedSessionIds={selectedSessionIds}
+              onToggleSessionSelection={toggleBatchSessionSelection}
+              onToggleFolderSelection={toggleBatchFolderSelection}
           />
       </div>
       <Dialog.Root open={Boolean(pendingPrivateSwitchSessionId)} onOpenChange={(open) => {
@@ -643,6 +791,11 @@ function SessionFolder({
   onSessionRenameSave,
   onSessionRenameCommit,
   isCompactSessionHidden,
+  batchMode = false,
+  selectionEnabled = false,
+  selectedSessionIds,
+  onToggleSessionSelection,
+  onToggleFolderSelection,
 }: SessionFolderProps) {
   const folderMenuButtonRef = useRef<HTMLButtonElement>(null);
   const folderMenuRef = useRef<HTMLDivElement>(null);
@@ -770,6 +923,10 @@ function SessionFolder({
                 onRenameCancel={onSessionRenameCancel}
                 onRenameSave={onSessionRenameSave}
                 onRenameCommit={onSessionRenameCommit}
+                batchMode={batchMode}
+                selected={selectedSessionIds?.has(session.id) ?? false}
+                selectionEnabled={selectionEnabled}
+                onToggleSelection={onToggleSessionSelection}
               />
             );
           })}
@@ -802,6 +959,10 @@ function SessionItem({
   onRenameCancel,
   onRenameSave,
   onRenameCommit,
+  batchMode = false,
+  selected = false,
+  selectionEnabled = false,
+  onToggleSelection,
 }: SessionItemProps) {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -838,7 +999,28 @@ function SessionItem({
       onDragStart={(event) => onDragStart?.(session.id, event)}
       onDragEnd={onDragEnd}
     >
-      <div className="session-item-row" onClick={() => !renaming && onSelect(session.id)}>
+      <div className="session-item-row" onClick={() => {
+        if (renaming) {
+          return;
+        }
+        if (batchMode) {
+          onToggleSelection?.(session.id);
+          return;
+        }
+        onSelect(session.id);
+      }}>
+        {batchMode ? (
+          <label className="session-batch-checkbox-label" onClick={(event) => event.stopPropagation()}>
+            <input
+              className="session-batch-checkbox"
+              type="checkbox"
+              checked={selected}
+              disabled={!selectionEnabled}
+              onChange={() => onToggleSelection?.(session.id)}
+              aria-label={`选择会话 ${session.title}`}
+            />
+          </label>
+        ) : null}
         {renaming ? (
           <input
             className="ui-input session-rename-input"

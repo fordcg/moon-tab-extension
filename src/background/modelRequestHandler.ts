@@ -29,6 +29,7 @@ import { appendBrowserControlPromptIfNeeded, createBackgroundToolExecutor, creat
 import { selectAutomationPlaybook } from "./automationPlaybookSelector";
 import { createChatRequestLogClient, type ChatRequestLogClient } from "./chatRequestLogFile";
 import { extractAssistantResponseData } from "./modelAssistantResponseParser";
+import { getModelStopReasonFailureMessage } from "./modelResponseStopReason";
 import { formatModelHttpErrorMessage } from "./modelProviderRequestHeaders";
 import { readModelStreamResponse } from "./modelStreamResponseParser";
 import { runModelToolLoop } from "./toolCalling/toolLoop";
@@ -460,6 +461,12 @@ async function requestModelOnce(
       structuredOutput: message.structuredOutput,
       collectToolCalls: Boolean(message.tools?.length),
     });
+    const stopReasonFailureMessage = getModelStopReasonFailureMessage(responseData.stopReason);
+    if (stopReasonFailureMessage) {
+      const failed: ChatSendResponse = { ok: false, message: stopReasonFailureMessage };
+      emitModelResponse(log, failed);
+      return failed;
+    }
     // 部分推理模型（DeepSeek V4 / reasoner）首轮可能只回 reasoning_content 或仅 tool_calls。
     if (!responseData.content && !responseData.reasoningContent && !responseData.toolCalls?.length) {
       const failed: ChatSendResponse = { ok: false, message: "模型响应中没有可用内容" };

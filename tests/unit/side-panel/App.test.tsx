@@ -1641,6 +1641,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -1649,6 +1652,7 @@ describe("App", () => {
         enabledToolIds: [],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,
@@ -1676,6 +1680,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -1684,6 +1691,7 @@ describe("App", () => {
         enabledToolIds: [],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,
@@ -1711,6 +1719,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -1719,6 +1730,7 @@ describe("App", () => {
         enabledToolIds: [],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,
@@ -2001,6 +2013,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -2009,6 +2024,7 @@ describe("App", () => {
         enabledToolIds: [],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,
@@ -2043,6 +2059,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -2051,6 +2070,7 @@ describe("App", () => {
         enabledToolIds: [],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,
@@ -2078,6 +2098,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -2086,6 +2109,7 @@ describe("App", () => {
         enabledToolIds: [],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,
@@ -3292,6 +3316,7 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: shortcut,
         historyDrawerDefaultOpen: true,
       },
@@ -3346,6 +3371,7 @@ describe("App", () => {
         systemPrompt: "你是网页助手",
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "ctrl_enter",
         historyDrawerDefaultOpen: true,
       },
@@ -6605,6 +6631,9 @@ describe("App", () => {
     useAppStore.setState({
       chatPreferences: {
         systemPrompt: "你是网页助手",
+        contextCompressionPrompt: "压缩提示词",
+        contextCompressionThresholdPercent: 90,
+        toolDetailPoolKeepLimit: 500,
         aiRequestRetryCount: 5,
         browserAutomationMaxToolIterations: 32,
         browserAutomationMaxToolIterationsControlledEnhanced: 80,
@@ -6613,6 +6642,7 @@ describe("App", () => {
         enabledToolIds: ["browser.take_snapshot"],
         temperature: 0.7,
         maxTokens: 1024,
+        maxContextTokens: 256000,
         sendShortcut: "enter",
         followUpBehavior: "queue",
         historyDrawerDefaultOpen: true,

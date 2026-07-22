@@ -12,6 +12,19 @@ export type TavilyIncludeRawContent = boolean | "markdown" | "text";
 export type AutomationPlaybookSource = "builtin" | "skill" | "user";
 export type AutomationPlaybookRisk = "low" | "medium" | "high" | "critical";
 export type AutomationPlaybookConfidence = "low" | "medium" | "high";
+export type ChatContextEstimateScope = "request" | "tool_loop";
+export type ChatContextEstimatePhase = "decision" | "final";
+export type ToolAttachmentContextMode = "none" | "summary" | "selected_details";
+export type ToolAttachmentRetentionMode = "discard" | "summary" | "detail_pool" | "current_turn_detail";
+
+export interface ChatContextEstimate {
+  scope: ChatContextEstimateScope;
+  phase?: ChatContextEstimatePhase;
+  estimatedContextTokens: number;
+  maxContextTokens: number;
+  thresholdPercent: number;
+  triggerThresholdTokens: number;
+}
 
 export interface McpDiscoveredTool {
   name: string;
@@ -115,6 +128,12 @@ export interface ModelConfig extends ProviderModel {
 
 export interface ChatPreferenceValues {
   systemPrompt: string;
+  /** 上下文自动压缩使用的系统提示词。 */
+  contextCompressionPrompt: string;
+  /** 达到最大上下文预算的百分比后触发自动压缩。 */
+  contextCompressionThresholdPercent: number;
+  /** 会话级工具附件详情池保留上限。 */
+  toolDetailPoolKeepLimit: number;
   aiRequestRetryCount: number;
   /** 普通模式（normal_restricted）最大工具轮次 */
   browserAutomationMaxToolIterations: number;
@@ -130,7 +149,15 @@ export interface ChatPreferenceValues {
   toolCallDisplayMode: ToolCallDisplayMode;
   showToolCallProcessInAssistantMode: boolean;
   temperature: number;
+  /**
+   * 覆盖当前模型输出 max_tokens（请求 payload）。
+   * 与 maxContextTokens 分离：后者只用于上下文预算与压缩判断。
+   */
   maxTokens: number;
+  /**
+   * 最大聊天上下文预算（token 估算），只用于请求上下文裁剪与自动压缩判断。
+   */
+  maxContextTokens: number;
   topK?: number;
   sendShortcut: SendShortcut;
   followUpBehavior: FollowUpBehavior;
@@ -142,6 +169,9 @@ export interface ChatPreferenceValues {
 
 export interface ChatSessionPreferenceOverrides {
   systemPrompt?: string;
+  contextCompressionPrompt?: string;
+  contextCompressionThresholdPercent?: number;
+  toolDetailPoolKeepLimit?: number;
   aiRequestRetryCount?: number;
   browserAutomationMaxToolIterations?: number;
   browserAutomationMaxToolIterationsControlledEnhanced?: number;
@@ -150,6 +180,7 @@ export interface ChatSessionPreferenceOverrides {
   enabledToolIds?: string[];
   temperature?: number;
   maxTokens?: number;
+  maxContextTokens?: number;
   topK?: number;
 }
 
@@ -463,7 +494,7 @@ export interface ChatPromptInvocation {
   contentSnapshot: string;
 }
 
-export type ChatTokenUsageSource = "chat" | "tool_decision" | "tool_final" | "title";
+export type ChatTokenUsageSource = "chat" | "tool_decision" | "tool_final" | "title" | "context_compression";
 
 export type ChatSendDebugSource = "side_panel_chat" | "title_generation";
 
@@ -524,7 +555,7 @@ export interface ExtractionRule {
 export interface ChatMessage {
   id: string;
   role: ChatRole;
-  assistantMessageKind?: "tool_call_turn";
+  assistantMessageKind?: "tool_call_turn" | "context_summary";
   content: string;
   createdAt: number;
   modelId: string;
@@ -538,6 +569,8 @@ export interface ChatMessage {
   networkContextAttachment?: ChatNetworkContextAttachment;
   toolCallRecords?: ChatToolCallRecord[];
   toolAttachments?: ChatToolAttachment[];
+  toolAttachmentIds?: string[];
+  tokenUsageEntryIds?: string[];
   promptInvocations?: ChatPromptInvocation[];
   thinking?: string;
   reasoningContent?: string;
