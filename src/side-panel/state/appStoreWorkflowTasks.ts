@@ -41,7 +41,9 @@ const WORKFLOW_ARTIFACT_CONTENT_LIMIT = 12000;
 const DATA_URL_PATTERN = /\bdata:[^\s"'`)<>]+/gi;
 const DEBUG_STEP_KEYWORDS = [
   "network", "js", "javascript", "source map", "sourcemap", "runtime", "console", "performance", "diagnostic",
+  "signature", "sign", "sig", "nonce", "crypto", "encrypt", "hash",
   "网络", "请求", "源码", "映射", "运行时", "控制台", "性能", "诊断", "重放", "完全访问",
+  "签名", "加签", "验签", "加密",
 ];
 const AUTOMATION_OPERATION_KEYWORDS = [
   "click", "fill", "press", "scroll", "hover", "double_click", "context_click", "drag", "wait", "navigate", "new page", "select page", "close page",
