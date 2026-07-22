@@ -200,13 +200,20 @@ body {
     border-radius: 999px;
     pointer-events: auto;
     overflow: hidden;
-    background: color-mix(in srgb, var(--color-primary) 9%, #fff);
+    background:
+      linear-gradient(
+        155deg,
+        color-mix(in srgb, var(--color-primary) 16%, rgb(255 255 255 / 62%)) 0%,
+        color-mix(in srgb, var(--color-primary) 8%, rgb(255 255 255 / 34%)) 52%,
+        color-mix(in srgb, var(--color-primary) 12%, rgb(255 255 255 / 48%)) 100%
+      );
     border: 0;
     box-shadow:
-      0 10px 22px rgb(20 95 215 / 10%),
-      0 1px 3px rgb(32 36 42 / 5%);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+      0 12px 28px rgb(20 95 215 / 12%),
+      0 1px 0 rgb(255 255 255 / 55%) inset,
+      0 -1px 0 rgb(20 95 215 / 6%) inset;
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
     animation: notification-slide-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
@@ -214,12 +221,18 @@ body {
     animation: notification-slide-out 150ms ease-in forwards;
   }
 
-  /* Soft blue surfaces, borderless */
+  /* Soft blue glass, borderless */
   .notification-success,
   .notification-warning,
   .notification-error,
   .notification-info {
-    background: color-mix(in srgb, var(--color-primary) 9%, #fff);
+    background:
+      linear-gradient(
+        155deg,
+        color-mix(in srgb, var(--color-primary) 16%, rgb(255 255 255 / 62%)) 0%,
+        color-mix(in srgb, var(--color-primary) 8%, rgb(255 255 255 / 34%)) 52%,
+        color-mix(in srgb, var(--color-primary) 12%, rgb(255 255 255 / 48%)) 100%
+      );
     border: 0;
   }
 
@@ -233,9 +246,9 @@ body {
     width: 1.2rem;
     height: 1.2rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-primary) 12%, #fff);
+    background: rgb(255 255 255 / 48%);
     border: 0;
-    box-shadow: none;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 50%) inset;
     color: var(--color-primary);
     flex: 0 0 auto;
   }
@@ -248,22 +261,22 @@ body {
 
   .notification-success .notification-icon {
     color: var(--color-success);
-    background: color-mix(in srgb, var(--color-success) 12%, #fff);
+    background: color-mix(in srgb, var(--color-success) 14%, rgb(255 255 255 / 50%));
   }
 
   .notification-warning .notification-icon {
     color: var(--color-warning);
-    background: color-mix(in srgb, var(--color-warning) 12%, #fff);
+    background: color-mix(in srgb, var(--color-warning) 14%, rgb(255 255 255 / 50%));
   }
 
   .notification-error .notification-icon {
     color: var(--color-error);
-    background: color-mix(in srgb, var(--color-error) 12%, #fff);
+    background: color-mix(in srgb, var(--color-error) 14%, rgb(255 255 255 / 50%));
   }
 
   .notification-info .notification-icon {
     color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 12%, #fff);
+    background: color-mix(in srgb, var(--color-primary) 14%, rgb(255 255 255 / 50%));
   }
 
   .notification-content {
@@ -7733,12 +7746,19 @@ body:has(.context-dialog) .dialog-overlay {
   padding: 0.4rem 0.4rem 0.4rem 0.5rem !important;
   border: 0 !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--color-primary, #145fd7) 9%, #fff) !important;
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--color-primary, #145fd7) 16%, rgb(255 255 255 / 62%)) 0%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 8%, rgb(255 255 255 / 34%)) 52%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 12%, rgb(255 255 255 / 48%)) 100%
+    ) !important;
   box-shadow:
-    0 10px 22px rgb(20 95 215 / 10%),
-    0 1px 3px rgb(32 36 42 / 5%) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+    0 12px 28px rgb(20 95 215 / 12%),
+    0 1px 0 rgb(255 255 255 / 55%) inset,
+    0 -1px 0 rgb(20 95 215 / 6%) inset !important;
+  backdrop-filter: blur(18px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.4) !important;
   color: var(--sidepanel-ink, #303237) !important;
   overflow: hidden !important;
   pointer-events: auto !important;
@@ -7748,7 +7768,13 @@ body:has(.context-dialog) .dialog-overlay {
 .notification-warning,
 .notification-error,
 .notification-info {
-  background: color-mix(in srgb, var(--color-primary, #145fd7) 9%, #fff) !important;
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--color-primary, #145fd7) 16%, rgb(255 255 255 / 62%)) 0%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 8%, rgb(255 255 255 / 34%)) 52%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 12%, rgb(255 255 255 / 48%)) 100%
+    ) !important;
   border: 0 !important;
   border-color: transparent !important;
 }
@@ -7758,9 +7784,9 @@ body:has(.context-dialog) .dialog-overlay {
 }
 
 .notification-icon {
-  background: color-mix(in srgb, var(--color-primary, #145fd7) 12%, #fff) !important;
+  background: rgb(255 255 255 / 48%) !important;
   border: 0 !important;
-  box-shadow: none !important;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 50%) inset !important;
   border-radius: 999px !important;
   display: grid !important;
   height: 1.2rem !important;
@@ -7777,22 +7803,22 @@ body:has(.context-dialog) .dialog-overlay {
 
 .notification-success .notification-icon {
   color: var(--color-success, #2f7d55) !important;
-  background: color-mix(in srgb, var(--color-success, #2f7d55) 12%, #fff) !important;
+  background: color-mix(in srgb, var(--color-success, #2f7d55) 14%, rgb(255 255 255 / 50%)) !important;
 }
 
 .notification-warning .notification-icon {
   color: var(--color-warning, #d97706) !important;
-  background: color-mix(in srgb, var(--color-warning, #d97706) 12%, #fff) !important;
+  background: color-mix(in srgb, var(--color-warning, #d97706) 14%, rgb(255 255 255 / 50%)) !important;
 }
 
 .notification-error .notification-icon {
   color: var(--color-error, #c0453f) !important;
-  background: color-mix(in srgb, var(--color-error, #c0453f) 12%, #fff) !important;
+  background: color-mix(in srgb, var(--color-error, #c0453f) 14%, rgb(255 255 255 / 50%)) !important;
 }
 
 .notification-info .notification-icon {
   color: var(--color-primary, #145fd7) !important;
-  background: color-mix(in srgb, var(--color-primary, #145fd7) 12%, #fff) !important;
+  background: color-mix(in srgb, var(--color-primary, #145fd7) 14%, rgb(255 255 255 / 50%)) !important;
 }
 
 .notification-title {
