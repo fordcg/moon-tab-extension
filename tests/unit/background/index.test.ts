@@ -573,7 +573,7 @@ describe("background 入口", () => {
     );
 
     await vi.waitFor(() => {
-      expect(sendResponse).toHaveBeenCalledWith({ ok: false, message: "当前页面不支持悬浮窗，请切换到普通网页后重试。" });
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false, message: "受限页面不支持悬浮窗，请切换到普通网页。" });
     });
     expect(mock.chrome.tabs.sendMessage).not.toHaveBeenCalledWith(7, expect.objectContaining({ type: "sidePanel.floating.attach" }));
   });
@@ -1477,7 +1477,7 @@ describe("background 入口", () => {
     await vi.waitFor(() => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
-        message: "当前页面无法截图，请切换到普通网页后重试",
+        message: "受限页面无法截图，请切换到普通网页。",
       });
     });
   });

@@ -8,7 +8,7 @@ const NOTIFICATION_ICON_LABEL: Record<AppNotification["type"], string> = {
   error: "错误",
   info: "消息",
 };
-const NOTIFICATION_EXIT_DURATION_MS = 160;
+const NOTIFICATION_EXIT_DURATION_MS = 180;
 
 export function NotificationHost() {
   const notifications = useAppStore((state) => state.notifications);
@@ -77,15 +77,19 @@ export function NotificationHost() {
       consumedChannelOperationRef.current[providerId] = message;
       addNotification({
         type: operation.error ? "error" : "success",
-        title: operation.error ? "模型列表获取失败" : "模型列表已更新",
+        title: operation.error ? "模型列表失败" : "模型列表已更新",
         message,
       });
       clearChannelOperationNotice(providerId);
     }
   }, [addNotification, channelOperations, clearChannelOperationNotice]);
 
+  if (notifications.length === 0) {
+    return null;
+  }
+
   return (
-    <div className="notification-host">
+    <div className="notification-host" aria-live="polite">
       {notifications.map((notification) => (
         <NotificationItem key={notification.id} notification={notification} dismissNotification={dismissNotification} />
       ))}
@@ -102,6 +106,9 @@ function NotificationItem({
 }) {
   const [closing, setClosing] = useState(false);
   const exitTimerRef = useRef<number | undefined>(undefined);
+  const title = notification.title ?? NOTIFICATION_ICON_LABEL[notification.type];
+  const message = notification.message.trim();
+  const showMessage = Boolean(message) && message !== title;
 
   const closeWithAnimation = useCallback(() => {
     if (closing) {
@@ -132,34 +139,53 @@ function NotificationItem({
     return () => window.clearTimeout(timer);
   }, [closeWithAnimation, closing, notification.durationMs]);
 
-  const title = notification.title ?? NOTIFICATION_ICON_LABEL[notification.type];
-
   return (
-    <section className={`notification notification-${notification.type}${closing ? " notification-closing" : ""}`} role={notification.type === "error" ? "alert" : "status"}>
+    <section
+      className={`notification notification-${notification.type}${closing ? " notification-closing" : ""}${showMessage ? "" : " notification-compact"}`}
+      role={notification.type === "error" ? "alert" : "status"}
+    >
+      <span className="notification-accent" aria-hidden="true" />
       <div className="notification-icon" aria-hidden="true">
-        {resolveNotificationSymbol(notification.type)}
+        <NotificationGlyph type={notification.type} />
       </div>
       <div className="notification-content">
         <p className="notification-title">{title}</p>
-        <p className="notification-message">{notification.message}</p>
+        {showMessage ? <p className="notification-message">{message}</p> : null}
       </div>
-      <button className="notification-close" type="button" aria-label={`关闭通知：${title}`} onClick={closeWithAnimation}>
-        ×
-      </button>
+      <button className="notification-close" type="button" aria-label={`关闭通知：${title}`} onClick={closeWithAnimation} />
     </section>
   );
 }
 
-function resolveNotificationSymbol(type: AppNotification["type"]): string {
+function NotificationGlyph({ type }: { type: AppNotification["type"] }) {
   if (type === "success") {
-    return "✓";
+    return (
+      <svg viewBox="0 0 16 16" className="notification-glyph" aria-hidden="true">
+        <path d="M3.5 8.2 6.4 11l6.1-6.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
   }
   if (type === "warning") {
-    return "!";
+    return (
+      <svg viewBox="0 0 16 16" className="notification-glyph" aria-hidden="true">
+        <path d="M8 3.2 2.6 12.4h10.8L8 3.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M8 6.4v2.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="8" cy="11.1" r="0.8" fill="currentColor" />
+      </svg>
+    );
   }
   if (type === "error") {
-    return "×";
+    return (
+      <svg viewBox="0 0 16 16" className="notification-glyph" aria-hidden="true">
+        <path d="m5 5 6 6M11 5 5 11" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
   }
-
-  return "i";
+  return (
+    <svg viewBox="0 0 16 16" className="notification-glyph" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 7.1v3.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="5.1" r="0.75" fill="currentColor" />
+    </svg>
+  );
 }

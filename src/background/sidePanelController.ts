@@ -346,7 +346,7 @@ async function openFloatingAssistantInCurrentTab(): Promise<SidePanelRuntimeResp
       return { ok: false, message: "未找到当前活动页面，无法打开悬浮窗。" };
     }
     if (!isFloatingSupportedUrl(tab.url)) {
-      return { ok: false, message: "当前页面不支持悬浮窗，请切换到普通网页后重试。" };
+      return { ok: false, message: "受限页面不支持悬浮窗，请切换到普通网页。" };
     }
 
     const url = chrome.runtime.getURL(createFloatingSidePanelPath({ tabId: tab.id, windowId: tab.windowId }));

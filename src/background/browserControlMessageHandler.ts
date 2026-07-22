@@ -446,7 +446,7 @@ export class BrowserDebuggerConnection {
 
     const chromeApi = this.chromeApi;
     if (!chromeApi?.debugger?.attach) {
-      return { ok: false, message: "当前浏览器不支持调试器接口，无法开启浏览器控制。" };
+      return { ok: false, message: "当前浏览器不支持调试器接口。" };
     }
 
     const debuggee: Debuggee = { tabId };
@@ -2202,16 +2202,16 @@ export class BrowserControlManager {
         : await this.getActiveTab();
 
       if (!tab?.id) {
-        return { ok: false, message: "未找到可控制的当前标签页，请先打开普通网页。" };
+        return { ok: false, message: "未找到可控制标签页，请先打开普通网页。" };
       }
 
       const url = getBrowserControlTabUrl(tab);
       if (!url) {
-        return { ok: false, message: "当前标签页没有可控制的页面地址，请先打开普通网页。" };
+        return { ok: false, message: "当前标签页无有效地址，请先打开普通网页。" };
       }
 
       if (isBrowserControlRestrictedUrl(url)) {
-        return { ok: false, message: "当前页面属于浏览器或扩展受限页面，无法开启浏览器控制。请切换到普通网页后重试。" };
+        return { ok: false, message: "受限页面无法开启浏览器控制，请切换到普通网页。" };
       }
 
       return { ok: true, tab: tab as chrome.tabs.Tab & { id: number } };
@@ -3887,7 +3887,7 @@ export function handleBrowserControlTabRemoved(tabId: number, manager = browserC
 function normalizeDebuggerError(message = ""): string {
   const normalized = message.toLowerCase();
   if (normalized.includes("restricted") || normalized.includes("cannot access") || normalized.includes("webui")) {
-    return "当前页面属于浏览器受限页面，无法开启浏览器控制。请切换到普通网页后重试。";
+    return "受限页面无法开启浏览器控制，请切换到普通网页。";
   }
 
   if (normalized.includes("another debugger") || normalized.includes("already attached")) {

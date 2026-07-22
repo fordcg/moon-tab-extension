@@ -289,7 +289,7 @@ describe("浏览器控制地基", () => {
 
     const response = await manager.setEnabled(true, 9);
 
-    expect(response).toEqual({ ok: false, message: "当前页面属于浏览器或扩展受限页面，无法开启浏览器控制。请切换到普通网页后重试。" });
+    expect(response).toEqual({ ok: false, message: "受限页面无法开启浏览器控制，请切换到普通网页。" });
     expect(chromeMock.debugger.attach).not.toHaveBeenCalled();
   });
 

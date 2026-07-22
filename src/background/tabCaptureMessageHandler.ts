@@ -23,6 +23,6 @@ export async function handleTabCaptureVisibleMessage(): Promise<TabCaptureVisibl
       },
     };
   } catch {
-    return { ok: false, message: "当前页面无法截图，请切换到普通网页后重试" };
+    return { ok: false, message: "受限页面无法截图，请切换到普通网页。" };
   }
 }

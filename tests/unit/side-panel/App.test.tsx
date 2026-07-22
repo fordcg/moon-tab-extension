@@ -5004,7 +5004,7 @@ describe("App", () => {
     createShortcutRuntimeMock({
       screenshotResponse: {
         ok: false,
-        message: "当前页面无法截图，请切换到普通网页后重试",
+        message: "受限页面无法截图，请切换到普通网页。",
       },
     });
     await saveModelProvider(provider);
@@ -5015,7 +5015,7 @@ describe("App", () => {
     await screen.findByDisplayValue("视觉渠道 / 视觉模型 · 视觉");
     await user.click(screen.getByRole("button", { name: "截图当前标签页" }));
 
-    expect(await screen.findByText("当前页面无法截图，请切换到普通网页后重试")).toBeInTheDocument();
+    expect(await screen.findByText("受限页面无法截图，请切换到普通网页。")).toBeInTheDocument();
   });
 
   it("当前标签页截图超过单张大小限制时不加入编辑区", async () => {
