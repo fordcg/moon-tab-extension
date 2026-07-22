@@ -220,6 +220,8 @@ describe("background 工具运行时封装", () => {
     expect(result[0].content).toContain("直接使用 full_access.* 工具");
     expect(result[0].content).toContain("不需要调用 boundary_request_user_choice");
     expect(result[0].content).toContain("不使用请求重放沙箱");
+    expect(result[0].content).toContain("默认导出、后续追问和工作流产物仍按脱敏策略处理");
+    expect(result[0].content).toContain("签名、加密、nonce/debug 参数实验");
   });
 
   it("浏览器控制未授权时不暴露浏览器操作工具", () => {
@@ -323,6 +325,34 @@ describe("background 工具运行时封装", () => {
     expect(result[0]).toMatchObject({
       content: expect.not.stringContaining("任务策略：页面阅读"),
     });
+  });
+
+  it("选中完全访问签名实验室时注入签名实验策略和 Full Access 工具指引", () => {
+    const result = appendBrowserControlPromptIfNeeded(
+      [createMessage("system", "你是网页助手"), createMessage("user", "逆向这个请求签名")],
+      [
+        { id: "network.summarize_api_candidates", name: "network_summarize_api_candidates", parameters: {} },
+        { id: "full_access.get_network_details", name: "full_access_get_network_details", parameters: {} },
+        { id: "full_access.execute_script", name: "full_access_execute_script", parameters: {} },
+        { id: "full_access.fetch", name: "full_access_fetch", parameters: {} },
+      ],
+      {
+        playbookId: "full_access_signature_lab",
+        title: "Full Access 签名实验室",
+        source: "builtin",
+        confidence: "high",
+        reason: "用户要求逆向请求签名",
+      },
+    );
+
+    expect(result[0].content).toContain("当前处于完全访问模式");
+    expect(result[0].content).toContain("当前选中的浏览器自动化任务策略：Full Access 签名实验室");
+    expect(result[0].content).toContain("任务策略：Full Access 签名实验室");
+    expect(result[0].content).toContain("full_access.get_network_details");
+    expect(result[0].content).toContain("full_access.execute_script");
+    expect(result[0].content).toContain("full_access.fetch");
+    expect(result[0].content).toContain("可复现实验记录");
+    expect(result[0].content).not.toContain("任务策略：Network/API 分析");
   });
 
   it("仅启用 Network 和受控增强工具时也追加边界确认调度提示", () => {
