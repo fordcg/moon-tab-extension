@@ -1,5 +1,5 @@
 const REDACTED_VALUE = "[已脱敏]";
-const SENSITIVE_KEY = "(?:access[_-]?token|token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer)";
+const SENSITIVE_KEY = "(?:access[_-]?token|token|secret|password|passwd|pwd|authorization|auth|api[_-]?key|session|jwt|credential|cookie|set-cookie|bearer|signature|sign|sig|nonce)";
 const SENSITIVE_ASSIGNMENT_PATTERN = new RegExp(
   `\\b(${SENSITIVE_KEY})\\b(\\s*[=:]\\s*)(?:Bearer\\s+)?("(?:\\\\.|[^"])*"|'(?:\\\\.|[^'])*'|[^\\s,;&}]+)`,
   "gi",

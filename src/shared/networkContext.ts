@@ -7,8 +7,9 @@ const BODY_LIMIT = 6000;
 const FIELD_LIMIT = 1200;
 
 const SENSITIVE_NAME_PATTERN = /(authorization|cookie|set-cookie|token|access[_-]?token|refresh[_-]?token|jwt|api[_-]?key|secret|password|passwd|credential|session|sid|csrf|xsrf)/i;
+const SIGNATURE_NAME_PATTERN = /(?:^|[-_.\s])(?:signature|sign|sig|nonce)(?:$|[-_.\s])/i;
 const AUTH_INLINE_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
-const SENSITIVE_INLINE_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|jwt|secret|password|passwd|credential|session|sid|csrf|xsrf)\s*[:=]\s*[^\s,;&"'}）]+/gi;
+const SENSITIVE_INLINE_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|jwt|secret|password|passwd|credential|session|sid|csrf|xsrf|signature|sign|sig|nonce)\s*[:=]\s*[^\s,;&"'}）]+/gi;
 const INLINE_HEADER_NAME_PATTERN = "(?:Proxy-Authorization|Authorization|Set-Cookie|Cookie)";
 const INLINE_HEADER_PATTERN = new RegExp(
   `\\b(${INLINE_HEADER_NAME_PATTERN})(\\s*[:=]\\s*)([^\\r\\n]*?)(?=\\r?\\n|$|\\b${INLINE_HEADER_NAME_PATTERN}\\s*[:=])`,
@@ -423,5 +424,5 @@ function truncateForPrompt(value: string, maxLength: number): string {
 }
 
 function isSensitiveName(name: string): boolean {
-  return SENSITIVE_NAME_PATTERN.test(name);
+  return SENSITIVE_NAME_PATTERN.test(name) || SIGNATURE_NAME_PATTERN.test(name);
 }
