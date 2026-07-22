@@ -2,7 +2,6 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { ChatPanel } from "./components/ChatPanel";
 import { NotificationHost } from "./components/NotificationHost";
 import { SoftTooltipLayer } from "./components/SoftTooltipLayer";
-import { UpdateAvailableButton } from "./components/UpdateAvailableButton";
 import type { SettingsTab } from "./components/SettingsPanel";
 import { useAppStore } from "./state/appStore";
 import { sendRuntimeMessage } from "./state/runtimeMessage";
@@ -193,7 +192,6 @@ export function App() {
       >
         <h1 className="app-title sidebar-topbar-title">月标签 AI 助手</h1>
         <div className="app-header-actions">
-          <UpdateAvailableButton />
           <button
             className="ui-button-secondary app-header-icon-button"
             type="button"

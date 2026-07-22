@@ -45,7 +45,6 @@ import { BrowserNetworkToolExecutor } from "./browserControl/networkToolExecutor
 import { exportAllDataForSync, recoverInterruptedChatSessions, replaceAllDataFromSync } from "../shared/storage/repositories";
 import { installModelProviderHeaderRules } from "./modelProviderRequestHeaders";
 import { diagnosticDebug } from "../shared/diagnosticLogging";
-import { checkForLatestRelease } from "./releaseUpdateChecker";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
 const networkDevtoolsBridge = createNetworkDevtoolsBridge();
@@ -61,7 +60,6 @@ const deferredRestoreCanceledResponses = new Set<(response?: unknown) => void>()
 let syncRestoreInProgress = false;
 let syncRestoreOperationInProgress = false;
 let restoreBarrierActivityRevision = 0;
-let releaseUpdateCheckPromise: Promise<void> | undefined;
 const DEVTOOLS_LEGACY_NETWORK_TOOL_IDS = new Set([
   "network.list_requests",
   "network.get_request_details",
@@ -77,7 +75,6 @@ const NETWORK_DEVTOOLS_NOT_CONNECTED_RESPONSE = { ok: false, message: "未检测
 chrome.runtime.onInstalled.addListener(() => {
   ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
-  runReleaseUpdateCheck();
   void installModelProviderHeaderRules();
   // Re-inject so already-open tabs get the pet without a manual refresh.
   void reinjectPetContentScripts();
@@ -86,7 +83,6 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
   ensureOpenSidePanelContextMenu();
   runRestoreSyncAlarmFromSettings();
-  runReleaseUpdateCheck();
   void installModelProviderHeaderRules();
   void reinjectPetContentScripts();
 });
@@ -95,22 +91,6 @@ chrome.runtime.onStartup.addListener(() => {
 void installModelProviderHeaderRules();
 
 initializeSidePanelController();
-
-function runReleaseUpdateCheck(): void {
-  if (releaseUpdateCheckPromise) {
-    return;
-  }
-
-  // 安装与浏览器启动事件可能紧邻触发，复用同一次请求可避免重复访问和旧响应晚到覆盖。
-  releaseUpdateCheckPromise = checkForLatestRelease()
-    .then(() => undefined)
-    .catch(() => {
-      console.warn("检查扩展更新失败，将保留上次成功结果");
-    })
-    .finally(() => {
-      releaseUpdateCheckPromise = undefined;
-    });
-}
 
 function ensureOpenSidePanelContextMenu(): void {
   const contextMenus = chrome.contextMenus;
