@@ -1,5 +1,5 @@
 import type { ChatMessage, ModelConfig } from "../types";
-import { collectMessageToolAttachments, formatToolAttachmentForPrompt } from "../toolArtifacts";
+import { collectMessageToolAttachments, formatToolAttachmentForPromptSummary } from "../toolArtifacts";
 import { truncateText } from "../utils/text";
 
 interface BuildChatRequestMessagesInput {
@@ -44,12 +44,12 @@ export function buildChatRequestMessages(input: BuildChatRequestMessagesInput): 
 }
 
 function expandAssistantContextAttachments(message: ChatMessage): ChatMessage {
-  if (message.role !== "assistant") {
+  if (message.role !== "assistant" || message.assistantMessageKind !== "tool_call_turn") {
     return message;
   }
 
   const attachmentPrompts = collectMessageToolAttachments(message)
-    .map(formatToolAttachmentForPrompt)
+    .map(formatToolAttachmentForPromptSummary)
     .filter((item): item is string => Boolean(item?.trim()));
   if (attachmentPrompts.length === 0) {
     return message;
