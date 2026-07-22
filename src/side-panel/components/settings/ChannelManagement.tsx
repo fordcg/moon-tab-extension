@@ -3,7 +3,7 @@ import type { KeyboardEvent } from "react";
 import type { ModelProvider, ProviderModel } from "../../../shared/types";
 import { parseTavilyIncludeAnswerInput, parseTavilyIncludeRawContentInput } from "../../../shared/webSearch/settings";
 import { useAppStore } from "../../state/appStore";
-import { formatModelLabelWithVision, ModelVisionIcon } from "../ModelVisionIndicator";
+import { ModelVisionIcon } from "../ModelVisionIndicator";
 import { useComposedTextInput } from "../useComposedTextInput";
 import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
 import { SettingsSelect } from "./SettingsSelect";
@@ -46,9 +46,6 @@ export function ChannelManagement() {
   const fetchRemoteModels = useAppStore((state) => state.fetchRemoteModels);
   const testModel = useAppStore((state) => state.testModel);
   const updateModel = useAppStore((state) => state.updateModel);
-  const setTitleModel = useAppStore((state) => state.setTitleModel);
-  const defaultChatModelId = useAppStore((state) => state.defaultChatModelId);
-  const setDefaultChatModel = useAppStore((state) => state.setDefaultChatModel);
   const webSearchSettings = useAppStore((state) => state.webSearchSettings);
   const updateWebSearchSettings = useAppStore((state) => state.updateWebSearchSettings);
   const remoteModelsByProvider = useAppStore((state) => state.remoteModels);
@@ -88,22 +85,6 @@ export function ChannelManagement() {
   const remoteModels = remoteModelsByProvider[selectedProvider.id] ?? [];
   const channelOperation = channelOperations[selectedProvider.id];
   const existingRemoteModelIds = new Set(models.filter((model) => model.providerId === selectedProvider.id).map((model) => model.modelId));
-  const selectedTitleModelId = models.find((model) => model.isTitleModel)?.id ?? "";
-  const titleModelOptions = useMemo(
-    () =>
-      models
-        .map((model) => {
-          const provider = providers.find((item) => item.id === model.providerId);
-          return provider
-            ? {
-                id: model.id,
-                label: formatModelLabelWithVision(`${provider.name} / ${model.displayName}`, model.supportsVision),
-              }
-            : undefined;
-        })
-        .filter((item): item is { id: string; label: string } => Boolean(item)),
-    [models, providers],
-  );
   const normalizedRemoteModelQuery = remoteModelQuery.trim().toLowerCase();
   const filteredRemoteModels = remoteModels.filter((remoteModel) => {
     if (!normalizedRemoteModelQuery) {
@@ -270,35 +251,6 @@ export function ChannelManagement() {
         </label>
       </section>
       ) : null}
-      <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="AI 标题生成">
-        <div className="grid gap-1 text-sm">
-          <span>默认对话模型</span>
-          <SettingsSelect
-            ariaLabel="默认对话模型"
-            triggerAriaLabel="默认对话模型菜单"
-            value={defaultChatModelId}
-            options={[
-              { value: "", label: "使用第一个可用模型" },
-              ...titleModelOptions.map((model) => ({ value: model.id, label: model.label })),
-            ]}
-            onChange={(value) => void setDefaultChatModel(value)}
-          />
-        </div>
-        <div className="grid gap-1 text-sm">
-          <span>AI 标题生成模型</span>
-          <SettingsSelect
-            ariaLabel="AI 标题生成模型"
-            triggerAriaLabel="AI 标题生成模型菜单"
-            value={selectedTitleModelId}
-            options={[
-              { value: "", label: "不开启自动标题生成" },
-              ...titleModelOptions.map((model) => ({ value: model.id, label: model.label })),
-            ]}
-            onChange={(value) => setTitleModel(value)}
-          />
-        </div>
-        <p className="text-xs text-[var(--color-muted)]">选择后仅在首轮对话完成后额外发起一次非流式标题请求。</p>
-      </section>
 
       <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="渠道模型">
         <div className="flex items-center justify-between gap-3">

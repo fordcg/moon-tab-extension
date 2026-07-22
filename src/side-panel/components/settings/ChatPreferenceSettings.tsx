@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MODEL_TOOL_CAPABILITY_VALUES,
   MODEL_TOOL_RISK_VALUES,
@@ -14,6 +14,7 @@ import {
   type ChatRequestLogSinkStatus,
 } from "../../../background/chatRequestLogFile";
 import { useAppStore } from "../../state/appStore";
+import { formatModelLabelWithVision } from "../ModelVisionIndicator";
 import { useComposedTextInput } from "../useComposedTextInput";
 import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
 import { SettingsSelect } from "./SettingsSelect";
@@ -64,8 +65,30 @@ export function ChatPreferenceSettings() {
   const [logSinkStatus, setLogSinkStatus] = useState<ChatRequestLogSinkStatus>("unknown");
   const chatPreferences = useAppStore((state) => state.chatPreferences);
   const mcpSettings = useAppStore((state) => state.mcpSettings);
+  const providers = useAppStore((state) => state.providers);
+  const models = useAppStore((state) => state.models);
+  const defaultChatModelId = useAppStore((state) => state.defaultChatModelId);
+  const setDefaultChatModel = useAppStore((state) => state.setDefaultChatModel);
+  const setTitleModel = useAppStore((state) => state.setTitleModel);
   const updateChatPreferences = useAppStore((state) => state.updateChatPreferences);
   const addNotification = useAppStore((state) => state.addNotification);
+  const selectedTitleModelId = models.find((model) => model.isTitleModel)?.id ?? "";
+  const titleModelOptions = useMemo(
+    () =>
+      models
+        .map((model) => {
+          const provider = providers.find((item) => item.id === model.providerId);
+          if (!provider?.enabled || !model.enabled) {
+            return undefined;
+          }
+          return {
+            id: model.id,
+            label: formatModelLabelWithVision(`${provider.name} / ${model.displayName}`, model.supportsVision),
+          };
+        })
+        .filter((item): item is { id: string; label: string } => Boolean(item)),
+    [models, providers],
+  );
 
   useEffect(() => {
     if (!chatPreferences.workspaceRequestLoggingEnabled) {
@@ -144,6 +167,35 @@ export function ChatPreferenceSettings() {
   return (
     <section className="grid w-full gap-3" aria-label="聊天偏好">
       <h3 className="text-base font-semibold">聊天偏好</h3>
+      <section className="grid gap-3 border-b border-[var(--color-hairline)] pb-3" aria-label="全局模型">
+        <div className="grid gap-1 text-sm">
+          <span>默认对话模型</span>
+          <SettingsSelect
+            ariaLabel="默认对话模型"
+            triggerAriaLabel="默认对话模型菜单"
+            value={defaultChatModelId}
+            options={[
+              { value: "", label: "使用第一个可用模型" },
+              ...titleModelOptions.map((model) => ({ value: model.id, label: model.label })),
+            ]}
+            onChange={(value) => void setDefaultChatModel(value)}
+          />
+        </div>
+        <div className="grid gap-1 text-sm">
+          <span>AI 标题生成模型</span>
+          <SettingsSelect
+            ariaLabel="AI 标题生成模型"
+            triggerAriaLabel="AI 标题生成模型菜单"
+            value={selectedTitleModelId}
+            options={[
+              { value: "", label: "不开启自动标题生成" },
+              ...titleModelOptions.map((model) => ({ value: model.id, label: model.label })),
+            ]}
+            onChange={(value) => setTitleModel(value)}
+          />
+        </div>
+        <p className="text-xs text-[var(--color-muted)]">选择后仅在首轮对话完成后额外发起一次非流式标题请求。</p>
+      </section>
       <label className="grid gap-1 text-sm">
         系统提示词
         <textarea

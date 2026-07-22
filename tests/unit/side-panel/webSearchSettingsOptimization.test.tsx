@@ -73,15 +73,11 @@ describe("网络搜索设置优化", () => {
     await user.click(await screen.findByRole("button", { name: /测试渠道/ }));
     expect(screen.getByRole("region", { name: "当前渠道详情" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "渠道模型" })).toBeInTheDocument();
-    expect(screen.getByLabelText("默认对话模型")).toBeInTheDocument();
-    expect(screen.getByLabelText("AI 标题生成模型")).toBeInTheDocument();
     expect(screen.getByText("gpt-test")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /测试渠道/ }));
     expect(screen.queryByRole("region", { name: "当前渠道详情" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "渠道模型" })).toBeInTheDocument();
-    expect(screen.getByLabelText("默认对话模型")).toBeInTheDocument();
-    expect(screen.getByLabelText("AI 标题生成模型")).toBeInTheDocument();
     expect(screen.getByText("gpt-test")).toBeInTheDocument();
   });
 
