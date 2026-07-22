@@ -91,7 +91,7 @@ describe("appStore 网络搜索", () => {
     await clearDatabase();
   });
 
-  it("Tavily 工具结果会保存到 AI 消息附件并在后续追问注入历史搜索结果", async () => {
+  it("Tavily 工具结果会保存到最终 AI 消息附件且后续追问不默认展开最终附件", async () => {
     const provider = createProvider();
     const model = createModel();
     let chatSendCount = 0;
@@ -164,8 +164,8 @@ describe("appStore 网络搜索", () => {
         query: "Tavily API 是什么",
       }),
     ]);
-    expect(chatRequests[1].messages?.some((message) => message.content.includes("后续追问需要继续参考以下历史网络搜索结果："))).toBe(true);
-    expect(chatRequests[1].messages?.some((message) => message.content.includes("Tavily Docs"))).toBe(true);
+    expect(chatRequests[1].messages?.some((message) => message.content.includes("后续追问可参考以下历史网络搜索摘要："))).toBe(false);
+    expect(chatRequests[1].messages?.some((message) => message.content.includes("Tavily Docs"))).toBe(false);
   });
 
   it("任务策略设置会通过 appSettings 加载、归一化并保存", async () => {

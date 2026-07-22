@@ -53,6 +53,41 @@ describe("Network 上下文", () => {
     expect(detail.redacted).toBe(true);
   });
 
+  it("脱敏签名实验字段中的 sign、signature、sig 和 nonce", () => {
+    const detail = redactNetworkRequestDetail(createDetail({
+      url: "https://api.example.com/search?sign=raw-signature&signature=raw-long-signature&sig=raw-sig&nonce=raw-nonce&safe=1",
+      requestHeaders: [{ name: "X-Nonce", value: "raw-header-nonce" }],
+      requestBody: "{\"sign\":\"raw-body-sign\",\"nonce\":\"raw-body-nonce\",\"q\":\"apple\"}",
+      responseBody: "{\"signature\":\"raw-response-sign\",\"ok\":true}",
+    }));
+
+    const text = JSON.stringify(detail);
+
+    expect(text).toContain("[已脱敏]");
+    expect(text).not.toMatch(/raw-signature|raw-long-signature|raw-sig|raw-nonce|raw-header-nonce|raw-body-sign|raw-body-nonce|raw-response-sign/);
+    expect(detail.url).toContain("sign=[已脱敏]");
+    expect(detail.url).toContain("signature=[已脱敏]");
+    expect(detail.url).toContain("sig=[已脱敏]");
+    expect(detail.url).toContain("nonce=[已脱敏]");
+  });
+
+  it("签名字段匹配不会误脱敏 design 和 signal 这类普通名称", () => {
+    const detail = redactNetworkRequestDetail(createDetail({
+      url: "https://api.example.com/search?design=clean-style&signal=ready&sign=raw-signature",
+      requestHeaders: [{ name: "X-Signal", value: "ready" }],
+      requestBody: "{\"design\":\"clean-style\",\"signal\":\"ready\",\"sign\":\"raw-body-sign\"}",
+      responseBody: "{\"ok\":true}",
+    }));
+
+    expect(detail.url).toContain("design=clean-style");
+    expect(detail.url).toContain("signal=ready");
+    expect(detail.url).toContain("sign=[已脱敏]");
+    expect(detail.requestHeaders).toEqual([{ name: "X-Signal", value: "ready" }]);
+    expect(detail.requestBody).toContain("\"design\":\"clean-style\"");
+    expect(detail.requestBody).toContain("\"signal\":\"ready\"");
+    expect(detail.requestBody).toContain("\"sign\":\"[已脱敏]\"");
+  });
+
   it("从 AI 筛选响应中解析合法请求 ID 并过滤不存在的 ID", () => {
     const ids = parseRelevantNetworkRequestIds('{"requestIds":["req-2","missing","req-1"]}', ["req-1", "req-2"]);
 
