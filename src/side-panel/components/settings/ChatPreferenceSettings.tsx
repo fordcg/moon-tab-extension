@@ -206,14 +206,14 @@ export function ChatPreferenceSettings() {
           onChange={(value) => void updateChatPreferences({ maxTokens: value })}
         />
         <GlobalPreferenceNumberInput
-          label="最大聊天上下文（token）"
+          label="最大聊天上下文预算（token，会与模型窗口取更小值）"
           value={chatPreferences.maxContextTokens}
           min={1}
           step={1}
           onChange={(value) => void updateChatPreferences({ maxContextTokens: value })}
         />
         <GlobalPreferenceNumberInput
-          label="自动压缩阈值（%）"
+          label="硬压缩阈值（%，先 soft 裁剪再摘要）"
           value={chatPreferences.contextCompressionThresholdPercent}
           min={1}
           max={100}

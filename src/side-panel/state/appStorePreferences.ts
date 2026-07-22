@@ -14,7 +14,8 @@ import type {
   SendShortcut,
 } from "../../shared/types";
 
-export const DEFAULT_MAX_CONTEXT_TOKENS = 256_000;
+/** 偏好默认值；实际请求会再与模型窗口取更保守值。 */
+export const DEFAULT_MAX_CONTEXT_TOKENS = 128_000;
 export const DEFAULT_TOOL_DETAIL_POOL_KEEP_LIMIT = 500;
 
 export function createDefaultChatPreferences(): ChatPreferenceValues {

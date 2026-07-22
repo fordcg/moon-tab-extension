@@ -1,12 +1,13 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ChatSessionBatchPartition } from "../state/appStoreChatSessions";
 
-export type SessionBatchOperation = "archive" | "delete";
+export type SessionBatchOperation = "archive" | "delete" | "cleanup_old_archived";
 
 interface SessionBatchControlsProps {
   partition: ChatSessionBatchPartition;
   selectedCount: number;
   pending: boolean;
+  oldArchivedCount?: number;
   confirmOperation?: SessionBatchOperation;
   onPartitionChange: (partition: ChatSessionBatchPartition) => void;
   onRequestOperation: (operation: SessionBatchOperation) => void;
@@ -18,6 +19,7 @@ export function SessionBatchControls({
   partition,
   selectedCount,
   pending,
+  oldArchivedCount = 0,
   confirmOperation,
   onPartitionChange,
   onRequestOperation,
@@ -25,10 +27,17 @@ export function SessionBatchControls({
   onConfirm,
 }: SessionBatchControlsProps) {
   const confirmArchive = confirmOperation === "archive";
-  const dialogTitle = confirmArchive ? "确认批量归档" : "确认批量删除";
+  const confirmCleanup = confirmOperation === "cleanup_old_archived";
+  const dialogTitle = confirmArchive
+    ? "确认批量归档"
+    : confirmCleanup
+      ? "确认清理旧归档"
+      : "确认批量删除";
   const dialogDescription = confirmArchive
     ? `确定归档选中的 ${selectedCount} 个会话吗？`
-    : `确定删除选中的 ${selectedCount} 个会话吗？删除后无法恢复。`;
+    : confirmCleanup
+      ? `确定删除 ${oldArchivedCount} 个超过 7 天的已归档会话吗？删除后无法恢复。`
+      : `确定删除选中的 ${selectedCount} 个会话吗？删除后无法恢复。`;
 
   return (
     <>
@@ -63,7 +72,17 @@ export function SessionBatchControls({
           >
             归档 {selectedCount}
           </button>
-        ) : null}
+        ) : (
+          <button
+            className="ui-button-secondary session-batch-action session-batch-archive"
+            type="button"
+            disabled={pending || oldArchivedCount === 0}
+            onClick={() => onRequestOperation("cleanup_old_archived")}
+            title="删除更新时间超过 7 天的已归档会话"
+          >
+            清理7天前 {oldArchivedCount}
+          </button>
+        )}
         <button
           className="ui-button-secondary session-batch-action session-batch-delete"
           type="button"
@@ -93,7 +112,7 @@ export function SessionBatchControls({
                 取消
               </button>
               <button className="ui-button-primary" type="button" disabled={pending} onClick={onConfirm}>
-                {pending ? "处理中..." : confirmArchive ? "确认归档" : "确认删除"}
+                {pending ? "处理中..." : confirmArchive ? "确认归档" : confirmCleanup ? "确认清理" : "确认删除"}
               </button>
             </div>
           </Dialog.Content>

@@ -199,6 +199,10 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
   const selectedBatchSessionIds = batchTargetSessions
     .filter((session) => selectedSessionIds.has(session.id))
     .map((session) => session.id);
+  const OLD_ARCHIVED_CLEANUP_MS = 7 * 24 * 60 * 60 * 1000;
+  const oldArchivedSessionIds = archivedSessions
+    .filter((session) => Date.now() - session.updatedAt >= OLD_ARCHIVED_CLEANUP_MS)
+    .map((session) => session.id);
   const defaultSessions = activeSessions.filter((session) => !session.folderId);
   const sessionsByFolder = useMemo(() => {
     return new Map(chatFolders.map((folder) => [folder.id, activeSessions.filter((session) => session.folderId === folder.id)]));
@@ -500,13 +504,24 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
   };
 
   const confirmBatchOperation = async () => {
-    if (!batchConfirmOperation || selectedBatchSessionIds.length === 0) {
+    if (!batchConfirmOperation) {
+      return;
+    }
+    if (batchConfirmOperation !== "cleanup_old_archived" && selectedBatchSessionIds.length === 0) {
+      return;
+    }
+    if (batchConfirmOperation === "cleanup_old_archived" && oldArchivedSessionIds.length === 0) {
       return;
     }
     setBatchOperationPending(true);
-    const succeeded = batchConfirmOperation === "archive"
-      ? await archiveChatSessions(selectedBatchSessionIds)
-      : await deleteChatSessions(selectedBatchSessionIds, batchPartition);
+    let succeeded = false;
+    if (batchConfirmOperation === "archive") {
+      succeeded = await archiveChatSessions(selectedBatchSessionIds);
+    } else if (batchConfirmOperation === "cleanup_old_archived") {
+      succeeded = await deleteChatSessions(oldArchivedSessionIds, "archived");
+    } else {
+      succeeded = await deleteChatSessions(selectedBatchSessionIds, batchPartition);
+    }
     if (succeeded) {
       exitBatchMode();
       return;
@@ -562,6 +577,7 @@ export function SessionList({ compact = false, compactExpanded = false, compactV
           <SessionBatchControls
             partition={batchPartition}
             selectedCount={selectedBatchSessionIds.length}
+            oldArchivedCount={oldArchivedSessionIds.length}
             pending={batchOperationPending}
             confirmOperation={batchConfirmOperation}
             onPartitionChange={changeBatchPartition}

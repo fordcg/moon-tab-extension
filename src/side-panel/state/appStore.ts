@@ -8,6 +8,11 @@ import {
   estimateModelRequestContextTokens,
   getMessagesFromLatestContextSummary,
 } from "../../shared/chat/contextCompression";
+import {
+  resolveEffectiveMaxContextTokens,
+  softTrimChatMessagesForRequest,
+  SOFT_TRIM_THRESHOLD_PERCENT,
+} from "../../shared/chat/softContextTrim";
 import { createModelConfig } from "../../shared/chat/modelConfig";
 import { detectModelSupportsVision } from "../../shared/models/modelVision";
 import {
@@ -2269,45 +2274,78 @@ function findPreviousUserMessage(messages: ChatMessage[], startIndex: number): C
 class ContextCompressionError extends Error {}
 class ContextCompressionCanceledError extends Error {}
 
-type PreparedContextCompressionResult = {
+type PreparedRequestContextResult = {
   requestExistingMessages: ChatMessage[];
-  sessionMessages: ChatMessage[];
+  softTrimmed: boolean;
+  hardCompressed: boolean;
   tokenUsageEntries?: ChatTokenUsageEntry[];
 };
 
-async function prepareContextCompression(input: {
+/**
+ * 请求前上下文准备：
+ * 1) 确定性 soft trim（折叠旧 tool turn、截断长正文）
+ * 2) 仍超 hard 阈值才调用模型写 context_summary
+ * soft trim 只影响本次请求，不改历史；hard compress 会写入会话摘要。
+ */
+
+function shouldInjectPageContextForRequest(existingMessages: ChatMessage[], appendByPreference: boolean): boolean {
+  if (!appendByPreference) {
+    return false;
+  }
+  // 仅在当前上下文窗口（最新 summary 之后）还没有用户消息时注入整页上下文，避免每轮重复塞页面 HTML/正文。
+  const scoped = getMessagesFromLatestContextSummary(existingMessages);
+  return !scoped.some((message) => message.role === "user");
+}
+
+async function prepareRequestContext(input: {
   input: RunChatRequestInput;
   modelConfig: ReturnType<typeof createModelConfig>;
   effectiveChatPreferences: EffectiveChatPreferences;
   chatTaskId: string;
-}): Promise<PreparedContextCompressionResult | undefined> {
-  const scopedMessages = getMessagesFromLatestContextSummary([...input.input.existingMessages, input.input.userMessage]);
-  const requestMessages = buildChatRequestMessages({
-    model: input.modelConfig,
-    pageContext: input.input.pageContextPrompt,
-    existingMessages: input.input.existingMessages,
-    userMessage: input.input.userMessage,
-    systemPrompt: input.effectiveChatPreferences.systemPrompt,
-    appendPageContextToSystemPrompt: input.input.state.appendPageContextToSystemPrompt,
-    maxContextTokens: input.effectiveChatPreferences.maxContextTokens,
-  });
-  const estimatedContextTokens = estimateModelRequestContextTokens(requestMessages);
-  const compressionThresholdTokens = Math.floor(
-    input.effectiveChatPreferences.maxContextTokens * (input.effectiveChatPreferences.contextCompressionThresholdPercent / 100),
+}): Promise<PreparedRequestContextResult> {
+  const effectiveMaxContextTokens = resolveEffectiveMaxContextTokens(
+    input.effectiveChatPreferences.maxContextTokens,
+    input.modelConfig,
   );
-  if (estimatedContextTokens < compressionThresholdTokens) {
-    return undefined;
-  }
+  const hardThresholdPercent = input.effectiveChatPreferences.contextCompressionThresholdPercent;
+  const softThresholdTokens = Math.floor(effectiveMaxContextTokens * (SOFT_TRIM_THRESHOLD_PERCENT / 100));
+  const hardThresholdTokens = Math.floor(effectiveMaxContextTokens * (hardThresholdPercent / 100));
 
-  const compressionArguments = {
-    maxContextTokens: input.effectiveChatPreferences.maxContextTokens,
-    thresholdPercent: input.effectiveChatPreferences.contextCompressionThresholdPercent,
-    triggerThresholdTokens: compressionThresholdTokens,
-    estimatedContextTokens,
-    scopedMessageCount: scopedMessages.length,
+  const estimateFor = (existingMessages: ChatMessage[]) => {
+    const requestMessages = buildChatRequestMessages({
+      model: input.modelConfig,
+      pageContext: input.input.pageContextPrompt,
+      existingMessages,
+      userMessage: input.input.userMessage,
+      systemPrompt: input.effectiveChatPreferences.systemPrompt,
+      appendPageContextToSystemPrompt: shouldInjectPageContextForRequest(existingMessages, input.input.state.appendPageContextToSystemPrompt),
+      maxContextTokens: effectiveMaxContextTokens,
+    });
+    return estimateModelRequestContextTokens(requestMessages);
   };
 
-  const messagesToCompress = getMessagesFromLatestContextSummary(input.input.existingMessages);
+  const rawEstimate = estimateFor(input.input.existingMessages);
+  let requestExistingMessages = input.input.existingMessages;
+  let softTrimmed = false;
+
+  if (rawEstimate >= softThresholdTokens) {
+    const soft = softTrimChatMessagesForRequest(input.input.existingMessages);
+    if (soft.changed) {
+      requestExistingMessages = soft.messages;
+      softTrimmed = true;
+    }
+  }
+
+  const softEstimate = softTrimmed ? estimateFor(requestExistingMessages) : rawEstimate;
+  if (softEstimate < hardThresholdTokens) {
+    return {
+      requestExistingMessages,
+      softTrimmed,
+      hardCompressed: false,
+    };
+  }
+
+  const messagesToCompress = getMessagesFromLatestContextSummary(requestExistingMessages);
   if (messagesToCompress.length === 0) {
     input.input.set({
       failure: {
@@ -2316,6 +2354,17 @@ async function prepareContextCompression(input: {
     });
     throw new ContextCompressionError("没有可压缩的历史消息");
   }
+
+  const compressionArguments = {
+    maxContextTokens: effectiveMaxContextTokens,
+    preferenceMaxContextTokens: input.effectiveChatPreferences.maxContextTokens,
+    softThresholdPercent: SOFT_TRIM_THRESHOLD_PERCENT,
+    thresholdPercent: hardThresholdPercent,
+    triggerThresholdTokens: hardThresholdTokens,
+    estimatedContextTokens: softEstimate,
+    softTrimmed,
+    scopedMessageCount: messagesToCompress.length,
+  };
 
   const compressionStartedAt = Date.now();
   const compressionMessageId = `message-${compressionStartedAt}-context-compression`;
@@ -2463,7 +2512,8 @@ async function prepareContextCompression(input: {
 
   return {
     requestExistingMessages: [summaryMessage],
-    sessionMessages: sessionWithCompletedCompression.messages,
+    softTrimmed,
+    hardCompressed: true,
     tokenUsageEntries: response.tokenUsageEntries,
   };
 }
@@ -2562,16 +2612,18 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       input.state.browserAutomationMode ?? "normal_restricted",
     );
     let requestExistingMessages = input.existingMessages;
+    const effectiveMaxContextTokens = resolveEffectiveMaxContextTokens(
+      effectiveChatPreferences.maxContextTokens,
+      modelConfig,
+    );
     try {
-      const compression = await prepareContextCompression({
+      const prepared = await prepareRequestContext({
         input,
         modelConfig,
         effectiveChatPreferences,
         chatTaskId: chatTask.id,
       });
-      if (compression) {
-        requestExistingMessages = compression.requestExistingMessages;
-      }
+      requestExistingMessages = prepared.requestExistingMessages;
     } catch (error) {
       if (error instanceof ContextCompressionCanceledError) {
         taskStatus = "canceled";
@@ -2590,8 +2642,8 @@ async function runChatRequest(input: RunChatRequestInput): Promise<void> {
       existingMessages: requestExistingMessages,
       userMessage: input.userMessage,
       systemPrompt: effectiveChatPreferences.systemPrompt,
-      appendPageContextToSystemPrompt: input.state.appendPageContextToSystemPrompt,
-      maxContextTokens: effectiveChatPreferences.maxContextTokens,
+      appendPageContextToSystemPrompt: shouldInjectPageContextForRequest(requestExistingMessages, input.state.appendPageContextToSystemPrompt),
+      maxContextTokens: effectiveMaxContextTokens,
     });
     const loggingEnabled = Boolean(input.state.chatPreferences.workspaceRequestLoggingEnabled);
     const request: AppChatSendMessage = {
