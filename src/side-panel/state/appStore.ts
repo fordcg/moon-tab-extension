@@ -216,6 +216,31 @@ import { generateTitleForSession, generateTitleFromSavedPrivateSession, hasAvail
 import { createAppNotification, type AppNotification, type AppNotificationDraft } from "./appNotifications";
 import { sendRuntimeMessage } from "./runtimeMessage";
 
+function reconcileSelectionAfterCatalogChange(
+  state: Pick<AppState, "models" | "providers" | "selectedModelId" | "defaultChatModelId">,
+): Pick<AppState, "selectedModelId" | "defaultChatModelId" | "models"> {
+  const selectedModelId = resolveAvailableModelId(state.selectedModelId, state.models, state.providers);
+  const defaultChatModelId =
+    resolveConfiguredModelId(state.defaultChatModelId, state.models, state.providers) ||
+    resolveAvailableModelId(state.defaultChatModelId, state.models, state.providers);
+  // If title model is disabled or its provider is disabled, clear isTitleModel on that row.
+  let models = state.models;
+  const title = models.find((model) => model.isTitleModel);
+  if (title) {
+    const provider = state.providers.find((item) => item.id === title.providerId);
+    if (!title.enabled || !provider?.enabled) {
+      models = models.map((model) =>
+        model.id === title.id ? { ...model, isTitleModel: false, updatedAt: Date.now() } : model,
+      );
+      const cleared = models.find((model) => model.id === title.id);
+      if (cleared) {
+        void saveProviderModel(cleared);
+      }
+    }
+  }
+  return { selectedModelId, defaultChatModelId, models };
+}
+
 function createSessionId(timestamp = Date.now()): string {
   return `session-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -337,10 +362,29 @@ export interface AppState {
   clearChannelOperationNotice: (providerId: string) => void;
   addExampleModel: () => void;
   addProvider: () => ModelProvider;
-  updateProvider: (providerId: string, updates: Partial<Pick<ModelProvider, "name" | "endpointType" | "endpointUrl" | "apiKey">>) => void;
+  updateProvider: (
+    providerId: string,
+    updates: Partial<Pick<ModelProvider, "name" | "endpointType" | "endpointUrl" | "apiKey" | "enabled">>,
+  ) => void;
   addModel: (providerId: string, overrides?: Partial<Pick<ProviderModel, "displayName" | "modelId">>) => ProviderModel;
   addRemoteModel: (providerId: string, remoteModel: RemoteModelInfo) => ProviderModel;
-  updateModel: (modelId: string, updates: Partial<Pick<ProviderModel, "displayName" | "modelId" | "temperature" | "maxTokens" | "topK" | "systemPrompt" | "supportsVision" | "reasoningEffort">>) => void;
+  updateModel: (
+    modelId: string,
+    updates: Partial<
+      Pick<
+        ProviderModel,
+        | "displayName"
+        | "modelId"
+        | "temperature"
+        | "maxTokens"
+        | "topK"
+        | "systemPrompt"
+        | "supportsVision"
+        | "reasoningEffort"
+        | "enabled"
+      >
+    >,
+  ) => void;
   setTitleModel: (modelId: string) => void;
   setDefaultChatModel: (modelId: string) => Promise<void>;
   updateChatPreferences: (updates: Partial<ChatPreferenceValues>) => Promise<void>;
@@ -633,7 +677,22 @@ export const useAppStore = create<AppState>()((set, get) => ({
         void saveModelProvider(updatedProvider);
       }
 
-      return { providers };
+      const reconciled = reconcileSelectionAfterCatalogChange({
+        models: state.models,
+        providers,
+        selectedModelId: state.selectedModelId,
+        defaultChatModelId: state.defaultChatModelId,
+      });
+
+      if (reconciled.defaultChatModelId !== state.defaultChatModelId) {
+        void saveAppSetting({
+          key: "defaultChatModelId",
+          value: reconciled.defaultChatModelId,
+          updatedAt: Date.now(),
+        });
+      }
+
+      return { providers, ...reconciled };
     });
   },
   addModel: (providerId, overrides) => createAndStoreModel(providerId, get, set, overrides),
@@ -696,7 +755,22 @@ export const useAppStore = create<AppState>()((set, get) => ({
         void saveProviderModel(updatedModel);
       }
 
-      return { models };
+      const reconciled = reconcileSelectionAfterCatalogChange({
+        models,
+        providers: state.providers,
+        selectedModelId: state.selectedModelId,
+        defaultChatModelId: state.defaultChatModelId,
+      });
+
+      if (reconciled.defaultChatModelId !== state.defaultChatModelId) {
+        void saveAppSetting({
+          key: "defaultChatModelId",
+          value: reconciled.defaultChatModelId,
+          updatedAt: Date.now(),
+        });
+      }
+
+      return { ...reconciled };
     });
   },
   setTitleModel: (modelId) => {
