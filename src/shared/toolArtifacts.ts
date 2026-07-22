@@ -159,7 +159,7 @@ export function formatToolAttachmentForPrompt(attachment: ChatToolAttachment): s
   }
 
   if (isNetworkToolAttachment(attachment)) {
-    const requests = shouldPreserveNetworkAttachmentRaw(attachment) ? attachment.requests : attachment.requests.map(redactNetworkRequestDetail);
+    const requests = redactNetworkAttachmentRequestsForSharedText(attachment);
     return ["后续追问需要继续参考以下历史 Network 请求详情：", formatNetworkAttachmentForExport(requests)].join("\n");
   }
 
@@ -190,13 +190,67 @@ export function formatToolAttachmentForPrompt(attachment: ChatToolAttachment): s
   return safeAttachment.summary.trim() ? [`后续追问需要继续参考以下历史工具附件：${safeAttachment.title}`, safeAttachment.summary.trim()].join("\n") : undefined;
 }
 
+/** 压缩/预算估算用的摘要注入：只带 summary，不展开完整 body/源码。 */
+export function formatToolAttachmentForPromptSummary(attachment: ChatToolAttachment): string | undefined {
+  if (isWebSearchToolAttachment(attachment)) {
+    const summary = formatTavilySearchAttachmentSummary(attachment).trim();
+    return summary ? ["后续追问可参考以下历史网络搜索摘要：", summary].join("\n") : undefined;
+  }
+
+  if (isNetworkToolAttachment(attachment)) {
+    const requests = redactNetworkAttachmentRequestsForSharedText(attachment);
+    const summary = formatNetworkAttachmentSummary(requests).trim();
+    return summary
+      ? [
+          "后续追问可参考以下历史 Network 请求摘要；完整 body/header 仅保存在附件弹窗，不默认注入模型上下文：",
+          summary,
+        ].join("\n")
+      : undefined;
+  }
+
+  if (isJsSourceToolAttachment(attachment)) {
+    const summary = formatJsSourceAttachmentSummary(attachment).trim();
+    return summary
+      ? [
+          "后续追问可参考以下历史 JS 资源摘要；完整源码仅保存在附件弹窗，不默认注入模型上下文：",
+          summary,
+        ].join("\n")
+      : undefined;
+  }
+
+  if (isSourceMapToolAttachment(attachment)) {
+    const summary = formatSourceMapAttachmentSummary(attachment).trim();
+    return summary
+      ? [
+          "后续追问可参考以下历史 Source Map 摘要；完整原始片段仅保存在附件弹窗，不默认注入模型上下文：",
+          summary,
+        ].join("\n")
+      : undefined;
+  }
+
+  if (isBrowserScreenshotToolAttachment(attachment)) {
+    return [
+      "后续追问可参考一张历史浏览器截图附件；正文只保留元数据，不注入图片 base64：",
+      formatBrowserScreenshotAttachmentSummary(attachment),
+    ].join("\n");
+  }
+
+  if (isAutomationReportToolAttachment(attachment)) {
+    return ["后续追问可参考以下自动化任务报告摘要：", formatAutomationReportSummary(attachment)].join("\n");
+  }
+
+  const safeAttachment = sanitizeGenericToolAttachment(attachment);
+  const summary = safeAttachment.summary.trim();
+  return summary ? [`后续追问可参考以下历史工具附件摘要：${safeAttachment.title}`, summary].join("\n") : undefined;
+}
+
 export function formatToolAttachmentForExport(attachment: ChatToolAttachment): string {
   if (isWebSearchToolAttachment(attachment)) {
     return ["# 网络搜索结果附件", "", formatTavilySearchAttachmentSummary(attachment), "", createTavilySearchContextPrompt(attachment)].join("\n");
   }
 
   if (isNetworkToolAttachment(attachment)) {
-    const requests = shouldPreserveNetworkAttachmentRaw(attachment) ? attachment.requests : attachment.requests.map(redactNetworkRequestDetail);
+    const requests = redactNetworkAttachmentRequestsForSharedText(attachment);
     return ["# Network 请求详情附件", "", formatNetworkAttachmentSummary(requests), "", formatNetworkAttachmentForExport(requests)].join("\n");
   }
 
@@ -796,6 +850,12 @@ function normalizeNetworkToolAttachment(source: Partial<ChatToolAttachment>): Ch
 
 function shouldPreserveNetworkAttachmentRaw(attachment: ChatNetworkToolAttachment): boolean {
   return attachment.fullAccess === true && attachment.redacted === false;
+}
+
+function redactNetworkAttachmentRequestsForSharedText(
+  attachment: ChatNetworkToolAttachment,
+): ChatNetworkToolAttachment["requests"] {
+  return attachment.requests.map(redactNetworkRequestDetail);
 }
 
 function isFullAccessNetworkAttachmentSource(source: Partial<ChatToolAttachment>): source is Partial<ChatNetworkToolAttachment> {
