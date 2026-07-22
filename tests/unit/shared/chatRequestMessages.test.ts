@@ -150,7 +150,7 @@ describe("聊天请求消息构造", () => {
     expect(result[1]).toMatchObject({
       role: "user",
       content: [
-        "已选用任务策略：",
+        "已调用提示词：",
         "1. 风险审查",
         "从安全、隐私和可维护性三个角度审查。",
         "",
@@ -261,6 +261,7 @@ describe("聊天请求消息构造", () => {
     const model = createModelConfig(createProvider(), createModel());
     const assistantMessage = {
       ...createMessage("message-1", "assistant", "登录接口返回 500。", 1),
+      assistantMessageKind: "tool_call_turn",
       networkContextAttachment: {
         id: "network-1",
         title: "Network 请求详情",
@@ -291,10 +292,9 @@ describe("聊天请求消息构造", () => {
       userMessage,
     });
 
-    expect(result[1].content).toContain("后续追问需要继续参考");
-    expect(result[1].content).toContain("Network context:");
-    expect(result[1].content).toContain("POST https://api.example.com/login?token=[已脱敏]&safe=1");
-    expect(result[1].content).toContain("Authorization: [已脱敏]");
+    expect(result[1].content).toContain("后续追问可参考以下历史 Network 请求摘要");
+    expect(result[1].content).toContain("POST 500 https://api.example.com/login?token=[已脱敏]&safe=1");
+    expect(result[1].content).not.toContain("Network context:");
     expect(assistantMessage.content).toBe("登录接口返回 500。");
   });
 
@@ -302,6 +302,7 @@ describe("聊天请求消息构造", () => {
     const model = createModelConfig(createProvider(), createModel());
     const assistantMessage = {
       ...createMessage("message-1", "assistant", "旧版本保存的接口分析。", 1),
+      assistantMessageKind: "tool_call_turn",
       networkContextAttachment: {
         id: "network-1",
         title: "Network 请求详情",
@@ -337,11 +338,8 @@ describe("聊天请求消息构造", () => {
     });
     const expandedContent = result[1].content;
 
+    expect(expandedContent).toContain("后续追问可参考以下历史 Network 请求摘要");
     expect(expandedContent).toContain("token=[已脱敏]");
-    expect(expandedContent).toContain("Authorization: [已脱敏]");
-    expect(expandedContent).toContain("Cookie: [已脱敏]");
-    expect(expandedContent).toContain("\"password\":\"[已脱敏]\"");
-    expect(expandedContent).toContain("\"access_token\":\"[已脱敏]\"");
     expect(expandedContent).not.toContain("secret-token");
     expect(expandedContent).not.toContain("secret-cookie");
     expect(expandedContent).not.toContain("123456");
@@ -351,6 +349,7 @@ describe("聊天请求消息构造", () => {
     const model = createModelConfig(createProvider(), { ...createModel(), maxTokens: 60 });
     const assistantMessage = {
       ...createMessage("message-1", "assistant", "已分析接口。", 1),
+      assistantMessageKind: "tool_call_turn",
       networkContextAttachment: {
         id: "network-1",
         title: "Network 请求详情",
@@ -381,7 +380,7 @@ describe("聊天请求消息构造", () => {
     });
 
     expect(result[0].contextPrompt).toBe("");
-    expect(result[1].content).toContain("Network context:");
+    expect(result[1].content).toContain("后续追问可参考以下历史 Network 请求摘要");
   });
 
   it("max_token 足够时发送请求保留完整页面上下文", () => {
@@ -408,6 +407,7 @@ describe("网络搜索上下文消息构造", () => {
     const model = createModelConfig(createProvider(), createModel());
     const assistantMessage = {
       ...createMessage("message-search-assistant", "assistant", "根据搜索结果，Tavily 提供 Web 搜索能力。", 1),
+      assistantMessageKind: "tool_call_turn",
       toolAttachments: [
         {
           id: "tool-attachment-search",
@@ -441,10 +441,10 @@ describe("网络搜索上下文消息构造", () => {
       userMessage,
     });
 
-    expect(result[1].content).toContain("后续追问需要继续参考以下历史网络搜索结果：");
-    expect(result[1].content).toContain("网络搜索上下文：");
+    expect(result[1].content).toContain("后续追问可参考以下历史网络搜索摘要：");
+    expect(result[1].content).toContain("已搜索：Tavily API");
     expect(result[1].content).toContain("Tavily Docs");
-    expect(result[1].content).toContain("https://docs.tavily.com/search");
+    expect(result[1].content).not.toContain("网络搜索上下文：");
     expect(assistantMessage.content).toBe("根据搜索结果，Tavily 提供 Web 搜索能力。");
   });
 });

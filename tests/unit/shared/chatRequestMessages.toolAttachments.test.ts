@@ -52,6 +52,7 @@ describe("聊天请求历史工具附件", () => {
   it("后续追问只注入聚合后的同类工具附件", () => {
     const model = createModelConfig(createProvider(), createModel());
     const assistantMessage = createMessage({
+      assistantMessageKind: "tool_call_turn",
       toolCallRecords: [
         {
           id: "call-search-1",
@@ -122,9 +123,61 @@ describe("聊天请求历史工具附件", () => {
       userMessage,
     });
 
-    expect(result[1].content.match(/网络搜索上下文/g)).toHaveLength(1);
-    expect(result[1].content.match(/https:\/\/docs\.tavily\.com\/search/g)).toHaveLength(1);
-    expect(result[1].content).toContain("https://developer.chrome.com/docs/extensions");
+    expect(result[1].content.match(/后续追问可参考以下历史网络搜索摘要/g)).toHaveLength(1);
+    expect(result[1].content).toContain("已搜索：Tavily API；Chrome 扩展");
+    expect(result[1].content).toContain("返回 2 条结果");
+    expect(result[1].content).toContain("首条：Tavily Docs");
     expect(result[1].content).toContain("Tavily API；Chrome 扩展");
+  });
+
+  it("后续追问展开完全访问 Network 附件时只注入脱敏摘要", () => {
+    const model = createModelConfig(createProvider(), createModel());
+    const assistantMessage = createMessage({
+      id: "message-full-access-tool-turn",
+      assistantMessageKind: "tool_call_turn",
+      content: "已读取原始请求。",
+      toolAttachments: [
+        {
+          id: "attachment-full-access-network",
+          kind: "network",
+          title: "Network 请求详情",
+          summary: "原始详情",
+          sourceToolCallId: "call-full-access",
+          createdAt: 2,
+          redacted: false,
+          fullAccess: true,
+          truncated: false,
+          requests: [
+            {
+              id: "req-1",
+              url: "https://example.com/api?sign=raw-signature&nonce=raw-nonce",
+              method: "POST",
+              status: 200,
+              requestBody: "{\"signature\":\"raw-body-sign\",\"password\":\"123456\"}",
+              redacted: false,
+              truncated: false,
+            },
+          ],
+        },
+      ],
+    });
+    const userMessage = createMessage({
+      id: "message-user-follow-up",
+      role: "user",
+      content: "继续分析",
+      createdAt: 4,
+    });
+
+    const result = buildChatRequestMessages({
+      model,
+      pageContext: "",
+      existingMessages: [assistantMessage],
+      userMessage,
+    });
+
+    const expandedAssistant = result.find((message) => message.id === "message-full-access-tool-turn");
+    expect(expandedAssistant?.content).toContain("后续追问可参考以下历史 Network 请求摘要");
+    expect(expandedAssistant?.content).toContain("[已脱敏]");
+    expect(expandedAssistant?.content).not.toMatch(/raw-signature|raw-nonce|raw-body-sign|123456/);
   });
 });
