@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatPreferenceDrawer } from "../../../src/side-panel/components/ChatPreferenceDrawer";
@@ -52,33 +52,29 @@ function createSession(partial: Partial<ChatSession> = {}): ChatSession {
   };
 }
 
-describe("网络搜索设置优化", () => {
+describe("渠道管理与网络搜索设置优化", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     useAppStore.getState().reset();
     await clearDatabase();
   });
 
-  it("模型渠道点击展开后再次点击同一渠道会折叠配置", async () => {
+  it("模型渠道点击展开后再次点击同一渠道会折叠详情与模型", async () => {
     const user = userEvent.setup();
     useAppStore.setState({
       providers: [createProvider()],
       models: [createModel()],
     });
 
-    render(<SettingsPanel />);
+    render(<SettingsPanel initialTab="channels" />);
 
-    expect(screen.queryByRole("region", { name: "当前渠道详情" })).not.toBeInTheDocument();
-
-    await user.click(await screen.findByRole("button", { name: /测试渠道/ }));
-    expect(screen.getByRole("region", { name: "当前渠道详情" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "当前渠道详情" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "渠道模型" })).toBeInTheDocument();
-    expect(screen.getByText("gpt-test")).toBeInTheDocument();
+    expect(screen.getByText("测试模型")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /测试渠道/ }));
     expect(screen.queryByRole("region", { name: "当前渠道详情" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "渠道模型" })).toBeInTheDocument();
-    expect(screen.getByText("gpt-test")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "渠道模型" })).not.toBeInTheDocument();
   });
 
   it("模型渠道从空列表异步加载后会自动选中真实渠道", async () => {
@@ -92,8 +88,9 @@ describe("网络搜索设置优化", () => {
       addModel,
     });
 
-    render(<SettingsPanel />);
-    expect(await screen.findByText("默认渠道")).toBeInTheDocument();
+    render(<SettingsPanel initialTab="channels" />);
+    expect(await screen.findByText(/还没有渠道/)).toBeInTheDocument();
+    expect(screen.queryByText("默认渠道")).not.toBeInTheDocument();
 
     useAppStore.setState({
       providers: [createProvider()],
@@ -101,6 +98,7 @@ describe("网络搜索设置优化", () => {
     });
 
     expect(await screen.findByRole("button", { name: /测试渠道/ })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "当前渠道详情" })).toBeInTheDocument();
     expect(screen.queryByText("默认渠道")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "添加模型" }));
@@ -108,83 +106,16 @@ describe("网络搜索设置优化", () => {
     expect(addModel).toHaveBeenCalledWith("provider-1");
   });
 
-  it("网络搜索配置与渠道模型配置是渠道管理下的同级 section", async () => {
-    const user = userEvent.setup();
+  it("渠道管理不再展示 Tavily 配置", async () => {
     useAppStore.setState({
       providers: [createProvider()],
       models: [createModel()],
     });
 
-    render(<SettingsPanel />);
-
-    await user.click(await screen.findByRole("button", { name: /测试渠道/ }));
-
-    const channelManagement = screen.getByRole("region", { name: "渠道管理" });
-    const webSearchSection = screen.getByRole("region", { name: "Tavily 搜索工具配置" });
-    const modelSection = screen.getByRole("region", { name: "渠道模型" });
-
-    expect(webSearchSection.parentElement).toBe(channelManagement);
-    expect(modelSection.parentElement).toBe(channelManagement);
-    expect(modelSection).not.toContainElement(webSearchSection);
-  });
-
-  it("网络搜索配置可以设置 Tavily 参数并切换 API Key 明文显示", async () => {
-    const user = userEvent.setup();
-    const updateWebSearchSettings = vi.fn(async (updates) => {
-      useAppStore.setState((state) => ({
-        webSearchSettings: {
-          ...state.webSearchSettings,
-          ...updates,
-          tavily: {
-            ...state.webSearchSettings.tavily,
-            ...updates.tavily,
-          },
-        },
-      }));
-    });
-    useAppStore.setState({
-      updateWebSearchSettings,
-      webSearchSettings: {
-        provider: "tavily",
-        tavily: {
-          apiKeysText: "tvly-secret",
-          apiKeyStrategy: "round_robin",
-          includeAnswer: "basic",
-          includeRawContent: false,
-          maxResults: 5,
-        },
-        updatedAt: 1,
-      },
-    });
-
-    render(<SettingsPanel />);
-
-    const apiKeyInput = await screen.findByLabelText("Tavily API Key");
-    expect(apiKeyInput).toHaveAttribute("type", "password");
-    const showButton = screen.getByRole("button", { name: "显示 Tavily API Key 明文" });
-    expect(showButton.querySelector(".tavily-api-key-visibility-icon-closed")).toBeInTheDocument();
-    expect(showButton).not.toHaveTextContent("◎");
-    expect(showButton).not.toHaveTextContent("◉");
-
-    await user.click(showButton);
-    expect(apiKeyInput).toHaveAttribute("type", "text");
-    expect(screen.getByRole("button", { name: "隐藏 Tavily API Key 明文" }).querySelector(".tavily-api-key-visibility-icon-open")).toBeInTheDocument();
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Tavily 综合答案" }), "advanced");
-    expect(updateWebSearchSettings).toHaveBeenLastCalledWith({
-      tavily: expect.objectContaining({ includeAnswer: "advanced" }),
-    });
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Tavily 原始内容" }), "markdown");
-    expect(updateWebSearchSettings).toHaveBeenLastCalledWith({
-      tavily: expect.objectContaining({ includeRawContent: "markdown" }),
-    });
-
-    const maxResultsInput = screen.getByRole("spinbutton", { name: "全局 Tavily 最大结果数" });
-    fireEvent.change(maxResultsInput, { target: { value: "12" } });
-    expect(updateWebSearchSettings).toHaveBeenLastCalledWith({
-      tavily: expect.objectContaining({ maxResults: 12 }),
-    });
+    render(<SettingsPanel initialTab="channels" />);
+    expect(await screen.findByRole("region", { name: "渠道管理" })).toBeInTheDocument();
+    expect(screen.queryByText(/Tavily/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Tavily 搜索工具配置" })).not.toBeInTheDocument();
   });
 
   it("当前聊天设置不再展示 Tavily 参数覆盖入口", () => {

@@ -1,38 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { ModelProvider, ProviderModel } from "../../../shared/types";
-import { parseTavilyIncludeAnswerInput, parseTavilyIncludeRawContentInput } from "../../../shared/webSearch/settings";
 import { useAppStore } from "../../state/appStore";
 import { ModelVisionIcon } from "../ModelVisionIndicator";
 import { useComposedTextInput } from "../useComposedTextInput";
-import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
 import { SettingsSelect } from "./SettingsSelect";
-
-const draftProvider: ModelProvider = {
-  id: "draft-provider",
-  name: "默认渠道",
-  endpointType: "openai_chat",
-  endpointUrl: "https://api.openai.com",
-  apiKey: "",
-  enabled: true,
-  createdAt: 0,
-  updatedAt: 0,
-};
-
-const draftModel: ProviderModel = {
-  id: "draft-model",
-  providerId: draftProvider.id,
-  displayName: "默认模型",
-  modelId: "gpt-4.1-mini",
-  temperature: 0.7,
-  maxTokens: 1024,
-  systemPrompt: "你是网页助手",
-  isTitleModel: false,
-  supportsVision: false,
-  enabled: true,
-  createdAt: 0,
-  updatedAt: 0,
-};
 
 export function ChannelManagement() {
   const providers = useAppStore((state) => state.providers);
@@ -46,45 +18,46 @@ export function ChannelManagement() {
   const fetchRemoteModels = useAppStore((state) => state.fetchRemoteModels);
   const testModel = useAppStore((state) => state.testModel);
   const updateModel = useAppStore((state) => state.updateModel);
-  const webSearchSettings = useAppStore((state) => state.webSearchSettings);
-  const updateWebSearchSettings = useAppStore((state) => state.updateWebSearchSettings);
   const remoteModelsByProvider = useAppStore((state) => state.remoteModels);
   const channelOperations = useAppStore((state) => state.channelOperations);
   const modelConnectivity = useAppStore((state) => state.modelConnectivity);
-  const visibleProviders = providers.length > 0 ? providers : [draftProvider];
-  const [selectedProviderId, setSelectedProviderId] = useState(visibleProviders[0].id);
+
+  const [selectedProviderId, setSelectedProviderId] = useState<string>();
   const [expandedProviderId, setExpandedProviderId] = useState<string>();
   const [remoteModelQuery, setRemoteModelQuery] = useState("");
   const [batchModelInput, setBatchModelInput] = useState("");
   const [batchModelError, setBatchModelError] = useState("");
   const [settingsModelId, setSettingsModelId] = useState<string>();
-  const [showTavilyApiKey, setShowTavilyApiKey] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+
   useEffect(() => {
     if (providers.length === 0) {
-      setSelectedProviderId(draftProvider.id);
+      setSelectedProviderId(undefined);
+      setExpandedProviderId(undefined);
       return;
     }
-    if (!providers.some((provider) => provider.id === selectedProviderId)) {
-      setSelectedProviderId(providers[0].id);
+
+    const stillSelected = selectedProviderId && providers.some((provider) => provider.id === selectedProviderId);
+    if (!stillSelected) {
+      const firstEnabled = providers.find((provider) => provider.enabled) ?? providers[0];
+      setSelectedProviderId(firstEnabled.id);
+      setExpandedProviderId(firstEnabled.id);
     }
   }, [providers, selectedProviderId]);
 
-  const realSelectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
-  const selectedProvider = realSelectedProvider ?? draftProvider;
-  const realProviderModels = useMemo(
-    () => models.filter((model) => model.providerId === selectedProvider.id),
-    [models, selectedProvider.id],
-  );
-  const providerModels = useMemo(() => {
-    if (realProviderModels.length > 0) {
-      return realProviderModels;
-    }
+  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
+  const isExpanded = Boolean(selectedProvider && expandedProviderId === selectedProvider.id);
 
-    return realSelectedProvider ? [] : [draftModel];
-  }, [realProviderModels, realSelectedProvider]);
-  const remoteModels = remoteModelsByProvider[selectedProvider.id] ?? [];
-  const channelOperation = channelOperations[selectedProvider.id];
-  const existingRemoteModelIds = new Set(models.filter((model) => model.providerId === selectedProvider.id).map((model) => model.modelId));
+  const providerModels = useMemo(
+    () => (selectedProvider ? models.filter((model) => model.providerId === selectedProvider.id) : []),
+    [models, selectedProvider],
+  );
+  const remoteModels = selectedProvider ? (remoteModelsByProvider[selectedProvider.id] ?? []) : [];
+  const channelOperation = selectedProvider ? channelOperations[selectedProvider.id] : undefined;
+  const existingRemoteModelIds = useMemo(
+    () => new Set(providerModels.map((model) => model.modelId)),
+    [providerModels],
+  );
   const normalizedRemoteModelQuery = remoteModelQuery.trim().toLowerCase();
   const filteredRemoteModels = remoteModels.filter((remoteModel) => {
     if (!normalizedRemoteModelQuery) {
@@ -96,36 +69,62 @@ export function ChannelManagement() {
       remoteModel.displayName.toLowerCase().includes(normalizedRemoteModelQuery)
     );
   });
-  const ensureSelectedProvider = () => {
-    if (realSelectedProvider) {
-      return realSelectedProvider;
-    }
 
-    const provider = addProvider();
-    setSelectedProviderId(provider.id);
-    return provider;
+  const handleRowClick = (providerId: string) => {
+    if (selectedProviderId === providerId && expandedProviderId === providerId) {
+      setExpandedProviderId(undefined);
+      return;
+    }
+    setSelectedProviderId(providerId);
+    setExpandedProviderId(providerId);
+    setShowApiKey(false);
   };
+
   const handleAddProvider = () => {
     const provider = addProvider();
     setSelectedProviderId(provider.id);
     setExpandedProviderId(provider.id);
+    setShowApiKey(false);
   };
+
   const handleAddModel = () => {
-    const provider = ensureSelectedProvider();
-    addModel(provider.id);
+    if (!selectedProvider) {
+      return;
+    }
+    addModel(selectedProvider.id);
   };
+
   const handleClearModels = () => {
-    const shouldCloseSettings = settingsModelId ? realProviderModels.some((model) => model.id === settingsModelId) : false;
-    realProviderModels.forEach((model) => deleteModel(model.id));
+    if (!selectedProvider) {
+      return;
+    }
+    if (!window.confirm("确认清空当前渠道下的所有模型吗？")) {
+      return;
+    }
+    const shouldCloseSettings = settingsModelId
+      ? providerModels.some((model) => model.id === settingsModelId)
+      : false;
+    providerModels.forEach((model) => deleteModel(model.id));
     if (shouldCloseSettings) {
       setSettingsModelId(undefined);
     }
   };
+
   const handleBatchAddModels = () => {
-    const provider = ensureSelectedProvider();
-    const existingModelIds = new Set(models.filter((model) => model.providerId === provider.id).map((model) => model.modelId));
-    const nextModelIds = Array.from(new Set(batchModelInput.split(",").map((item) => item.trim()).filter(Boolean)))
-      .filter((modelId) => !existingModelIds.has(modelId));
+    if (!selectedProvider) {
+      return;
+    }
+    const existingModelIds = new Set(
+      models.filter((model) => model.providerId === selectedProvider.id).map((model) => model.modelId),
+    );
+    const nextModelIds = Array.from(
+      new Set(
+        batchModelInput
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ).filter((modelId) => !existingModelIds.has(modelId));
 
     if (nextModelIds.length === 0) {
       setBatchModelError("请输入至少一个未添加的模型 ID");
@@ -133,12 +132,12 @@ export function ChannelManagement() {
     }
 
     nextModelIds.forEach((modelId) => {
-      // Force vision/reasoning detection at add time (batch path).
-      addModel(provider.id, { modelId, displayName: modelId });
+      addModel(selectedProvider.id, { modelId, displayName: modelId });
     });
     setBatchModelInput("");
     setBatchModelError("");
   };
+
   const handleBatchModelInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return;
@@ -147,23 +146,42 @@ export function ChannelManagement() {
     event.preventDefault();
     handleBatchAddModels();
   };
+
   const handleFetchRemoteModels = () => {
-    const provider = ensureSelectedProvider();
-    void fetchRemoteModels(provider.id);
+    if (!selectedProvider) {
+      return;
+    }
+    void fetchRemoteModels(selectedProvider.id);
   };
+
   const handleDeleteProvider = () => {
-    deleteProvider(selectedProvider.id);
-    const nextProviderId = providers.find((provider) => provider.id !== selectedProvider.id)?.id ?? draftProvider.id;
-    setSelectedProviderId(nextProviderId);
-    setExpandedProviderId(undefined);
+    if (!selectedProvider) {
+      return;
+    }
+    if (!window.confirm(`确认删除渠道「${selectedProvider.name}」及其模型吗？`)) {
+      return;
+    }
+    const deletedId = selectedProvider.id;
+    deleteProvider(deletedId);
+    const nextProvider = providers.find((provider) => provider.id !== deletedId);
+    if (nextProvider) {
+      setSelectedProviderId(nextProvider.id);
+      setExpandedProviderId(nextProvider.id);
+    } else {
+      setSelectedProviderId(undefined);
+      setExpandedProviderId(undefined);
+    }
+    setShowApiKey(false);
   };
+
   const handleTestModel = (modelId: string) => {
+    if (!selectedProvider) {
+      return;
+    }
     void testModel(selectedProvider.id, modelId);
   };
+
   const settingsModel = settingsModelId ? models.find((model) => model.id === settingsModelId) : undefined;
-  const tavilyApiKeyInput = useComposedTextInput(webSearchSettings.tavily.apiKeysText, (apiKeysText) => {
-    void updateWebSearchSettings({ tavily: { ...webSearchSettings.tavily, apiKeysText } });
-  });
 
   return (
     <section className="grid w-full gap-4" aria-label="渠道管理">
@@ -174,344 +192,317 @@ export function ChannelManagement() {
         </button>
       </div>
 
-      <div className="grid gap-2">
-        {visibleProviders.map((provider) => (
-          <button
-            key={provider.id}
-            className={[
-              "rounded-lg border p-3 text-left transition",
-              provider.id === selectedProviderId
-                ? "border-[var(--color-primary)] bg-[var(--color-surface-card)]"
-                : "border-[var(--color-hairline)] bg-[var(--color-canvas)] hover:bg-[var(--color-surface-soft)]",
-            ].join(" ")}
-            type="button"
-            onClick={() => {
-              setSelectedProviderId(provider.id);
-              setExpandedProviderId((current) => (current === provider.id ? undefined : provider.id));
-            }}
-          >
-            <span className="block text-sm font-medium">{provider.name}</span>
-            <span className="ui-muted mt-1 block truncate text-xs">{provider.endpointUrl}</span>
-          </button>
-        ))}
-      </div>
-
-      {expandedProviderId === selectedProvider.id ? (
-      <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="当前渠道详情">
-        <div className="flex flex-wrap gap-2">
-          <button className="ui-button-secondary" type="button" onClick={handleFetchRemoteModels} disabled={channelOperation?.loading}>
-            {channelOperation?.loading ? "处理中" : "获取模型列表"}
-          </button>
-          {realSelectedProvider ? (
-            <button className="ui-button-secondary" type="button" onClick={handleDeleteProvider}>
-              删除渠道
-            </button>
-          ) : null}
+      {providers.length === 0 ? (
+        <div className="grid gap-2 rounded-lg border border-dashed border-[var(--color-hairline)] p-4 text-sm">
+          <p className="text-[var(--color-muted)]">还没有渠道。新增一个模型渠道后即可配置端点与模型。</p>
         </div>
-        <label className="grid gap-1 text-sm">
-          渠道名称
-          <input
-            className="ui-input"
-            aria-label="渠道名称"
-            value={selectedProvider.name}
-            onChange={(event) => updateProvider(ensureSelectedProvider().id, { name: event.target.value })}
-          />
-        </label>
-        <div className="grid gap-1 text-sm">
-          <span>端点类型</span>
-          <SettingsSelect
-            ariaLabel="端点类型"
-            triggerAriaLabel="端点类型菜单"
-            value={selectedProvider.endpointType}
-            options={[
-              { value: "openai_chat", label: "OpenAI Chat Completions" },
-              { value: "anthropic_messages", label: "Anthropic Messages" },
-            ]}
-            onChange={(value) => updateProvider(ensureSelectedProvider().id, { endpointType: value as ModelProvider["endpointType"] })}
-          />
-        </div>
-        <label className="grid gap-1 text-sm">
-          端点地址
-          <input
-            className="ui-input"
-            aria-label="端点地址"
-            value={selectedProvider.endpointUrl}
-            onChange={(event) => updateProvider(ensureSelectedProvider().id, { endpointUrl: event.target.value })}
-          />
-        </label>
-        <label className="grid gap-1 text-sm">
-          API Key
-          <input
-            className="ui-input"
-            aria-label="API Key"
-            type="password"
-            value={selectedProvider.apiKey}
-            onChange={(event) => updateProvider(ensureSelectedProvider().id, { apiKey: event.target.value })}
-          />
-        </label>
-      </section>
-      ) : null}
-
-      <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="渠道模型">
-        <div className="flex items-center justify-between gap-3">
-          <h4 className="text-sm font-semibold">模型</h4>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <button className="ui-button-secondary" type="button" onClick={handleAddModel}>
-              添加模型
-            </button>
-            <button className="ui-button-secondary" type="button" onClick={handleClearModels} disabled={realProviderModels.length === 0}>
-              清空所有
-            </button>
-          </div>
-        </div>
-        <label className="grid gap-1 text-sm">
-          批量添加模型
-          <input
-            className="ui-input"
-            aria-label="批量添加模型"
-            placeholder="输入模型 ID，用英文逗号分隔，回车添加"
-            value={batchModelInput}
-            onChange={(event) => {
-              setBatchModelInput(event.target.value);
-              if (batchModelError) {
-                setBatchModelError("");
-              }
-            }}
-            onKeyDown={handleBatchModelInputKeyDown}
-          />
-          {batchModelError ? <span className="text-xs text-[var(--color-error)]">{batchModelError}</span> : null}
-        </label>
-        {remoteModels.length > 0 ? (
-          <div className="grid gap-2 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] p-2">
-            <label className="grid gap-1 text-sm">
-              搜索模型
-              <input
-                aria-label="搜索模型"
-                aria-controls="remote-model-options"
-                aria-expanded="true"
-                className="ui-input"
-                placeholder="搜索或选择模型"
-                role="combobox"
-                value={remoteModelQuery}
-                onChange={(event) => setRemoteModelQuery(event.target.value)}
-              />
-            </label>
-            <div className="grid max-h-48 gap-1 overflow-y-auto" id="remote-model-options" role="listbox">
-              {filteredRemoteModels.length > 0 ? (
-                filteredRemoteModels.map((remoteModel) => {
-                  const alreadyAdded = existingRemoteModelIds.has(remoteModel.id);
-
-                  return (
-                    <button
-                      key={remoteModel.id}
-                      aria-disabled={alreadyAdded}
-                      className={[
-                        "rounded-md px-3 py-2 text-left text-sm transition",
-                        alreadyAdded
-                          ? "cursor-not-allowed bg-[var(--color-primary-disabled)] text-[var(--color-muted)]"
-                          : "bg-[var(--color-canvas)] text-[var(--color-ink)] hover:bg-[var(--color-surface-card)]",
-                      ].join(" ")}
-                      disabled={alreadyAdded}
-                      role="option"
-                      type="button"
-                      onClick={() => addRemoteModel(selectedProvider.id, remoteModel)}
-                    >
-                      {alreadyAdded ? "已添加 " : ""}
-                      {remoteModel.displayName}
-                      <span className="ui-muted ml-2 text-xs">{remoteModel.id}</span>
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="px-3 py-2 text-sm text-[var(--color-muted)]">未找到匹配模型</p>
-              )}
-            </div>
-          </div>
-        ) : null}
+      ) : (
         <div className="grid gap-2">
-          {providerModels.map((model) => {
-            const connectivity = modelConnectivity[model.id];
-            const statusText = connectivity?.loading
-              ? "正在测试连通性…"
-              : connectivity?.success
-                ? "测试成功"
-                : connectivity?.error
-                  ? `测试失败：${connectivity.error}`
-                  : "";
-
+          {providers.map((provider) => {
+            const modelCount = models.filter((model) => model.providerId === provider.id).length;
+            const expanded = expandedProviderId === provider.id;
             return (
-              <article
-                key={model.id}
+              <div
+                key={provider.id}
                 className={[
-                  "ui-card",
-                  "model-connectivity-card",
-                  connectivity?.loading ? "is-model-connectivity-loading" : "",
-                  connectivity?.success ? "border-[var(--color-success)] is-model-connectivity-success" : "",
-                  connectivity?.error ? "border-[var(--color-error)] is-model-connectivity-error" : "",
-                ].filter(Boolean).join(" ")}
+                  "flex items-stretch gap-2 rounded-lg border p-2",
+                  selectedProviderId === provider.id
+                    ? "border-[var(--color-primary)] bg-[var(--color-surface-card)]"
+                    : "border-[var(--color-hairline)] bg-[var(--color-canvas)]",
+                  provider.enabled ? "" : "opacity-60",
+                ].join(" ")}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="model-list-name">
-                    <span className="min-w-0 truncate text-sm font-medium">{model.modelId}</span>
-                    {model.supportsVision ? <ModelVisionIcon label={`${model.modelId} 支持视觉理解`} /> : null}
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 rounded-md p-2 text-left"
+                  aria-expanded={expanded}
+                  aria-controls={expanded ? "channel-detail-panel" : undefined}
+                  onClick={() => handleRowClick(provider.id)}
+                >
+                  <span className="block text-sm font-medium">{provider.name}</span>
+                  <span className="ui-muted mt-1 block truncate text-xs">{provider.endpointUrl}</span>
+                  <span className="ui-muted mt-1 block text-xs">
+                    {provider.endpointType === "anthropic_messages" ? "Anthropic" : "OpenAI"} · {modelCount} 个模型
                   </span>
-                  {realSelectedProvider && model.id !== draftModel.id ? (
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      <button
-                        aria-label={`设置 ${model.modelId}`}
-                        className="ui-button-secondary px-2 py-1"
-                        type="button"
-                        onClick={() => setSettingsModelId(model.id)}
-                      >
-                        设置
-                      </button>
-                      <button
-                        aria-label={`测试模型连通性 ${model.modelId}`}
-                        className="ui-button-secondary px-2 py-1"
-                        type="button"
-                        onClick={() => handleTestModel(model.id)}
-                        disabled={connectivity?.loading}
-                        aria-busy={connectivity?.loading ? true : undefined}
-                      >
-                        {connectivity?.loading ? "测试中…" : "测试"}
-                      </button>
-                      <button
-                        aria-label={`删除 ${model.modelId}`}
-                        className="ui-button-secondary px-2 py-1"
-                        type="button"
-                        onClick={() => deleteModel(model.id)}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-                {statusText ? (
-                  <p
-                    className={[
-                      "model-connectivity-status mt-2 text-xs",
-                      connectivity?.loading ? "text-[var(--color-muted)]" : "",
-                      connectivity?.success ? "text-[var(--color-success)]" : "",
-                      connectivity?.error ? "text-[var(--color-error)]" : "",
-                    ].filter(Boolean).join(" ")}
-                    role="status"
-                    aria-live="polite"
-                  >
-                    {statusText}
-                  </p>
-                ) : null}
-              </article>
+                </button>
+                <label className="chat-preference-switch shrink-0 self-center px-2" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    className="chat-preference-switch-input"
+                    type="checkbox"
+                    role="switch"
+                    aria-label={`渠道启用：${provider.name}`}
+                    checked={provider.enabled}
+                    onChange={(event) => updateProvider(provider.id, { enabled: event.target.checked })}
+                  />
+                  <span className="chat-preference-switch-control" aria-hidden="true">
+                    <span className="chat-preference-switch-thumb" />
+                  </span>
+                </label>
+              </div>
             );
           })}
         </div>
-      </section>
+      )}
 
-      <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="Tavily 搜索工具配置">
-        <h4 className="text-sm font-semibold">Tavily 搜索工具</h4>
-        <label className="grid gap-1 text-sm">
-          Tavily API Key
-          <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-            <input
-              className="ui-input min-w-0"
-              aria-label="Tavily API Key"
-              type={showTavilyApiKey ? "text" : "password"}
-              {...tavilyApiKeyInput}
-            />
+      {isExpanded && selectedProvider ? (
+        <section
+          id="channel-detail-panel"
+          className="grid gap-3 border-t border-[var(--color-hairline)] bg-[var(--color-surface-soft)] pt-4"
+          aria-label="当前渠道详情"
+          role="region"
+        >
+          <div className="flex flex-wrap gap-2">
             <button
-              className="ui-button-secondary px-2"
+              className="ui-button-secondary"
               type="button"
-              aria-label={showTavilyApiKey ? "隐藏 Tavily API Key 明文" : "显示 Tavily API Key 明文"}
-              onClick={() => setShowTavilyApiKey((visible) => !visible)}
+              onClick={handleFetchRemoteModels}
+              disabled={channelOperation?.loading}
             >
-              <TavilyApiKeyVisibilityIcon visible={showTavilyApiKey} />
+              {channelOperation?.loading ? "处理中" : "获取模型列表"}
             </button>
-          </span>
-          <span className="ui-muted text-xs">多个 API Key 请使用英文逗号分隔。</span>
-        </label>
-        <div className="grid gap-1 text-sm">
-          <span>Tavily API Key 使用策略</span>
-          <SettingsSelect
-            ariaLabel="Tavily API Key 使用策略"
-            triggerAriaLabel="Tavily API Key 使用策略菜单"
-            value={webSearchSettings.tavily.apiKeyStrategy}
-            options={[
-              { value: "round_robin", label: "轮询" },
-              { value: "random", label: "随机" },
-            ]}
-            onChange={(value) =>
-              void updateWebSearchSettings({
-                tavily: {
-                  ...webSearchSettings.tavily,
-                  apiKeyStrategy: value === "random" ? "random" : "round_robin",
-                },
-              })
-            }
-          />
-        </div>
-        <div className="chat-preference-grid">
-          <div className="chat-preference-field">
-            <span>综合答案</span>
+            <button className="ui-button-secondary" type="button" onClick={handleDeleteProvider}>
+              删除渠道
+            </button>
+          </div>
+          <label className="grid gap-1 text-sm">
+            渠道名称
+            <input
+              className="ui-input"
+              aria-label="渠道名称"
+              value={selectedProvider.name}
+              onChange={(event) => updateProvider(selectedProvider.id, { name: event.target.value })}
+            />
+          </label>
+          <div className="grid gap-1 text-sm">
+            <span>端点类型</span>
             <SettingsSelect
-              ariaLabel="Tavily 综合答案"
-              triggerAriaLabel="Tavily 综合答案菜单"
-              value={String(webSearchSettings.tavily.includeAnswer)}
+              ariaLabel="端点类型"
+              triggerAriaLabel="端点类型菜单"
+              value={selectedProvider.endpointType}
               options={[
-                { value: "basic", label: "基础答案" },
-                { value: "advanced", label: "深入答案" },
-                { value: "true", label: "开启" },
-                { value: "false", label: "关闭" },
+                { value: "openai_chat", label: "OpenAI Chat Completions" },
+                { value: "anthropic_messages", label: "Anthropic Messages" },
               ]}
               onChange={(value) =>
-                void updateWebSearchSettings({
-                  tavily: {
-                    ...webSearchSettings.tavily,
-                    includeAnswer: parseTavilyIncludeAnswerInput(value),
-                  },
-                })
+                updateProvider(selectedProvider.id, { endpointType: value as ModelProvider["endpointType"] })
               }
             />
           </div>
-          <div className="chat-preference-field">
-            <span>原始内容</span>
-            <SettingsSelect
-              ariaLabel="Tavily 原始内容"
-              triggerAriaLabel="Tavily 原始内容菜单"
-              value={String(webSearchSettings.tavily.includeRawContent)}
-              options={[
-                { value: "false", label: "关闭" },
-                { value: "true", label: "开启" },
-                { value: "markdown", label: "Markdown" },
-                { value: "text", label: "纯文本" },
-              ]}
-              onChange={(value) =>
-                void updateWebSearchSettings({
-                  tavily: {
-                    ...webSearchSettings.tavily,
-                    includeRawContent: parseTavilyIncludeRawContentInput(value),
-                  },
-                })
-              }
+          <label className="grid gap-1 text-sm">
+            端点地址
+            <input
+              className="ui-input"
+              aria-label="端点地址"
+              value={selectedProvider.endpointUrl}
+              onChange={(event) => updateProvider(selectedProvider.id, { endpointUrl: event.target.value })}
             />
-          </div>
-          <GlobalPreferenceNumberInput
-            label="Tavily 最大结果数"
-            value={webSearchSettings.tavily.maxResults}
-            min={1}
-            max={20}
-            step={1}
-            onChange={(value) =>
-              value === undefined
-                ? undefined
-                : void updateWebSearchSettings({
-                    tavily: {
-                      ...webSearchSettings.tavily,
-                      maxResults: value,
-                    },
-                  })
-            }
-          />
-        </div>
-      </section>
+          </label>
+          <label className="grid gap-1 text-sm">
+            API Key
+            <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <input
+                className="ui-input min-w-0"
+                aria-label="API Key"
+                type={showApiKey ? "text" : "password"}
+                value={selectedProvider.apiKey}
+                onChange={(event) => updateProvider(selectedProvider.id, { apiKey: event.target.value })}
+              />
+              <button
+                className="ui-button-secondary px-2"
+                type="button"
+                aria-label={showApiKey ? "隐藏 API Key 明文" : "显示 API Key 明文"}
+                onClick={() => setShowApiKey((visible) => !visible)}
+              >
+                <ApiKeyVisibilityIcon visible={showApiKey} />
+              </button>
+            </span>
+          </label>
+
+          <section className="grid gap-3 border-t border-[var(--color-hairline)] pt-4" aria-label="渠道模型" role="region">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-sm font-semibold">模型</h4>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button className="ui-button-secondary" type="button" onClick={handleAddModel}>
+                  添加模型
+                </button>
+                <button
+                  className="ui-button-secondary"
+                  type="button"
+                  onClick={handleClearModels}
+                  disabled={providerModels.length === 0}
+                >
+                  清空所有
+                </button>
+              </div>
+            </div>
+            <label className="grid gap-1 text-sm">
+              批量添加模型
+              <input
+                className="ui-input"
+                aria-label="批量添加模型"
+                placeholder="输入模型 ID，用英文逗号分隔，回车添加"
+                value={batchModelInput}
+                onChange={(event) => {
+                  setBatchModelInput(event.target.value);
+                  if (batchModelError) {
+                    setBatchModelError("");
+                  }
+                }}
+                onKeyDown={handleBatchModelInputKeyDown}
+              />
+              {batchModelError ? <span className="text-xs text-[var(--color-error)]">{batchModelError}</span> : null}
+            </label>
+            {remoteModels.length > 0 ? (
+              <div className="grid gap-2 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-canvas)] p-2">
+                <label className="grid gap-1 text-sm">
+                  搜索模型
+                  <input
+                    aria-label="搜索模型"
+                    aria-controls="remote-model-options"
+                    aria-expanded="true"
+                    className="ui-input"
+                    placeholder="搜索或选择模型"
+                    role="combobox"
+                    value={remoteModelQuery}
+                    onChange={(event) => setRemoteModelQuery(event.target.value)}
+                  />
+                </label>
+                <div className="grid max-h-48 gap-1 overflow-y-auto" id="remote-model-options" role="listbox">
+                  {filteredRemoteModels.length > 0 ? (
+                    filteredRemoteModels.map((remoteModel) => {
+                      const alreadyAdded = existingRemoteModelIds.has(remoteModel.id);
+
+                      return (
+                        <button
+                          key={remoteModel.id}
+                          aria-disabled={alreadyAdded}
+                          className={[
+                            "rounded-md px-3 py-2 text-left text-sm transition",
+                            alreadyAdded
+                              ? "cursor-not-allowed bg-[var(--color-primary-disabled)] text-[var(--color-muted)]"
+                              : "bg-[var(--color-canvas)] text-[var(--color-ink)] hover:bg-[var(--color-surface-card)]",
+                          ].join(" ")}
+                          disabled={alreadyAdded}
+                          role="option"
+                          type="button"
+                          onClick={() => addRemoteModel(selectedProvider.id, remoteModel)}
+                        >
+                          {alreadyAdded ? "已添加 " : ""}
+                          {remoteModel.displayName}
+                          <span className="ui-muted ml-2 text-xs">{remoteModel.id}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <p className="px-3 py-2 text-sm text-[var(--color-muted)]">未找到匹配模型</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+            <div className="grid gap-2">
+              {providerModels.map((model) => {
+                const connectivity = modelConnectivity[model.id];
+                const statusText = connectivity?.loading
+                  ? "正在测试连通性…"
+                  : connectivity?.success
+                    ? "测试成功"
+                    : connectivity?.error
+                      ? `测试失败：${connectivity.error}`
+                      : "";
+                const showModelId = model.modelId !== model.displayName;
+
+                return (
+                  <article
+                    key={model.id}
+                    className={[
+                      "ui-card",
+                      "model-connectivity-card",
+                      connectivity?.loading ? "is-model-connectivity-loading" : "",
+                      connectivity?.success ? "border-[var(--color-success)] is-model-connectivity-success" : "",
+                      connectivity?.error ? "border-[var(--color-error)] is-model-connectivity-error" : "",
+                      model.enabled ? "" : "opacity-60",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="model-list-name min-w-0 flex-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="min-w-0 truncate text-sm font-medium">{model.displayName}</span>
+                          {model.supportsVision ? (
+                            <ModelVisionIcon label={`${model.displayName} 支持视觉理解`} />
+                          ) : null}
+                        </span>
+                        {showModelId ? (
+                          <span className="ui-muted mt-0.5 block truncate text-xs">{model.modelId}</span>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <label className="chat-preference-switch shrink-0" onClick={(event) => event.stopPropagation()}>
+                          <input
+                            className="chat-preference-switch-input"
+                            type="checkbox"
+                            role="switch"
+                            aria-label={`模型启用：${model.displayName}`}
+                            checked={model.enabled}
+                            onChange={(event) => updateModel(model.id, { enabled: event.target.checked })}
+                          />
+                          <span className="chat-preference-switch-control" aria-hidden="true">
+                            <span className="chat-preference-switch-thumb" />
+                          </span>
+                        </label>
+                        <button
+                          aria-label={`设置 ${model.modelId}`}
+                          className="ui-button-secondary px-2 py-1"
+                          type="button"
+                          onClick={() => setSettingsModelId(model.id)}
+                        >
+                          设置
+                        </button>
+                        <button
+                          aria-label={`测试模型连通性 ${model.modelId}`}
+                          className="ui-button-secondary px-2 py-1"
+                          type="button"
+                          onClick={() => handleTestModel(model.id)}
+                          disabled={connectivity?.loading}
+                          aria-busy={connectivity?.loading ? true : undefined}
+                        >
+                          {connectivity?.loading ? "测试中…" : "测试"}
+                        </button>
+                        <button
+                          aria-label={`删除 ${model.modelId}`}
+                          className="ui-button-secondary px-2 py-1"
+                          type="button"
+                          onClick={() => deleteModel(model.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                    {statusText ? (
+                      <p
+                        className={[
+                          "model-connectivity-status mt-2 text-xs",
+                          connectivity?.loading ? "text-[var(--color-muted)]" : "",
+                          connectivity?.success ? "text-[var(--color-success)]" : "",
+                          connectivity?.error ? "text-[var(--color-error)]" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {statusText}
+                      </p>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </section>
+      ) : null}
+
       {settingsModel ? (
         <ModelSettingsDialog
           model={settingsModel}
@@ -560,11 +551,7 @@ function ModelSettingsDialog({ model, onClose, onChangeModelId, onChangeSupports
         </div>
         <label className="grid gap-1 text-sm">
           模型 ID
-          <input
-            className="ui-input"
-            aria-label="模型 ID"
-            {...modelIdInput}
-          />
+          <input className="ui-input" aria-label="模型 ID" {...modelIdInput} />
           {modelIdError ? <span className="text-xs text-[var(--color-error)]">{modelIdError}</span> : null}
         </label>
         <label className="chat-preference-switch">
@@ -587,10 +574,14 @@ function ModelSettingsDialog({ model, onClose, onChangeModelId, onChangeSupports
   );
 }
 
-function TavilyApiKeyVisibilityIcon({ visible }: { visible: boolean }) {
+function ApiKeyVisibilityIcon({ visible }: { visible: boolean }) {
   return (
     <span
-      className={visible ? "tavily-api-key-visibility-icon tavily-api-key-visibility-icon-open" : "tavily-api-key-visibility-icon tavily-api-key-visibility-icon-closed"}
+      className={
+        visible
+          ? "api-key-visibility-icon api-key-visibility-icon-open tavily-api-key-visibility-icon tavily-api-key-visibility-icon-open"
+          : "api-key-visibility-icon api-key-visibility-icon-closed tavily-api-key-visibility-icon tavily-api-key-visibility-icon-closed"
+      }
       aria-hidden="true"
     >
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
