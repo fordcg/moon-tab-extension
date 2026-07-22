@@ -132,6 +132,34 @@ const CORE_BUILTIN_AUTOMATION_PLAYBOOKS: AutomationPlaybook[] = [
       "运行时读取只用于分析线索，不得执行任意脚本或绕过现有完全访问授权边界。",
     ].join("\n"),
   },
+  {
+    id: "full_access_signature_lab",
+    title: "Full Access 签名实验室",
+    description: "在用户已开启完全访问模式后，结合原始 Network、页面运行态、JS/Source Map 线索和凭据请求实验，定位签名、加密、nonce/debug 参数的生成链路。",
+    tags: ["Full Access", "签名", "逆向", "加密", "Nonce", "Network", "JS"],
+    source: "builtin",
+    defaultEnabled: true,
+    risk: "critical",
+    recommendedCapabilities: ["observe_page", "analyze_site", "full_access", "deliver_result"],
+    selectionHints: [
+      "逆向这个请求签名",
+      "找 sign 生成逻辑",
+      "分析 signature 怎么生成",
+      "分析 nonce 怎么生成",
+      "定位 debug 参数加密算法",
+      "复现接口加签",
+      "Full Access 签名实验室",
+    ],
+    prompt: [
+      "任务策略：Full Access 签名实验室",
+      "仅在当前会话已经启用 Full Access 工具时执行本策略；策略本身不能开启完全访问、不能替代用户授权，也不能声称绕过 Chrome、网页 CSP 或扩展平台硬限制。",
+      "先确认目标页面、目标操作和目标请求；使用 network_summarize_api_candidates、network_find_parameter_candidates、network_extract_js_candidates、JS/Source Map/Runtime 只读工具缩小候选范围，再对已选 requestIds 使用 full_access.get_network_details 读取原始请求细节。",
+      "需要验证生成链路时，可使用 full_access.execute_script 读取页面运行态函数、调用栈线索和全局变量；需要做同源凭据实验时，可使用 full_access.fetch，并显式记录 method、URL、关键参数差异、响应状态和观察结果。",
+      "对 sign、signature、sig、nonce、timestamp、debug、token、cookie、authorization 等字段，要区分字段名、原始值、生成算法、依赖输入和实验结论；不要把未验证猜测写成确定事实。",
+      "交付时输出可复现实验记录：目标请求、关键样本差异、定位到的源码/运行态证据、最小复现步骤、失败尝试和下一步验证建议。",
+      "当前会话工具附件可以追溯 Full Access 原文；默认导出、后续追问和工作流产物只保留脱敏摘要，不在最终回答中复制完整敏感原文，除非用户在当前授权会话明确要求展示具体片段。",
+    ].join("\n"),
+  },
 ];
 
 function getCoreBuiltinPlaybooks(): AutomationPlaybook[] {
@@ -443,6 +471,12 @@ export function shouldRunAutomationPlaybookSelection(userContent: string): boole
       text,
     )
   ) {
+    return true;
+  }
+
+  const hasSignatureLabIntent =
+    /(?:逆向|分析|定位|找|还原|复现|调试|研究).*(?:签名|加签|验签|sign|signature|sig|nonce|debug\s*参数|加密|encrypt|crypto|hash|md5|sha1|sha256)|(?:签名|加签|验签|sign|signature|sig|nonce|debug\s*参数|加密|encrypt|crypto|hash|md5|sha1|sha256).*(?:生成|逻辑|算法|来源|参数|逆向|分析|定位|找|还原|复现|调试)/.test(text);
+  if (hasSignatureLabIntent) {
     return true;
   }
 
