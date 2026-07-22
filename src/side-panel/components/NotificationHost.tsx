@@ -106,9 +106,14 @@ function NotificationItem({
 }) {
   const [closing, setClosing] = useState(false);
   const exitTimerRef = useRef<number | undefined>(undefined);
-  const title = notification.title ?? NOTIFICATION_ICON_LABEL[notification.type];
+  const fallbackTitle = NOTIFICATION_ICON_LABEL[notification.type];
+  const rawTitle = notification.title?.trim() || fallbackTitle;
   const message = notification.message.trim();
-  const showMessage = Boolean(message) && message !== title;
+  // 通用标题 + 正文时，只展示正文，避免“操作失败”再占一行。
+  const genericTitle = isGenericNotificationTitle(rawTitle, notification.type);
+  const primaryText = genericTitle && message ? message : rawTitle;
+  const secondaryText = !genericTitle && message && message !== rawTitle ? message : undefined;
+  const compact = !secondaryText;
 
   const closeWithAnimation = useCallback(() => {
     if (closing) {
@@ -141,7 +146,7 @@ function NotificationItem({
 
   return (
     <section
-      className={`notification notification-${notification.type}${closing ? " notification-closing" : ""}${showMessage ? "" : " notification-compact"}`}
+      className={`notification notification-${notification.type}${closing ? " notification-closing" : ""}${compact ? " notification-compact" : ""}`}
       role={notification.type === "error" ? "alert" : "status"}
     >
       <span className="notification-accent" aria-hidden="true" />
@@ -149,12 +154,19 @@ function NotificationItem({
         <NotificationGlyph type={notification.type} />
       </div>
       <div className="notification-content">
-        <p className="notification-title">{title}</p>
-        {showMessage ? <p className="notification-message">{message}</p> : null}
+        <p className="notification-title">{primaryText}</p>
+        {secondaryText ? <p className="notification-message">{secondaryText}</p> : null}
       </div>
-      <button className="notification-close" type="button" aria-label={`关闭通知：${title}`} onClick={closeWithAnimation} />
+      <button className="notification-close" type="button" aria-label={`关闭通知：${primaryText}`} onClick={closeWithAnimation} />
     </section>
   );
+}
+
+function isGenericNotificationTitle(title: string, type: AppNotification["type"]): boolean {
+  if (title === NOTIFICATION_ICON_LABEL[type]) {
+    return true;
+  }
+  return title === "操作失败" || title === "同步失败" || title === "同步完成" || title === "模型列表失败" || title === "模型列表已更新";
 }
 
 function NotificationGlyph({ type }: { type: AppNotification["type"] }) {

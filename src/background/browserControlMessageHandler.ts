@@ -2211,7 +2211,7 @@ export class BrowserControlManager {
       }
 
       if (isBrowserControlRestrictedUrl(url)) {
-        return { ok: false, message: "受限页面无法开启浏览器控制，请切换到普通网页。" };
+        return { ok: false, message: "受限页面，请切换到普通网页。" };
       }
 
       return { ok: true, tab: tab as chrome.tabs.Tab & { id: number } };
@@ -3887,7 +3887,7 @@ export function handleBrowserControlTabRemoved(tabId: number, manager = browserC
 function normalizeDebuggerError(message = ""): string {
   const normalized = message.toLowerCase();
   if (normalized.includes("restricted") || normalized.includes("cannot access") || normalized.includes("webui")) {
-    return "受限页面无法开启浏览器控制，请切换到普通网页。";
+    return "受限页面，请切换到普通网页。";
   }
 
   if (normalized.includes("another debugger") || normalized.includes("already attached")) {
