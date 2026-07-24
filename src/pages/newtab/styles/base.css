@@ -24,8 +24,10 @@ body {
   font-family: var(--font-sans);
   color: var(--ink-primary);
   background:
-    radial-gradient(circle at 50% -4%, rgba(255, 225, 158, 0.28) 0%, rgba(255, 225, 158, 0.05) 18%, rgba(255, 225, 158, 0) 38%),
-    linear-gradient(180deg, #fffaf2 0%, #fff4e4 48%, #ffeecd 100%);
+    radial-gradient(ellipse 70% 46% at 50% -8%, rgba(255, 236, 188, 0.72) 0%, rgba(255, 236, 188, 0.18) 34%, transparent 68%),
+    radial-gradient(circle at 12% 78%, rgba(255, 214, 168, 0.22) 0%, transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(255, 228, 186, 0.28) 0%, transparent 24%),
+    linear-gradient(180deg, #fffdf8 0%, #fff6e8 42%, #ffefd6 100%);
 }
 
 button,
@@ -36,17 +38,32 @@ textarea {
   cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
 }
 
-body::before {
+body::before,
+body::after {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.32) 0 1px, transparent 1px 100%),
-    radial-gradient(circle at 74% 18%, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 100%);
-  background-size: 280px 280px, 360px 360px;
-  opacity: 0.1;
   z-index: 0;
+}
+
+body::before {
+  background:
+    radial-gradient(ellipse 34% 22% at 8% 18%, rgba(255, 248, 232, 0.9) 0%, rgba(255, 248, 232, 0) 72%),
+    radial-gradient(ellipse 28% 20% at 92% 12%, rgba(255, 241, 214, 0.75) 0%, rgba(255, 241, 214, 0) 70%),
+    radial-gradient(ellipse 42% 28% at 78% 84%, rgba(255, 228, 186, 0.28) 0%, rgba(255, 228, 186, 0) 72%),
+    radial-gradient(ellipse 36% 24% at 16% 88%, rgba(255, 220, 176, 0.22) 0%, rgba(255, 220, 176, 0) 70%);
+  opacity: 1;
+}
+
+body::after {
+  background:
+    radial-gradient(circle at 14% 24%, rgba(255, 255, 255, 0.42) 0 1px, transparent 1.2px 100%),
+    radial-gradient(circle at 72% 18%, rgba(255, 255, 255, 0.28) 0 1px, transparent 1.2px 100%),
+    radial-gradient(circle at 48% 72%, rgba(232, 196, 138, 0.14) 0 1.4px, transparent 1.6px 100%);
+  background-size: 220px 220px, 300px 300px, 260px 260px;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
 }
 
 .homepage-shell {
@@ -76,7 +93,7 @@ body::before {
   height: 100%;
   min-height: 100dvh;
   max-height: 100dvh;
-  padding: clamp(1.2rem, 3.5vh, 2.4rem) 1.25rem 1.4rem;
+  padding: clamp(1.6rem, 4.2vh, 2.8rem) 1.25rem 1.4rem;
   overflow: hidden;
 }
 
