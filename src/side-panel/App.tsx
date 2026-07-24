@@ -177,7 +177,7 @@ export function App() {
   return (
     <main className="app-shell sidebar-shell">
       <section className="app-header sidebar-topbar" aria-label="侧栏操作">
-        <h1 className="app-title sidebar-topbar-title">月标签 AI 助手</h1>
+        <h1 className="app-title sidebar-topbar-title">Browser AI Assistant</h1>
         <div className="app-header-actions">
           <button
             className="ui-button-secondary app-header-icon-button"

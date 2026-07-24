@@ -80,10 +80,10 @@ describe("扩展构建产物合约", () => {
   });
 
   it("Moon Tab 页面间导航应继续指向构建后的稳定扩展路径", async () => {
-    const newtabEntry = await readProjectFile("src/pages/newtab/index.mjs");
+    const newtabApp = await readProjectFile("src/pages/newtab/App.tsx");
     const gameEntry = await readProjectFile("src/pages/game/index.mjs");
 
-    expect(newtabEntry).toContain('runtime.getURL("src/pages/game/index.html")');
+    expect(newtabApp).toContain('runtime.getURL("src/pages/game/index.html")');
     expect(gameEntry).toContain('runtime.getURL("src/pages/newtab/index.html")');
   });
 });

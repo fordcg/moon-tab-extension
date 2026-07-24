@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Moon Tab Chrome MV3 extension with new tab search, game page, and Browser AI Assistant side panel.",
+  "description": "Moon Tab Chrome MV3 extension with new tab search, the A Dark Room text adventure, and Browser AI Assistant side panel.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
@@ -17,14 +17,17 @@
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-playwright-e2e.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run build:extension && npm run test && npm run test:legacy && npm run check:package",
+    "check:size": "node scripts/check-file-size.mjs",
+    "check": "npm run typecheck && npm run check:size && npm run build:extension && npm run test && npm run test:legacy && npm run check:package",
     "verify:release": "npm run check && npm run test:e2e && node scripts/verify-release-readiness.mjs",
     "mcp:grok-search": "node scripts/run_grok_search_mcp_bridge.mjs --model grok-4.20-multi-agent-xhigh",
     "mcp:grok-search:check": "node scripts/run_grok_search_mcp_bridge.mjs --model grok-4.20-multi-agent-xhigh --list-tools-once",
     "mcp:grok-search:start-bg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start_grok_search_mcp_bridge.ps1",
     "mcp:grok-search:install-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install_grok_search_mcp_bridge_task.ps1",
     "mcp:grok-search:uninstall-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall_grok_search_mcp_bridge_task.ps1",
-    "model-diagnostics": "node scripts/model_diagnostics_sink.mjs"
+    "model-diagnostics": "node scripts/model_diagnostics_sink.mjs",
+    "model-diagnostics:ensure": "node scripts/ensure_model_diagnostics_sink.mjs",
+    "model-diagnostics:install-autostart": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install_log_sink_protocol.ps1"
   },
   "engines": {
     "node": ">=20"
@@ -38,7 +41,6 @@
     "clsx": "^2.1.1",
     "dexie": "^4.4.2",
     "docx": "^9.7.1",
-    "highlight.js": "^11.11.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
@@ -61,6 +63,7 @@
     "jsdom": "^29.1.1",
     "playwright": "^1.60.0",
     "postcss": "^8.5.15",
+    "postcss-import": "^16.1.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^6.0.3",
     "vite": "^8.0.13",
