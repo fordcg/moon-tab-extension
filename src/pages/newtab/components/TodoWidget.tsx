@@ -107,11 +107,17 @@ export function TodoWidget() {
       <button
         className="todo-edge-pet"
         type="button"
+        data-todo-pet-pose={drawerOpen ? "perch" : "stand"}
         aria-label={drawerOpen ? "收起待办抽屉" : "展开待办抽屉"}
         aria-expanded={drawerOpen}
         onClick={toggleDrawer}
       >
-        <img className="todo-edge-pet__img" src={newtabAssets.petTodoPerch} alt="" draggable={false} />
+        <img
+          className="todo-edge-pet__img"
+          src={drawerOpen ? newtabAssets.petTodoPerch : newtabAssets.petGroom}
+          alt=""
+          draggable={false}
+        />
       </button>
 
       <div className="todo-drawer" data-todo-drawer="true" aria-hidden={!drawerOpen}>

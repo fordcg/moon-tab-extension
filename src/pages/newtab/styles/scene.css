@@ -732,7 +732,7 @@
 }
 
 /*
- * Closed state: only the free-floating peek cat remains. Override both
+ * Closed state: only the free-floating standing cat remains. Override both
  * .ui-note-card and the slot card chrome (border/bg/shadow/width) so no
  * paper frame wraps the cat.
  */
@@ -779,14 +779,14 @@
 }
 
 /*
- * Closed: free-floating peek cat (no card shell). Open: pin the same cat to
- * the card top rim so paws rest on the paper edge.
+ * Closed: free-floating standing/sitting cat (no card shell).
+ * Open: switch to peek asset and pin it to the card top rim.
  */
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet {
   position: relative;
   z-index: 12;
   display: block;
-  width: clamp(112px, 12vw, 140px);
+  width: clamp(92px, 9.5vw, 118px);
   height: auto;
   margin: 0;
   padding: 0;
@@ -798,7 +798,7 @@
   -webkit-appearance: none;
   cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
   filter: drop-shadow(0 8px 14px rgba(145, 103, 57, 0.18));
-  transition: transform 180ms ease;
+  transition: transform 180ms ease, width 180ms ease;
 }
 
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet__img {
@@ -811,6 +811,11 @@
   object-fit: contain;
 }
 
+.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="stand"] {
+  width: clamp(92px, 9.5vw, 118px);
+}
+
+.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="perch"],
 .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet {
   position: absolute;
   /* A bit right of center; bottom of paws sits on the paper rim. */
@@ -821,11 +826,13 @@
   transform: translate(-50%, calc(-100% + 18px));
 }
 
-.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet:hover,
-.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet:focus-visible {
+.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="stand"]:hover,
+.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="stand"]:focus-visible {
   transform: translateY(-3px);
 }
 
+.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="perch"]:hover,
+.homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="perch"]:focus-visible,
 .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet:hover,
 .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet:focus-visible {
   transform: translate(-50%, calc(-100% + 16px));

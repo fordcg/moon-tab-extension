@@ -105,15 +105,18 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet {
-    width: 96px;
+  .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="stand"] {
+    width: 88px;
   }
 
+  .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="perch"],
   .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet {
     width: 104px;
     transform: translate(-50%, calc(-100% + 16px));
   }
 
+  .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="perch"]:hover,
+  .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet[data-todo-pet-pose="perch"]:focus-visible,
   .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet:hover,
   .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet:focus-visible {
     transform: translate(-50%, calc(-100% + 14px));
