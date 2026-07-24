@@ -19,6 +19,7 @@ import {
   fetchRemoteSuggestionItems,
   mergeSuggestionItems,
 } from "./helpers/search-suggestions.mjs";
+import { newtabAssets } from "./assets";
 import { AiPreviewPanel } from "./components/AiPreviewPanel";
 import { MenuIcon } from "./components/icons";
 import { SearchPanel } from "./components/SearchPanel";
@@ -443,11 +444,11 @@ export function App() {
         <section id="homepage-stage" className="homepage-stage" aria-label="主页搜索区域">
           <div id="homepage-bubble-layer" className="homepage-stage__ambient homepage-paper-glow" aria-hidden="true" />
           <div className="homepage-stage__decor" aria-hidden="true">
-            <img data-stage-asset="bg-ambient" className="homepage-stage__asset homepage-stage__asset--bg" src="./assets/hero/desktop-bg-ambient.webp" alt="" />
-            <img data-stage-asset="cloud-ribbon" className="homepage-stage__asset homepage-stage__asset--cloud-ribbon" src="./assets/hero/cloud-ribbon.webp" alt="" />
-            <img data-stage-asset="pet-left" className="homepage-stage__asset homepage-stage__asset--pet-left" src="./assets/hero/pet-left-peek.webp" alt="" />
-            <img data-stage-asset="pet-right" className="homepage-stage__asset homepage-stage__asset--pet-right" src="./assets/hero/pet-right-buddy.webp" alt="" />
-            <img data-stage-asset="pet-mini" className="homepage-stage__asset homepage-stage__asset--pet-mini" src="./assets/hero/pet-mini-pair.webp" alt="" />
+            <img data-stage-asset="bg-ambient" className="homepage-stage__asset homepage-stage__asset--bg" src={newtabAssets.desktopBgAmbient} alt="" />
+            <img data-stage-asset="cloud-ribbon" className="homepage-stage__asset homepage-stage__asset--cloud-ribbon" src={newtabAssets.cloudRibbon} alt="" />
+            <img data-stage-asset="pet-left" className="homepage-stage__asset homepage-stage__asset--pet-left" src={newtabAssets.petLeftPeek} alt="" />
+            <img data-stage-asset="pet-right" className="homepage-stage__asset homepage-stage__asset--pet-right" src={newtabAssets.petRightBuddy} alt="" />
+            <img data-stage-asset="pet-mini" className="homepage-stage__asset homepage-stage__asset--pet-mini" src={newtabAssets.petMiniPair} alt="" />
           </div>
 
           <SettingsDialog

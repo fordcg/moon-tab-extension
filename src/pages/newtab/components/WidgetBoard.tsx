@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { newtabAssets } from "../assets";
 import {
   createDefaultWidgetLayout,
   hideWidget,
@@ -340,8 +341,8 @@ function WidgetShell({
       <div className="homepage-widget-card-header">
         <h2 className="homepage-widget-card-title">{widget.title}</h2>
         <div className="homepage-widget-card-ornament" aria-hidden="true">
-          {widget.id === "quicksites" ? <img className="widget-note__sticker" src="./assets/widgets/quicksites-sticker.webp" alt="" /> : null}
-          {widget.id === "calendar" ? <img className="widget-note__sticker" src="./assets/widgets/calendar-sticker.webp" alt="" /> : null}
+          {widget.id === "quicksites" ? <img className="widget-note__sticker" src={newtabAssets.quicksitesSticker} alt="" /> : null}
+          {widget.id === "calendar" ? <img className="widget-note__sticker" src={newtabAssets.calendarSticker} alt="" /> : null}
         </div>
         <div className="homepage-widget-card-actions">
           {canHide ? (

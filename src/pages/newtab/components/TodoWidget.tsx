@@ -18,11 +18,9 @@ import {
   normalizeFilter,
   updateTask,
 } from "../widgets/todo/todo-model.mjs";
+import { newtabAssets } from "../assets";
 import { readTodoPayload, writeTodoPayload } from "../widgets/todo/todo-storage.mjs";
 import type { TodoMode, TodoTask } from "./types";
-
-const TODO_PET_GROOM_IMAGE = "./assets/hero/pet-groom/pet-groom.webp";
-const TODO_PET_GROOM_IDLE_IMAGE = "./assets/hero/pet-groom/pet-groom-01.webp";
 
 export function TodoWidget() {
   const [tasks, setTasks] = useState<TodoTask[]>([]);
@@ -106,14 +104,14 @@ export function TodoWidget() {
   return (
     <section className="todo-manager" data-todo-manager="true" data-todo-drawer-open={drawerOpen} data-todo-has-today-tasks={hasTodayActiveTasks}>
       <button className="todo-drawer-toggle" type="button" aria-label={drawerOpen ? "收起待办抽屉" : "展开待办抽屉"} aria-expanded={drawerOpen} onClick={toggleDrawer}>
-        <img className="todo-drawer-toggle__pet" src={hasTodayActiveTasks ? TODO_PET_GROOM_IMAGE : TODO_PET_GROOM_IDLE_IMAGE} alt="" />
+        <img className="todo-drawer-toggle__pet" src={hasTodayActiveTasks ? newtabAssets.petGroom : newtabAssets.petGroomIdle} alt="" />
       </button>
 
       <div className="todo-drawer" data-todo-drawer="true" aria-hidden={!drawerOpen}>
         <button className="widget-note__pet-peek-button" type="button" aria-label="收起待办抽屉" onClick={toggleDrawer}>
-          <img className="widget-note__pet-peek" src="./assets/hero/pet-left-peek.webp" alt="" />
+          <img className="widget-note__pet-peek" src={newtabAssets.petLeftPeek} alt="" />
         </button>
-        <img className="widget-note__sticker" src="./assets/widgets/todo-sticker.webp" alt="" />
+        <img className="widget-note__sticker" src={newtabAssets.todoSticker} alt="" />
 
         <div className="todo-manager-panel todo-manager-panel--list" hidden={editorOpen}>
           <div className="todo-filter-list" role="tablist">
