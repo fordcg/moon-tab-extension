@@ -6159,6 +6159,8 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    await user.click(screen.getByRole("button", { name: "工具" }));
+
     const appendContextSwitch = screen.getByRole("switch", { name: "拼接上下文" });
     const streamSwitch = screen.getByRole("switch", { name: "流式响应" });
     const contextSwitch = screen.getByRole("switch", { name: "提取模式" });
@@ -6171,7 +6173,8 @@ describe("App", () => {
     expect(streamSwitch).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("button", { name: /工具调用：/ })).not.toBeInTheDocument();
     expect(contextSwitch).toHaveAttribute("aria-checked", "false");
-    expect(contextSwitch).toHaveAttribute("title", "提取文本");
+    expect(contextSwitch).toHaveAttribute("data-label", "提取文本");
+    expect(contextSwitch.getAttribute("data-soft-tooltip") || "").toContain("提取文本");
     expect(streamSwitch).toHaveClass("composer-switch");
     expect(screen.queryByRole("checkbox", { name: "流式响应" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "提取文本" })).not.toBeInTheDocument();
@@ -6183,7 +6186,8 @@ describe("App", () => {
     expect(screen.getByRole("switch", { name: "拼接上下文" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("switch", { name: "流式响应" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("title", "提取所有");
+    expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("data-label", "提取所有");
+    expect((screen.getByRole("switch", { name: "提取模式" }).getAttribute("data-soft-tooltip") || "")).toContain("提取所有");
   });
 
   it("工具浮层行项目使用旧版图标标题勾三列结构，视觉标题不混入状态文本", async () => {
@@ -6998,10 +7002,12 @@ describe("App", () => {
 
     expect(await screen.findByText("已匹配规则：正文规则")).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("title", "提取文本");
+    expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("data-label", "提取文本");
+    expect((screen.getByRole("switch", { name: "提取模式" }).getAttribute("data-soft-tooltip") || "")).toContain("提取文本");
     await user.click(screen.getByRole("switch", { name: "提取模式" }));
     expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("title", "提取所有");
+    expect(screen.getByRole("switch", { name: "提取模式" })).toHaveAttribute("data-label", "提取所有");
+    expect((screen.getByRole("switch", { name: "提取模式" }).getAttribute("data-soft-tooltip") || "")).toContain("提取所有");
 
     await user.click(screen.getByRole("switch", { name: "流式响应" }));
     await user.type(screen.getByLabelText("对话输入"), "总结页面");
