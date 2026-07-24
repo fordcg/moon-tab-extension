@@ -103,18 +103,18 @@ export function TodoWidget() {
 
   return (
     <section className="todo-manager" data-todo-manager="true" data-todo-drawer-open={drawerOpen} data-todo-has-today-tasks={hasTodayActiveTasks}>
-      <button className="todo-drawer-toggle" type="button" aria-label={drawerOpen ? "收起待办抽屉" : "展开待办抽屉"} aria-expanded={drawerOpen} onClick={toggleDrawer}>
-        <img className="todo-drawer-toggle__pet" src={hasTodayActiveTasks ? newtabAssets.petGroom : newtabAssets.petGroomIdle} alt="" />
+      {/* Must stay outside .todo-drawer so absolute positioning anchors to the card, not the drawer. */}
+      <button
+        className="todo-edge-pet"
+        type="button"
+        aria-label={drawerOpen ? "收起待办抽屉" : "展开待办抽屉"}
+        aria-expanded={drawerOpen}
+        onClick={toggleDrawer}
+      >
+        <img className="todo-edge-pet__img" src={newtabAssets.petLeftPeek} alt="" />
       </button>
 
       <div className="todo-drawer" data-todo-drawer="true" aria-hidden={!drawerOpen}>
-        <button className="widget-note__pet-peek-button" type="button" aria-label="收起待办抽屉" onClick={toggleDrawer}>
-          <img
-            className="widget-note__pet-peek"
-            src={hasTodayActiveTasks ? newtabAssets.petGroom : newtabAssets.petGroomIdle}
-            alt=""
-          />
-        </button>
         <img className="widget-note__sticker" src={newtabAssets.todoSticker} alt="" />
 
         <div className="todo-manager-panel todo-manager-panel--list" hidden={editorOpen}>

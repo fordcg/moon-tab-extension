@@ -254,7 +254,7 @@ function WidgetShell({
       return controlAction;
     }
 
-    if (event.target instanceof Element && event.target.closest(".todo-drawer-toggle")) {
+    if (event.target instanceof Element && event.target.closest(".todo-edge-pet, .todo-drawer-toggle")) {
       return "drag";
     }
 
