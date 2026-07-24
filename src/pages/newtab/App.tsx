@@ -10,7 +10,6 @@ import {
   saveStoredSearchSettings,
 } from "../../shared/search-settings.mjs";
 import { runPageTransition } from "../../shared/page-transition.mjs";
-import { mountFloatingPetCompanion } from "../../shared/pet/pagePetHost";
 import { createAiPreviewService, buildAiSearchPreview } from "./ai-preview-service.mjs";
 import { DEFAULT_SEARCH_TARGET_ID, SEARCH_TARGETS } from "./helpers/search-targets.mjs";
 import { normalizeTextValue, resolveDirectNavigationTarget } from "./helpers/query-utils.mjs";
@@ -218,10 +217,6 @@ export function App() {
     }
   }, [cachedSidebarWindowId]);
 
-  useEffect(() => {
-    const controller = mountFloatingPetCompanion({ openSidePanel: openAiSidebar });
-    return () => controller.destroy();
-  }, [openAiSidebar]);
 
   useEffect(() => {
     const normalizedQuery = normalizeTextValue(query);
