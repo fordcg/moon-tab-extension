@@ -1,0 +1,504 @@
+/* Side-panel AI pet companion (headless publisher; page hosts the floating pet) */
+.pet-usage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+  background: rgba(20, 16, 12, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+.pet-usage-panel {
+  width: min(360px, 100%);
+  max-height: min(78vh, 640px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 90%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface, #fffaf2) 96%, #f3ebe0), var(--color-surface, #fffaf2));
+  box-shadow: 0 24px 60px rgba(30, 24, 18, 0.28);
+  color: var(--color-body, #2b241c);
+  padding: 14px;
+}
+
+.pet-usage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pet-usage-brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.pet-usage-logo {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, #f4c27a 35%, transparent);
+  font-size: 18px;
+}
+
+.pet-usage-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pet-usage-sub {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 62%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.pet-usage-close {
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 70%, transparent);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.pet-usage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pet-usage-stat {
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--color-canvas, #f7f1e8) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 70%, transparent);
+}
+
+.pet-usage-stat-label {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 58%, transparent);
+}
+
+.pet-usage-stat-value {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.pet-usage-stat-foot {
+  margin-top: 2px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 55%, transparent);
+}
+
+.pet-usage-block {
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 70%, transparent);
+  background: color-mix(in srgb, var(--color-surface, #fff) 88%, transparent);
+  padding: 10px 12px;
+}
+
+.pet-usage-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pet-usage-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.pet-usage-tabs button {
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 55%, transparent);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pet-usage-tabs button.is-active {
+  background: color-mix(in srgb, #efd8b0 55%, transparent);
+  color: var(--color-body, #2b241c);
+  font-weight: 650;
+}
+
+.pet-usage-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.pet-usage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.pet-usage-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 72%, transparent);
+}
+
+.pet-usage-row b {
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.pet-usage-row.is-total,
+.pet-usage-row.is-active span {
+  font-weight: 700;
+}
+
+.pet-usage-empty {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 50%, transparent);
+  padding: 6px 0;
+}
+
+.pet-usage-footnote {
+  margin: 10px 2px 0;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--color-body, #2b241c) 45%, transparent);
+}
+
+
+/* Generated image URLs rendered inside assistant bubbles / tool results */
+.message-generated-image-link {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7d0c5) 80%, transparent);
+  background: color-mix(in srgb, var(--color-canvas, #f7f1e8) 70%, transparent);
+}
+
+.message-generated-image {
+  display: block;
+  max-width: min(100%, 420px);
+  max-height: 420px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.message-tool-result-text pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.message-tool-result-images {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+
+/* Migrated from upstream: session batch + update button */
+  .session-list-compact {
+    @apply flex min-h-0;
+  }
+
+  .session-list-header {
+    @apply mb-3 grid gap-2;
+  }
+
+  .session-list-title {
+    @apply text-sm font-medium;
+    color: var(--color-ink);
+  }
+
+  .session-batch-toggle {
+    @apply min-h-9 min-w-0 whitespace-nowrap px-2 text-xs;
+  }
+
+  .session-batch-toggle[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-canvas));
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .session-batch-controls {
+    @apply grid min-w-0 py-1.5;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid var(--color-hairline-soft);
+    border-top: 1px solid var(--color-hairline-soft);
+  }
+
+  .session-batch-partitions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 6px;
+    background: var(--color-surface-soft);
+  }
+
+  .session-batch-partition {
+    @apply min-h-7 min-w-0 whitespace-nowrap rounded-md px-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
+    color: var(--color-muted);
+  }
+
+  .session-batch-partition[aria-pressed="true"] {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    box-shadow: 0 1px 2px rgba(20, 20, 19, 0.08);
+  }
+
+  .session-batch-action {
+    @apply min-h-8 whitespace-nowrap px-2 text-xs;
+  }
+
+  .session-batch-archive {
+    grid-column: 2;
+  }
+
+  .session-batch-delete {
+    grid-column: 3;
+    color: var(--color-error);
+  }
+
+  .session-batch-action:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .session-list-header-actions {
+    @apply grid gap-2;
+    grid-template-columns: minmax(68px, 1fr) minmax(84px, 1.25fr) minmax(56px, 0.8fr);
+  }
+
+  .session-header-button {
+    @apply min-h-9 px-2 text-xs;
+  }
+
+  .session-header-button:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .session-list-scroll {
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .session-folder-stack-scroll {
+    @apply min-h-0 flex-1 overflow-y-auto;
+    overflow-x: hidden;
+  }
+
+  .session-folder-stack {
+    @apply grid min-w-0 gap-2;
+  }
+
+  .session-archive-bottom {
+    @apply mt-auto pt-3;
+    border-top: 1px solid var(--color-hairline-soft);
+  }
+
+  .private-switch-dialog {
+    @apply fixed left-3 right-3 top-1/2 z-40 grid -translate-y-1/2 gap-3 rounded-lg p-4 sm:left-1/2 sm:right-auto sm:w-[min(360px,calc(100vw-32px))] sm:-translate-x-1/2;
+    background: var(--color-canvas);
+    border: 1px solid var(--color-hairline);
+    box-shadow: 0 1px 3px rgba(20, 20, 19, 0.08);
+  }
+
+  .private-switch-dialog-title {
+    @apply text-lg font-medium;
+    color: var(--color-ink);
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .private-switch-dialog-description {
+    @apply text-sm;
+    color: var(--color-body);
+  }
+
+  .private-switch-dialog-actions {
+    @apply flex flex-wrap justify-end gap-2;
+  }
+
+  .private-switch-dialog-button {
+    @apply min-h-10;
+  }
+
+  .session-folder {
+    @apply min-w-0 gap-2;
+    display: grid;
+  }
+
+  .session-folder-row {
+    @apply flex min-w-0 items-center gap-2;
+  }
+
+  .session-folder-drop-active {
+    @apply rounded-lg;
+    background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+    outline: 1px dashed var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .session-folder-toggle {
+    @apply flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm font-medium;
+    color: var(--color-body);
+  }
+
+  .session-folder-toggle:hover,
+  .session-folder-rename-button:hover,
+  .session-folder-rename-button[aria-expanded="true"] {
+    background: var(--color-surface-soft);
+  }
+
+  .session-folder-select-all {
+    @apply min-h-8 shrink-0 rounded-md px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50;
+    color: var(--color-primary);
+  }
+
+  .session-folder-select-all:hover:not(:disabled) {
+    background: var(--color-surface-soft);
+  }
+
+  .session-folder-menu-wrap {
+    @apply relative shrink-0;
+  }
+
+  .session-folder-rename-button {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-base font-medium leading-none;
+    color: var(--color-body);
+  }
+
+  .session-count {
+    @apply ml-auto rounded-full px-2 py-0.5 text-xs;
+    background: var(--color-surface-cream-strong);
+    color: var(--color-muted);
+  }
+
+  .session-item-stack {
+    @apply grid min-w-0 gap-2;
+  }
+
+  .session-empty {
+    @apply px-2 text-sm;
+    color: var(--color-muted);
+  }
+
+  .session-item {
+    @apply relative min-w-0 rounded-lg p-2;
+    overflow: visible;
+    background: var(--color-canvas);
+    border: 2px solid var(--color-hairline-soft);
+  }
+
+  .session-item-active {
+    border-color: var(--color-primary);
+  }
+
+  .session-item-selected {
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-canvas));
+    border-color: color-mix(in srgb, var(--color-primary) 60%, var(--color-hairline));
+  }
+
+  .session-title-button {
+    @apply min-w-0 flex-1 overflow-hidden text-left text-sm font-medium;
+    color: var(--color-ink);
+  }
+
+  .session-item-title {
+    @apply block max-w-full truncate;
+    text-overflow: ellipsis;
+  }
+
+  .session-item-title-disabled {
+    @apply min-w-0 flex-1 text-sm font-medium;
+    color: var(--color-muted);
+  }
+
+  .session-batch-checkbox-label {
+    @apply flex min-h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm font-medium;
+    color: var(--color-ink);
+  }
+
+  .session-batch-checkbox {
+    @apply h-4 w-4 shrink-0;
+    accent-color: var(--color-primary);
+  }
+
+  .session-batch-confirm-dialog {
+    @apply fixed left-1/2 top-1/2 z-50 grid -translate-x-1/2 -translate-y-1/2 gap-3 rounded-lg p-4;
+    width: min(360px, calc(100vw - 32px));
+    background: var(--color-canvas);
+    border: 1px solid var(--color-hairline);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--color-surface-dark) 18%, transparent);
+  }
+
+  .session-batch-confirm-title {
+    @apply text-base font-semibold;
+    color: var(--color-ink);
+  }
+
+  .session-batch-confirm-description {
+    @apply text-sm;
+    color: var(--color-body);
+  }
+
+  .session-batch-confirm-actions {
+    @apply flex flex-wrap justify-end gap-2;
+  }
+
+  .session-item-row {
+    @apply flex min-w-0 items-center gap-2;
+    cursor: pointer;
+  }
+
+  .session-item-menu-wrap {
+    @apply relative shrink-0;
+  }
+
+  .session-menu-button {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .ui-panel {
+    @apply rounded-lg p-3 sm:p-4;
+    background: color-mix(in srgb, var(--color-canvas) 86%, var(--color-on-primary));
+    border: 1px solid var(--color-hairline);
+  }
+
+  .ui-card {
+    @apply rounded-lg p-3;
+    background: var(--color-surface-card);
+    border: 1px solid var(--color-hairline);
+  }
+
+  .model-connectivity-card {
+    transition: border-color 420ms ease;
+  }
+
+

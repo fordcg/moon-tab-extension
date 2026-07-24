@@ -1,0 +1,2492 @@
+/* Native side-panel layout parity: keep React internals, restore the old rail geometry. */
+.sidebar-shell .sidebar-topbar {
+  position: static;
+  display: contents;
+  pointer-events: none;
+}
+
+.sidebar-shell .app-header-actions {
+  display: contents;
+}
+
+.sidebar-shell .app-header-icon-button {
+  position: fixed;
+  top: 0.75rem;
+  z-index: 36;
+  display: grid;
+  width: 1.875rem;
+  height: 1.875rem;
+  min-height: 1.875rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #111111;
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.sidebar-shell .app-header-icon-button[aria-label="新建对话"] {
+  right: 5.75rem;
+}
+
+.sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .app-header-icon-button[aria-label="新建对话"] {
+  right: 8.25rem;
+}
+
+.sidebar-shell:not(:has(.message-entry)) .app-header-icon-button[aria-label="新建对话"] {
+  display: none;
+}
+
+.sidebar-shell .app-header-icon-button[aria-label="打开悬浮助手"],
+.sidebar-shell .app-header-icon-button[aria-label="关闭悬浮助手"] {
+  right: 0.75rem;
+}
+
+.sidebar-shell .app-header-icon-button[aria-label="显示宠物"] {
+  right: 3.25rem;
+}
+
+.sidebar-shell .app-header-icon-button[aria-label="浏览器控制"],
+.sidebar-shell .app-header-icon-button[aria-label="设置"] {
+  display: none !important;
+}
+
+.sidebar-shell .chat-main-layout,
+.sidebar-shell .chat-main-layout.chat-main-layout-history-collapsed {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0;
+  padding: 0;
+}
+
+.sidebar-shell .session-list:not(.session-list-compact),
+.sidebar-shell .session-list-placeholder {
+  display: none !important;
+}
+
+.sidebar-shell .chat-model-row {
+  left: 1rem;
+  right: 8.125rem;
+  justify-content: flex-end;
+}
+
+.sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .chat-model-row {
+  right: 10.625rem;
+}
+
+.sidebar-shell .chat-history-panel-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sidebar-shell .chat-history-trigger {
+  position: fixed;
+  top: 0.75rem;
+  right: 3.25rem;
+  z-index: 36;
+  display: grid !important;
+  width: 1.875rem;
+  height: 1.875rem;
+  min-height: 1.875rem;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #111111;
+  font-size: 0;
+  line-height: 0;
+  box-shadow: none;
+}
+
+.sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .chat-history-trigger {
+  right: 5.75rem;
+}
+
+.sidebar-shell .chat-history-trigger::before {
+  content: none;
+  display: none;
+}
+
+.sidebar-shell .chat-history-icon {
+  display: block;
+  width: 1.125rem;
+  height: 1.125rem;
+  fill: currentColor;
+}
+
+.sidebar-shell .chat-history-trigger:hover,
+.sidebar-shell .chat-history-trigger:focus-visible {
+  background: var(--color-surface-soft);
+  color: #000000;
+}
+
+.sidebar-shell .chat-drawer-trigger,
+.sidebar-shell .chat-export-trigger,
+.sidebar-shell .chat-private-trigger {
+  display: none !important;
+}
+
+.sidebar-shell .model-selector {
+  flex: 0 1 auto;
+  order: 30;
+  width: auto;
+  max-width: calc(100% - 3rem);
+  overflow: visible;
+}
+
+.sidebar-shell .model-select-label {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  height: 2.25rem;
+}
+
+.sidebar-shell .model-select-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sidebar-shell .model-select-input {
+  width: auto;
+  min-width: 0;
+  max-width: min(15rem, 100%);
+  height: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.sidebar-shell .model-select-input:hover,
+.sidebar-shell .model-select-input:focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  outline: 0;
+}
+
+.sidebar-shell .message-list {
+  gap: 0.75rem;
+  padding: 3.5rem 1.5rem 4.75rem;
+}
+
+.sidebar-shell .sidepanel-empty-state {
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0.25rem 0 1.25rem;
+  justify-self: stretch;
+  align-self: stretch;
+}
+
+.sidebar-shell .sidepanel-empty-copy,
+.sidebar-shell .sidepanel-empty-suggestions {
+  justify-self: start;
+  justify-items: start;
+  max-width: 25rem;
+  text-align: left;
+}
+
+.sidebar-shell .sidepanel-suggestion {
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.sidebar-shell .message-entry {
+  gap: 0.625rem;
+}
+
+.sidebar-shell .message-avatar {
+  display: none !important;
+}
+
+.sidebar-shell .message-row {
+  width: 100%;
+}
+
+.sidebar-shell .message-bubble-wrap {
+  flex: 0 1 auto;
+  max-width: min(100%, 34rem);
+  gap: 0.375rem;
+}
+
+.sidebar-shell .message-row:not(.message-row-user) .message-bubble-wrap {
+  width: 100%;
+}
+
+.sidebar-shell .message-row-user .message-bubble-wrap {
+  justify-items: end;
+  max-width: min(82%, 28rem);
+}
+
+.sidebar-shell .message-bubble {
+  max-width: 100%;
+  padding: 0.125rem 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sidebar-shell .message-row-user .message-bubble {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-hairline-soft);
+  border-radius: 0.875rem 0.875rem 0.25rem 0.875rem;
+  background: var(--color-surface-soft);
+  color: var(--color-body-strong);
+}
+
+.sidebar-shell .message-bubble p,
+.sidebar-shell .message-bubble li {
+  text-align: left;
+  text-align-last: auto;
+}
+
+.sidebar-shell .message-icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.sidebar-shell .message-icon-button:hover,
+.sidebar-shell .message-icon-button:focus-visible {
+  background: var(--color-surface-soft);
+  color: var(--color-body-strong);
+}
+
+.sidebar-shell .chat-composer {
+  gap: 0;
+  padding: 0.75rem 0.5rem;
+}
+
+.sidebar-shell .context-strip {
+  min-height: 2.25rem;
+  margin: 0 0 -0.75rem;
+  padding: 0.375rem 0.625rem 1.125rem;
+  position: relative;
+  z-index: 0;
+  border: 0;
+  border-radius: 0.75rem 0.75rem 0 0;
+  background: #eef4ff;
+  overflow: hidden;
+}
+
+.sidebar-shell .chat-composer > p[class*="color-error"],
+.sidebar-shell .context-dialog p[class*="color-error"] {
+  display: none !important;
+}
+
+.sidebar-shell .context-view-button {
+  display: none !important;
+}
+
+.sidebar-shell .chat-input-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: min(42dvh, 18rem);
+  min-height: 2.25rem !important;
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+  padding-bottom: 0;
+  border-radius: 0.75rem;
+  box-shadow: none;
+}
+
+.sidebar-shell .chat-input-shell:focus-within {
+  border-color: #b8c0d0;
+  box-shadow: none;
+}
+
+.sidebar-shell .chat-input:focus,
+.sidebar-shell .chat-input:focus-visible,
+.sidebar-shell .prompt-inline-editor-text:focus,
+.sidebar-shell .prompt-inline-editor-text:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.sidebar-shell .chat-input {
+  min-height: 3rem;
+  max-height: min(32dvh, 13rem);
+  padding: 0.625rem 1rem 0.375rem;
+  overflow-y: auto;
+}
+
+.sidebar-shell .prompt-inline-editor {
+  max-height: min(30dvh, 11.5rem);
+  padding-right: 0.125rem;
+}
+
+.sidebar-shell .image-upload-button {
+  position: relative;
+  left: auto;
+  top: auto;
+  z-index: 2;
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+  order: 0;
+}
+
+.sidebar-shell .image-upload-button > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sidebar-shell .image-upload-button::before {
+  content: "";
+  width: 1rem;
+  height: 1rem;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='8.5' cy='9.5' r='1.5'/%3E%3Cpath d='M21 16l-5-5-9 9'/%3E%3C/svg%3E") center / 1rem 1rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='8.5' cy='9.5' r='1.5'/%3E%3Cpath d='M21 16l-5-5-9 9'/%3E%3C/svg%3E") center / 1rem 1rem no-repeat;
+}
+
+.sidebar-shell .composer-actions {
+  align-self: stretch;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+  gap: 0.375rem;
+  padding: 0 0.5rem 0.25rem;
+  position: relative;
+  width: auto;
+  z-index: 2;
+}
+
+.sidebar-shell .composer-switches {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+}
+
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap) {
+  display: none !important;
+}
+
+.sidebar-shell .composer-mode-menu-wrap {
+  order: 30;
+  margin-left: auto;
+}
+
+.sidebar-shell .composer-mode-trigger {
+  border-radius: 999px;
+  background: transparent;
+}
+
+@media (max-width: 520px) {
+  .sidebar-shell .chat-model-row {
+    right: 5.5rem;
+    top: 0.625rem;
+  }
+
+  .sidebar-shell:has(.app-header-icon-button[aria-label="显示宠物"]) .chat-model-row {
+    right: 8rem;
+  }
+
+  .sidebar-shell:has(.message-entry) .chat-model-row {
+    right: 8.125rem;
+  }
+
+  .sidebar-shell:has(.message-entry):has(.app-header-icon-button[aria-label="显示宠物"]) .chat-model-row {
+    right: 10.625rem;
+  }
+
+  .sidebar-shell .message-list {
+    padding-right: 1rem;
+    padding-left: 1rem;
+    padding-bottom: 4rem;
+  }
+}
+
+/* Native side-panel footer parity completion: React owns the old enhancer DOM. */
+.sidebar-shell :focus-visible {
+  outline: 0.125rem solid var(--sidepanel-focus-ring) !important;
+  outline-offset: 0.125rem !important;
+}
+
+/* 任务工作流沿用侧栏的中性表面，避免在窄轨中制造嵌套卡片。 */
+.workflow-create-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.workflow-create-button {
+  display: grid !important;
+  width: 1.75rem !important;
+  height: 1.75rem !important;
+  min-height: 1.75rem !important;
+  place-items: center;
+  padding: 0 !important;
+  color: #000000;
+}
+
+.workflow-create-button .composer-switch-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  stroke: #000000;
+  stroke-width: 2.1;
+}
+
+.workflow-create-button:hover,
+.workflow-create-button:focus-visible {
+  background: var(--sidepanel-row-hover, var(--color-surface-soft));
+  color: #000000;
+  outline: 0;
+}
+
+.workflow-template-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.375rem);
+  z-index: 40;
+  display: grid;
+  gap: 0.125rem;
+  min-width: 13.5rem;
+  max-width: min(18rem, calc(100vw - 1.5rem));
+  max-height: min(16rem, 40dvh);
+  overflow: auto;
+  padding: 0.375rem;
+  border: 1px solid var(--sidepanel-line, #d7dce2);
+  border-radius: 0.875rem;
+  background: var(--sidepanel-blue-soft, #fff);
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%);
+  color: var(--sidepanel-ink, inherit);
+}
+
+.workflow-template-menu button {
+  display: grid;
+  gap: 0.125rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.625rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.workflow-template-menu button:hover,
+.workflow-template-menu button:focus-visible {
+  background: var(--sidepanel-row-hover, #eef2f6);
+  outline: 0;
+}
+
+.workflow-template-menu button span {
+  color: var(--sidepanel-ink-strong, inherit);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.workflow-template-menu small {
+  color: var(--sidepanel-muted, #52606d);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.workflow-task-card, .workflow-skill-library { margin: .5rem .75rem; padding: .625rem; border: 1px solid var(--color-border, #d7dce2); border-radius: .5rem; background: var(--color-surface, #fff); }
+.workflow-task-card header { display: flex; gap: .5rem; align-items: baseline; }
+.workflow-task-card ol, .workflow-context { margin: .5rem 0; padding-inline-start: 1.25rem; }
+.workflow-task-card button, .workflow-skill-library button, .workflow-artifacts button { min-height: 2.25rem; margin: .125rem; }
+.workflow-context div { display: flex; gap: .375rem; align-items: center; padding-block: .25rem; }
+.workflow-artifacts pre { max-height: 10rem; overflow: auto; white-space: pre-wrap; }
+@media (prefers-reduced-motion: reduce) { .workflow-template-menu, .workflow-task-card, .workflow-context { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
+
+.sidebar-shell .app-header-icon {
+  height: 1.125rem;
+  width: 1.125rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sidebar-shell .composer-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  padding: 0 0.5rem 0.25rem;
+}
+
+.sidebar-shell .sidepanel-tools-toggle,
+.sidebar-shell .sidepanel-add-tab-button,
+.sidebar-shell .workflow-create-button {
+  flex: 0 0 auto;
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-height: 1.75rem;
+  place-items: center;
+  padding: 0;
+  color: #000000;
+}
+
+.sidebar-shell .sidepanel-tools-toggle .composer-switch-icon,
+.sidebar-shell .sidepanel-add-tab-button .composer-switch-icon,
+.sidebar-shell .workflow-create-button .composer-switch-icon {
+  width: 1rem;
+  height: 1rem;
+  stroke: #000000;
+  stroke-width: 2.1;
+}
+
+.sidebar-shell .sidepanel-tools-toggle:hover,
+.sidebar-shell .sidepanel-tools-toggle:focus-visible,
+.sidebar-shell .sidepanel-add-tab-button:hover,
+.sidebar-shell .sidepanel-add-tab-button:focus-visible,
+.sidebar-shell .workflow-create-button:hover,
+.sidebar-shell .workflow-create-button:focus-visible {
+  background: var(--sidepanel-row-hover, var(--color-surface-soft));
+  color: #000000;
+  outline: 0;
+}
+
+.sidebar-shell .sidepanel-add-tab-button {
+  order: 0;
+}
+
+.sidebar-shell .sidepanel-tools-toggle {
+  order: 1;
+}
+
+.sidebar-shell .workflow-create-wrap {
+  order: 2;
+}
+
+.chat-warning.chat-restore-status {
+  border-color: var(--sidepanel-line);
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-ink);
+}
+
+.sidebar-shell .composer-switches {
+  order: 4;
+}
+
+.sidebar-shell .sidepanel-footer-spacer {
+  flex: 1 1 auto;
+  min-width: 0.25rem;
+  order: 20;
+}
+
+.sidebar-shell .composer-actions > .model-selector {
+  flex: 0 1 auto;
+  order: 30;
+  width: auto;
+  max-width: min(15rem, 48%);
+  overflow: visible;
+}
+
+.sidebar-shell .composer-actions > .ui-button-primary {
+  order: 40;
+}
+
+/* Reasoning effort chips inside model menu */
+.model-select-effort {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem 0.65rem;
+  border-top: 1px solid color-mix(in srgb, var(--sidepanel-border, #d8dee8) 85%, transparent);
+  background: color-mix(in srgb, var(--sidepanel-surface, #fff) 92%, var(--sidepanel-canvas, #f4f6fa));
+}
+
+.model-select-effort-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.model-select-effort-label {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--sidepanel-muted, #7b8698);
+  letter-spacing: 0.02em;
+}
+
+.model-select-effort-family {
+  min-width: 0;
+  font-size: 0.68rem;
+  color: color-mix(in srgb, var(--sidepanel-muted, #7b8698) 88%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-select-effort-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.model-select-effort-chip {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--sidepanel-border, #d0d7e2) 90%, transparent);
+  background: color-mix(in srgb, var(--sidepanel-surface, #fff) 96%, transparent);
+  color: var(--sidepanel-text, #2b3445);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.model-select-effort-chip-hint {
+  font-size: 0.64rem;
+  opacity: 0.7;
+}
+
+.model-select-effort-chip:hover {
+  border-color: color-mix(in srgb, var(--sidepanel-accent, #4f7cff) 45%, var(--sidepanel-border, #d0d7e2));
+}
+
+.model-select-effort-chip.is-active {
+  border-color: color-mix(in srgb, var(--sidepanel-accent, #4f7cff) 70%, transparent);
+  background: color-mix(in srgb, var(--sidepanel-accent, #4f7cff) 16%, var(--sidepanel-surface, #fff));
+  color: var(--sidepanel-accent-strong, #2f5bff);
+  font-weight: 650;
+}
+
+.model-select-effort-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--sidepanel-accent, #4f7cff) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.sidebar-shell .workflow-task-strip {
+  display: grid;
+  flex: 0 0 auto;
+  max-height: min(38dvh, 18rem);
+  gap: 0.5rem;
+  padding: 0 1rem 0.625rem;
+  overflow-y: auto;
+  background: var(--sidepanel-canvas);
+}
+
+.sidebar-shell .workflow-task-card {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  background: var(--sidepanel-canvas);
+  color: var(--sidepanel-ink);
+}
+
+.sidebar-shell .workflow-skill-shelf-header,
+.sidebar-shell .workflow-task-card-header,
+.sidebar-shell .workflow-task-step,
+.sidebar-shell .task-context-item-header,
+.sidebar-shell .task-artifacts-header,
+.sidebar-shell .task-artifact-item-header,
+.sidebar-shell .workflow-task-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sidebar-shell .workflow-task-card-header {
+  justify-content: space-between;
+}
+
+.sidebar-shell .workflow-skill-shelf {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+  border-bottom: 1px solid var(--sidepanel-line);
+  padding: 0.125rem 0 0.625rem;
+}
+
+.sidebar-shell .workflow-skill-shelf-header {
+  justify-content: space-between;
+}
+
+.sidebar-shell .workflow-skill-shelf-title {
+  margin: 0;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.sidebar-shell .workflow-skill-list {
+  display: flex;
+  min-width: 0;
+  gap: 0.375rem;
+  overflow-x: auto;
+  padding-bottom: 0.125rem;
+}
+
+.sidebar-shell .workflow-skill-chip {
+  display: grid;
+  min-width: 7rem;
+  max-width: 12rem;
+  flex: 0 0 auto;
+  gap: 0.125rem;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  padding: 0.4375rem 0.5625rem;
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink);
+  text-align: left;
+}
+
+.sidebar-shell .workflow-skill-chip:hover,
+.sidebar-shell .workflow-skill-chip:focus-visible {
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+  outline: 0;
+}
+
+.sidebar-shell .workflow-skill-chip-title,
+.sidebar-shell .workflow-skill-chip-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .workflow-skill-chip-title {
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.sidebar-shell .workflow-skill-chip-meta {
+  color: var(--sidepanel-muted);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+
+.sidebar-shell .workflow-task-template,
+.sidebar-shell .workflow-task-status,
+.sidebar-shell .task-context-kind,
+.sidebar-shell .task-artifact-kind {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.sidebar-shell .workflow-task-template {
+  color: var(--sidepanel-muted);
+}
+
+.sidebar-shell .workflow-task-status {
+  padding: 0.1875rem 0.4375rem;
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+}
+
+.sidebar-shell .workflow-task-status[data-status="completed"] {
+  background: color-mix(in srgb, var(--color-success) 12%, var(--sidepanel-canvas));
+  color: var(--color-success);
+}
+
+.sidebar-shell .workflow-task-status[data-status="failed"] {
+  background: color-mix(in srgb, var(--color-error) 10%, var(--sidepanel-canvas));
+  color: var(--color-error);
+}
+
+.sidebar-shell .workflow-task-status[data-status="canceled"] {
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-muted);
+}
+
+.sidebar-shell .workflow-task-title {
+  margin: 0;
+  color: var(--sidepanel-ink);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-task-reason {
+  margin: 0;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-task-steps {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-shell .workflow-task-step {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.sidebar-shell .workflow-task-step-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--sidepanel-line);
+}
+
+.sidebar-shell .workflow-task-step[data-status="running"] .workflow-task-step-dot {
+  background: var(--sidepanel-blue);
+}
+
+.sidebar-shell .workflow-task-step[data-status="completed"] .workflow-task-step-dot {
+  background: var(--color-success);
+}
+
+.sidebar-shell .workflow-task-step[data-status="failed"] .workflow-task-step-dot {
+  background: var(--color-error);
+}
+
+.sidebar-shell .workflow-task-step-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--sidepanel-ink);
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-task-step-status {
+  flex: 0 0 auto;
+}
+
+.sidebar-shell .task-context-panel {
+  border-top: 1px solid var(--sidepanel-line);
+  padding-top: 0.5rem;
+}
+
+.sidebar-shell .task-context-summary {
+  cursor: pointer;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.sidebar-shell .task-context-list {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.sidebar-shell .task-context-item {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.sidebar-shell .task-context-kind {
+  padding: 0.125rem 0.375rem;
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+}
+
+.sidebar-shell .task-context-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--sidepanel-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .task-context-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.125rem;
+}
+
+.sidebar-shell .task-icon-button {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--sidepanel-muted);
+}
+
+.sidebar-shell .task-icon-button:hover,
+.sidebar-shell .task-icon-button:focus-visible,
+.sidebar-shell .task-icon-button[aria-pressed="true"] {
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+  outline: 0;
+}
+
+.sidebar-shell .task-icon-button svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-shell .task-context-text {
+  margin: 0;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .task-artifacts-panel {
+  display: grid;
+  gap: 0.5rem;
+  border-top: 1px solid var(--sidepanel-line);
+  padding-top: 0.5rem;
+}
+
+.sidebar-shell .task-artifacts-header {
+  justify-content: space-between;
+}
+
+.sidebar-shell .task-artifacts-title {
+  margin: 0;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.sidebar-shell .task-artifacts-export {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.sidebar-shell .task-artifacts-export svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-shell .task-artifacts-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sidebar-shell .task-artifact-item {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.sidebar-shell .task-artifact-kind {
+  padding: 0.125rem 0.375rem;
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+}
+
+.sidebar-shell .task-artifact-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--sidepanel-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .task-artifact-content {
+  max-height: 8rem;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.sidebar-shell .workflow-task-reply {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.sidebar-shell .workflow-task-reply-input {
+  min-height: 3rem;
+  resize: vertical;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.sidebar-shell .workflow-task-continue {
+  min-height: 2.25rem;
+  border-radius: 0.5rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.sidebar-shell .workflow-task-cancel,
+.sidebar-shell .workflow-task-save-skill {
+  min-height: 2.25rem;
+  padding: 0 0.625rem;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+}
+
+body:has(.workflow-skill-dialog) .dialog-overlay {
+  backdrop-filter: none !important;
+  background: rgb(32 36 42 / 10%) !important;
+}
+
+.sidebar-shell .workflow-skill-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 80;
+  display: grid;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(34rem, calc(100dvh - 4rem));
+  gap: 0.75rem;
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+  background: var(--sidepanel-canvas);
+  box-shadow: var(--sidepanel-shadow);
+  color: var(--sidepanel-ink);
+}
+
+.sidebar-shell .workflow-skill-dialog-header,
+.sidebar-shell .workflow-skill-dialog-actions,
+.sidebar-shell .workflow-skill-variable-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sidebar-shell .workflow-skill-dialog-header {
+  justify-content: space-between;
+}
+
+.sidebar-shell .workflow-skill-dialog-heading,
+.sidebar-shell .workflow-skill-variable-fields,
+.sidebar-shell .workflow-skill-variable-group {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.sidebar-shell .workflow-skill-dialog-title {
+  margin: 0;
+  color: var(--sidepanel-ink);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sidebar-shell .workflow-skill-dialog-subtitle {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-skill-dialog-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.sidebar-shell .workflow-skill-dialog-close:hover,
+.sidebar-shell .workflow-skill-dialog-close:focus-visible {
+  background: var(--sidepanel-blue-soft);
+  color: var(--sidepanel-blue);
+  outline: 0;
+}
+
+.sidebar-shell .workflow-skill-dialog-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sidebar-shell .workflow-skill-field {
+  display: grid;
+  gap: 0.3125rem;
+  min-width: 0;
+}
+
+.sidebar-shell .workflow-skill-field-label {
+  color: var(--sidepanel-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.sidebar-shell .workflow-skill-field-required {
+  margin-inline-start: 0.375rem;
+  color: var(--sidepanel-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.sidebar-shell .workflow-skill-input {
+  width: 100%;
+  min-height: 2.25rem;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  padding: 0 0.625rem;
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+}
+
+.sidebar-shell .workflow-skill-input:focus {
+  border-color: var(--sidepanel-blue);
+  outline: 0;
+}
+
+.sidebar-shell .workflow-skill-variable-list {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-shell .workflow-skill-variable-item {
+  justify-content: space-between;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--sidepanel-control);
+}
+
+.sidebar-shell .workflow-skill-variable-name {
+  min-width: 0;
+  color: var(--sidepanel-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-shell .workflow-skill-variable-required {
+  flex: 0 0 auto;
+  color: var(--sidepanel-muted);
+  font-size: 0.6875rem;
+}
+
+.sidebar-shell .workflow-skill-empty,
+.sidebar-shell .workflow-skill-dialog-error {
+  margin: 0;
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.sidebar-shell .workflow-skill-dialog-error {
+  color: var(--color-error);
+}
+
+.sidebar-shell .workflow-skill-dialog-actions {
+  justify-content: flex-end;
+}
+
+.sidebar-shell .workflow-skill-dialog-button {
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.sidebar-shell .composer-switches {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 2.75rem;
+  z-index: 60;
+  display: grid;
+  width: min(17rem, calc(100vw - 1rem));
+  max-width: 0;
+  max-height: 0;
+  min-width: 0;
+  gap: 0.125rem;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--sidepanel-blue-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.25rem);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.sidebar-shell .chat-composer.is-tools-open .composer-switches {
+  position: absolute;
+  max-width: min(17rem, calc(100vw - 1rem));
+  max-height: min(52dvh, calc(100dvh - 5rem));
+  padding: 0.375rem;
+  overflow-y: auto;
+  border: 1px solid var(--sidepanel-line);
+  box-shadow: 0 8px 24px rgb(31 41 55 / 8%);
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.sidebar-shell .composer-switches > *,
+.sidebar-shell .composer-switches > :not(.composer-mode-menu-wrap):not(.sidepanel-add-tab-button) {
+  display: flex !important;
+}
+
+.sidebar-shell .composer-switches > .composer-mode-menu-wrap {
+  display: block !important;
+  width: 100%;
+  margin-left: 0;
+  order: initial;
+}
+
+.sidebar-shell .composer-switches .composer-switch,
+.sidebar-shell .composer-switches .composer-mode-trigger,
+.sidebar-shell .composer-switches .image-upload-button {
+  box-sizing: border-box;
+  display: flex !important;
+  width: 100%;
+  min-height: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.sidebar-shell .composer-switches .composer-switch:hover,
+.sidebar-shell .composer-switches .composer-switch:focus-visible,
+.sidebar-shell .composer-switches .composer-mode-trigger:hover:not(:disabled),
+.sidebar-shell .composer-switches .composer-mode-trigger:focus-visible,
+.sidebar-shell .composer-switches .image-upload-button:hover,
+.sidebar-shell .composer-switches .image-upload-button:focus-visible {
+  background: var(--sidepanel-row-hover);
+  color: var(--sidepanel-ink-strong);
+  outline: 0;
+}
+
+.sidebar-shell .composer-switches .composer-switch::after {
+  content: attr(data-label);
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .composer-switches .image-upload-button::after {
+  content: attr(data-label);
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .composer-switches .composer-switch[aria-checked="true"],
+.sidebar-shell .composer-switches .composer-switch[aria-pressed="true"] {
+  background: transparent;
+  color: var(--sidepanel-ink);
+}
+
+.sidebar-shell .composer-switches .composer-switch[aria-checked="true"]::before,
+.sidebar-shell .composer-switches .composer-switch[aria-pressed="true"]::before {
+  box-sizing: border-box;
+  content: "✓";
+  order: 3;
+  display: inline-grid;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-left: auto;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--sidepanel-blue);
+  color: #ffffff;
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1;
+  padding-top: 0.0625rem;
+}
+
+.sidebar-shell .composer-switches .composer-switch-icon,
+.sidebar-shell .composer-switches .image-upload-button::before {
+  flex: 0 0 auto;
+  order: 1;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.sidebar-shell .composer-switches .composer-mode-trigger {
+  border-radius: 0.5rem;
+}
+
+.sidebar-shell .composer-switches .composer-mode-trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-shell .composer-switches .composer-mode-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  order: 3;
+}
+
+.sidebar-shell .composer-switches .image-upload-button {
+  position: relative;
+  left: auto;
+  top: auto;
+  cursor: pointer;
+}
+
+.sidebar-shell .composer-switches .image-upload-button-disabled {
+  color: var(--sidepanel-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sidebar-shell .model-select-label-enhanced {
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  height: 2.25rem;
+  gap: 0;
+}
+
+.sidebar-shell .model-select-label-enhanced .model-select-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.model-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  gap: 0.375rem;
+  padding: 0 0.75rem 0 0.875rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.model-select-trigger:hover,
+.model-select-label.is-model-menu-open .model-select-trigger {
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink-strong);
+}
+
+.model-select-trigger:focus-visible {
+  outline: 3px solid var(--sidepanel-focus-ring);
+  outline-offset: 2px;
+}
+
+.model-select-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-chevron {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E") center / 0.75rem 0.75rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E") center / 0.75rem 0.75rem no-repeat;
+}
+
+.model-select-menu {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 4.75rem;
+  z-index: 70;
+  display: grid;
+  width: min(18rem, calc(100vw - 1.5rem));
+  max-height: min(46dvh, 20rem);
+  gap: 0.125rem;
+  padding: 0.375rem;
+  overflow-y: auto;
+  border: 1px solid var(--sidepanel-line-soft);
+  border-radius: 0.875rem;
+  background: var(--sidepanel-canvas);
+  box-shadow: 0 8px 24px rgb(31 41 55 / 8%);
+}
+
+.model-select-option {
+  display: flex;
+  min-width: 0;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.model-select-option:hover,
+.model-select-option:focus-visible {
+  background: var(--sidepanel-row-hover);
+  outline: 0;
+}
+
+.model-select-option-active {
+  background: var(--sidepanel-blue-soft);
+}
+
+.model-select-option-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-option-check {
+  display: inline-grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--sidepanel-blue);
+  color: #ffffff;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.sidebar-shell .context-strip.is-page-banner-empty {
+  display: none !important;
+  min-height: 0;
+  margin-bottom: 0;
+  padding: 0;
+  border-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-shell .context-strip.is-page-banner-empty > * {
+  display: none !important;
+}
+
+.sidebar-shell .context-strip.has-page-banner {
+  cursor: default;
+}
+
+.sidebar-shell .context-strip.has-page-banner > .context-chip,
+.sidebar-shell .context-strip.has-page-banner > .context-view-button,
+.sidebar-shell .context-strip.has-page-banner > .token-usage-meter,
+.sidebar-shell .context-strip.has-page-banner > .ui-button-secondary:not(.context-view-button) {
+  display: none !important;
+}
+
+.sidepanel-page-banner {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.5rem;
+  height: 1.5rem;
+  min-width: 0;
+  overflow: hidden;
+  transform-origin: top;
+  transition: opacity 140ms ease-out, transform 180ms ease-out;
+}
+
+.sidepanel-page-banner.is-multi {
+  align-items: stretch;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  flex-direction: column;
+  gap: 0;
+  height: auto;
+  min-height: 1.5rem;
+  outline-offset: 2px;
+  padding: 0;
+  pointer-events: auto !important;
+  user-select: none;
+}
+
+.sidepanel-page-banner-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 0;
+  height: 1.5rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  transition: background 120ms ease-out;
+  width: 100%;
+}
+
+.sidepanel-page-banner-header:focus-visible {
+  outline: 2px solid var(--sidepanel-blue);
+  outline-offset: 2px;
+}
+
+.sidepanel-page-banner-favicon {
+  border-radius: 0.25rem;
+  flex: 0 0 auto;
+  height: 0.875rem;
+  object-fit: cover;
+  width: 0.875rem;
+}
+
+.sidepanel-page-banner-favicon[hidden] {
+  display: none;
+}
+
+.sidepanel-page-banner-stack {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  max-width: 2rem;
+  opacity: 1;
+  overflow: hidden;
+  position: relative;
+  transform: translateX(0) scale(1);
+  transition:
+    margin-right 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease-out,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidepanel-page-banner.is-open .sidepanel-page-banner-stack {
+  margin-right: 0;
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-0.25rem) scale(0.92);
+}
+
+.sidepanel-page-banner-stack .sidepanel-page-banner-favicon {
+  border: 1.5px solid var(--sidepanel-canvas);
+  border-radius: 999px;
+  box-sizing: content-box;
+  height: 0.8125rem;
+  width: 0.8125rem;
+}
+
+.sidepanel-page-banner-stack .sidepanel-page-banner-favicon + .sidepanel-page-banner-favicon {
+  margin-left: -0.4375rem;
+}
+
+.sidepanel-page-banner-text {
+  color: var(--sidepanel-ink);
+  flex: 1 1 auto;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidepanel-page-banner-chevron {
+  color: var(--sidepanel-muted);
+  flex: 0 0 auto;
+  height: 0.75rem;
+  margin-left: 0.5rem;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: 0.75rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sidepanel-page-banner.is-open .sidepanel-page-banner-chevron {
+  transform: rotate(180deg);
+}
+
+.sidepanel-page-banner-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  color: var(--sidepanel-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  height: 1.25rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background 120ms ease-out, color 120ms ease-out;
+  width: 1.25rem;
+}
+
+.sidepanel-page-banner-close:hover,
+.sidepanel-page-banner-close:focus-visible {
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink);
+  outline: 0;
+}
+
+/* Animate open/close with grid 0fr→1fr. display:none kills transitions.
+   Open height follows real content up to a hard cap — do not estimate by row count
+   (title/subtitle/gap make fixed row-height too short and clips the last item). */
+.sidepanel-shared-drawer {
+  --shared-drawer-max-height: 12.5rem;
+  border-top: 0 solid transparent;
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease-out,
+    border-color 180ms ease-out,
+    border-width 180ms ease-out;
+}
+
+.sidepanel-page-banner.is-open .sidepanel-shared-drawer {
+  border-top-color: var(--sidepanel-line-soft);
+  border-top-width: 1px;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidepanel-shared-drawer-inner {
+  /* Match the add-tabs dialog / context strip: soft blue, not a white card. */
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  max-height: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0;
+  scrollbar-width: none;
+  transform: translateY(-0.2rem);
+  transition:
+    max-height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  -ms-overflow-style: none;
+}
+
+.sidepanel-shared-drawer-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.sidepanel-page-banner.is-open .sidepanel-shared-drawer-inner {
+  /* Cap only — under the cap, height is content size so no fake scroll. */
+  max-height: var(--shared-drawer-max-height);
+  padding: 0.375rem 0 0.125rem;
+  transform: translateY(0);
+}
+
+.sidepanel-shared-row {
+  align-items: center;
+  background: transparent;
+  border-radius: 0.5rem;
+  box-sizing: border-box;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  grid-template-columns: 1rem minmax(0, 1fr) 1.25rem;
+  min-height: 2.5rem;
+  padding: 0.375rem 0.25rem 0.375rem 0.375rem;
+}
+
+.sidepanel-shared-row:hover,
+.sidepanel-shared-row.is-current {
+  background: var(--sidepanel-row-hover);
+}
+
+/* Fixed leading slot keeps the remove column aligned when favicon is missing. */
+.sidepanel-shared-row-leading {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1rem;
+  height: 1rem;
+  justify-content: center;
+  width: 1rem;
+}
+
+.sidepanel-shared-row-favicon {
+  border-radius: 0.25rem;
+  display: block;
+  height: 1rem;
+  object-fit: cover;
+  width: 1rem;
+}
+
+.sidepanel-shared-row-favicon[hidden] {
+  display: none;
+}
+
+.sidepanel-shared-row-text {
+  display: grid;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.sidepanel-shared-row-title {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidepanel-shared-row-subtitle {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidepanel-shared-row-remove {
+  align-items: center;
+  align-self: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  color: var(--sidepanel-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 1.25rem;
+  font-size: 1rem;
+  grid-column: 3;
+  height: 1.25rem;
+  justify-content: center;
+  justify-self: end;
+  line-height: 1;
+  padding: 0;
+  width: 1.25rem;
+}
+
+.sidepanel-shared-row-remove:hover,
+.sidepanel-shared-row-remove:focus-visible {
+  background: transparent;
+  color: var(--sidepanel-muted);
+  outline: 0;
+}
+
+.context-tab-item.sidepanel-current-tab-row {
+  background: #f8fbff;
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 28%, var(--sidepanel-line));
+}
+
+.context-tab-item.sidepanel-current-tab-row.context-tab-item-active {
+  background: var(--sidepanel-blue-soft);
+}
+
+.context-tab-item.sidepanel-current-tab-row .context-tab-title-row {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.context-tab-item .context-tab-selected-badge {
+  align-self: center;
+  white-space: nowrap;
+}
+
+.settings-dialog .sidepanel-settings-select,
+.settings-dialog .sidepanel-channel-select {
+  display: block !important;
+  height: auto !important;
+  width: 100% !important;
+}
+
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger {
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.5rem !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  height: 2.25rem !important;
+  padding: 0 0.75rem !important;
+  width: 100% !important;
+}
+
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:hover {
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 36%, var(--sidepanel-line)) !important;
+}
+
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 36%, var(--sidepanel-line)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sidepanel-blue) 18%, transparent) !important;
+  outline: 0 !important;
+}
+
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) .model-select-value {
+  font-size: 0.8125rem !important;
+  line-height: 2.25rem !important;
+}
+
+.settings-dialog :is(.sidepanel-settings-select, .sidepanel-channel-select) + select.ui-input {
+  border: 0 !important;
+  clip: rect(0, 0, 0, 0) !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: absolute !important;
+  width: 1px !important;
+}
+
+.message-list-thinking {
+  padding-bottom: 1.25rem;
+}
+
+.sidepanel-thinking {
+  align-items: center;
+  align-self: flex-start;
+  color: var(--sidepanel-muted);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  margin: 0.125rem 0 0.25rem;
+  min-height: 2rem;
+}
+
+.sidepanel-thinking-dots {
+  animation: sidepanel-thinking-pulse 900ms ease-in-out infinite;
+  display: inline-block;
+  flex: 0 0 1.275rem;
+  height: 0.375rem;
+  position: relative;
+  width: 1.275rem;
+}
+
+.sidepanel-thinking-dots::before {
+  background: var(--sidepanel-blue);
+  border-radius: 999px;
+  box-shadow:
+    0.45rem 0 0 color-mix(in srgb, var(--sidepanel-blue) 52%, transparent),
+    0.9rem 0 0 color-mix(in srgb, var(--sidepanel-blue) 28%, transparent);
+  content: "";
+  height: 0.375rem;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 0.375rem;
+}
+
+.message-bubble-wrap-long:not(.message-bubble-wrap-expanded) .message-bubble {
+  max-height: 10.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.message-bubble-wrap-long:not(.message-bubble-wrap-expanded) .message-bubble::after {
+  background: linear-gradient(to bottom, transparent, var(--color-surface-soft));
+  bottom: 0;
+  content: "";
+  height: 2.5rem;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.message-long-toggle {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--sidepanel-line-soft);
+  border-radius: 999px;
+  color: var(--sidepanel-muted);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  justify-self: end;
+  line-height: 1.25;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    color 140ms ease-out,
+    transform 140ms ease-out;
+}
+
+.message-long-toggle:hover {
+  background: var(--sidepanel-canvas);
+  border-color: var(--sidepanel-line);
+  color: var(--sidepanel-ink-strong);
+  transform: translateY(-1px);
+}
+
+.message-long-toggle:focus-visible {
+  outline: 3px solid var(--sidepanel-focus-ring);
+  outline-offset: 2px;
+}
+
+.sidepanel-agent-tools-overlay {
+  background: transparent;
+  inset: 0;
+  position: fixed;
+  z-index: 54;
+}
+
+.sidepanel-agent-tools-dialog {
+  background: var(--sidepanel-canvas);
+  border: 1px solid #dfe5ef;
+  border-radius: 0.875rem;
+  box-shadow: var(--sidepanel-shadow);
+  color: var(--sidepanel-ink);
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  max-height: min(36rem, calc(100dvh - 4.5rem));
+  min-height: 0;
+  overflow: hidden;
+  position: fixed;
+  right: 0.75rem;
+  top: 3.875rem;
+  width: min(23.5rem, calc(100vw - 1.5rem));
+  z-index: 55;
+}
+
+.sidepanel-agent-tools-header {
+  align-items: center;
+  border-bottom: 1px solid var(--sidepanel-line-soft);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem 0.625rem;
+}
+
+.sidepanel-agent-tools-title-wrap {
+  min-width: 0;
+}
+
+.sidepanel-agent-tools-title-wrap h2 {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.sidepanel-agent-tools-title-wrap p,
+.sidepanel-agent-tools-muted,
+.sidepanel-agent-tools-status-row p {
+  color: var(--sidepanel-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.sidepanel-agent-tools-close {
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--sidepanel-ink);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.5rem;
+}
+
+.sidepanel-agent-tools-close:hover,
+.sidepanel-agent-tools-close:focus-visible {
+  background: var(--sidepanel-control-hover);
+  outline: 0;
+}
+
+.sidepanel-agent-tools-body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.75rem;
+  grid-auto-rows: max-content;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.75rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.sidepanel-agent-tools-status-row {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid var(--sidepanel-line-soft);
+  border-radius: 0.75rem;
+  display: flex;
+  gap: 0.625rem;
+  padding: 0.625rem;
+}
+
+.sidepanel-agent-tools-status {
+  background: #eef1f6;
+  border-radius: 999px;
+  color: #4d5664;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+  padding: 0 0.5rem;
+  white-space: nowrap;
+}
+
+.sidepanel-agent-tools-status.is-connected {
+  background: color-mix(in srgb, var(--sidepanel-blue) 12%, white);
+  color: var(--sidepanel-blue-deep);
+}
+
+.sidepanel-agent-tools-status.is-error {
+  background: #f7e9e5;
+  color: #8b3a2f;
+}
+
+.sidepanel-agent-tools-section {
+  background: var(--color-surface-soft, #f8fafc);
+  border: 1px solid var(--color-hairline, #d8dde8);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.875rem;
+}
+
+.sidepanel-agent-tools-section-title {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.sidepanel-agent-tools-server-list,
+.sidepanel-agent-tools-tool-list,
+.sidepanel-agent-tools-audit-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sidepanel-agent-tools-server,
+.sidepanel-agent-tools-tool,
+.sidepanel-agent-tools-audit {
+  background: #fff;
+  border: 1px solid var(--color-hairline, #d8dde8);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.625rem;
+}
+
+.sidepanel-agent-tools-server strong,
+.sidepanel-agent-tools-tool strong,
+.sidepanel-agent-tools-audit strong {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidepanel-agent-tools-audit-args {
+  color: var(--sidepanel-muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.sidepanel-agent-tools-audit.is-error {
+  border-color: color-mix(in srgb, var(--color-error, #dc2626) 45%, #d8dde8);
+}
+
+.sidepanel-agent-tools-field,
+.sidepanel-agent-tools-switch {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.sidepanel-agent-tools-field > span {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.sidepanel-agent-tools-field-hint {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin: -0.125rem 0 0;
+}
+
+.sidepanel-agent-tools-field input {
+  background: #fff;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.625rem;
+  color: var(--sidepanel-ink);
+  font: inherit;
+  font-size: 0.875rem;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.625rem;
+}
+
+.sidepanel-agent-tools-field input:focus-visible {
+  border-color: var(--sidepanel-blue);
+  outline: 3px solid color-mix(in srgb, var(--sidepanel-blue) 18%, transparent);
+}
+
+.sidepanel-agent-tools-switch {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--sidepanel-line-soft);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.625rem;
+  padding: 0.625rem;
+}
+
+.sidepanel-agent-tools-switch input {
+  inline-size: 1px;
+  opacity: 0;
+  position: absolute;
+}
+
+.sidepanel-agent-tools-switch-control {
+  background: var(--sidepanel-control);
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 1.25rem;
+  position: relative;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out;
+  width: 2.125rem;
+}
+
+.sidepanel-agent-tools-switch-control::after {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(31 41 55 / 18%);
+  content: "";
+  height: 0.875rem;
+  left: 0.1875rem;
+  position: absolute;
+  top: 0.125rem;
+  transition: transform 140ms ease-out;
+  width: 0.875rem;
+}
+
+.sidepanel-agent-tools-switch input:checked + .sidepanel-agent-tools-switch-control {
+  background: var(--sidepanel-blue);
+  border-color: var(--sidepanel-blue);
+}
+
+.sidepanel-agent-tools-switch input:checked + .sidepanel-agent-tools-switch-control::after {
+  transform: translateX(0.875rem);
+}
+
+.sidepanel-agent-tools-switch input:focus-visible + .sidepanel-agent-tools-switch-control {
+  outline: 3px solid color-mix(in srgb, var(--sidepanel-blue) 18%, transparent);
+  outline-offset: 2px;
+}
+
+.sidepanel-agent-tools-switch > span:last-child {
+  color: var(--sidepanel-ink);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.sidepanel-agent-tools-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sidepanel-agent-tools-link-button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--sidepanel-blue-deep);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.5rem;
+}
+
+.sidepanel-agent-tools-link-button:hover,
+.sidepanel-agent-tools-link-button:focus-visible {
+  background: color-mix(in srgb, var(--sidepanel-blue) 9%, transparent);
+  outline: 0;
+}
+
+.sidepanel-agent-tools-link-button:disabled {
+  color: var(--sidepanel-muted);
+  cursor: default;
+  opacity: 0.65;
+}
+
+@media (max-width: 420px) {
+  .sidebar-shell .composer-actions {
+    gap: 0.125rem;
+  }
+
+  .sidebar-shell .composer-actions > .model-selector {
+    max-width: 44%;
+  }
+
+  .model-select-trigger {
+    padding-inline: 0.625rem;
+  }
+}
+
+/* Native floating layer parity: restore the old menu/dialog geometry after React migration. */
+:root {
+  --sidepanel-shadow: 0 8px 24px rgb(31 41 55 / 8%);
+  --sidepanel-popover-right: 0.75rem;
+  --sidepanel-popover-width: min(20.9375rem, calc(100vw - 1.5rem));
+  --sidepanel-history-compact-max-height: min(26rem, calc(100dvh - 5rem));
+  --sidepanel-history-expanded-height: min(31.25rem, calc(100dvh - 5rem));
+  --sidepanel-settings-dialog-height: min(32rem, calc(100dvh - 5rem));
+  --sidepanel-surface: #f0f4f9;
+  --sidepanel-surface-line: #dfe5ef;
+}
+
+.sidebar-shell .app-header-icon {
+  height: 1.125rem;
+  width: 1.125rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sidebar-shell .composer-switch-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sidebar-shell .message-icon-button svg {
+  height: 1rem;
+  width: 1rem;
+  stroke-width: 1.8;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidepanel-drawer-overlay,
+body:has(.sidepanel-drawer-dialog) .dialog-overlay {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.drawer-panel.history-drawer {
+  background: var(--sidepanel-surface);
+  border: 1px solid var(--sidepanel-surface-line);
+  border-left: 1px solid var(--sidepanel-surface-line);
+  border-radius: 0.875rem;
+  bottom: auto;
+  box-sizing: border-box;
+  box-shadow: 0 12px 28px rgb(31 41 55 / 14%);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  left: auto;
+  max-height: var(--sidepanel-history-compact-max-height);
+  max-width: var(--sidepanel-popover-width);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.625rem 0;
+  right: var(--sidepanel-popover-right);
+  top: 3.875rem;
+  transform: none;
+  width: var(--sidepanel-popover-width);
+  z-index: 50;
+}
+
+.sidepanel-drawer-pages {
+  background: var(--sidepanel-surface);
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.sidepanel-drawer-page,
+.sidepanel-history-content,
+.sidepanel-drawer-page-settings,
+.settings-drawer-page {
+  background: var(--sidepanel-surface);
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.sidepanel-drawer-page-history,
+.sidepanel-history-content,
+.sidepanel-drawer-page-settings,
+.settings-drawer-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
