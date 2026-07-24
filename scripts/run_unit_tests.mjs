@@ -1,17 +1,22 @@
+/**
+ * Legacy unit-test runner (npm run test:legacy).
+ *
+ * Purpose: exercise pure Node .mjs still used outside the Vitest/TS tree, plus
+ * lightweight source-wiring guards that are not duplicated under tests/unit.
+ *
+ * Do NOT re-add dual-track suites for shared modules that production already
+ * consumes as TypeScript (mcp/*, chat/tokenUsage, models/toolRegistry,
+ * automationPlaybooks, networkContext, security/redaction, browserControl).
+ * Those are covered by Vitest against TypeScript sources under src/.
+ *
+ * Remaining suites:
+ * - newtab ai-preview-service.mjs (live newtab runtime)
+ * - scripts/model_diagnostics_sink.mjs (local diagnostics tooling)
+ * - background/browserControl source-wiring smoke (string contracts)
+ */
 import { spawnSync } from "node:child_process";
 
 const testCommands = [
-  ["node", ["scripts/test_network_redaction.mjs"]],
-  ["node", ["scripts/test_network_tools.mjs"]],
-  ["node", ["scripts/test_tool_registry.mjs"]],
-  ["node", ["scripts/test_mcp_settings.mjs"]],
-  ["node", ["scripts/test_mcp_http_client.mjs"]],
-  ["node", ["scripts/test_mcp_tool_adapter.mjs"]],
-  ["node", ["scripts/test_token_usage.mjs"]],
-  ["node", ["scripts/test_agent_tool_audit.mjs"]],
-  ["node", ["scripts/test_automation_playbooks.mjs"]],
-  ["node", ["scripts/test_browser_extract_content.mjs"]],
-  ["node", ["scripts/test_browser_control_queue.mjs"]],
   ["node", ["scripts/test_background_browser_queue_wiring.mjs"]],
   ["node", ["scripts/test_background_agent_tools_wiring.mjs"]],
   ["node", ["scripts/test_ai_preview_service.mjs"]],
