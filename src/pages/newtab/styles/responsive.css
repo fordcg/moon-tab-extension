@@ -1,8 +1,22 @@
 @media (max-width: 980px) {
+  html,
+  body,
+  .homepage-shell,
+  .homepage-hero,
+  .homepage-stage {
+    height: auto;
+    min-height: 100dvh;
+    max-height: none;
+  }
+
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   .homepage-stage {
     width: 100%;
-    min-height: auto;
-    overflow: visible;
+    overflow: hidden;
     padding: 1rem 0.5rem 1.25rem;
   }
 
@@ -18,7 +32,7 @@
 
   .homepage-stage__asset--cloud-ribbon {
     width: 220px;
-    opacity: 0.28;
+    opacity: 0.22;
   }
 
   .homepage-focus-shell {
@@ -32,7 +46,9 @@
   }
 
   .homepage-widget-root {
+    height: auto;
     min-height: 0;
+    max-height: none;
   }
 
   .homepage-widget-card[data-widget-slot] {
