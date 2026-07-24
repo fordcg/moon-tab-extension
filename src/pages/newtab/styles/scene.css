@@ -714,7 +714,7 @@
   position: static;
 }
 
-/* Keep every nested layer open so the edge pet can leave the card box. */
+/* Keep nested layers open so the edge pet can leave the card box. */
 .homepage-widget-card[data-widget-id="todo"],
 .homepage-widget-card[data-widget-id="todo"] > .homepage-widget-card-body,
 .homepage-widget-card[data-widget-id="todo"] .todo-manager,
@@ -722,6 +722,10 @@
   overflow: visible;
 }
 
+/*
+ * Body/manager stay static so .todo-edge-pet absolute coords resolve against
+ * article.homepage-widget-card (the visible paper card), not a nested box.
+ */
 .homepage-widget-card[data-widget-id="todo"] > .homepage-widget-card-body,
 .homepage-widget-card[data-widget-id="todo"] .todo-manager {
   position: static;
@@ -731,6 +735,8 @@
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+  width: auto;
+  min-width: 0;
 }
 
 .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="false"]) > .homepage-widget-card-header {
@@ -751,67 +757,63 @@
   padding-right: 5.2rem;
 }
 
+.homepage-widget-card[data-widget-id="todo"] .homepage-widget-card-ornament .widget-note__sticker {
+  width: 34px;
+}
+
 /*
- * Edge pet anchors to the card itself (article.homepage-widget-card), because
- * body/manager are position:static. It must sit on the outer top rim.
+ * Closed: the peek cat is the only control, so keep it in normal flow so the
+ * card has real size. Open: pin it to the card's top rim with paws on the edge.
  */
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet {
-  position: absolute;
-  left: 70%;
-  /* Negative top pulls the head above the rim; remaining height overlaps the card. */
-  top: -38px;
+  position: relative;
   z-index: 12;
-  width: clamp(108px, 10.5vw, 132px);
-  height: 78px;
+  display: block;
+  width: clamp(104px, 10.5vw, 128px);
+  height: auto;
+  margin: 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
-  transform: translateX(-50%);
-  filter: drop-shadow(0 8px 12px rgba(145, 103, 57, 0.16));
+  filter: drop-shadow(0 6px 10px rgba(145, 103, 57, 0.16));
   transition: transform 180ms ease;
 }
 
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet__img {
   display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
   pointer-events: none;
   user-select: none;
-  /* Keep the peeping head/paws; hide the lower body below the rim. */
-  object-fit: cover;
-  object-position: center 12%;
+  -webkit-user-drag: none;
+  object-fit: contain;
+}
+
+.homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet {
+  position: absolute;
+  /* A bit right of center; bottom of paws sits on the paper rim. */
+  left: 72%;
+  top: 0;
+  width: clamp(108px, 11vw, 132px);
+  margin: 0;
+  transform: translate(-50%, calc(-100% + 18px));
 }
 
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet:hover,
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet:focus-visible {
-  transform: translateX(-50%) translateY(-3px);
+  transform: translateY(-2px);
+}
+
+.homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet:hover,
+.homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) .todo-edge-pet:focus-visible {
+  transform: translate(-50%, calc(-100% + 16px));
 }
 
 .homepage-widget-card[data-widget-id="todo"] .todo-edge-pet:focus-visible {
   border-radius: 28px;
   outline: 2px solid rgba(215, 170, 108, 0.72);
   outline-offset: 3px;
-}
-
-/* Closed state: same perch geometry, centered because the card chrome is gone. */
-.homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="false"]) .todo-edge-pet {
-  left: 50%;
-  top: -38px;
-}
-
-.todo-manager[data-todo-drawer-open="true"] .widget-note__sticker {
-  position: absolute;
-  top: 0.85rem;
-  left: 3.15rem;
-  z-index: 3;
-  display: block;
-  width: 28px;
-  height: auto;
-  margin: 0;
-  pointer-events: none;
-  opacity: 0.95;
-  user-select: none;
 }
 
 .widget-note__sticker {

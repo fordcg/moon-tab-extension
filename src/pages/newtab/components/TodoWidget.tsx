@@ -103,7 +103,7 @@ export function TodoWidget() {
 
   return (
     <section className="todo-manager" data-todo-manager="true" data-todo-drawer-open={drawerOpen} data-todo-has-today-tasks={hasTodayActiveTasks}>
-      {/* Must stay outside .todo-drawer so absolute positioning anchors to the card, not the drawer. */}
+      {/* Outside .todo-drawer so open-state absolute positioning anchors to the card rim. */}
       <button
         className="todo-edge-pet"
         type="button"
@@ -111,12 +111,10 @@ export function TodoWidget() {
         aria-expanded={drawerOpen}
         onClick={toggleDrawer}
       >
-        <img className="todo-edge-pet__img" src={newtabAssets.petLeftPeek} alt="" />
+        <img className="todo-edge-pet__img" src={newtabAssets.petTodoPerch} alt="" draggable={false} />
       </button>
 
       <div className="todo-drawer" data-todo-drawer="true" aria-hidden={!drawerOpen}>
-        <img className="widget-note__sticker" src={newtabAssets.todoSticker} alt="" />
-
         <div className="todo-manager-panel todo-manager-panel--list" hidden={editorOpen}>
           <div className="todo-filter-list" role="tablist">
             {Object.entries(TODO_FILTER_LABELS).map(([filterId, label]) => (

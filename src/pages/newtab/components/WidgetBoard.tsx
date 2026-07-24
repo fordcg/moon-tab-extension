@@ -343,6 +343,7 @@ function WidgetShell({
         <div className="homepage-widget-card-ornament" aria-hidden="true">
           {widget.id === "quicksites" ? <img className="widget-note__sticker" src={newtabAssets.quicksitesSticker} alt="" /> : null}
           {widget.id === "calendar" ? <img className="widget-note__sticker" src={newtabAssets.calendarSticker} alt="" /> : null}
+          {widget.id === "todo" ? <img className="widget-note__sticker" src={newtabAssets.todoSticker} alt="" /> : null}
         </div>
         <div className="homepage-widget-card-actions">
           {canHide ? (
