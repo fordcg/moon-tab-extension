@@ -105,10 +105,12 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .todo-drawer-toggle {
-    top: -56px;
-    width: 132px;
-    height: 104px;
+  .todo-drawer-toggle,
+  .homepage-widget-card[data-widget-id="todo"] .todo-drawer-toggle,
+  .homepage-widget-card[data-widget-id="todo"] .widget-note__pet-peek-button {
+    top: -40px;
+    width: 118px;
+    height: 92px;
   }
 
   .todo-manager-panel--list {

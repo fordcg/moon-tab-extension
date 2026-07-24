@@ -718,7 +718,9 @@
   overflow: visible;
 }
 
-.homepage-widget-card[data-widget-id="todo"] > .homepage-widget-card-body {
+.homepage-widget-card[data-widget-id="todo"] > .homepage-widget-card-body,
+.homepage-widget-card[data-widget-id="todo"] .todo-manager {
+  position: static;
   overflow: visible;
 }
 
@@ -731,39 +733,49 @@
 .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="false"]) > .homepage-widget-card-header {
   opacity: 0;
   pointer-events: none;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="false"]) > .homepage-widget-card-body {
   padding: 0;
 }
 
-.widget-note__pet-peek-button {
+.homepage-widget-card[data-widget-id="todo"]:has(.todo-manager[data-todo-drawer-open="true"]) > .homepage-widget-card-header {
+  padding-top: 0.95rem;
+  padding-right: 4.8rem;
+}
+
+/* Open-state cat: ride the outer top edge of the card, slightly right of center. */
+.homepage-widget-card[data-widget-id="todo"] .widget-note__pet-peek-button {
   position: absolute;
-  left: 50%;
-  top: -78px;
-  z-index: 6;
-  width: clamp(118px, 11vw, 152px);
-  height: 112px;
+  left: 70%;
+  top: -46px;
+  z-index: 9;
+  width: clamp(104px, 10vw, 128px);
+  height: 104px;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(18px) scale(0.94);
-  filter: drop-shadow(0 10px 14px rgba(145, 103, 57, 0.12));
+  transform: translateX(-50%) translateY(8px) scale(0.94);
+  filter: drop-shadow(0 8px 12px rgba(145, 103, 57, 0.16));
   transition:
     opacity 160ms ease 80ms,
     transform 360ms cubic-bezier(0.2, 0.85, 0.2, 1.18) 80ms;
 }
 
-.widget-note__pet-peek-button:focus-visible {
+.homepage-widget-card[data-widget-id="todo"] .widget-note__pet-peek-button:focus-visible {
   border-radius: 28px;
   outline: 2px solid rgba(215, 170, 108, 0.72);
   outline-offset: 3px;
 }
 
-.widget-note__pet-peek {
+.homepage-widget-card[data-widget-id="todo"] .widget-note__pet-peek {
   display: block;
   width: 100%;
   height: auto;
@@ -772,26 +784,86 @@
   user-select: none;
 }
 
-.todo-manager[data-todo-drawer-open="true"] .widget-note__pet-peek-button {
+.homepage-widget-card[data-widget-id="todo"] .todo-manager[data-todo-drawer-open="true"] .widget-note__pet-peek-button {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(-50%) translateY(0) scale(1);
 }
 
-.todo-manager[data-todo-drawer-open="true"] .widget-note__pet-peek-button:hover .widget-note__pet-peek,
-.todo-manager[data-todo-drawer-open="true"] .widget-note__pet-peek-button:focus-visible .widget-note__pet-peek {
-  transform: translateY(-4px);
+.homepage-widget-card[data-widget-id="todo"] .todo-manager[data-todo-drawer-open="true"] .widget-note__pet-peek-button:hover .widget-note__pet-peek,
+.homepage-widget-card[data-widget-id="todo"] .todo-manager[data-todo-drawer-open="true"] .widget-note__pet-peek-button:focus-visible .widget-note__pet-peek {
+  transform: translateY(-2px);
+}
+
+/* Closed-state cat: same perch, but on the floating toggle only (no card chrome). */
+.homepage-widget-card[data-widget-id="todo"] .todo-drawer-toggle {
+  position: absolute;
+  left: 50%;
+  top: -46px;
+  z-index: 9;
+  width: 128px;
+  height: 100px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 8px 12px rgba(145, 103, 57, 0.16));
+  transition:
+    opacity 150ms ease,
+    transform 180ms ease;
+}
+
+.homepage-widget-card[data-widget-id="todo"] .todo-drawer-toggle__pet {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  transition: transform 220ms ease;
+  user-select: none;
+}
+
+.homepage-widget-card[data-widget-id="todo"] .todo-drawer-toggle:hover .todo-drawer-toggle__pet,
+.homepage-widget-card[data-widget-id="todo"] .todo-drawer-toggle:focus-visible .todo-drawer-toggle__pet {
+  transform: translateY(-2px);
+}
+
+.homepage-widget-card[data-widget-id="todo"] .todo-manager[data-todo-drawer-open="true"] .todo-drawer-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-8px) scale(0.92);
+  visibility: hidden;
+}
+
+.homepage-widget-card[data-widget-id="todo"] .todo-drawer-toggle:focus-visible {
+  border-radius: 28px;
+  outline: 2px solid rgba(215, 170, 108, 0.72);
+  outline-offset: 3px;
+}
+
+.todo-manager[data-todo-drawer-open="true"] .widget-note__sticker {
+  position: absolute;
+  top: 0.9rem;
+  left: 3.15rem;
+  z-index: 3;
+  display: block;
+  width: 30px;
+  height: auto;
+  margin: 0;
+  pointer-events: none;
+  transform: none;
+  opacity: 0.95;
+  user-select: none;
 }
 
 .widget-note__sticker {
   position: relative;
   z-index: 3;
   display: block;
-  width: 62px;
+  width: 34px;
   height: auto;
   margin: 0;
   pointer-events: none;
-  transform: translate(8px, -6px);
   user-select: none;
 }
 
@@ -834,52 +906,6 @@
   min-height: 112px;
 }
 
-.todo-drawer-toggle {
-  position: absolute;
-  left: 50%;
-  top: -64px;
-  z-index: 6;
-  width: 150px;
-  height: 118px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: url("../assets/hero/paw-cursor-tilted.png") 12 12, pointer;
-  transform: translateX(-50%);
-  filter: drop-shadow(0 10px 14px rgba(145, 103, 57, 0.12));
-  transition:
-    opacity 150ms ease,
-    transform 180ms ease;
-}
-
-.todo-drawer-toggle__pet {
-  display: block;
-  width: 100%;
-  height: auto;
-  pointer-events: none;
-  transition: transform 220ms ease;
-  user-select: none;
-}
-
-.todo-drawer-toggle:hover .todo-drawer-toggle__pet,
-.todo-drawer-toggle:focus-visible .todo-drawer-toggle__pet,
-.todo-manager[data-todo-drawer-open="true"] .todo-drawer-toggle__pet {
-  transform: translateY(-3px);
-}
-
-.todo-manager[data-todo-drawer-open="true"] .todo-drawer-toggle {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-50%) translateY(-14px) scale(0.9);
-  visibility: hidden;
-}
-
-.todo-drawer-toggle:focus-visible {
-  border-radius: 28px;
-  outline: 2px solid rgba(215, 170, 108, 0.72);
-  outline-offset: 3px;
-}
-
 .todo-drawer {
   position: relative;
   display: grid;
@@ -888,6 +914,7 @@
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
+  padding-top: 0;
   transform: translateY(12px) scale(0.98);
   transform-origin: top center;
   transition:
@@ -901,6 +928,7 @@
   opacity: 1;
   overflow: visible;
   pointer-events: auto;
+  padding-top: 0.2rem;
   transform: translateY(0) scale(1);
 }
 

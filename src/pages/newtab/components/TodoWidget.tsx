@@ -109,7 +109,11 @@ export function TodoWidget() {
 
       <div className="todo-drawer" data-todo-drawer="true" aria-hidden={!drawerOpen}>
         <button className="widget-note__pet-peek-button" type="button" aria-label="收起待办抽屉" onClick={toggleDrawer}>
-          <img className="widget-note__pet-peek" src={newtabAssets.petLeftPeek} alt="" />
+          <img
+            className="widget-note__pet-peek"
+            src={hasTodayActiveTasks ? newtabAssets.petGroom : newtabAssets.petGroomIdle}
+            alt=""
+          />
         </button>
         <img className="widget-note__sticker" src={newtabAssets.todoSticker} alt="" />
 
