@@ -4,6 +4,7 @@ import type { ModelProvider, ProviderModel } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { ModelVisionIcon } from "../ModelVisionIndicator";
 import { useComposedTextInput } from "../useComposedTextInput";
+import { SettingsActionIcon, SettingsIconButton } from "./SettingsIconButton";
 import { SettingsSelect } from "./SettingsSelect";
 
 export function ChannelManagement() {
@@ -187,9 +188,7 @@ export function ChannelManagement() {
     <section className="grid w-full gap-4" aria-label="渠道管理">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-base font-semibold">模型渠道</h3>
-        <button className="ui-button-secondary" type="button" onClick={handleAddProvider}>
-          新增渠道
-        </button>
+        <SettingsIconButton icon="plus" label="新增渠道" onClick={handleAddProvider} />
       </div>
 
       {providers.length === 0 ? (
@@ -252,17 +251,15 @@ export function ChannelManagement() {
           role="region"
         >
           <div className="flex flex-wrap gap-2">
-            <button
-              className="ui-button-secondary"
-              type="button"
+            <SettingsIconButton
+              icon={channelOperation?.loading ? "loader" : "refresh"}
+              label="获取模型列表"
+              tooltip={channelOperation?.loading ? "正在获取模型列表" : "获取模型列表"}
               onClick={handleFetchRemoteModels}
               disabled={channelOperation?.loading}
-            >
-              {channelOperation?.loading ? "处理中" : "获取模型列表"}
-            </button>
-            <button className="ui-button-secondary" type="button" onClick={handleDeleteProvider}>
-              删除渠道
-            </button>
+              aria-busy={channelOperation?.loading ? true : undefined}
+            />
+            <SettingsIconButton icon="trash" label="删除渠道" onClick={handleDeleteProvider} />
           </div>
           <label className="grid gap-1 text-sm">
             渠道名称
@@ -307,14 +304,11 @@ export function ChannelManagement() {
                 value={selectedProvider.apiKey}
                 onChange={(event) => updateProvider(selectedProvider.id, { apiKey: event.target.value })}
               />
-              <button
-                className="ui-button-secondary px-2"
-                type="button"
-                aria-label={showApiKey ? "隐藏 API Key 明文" : "显示 API Key 明文"}
+              <SettingsIconButton
+                icon={showApiKey ? "eye-off" : "eye"}
+                label={showApiKey ? "隐藏 API Key 明文" : "显示 API Key 明文"}
                 onClick={() => setShowApiKey((visible) => !visible)}
-              >
-                <ApiKeyVisibilityIcon visible={showApiKey} />
-              </button>
+              />
             </span>
           </label>
 
@@ -322,17 +316,13 @@ export function ChannelManagement() {
             <div className="flex items-center justify-between gap-3">
               <h4 className="text-sm font-semibold">模型</h4>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <button className="ui-button-secondary" type="button" onClick={handleAddModel}>
-                  添加模型
-                </button>
-                <button
-                  className="ui-button-secondary"
-                  type="button"
+                <SettingsIconButton icon="plus" label="添加模型" onClick={handleAddModel} />
+                <SettingsIconButton
+                  icon="eraser"
+                  label="清空所有"
                   onClick={handleClearModels}
                   disabled={providerModels.length === 0}
-                >
-                  清空所有
-                </button>
+                />
               </div>
             </div>
             <label className="grid gap-1 text-sm">
@@ -376,8 +366,9 @@ export function ChannelManagement() {
                         <button
                           key={remoteModel.id}
                           aria-disabled={alreadyAdded}
+                          aria-label={formatRemoteModelOptionLabel(remoteModel, alreadyAdded)}
                           className={[
-                            "rounded-md px-3 py-2 text-left text-sm transition",
+                            "remote-model-option rounded-md px-3 py-2 text-left text-sm transition",
                             alreadyAdded
                               ? "cursor-not-allowed bg-[var(--color-primary-disabled)] text-[var(--color-muted)]"
                               : "bg-[var(--color-canvas)] text-[var(--color-ink)] hover:bg-[var(--color-surface-card)]",
@@ -387,9 +378,13 @@ export function ChannelManagement() {
                           type="button"
                           onClick={() => addRemoteModel(selectedProvider.id, remoteModel)}
                         >
-                          {alreadyAdded ? "已添加 " : ""}
-                          {remoteModel.displayName}
-                          <span className="ui-muted ml-2 text-xs">{remoteModel.id}</span>
+                          <span className="remote-model-status-marker" aria-hidden="true">
+                            <SettingsActionIcon name={alreadyAdded ? "check" : "plus"} />
+                          </span>
+                          <span className="remote-model-option-body">
+                            <span className="remote-model-title text-sm font-medium">{getRemoteModelDisplayName(remoteModel)}</span>
+                            <span className="remote-model-subtitle ui-muted text-xs">{remoteModel.id}</span>
+                          </span>
                         </button>
                       );
                     })
@@ -402,6 +397,7 @@ export function ChannelManagement() {
             <div className="grid gap-2">
               {providerModels.map((model) => {
                 const connectivity = modelConnectivity[model.id];
+                const modelDisplayName = getProviderModelDisplayName(model);
                 const statusText = connectivity?.loading
                   ? "正在测试连通性…"
                   : connectivity?.success
@@ -409,8 +405,6 @@ export function ChannelManagement() {
                     : connectivity?.error
                       ? `测试失败：${connectivity.error}`
                       : "";
-                const showModelId = model.modelId !== model.displayName;
-
                 return (
                   <article
                     key={model.id}
@@ -425,25 +419,23 @@ export function ChannelManagement() {
                       .filter(Boolean)
                       .join(" ")}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="model-list-name min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="min-w-0 truncate text-sm font-medium">{model.displayName}</span>
+                    <div className="model-row-content">
+                      <div className="model-list-name">
+                        <span className="model-list-title-row">
+                          <span className="model-list-title text-sm font-medium">{modelDisplayName}</span>
                           {model.supportsVision ? (
-                            <ModelVisionIcon label={`${model.displayName} 支持视觉理解`} />
+                            <ModelVisionIcon label={`${modelDisplayName} 支持视觉理解`} />
                           ) : null}
                         </span>
-                        {showModelId ? (
-                          <span className="ui-muted mt-0.5 block truncate text-xs">{model.modelId}</span>
-                        ) : null}
+                        <span className="model-list-subtitle ui-muted text-xs">{model.modelId}</span>
                       </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <div className="model-row-actions">
                         <label className="chat-preference-switch shrink-0" onClick={(event) => event.stopPropagation()}>
                           <input
                             className="chat-preference-switch-input"
                             type="checkbox"
                             role="switch"
-                            aria-label={`模型启用：${model.displayName}`}
+                            aria-label={`模型启用：${model.modelId}`}
                             checked={model.enabled}
                             onChange={(event) => updateModel(model.id, { enabled: event.target.checked })}
                           />
@@ -451,32 +443,26 @@ export function ChannelManagement() {
                             <span className="chat-preference-switch-thumb" />
                           </span>
                         </label>
-                        <button
-                          aria-label={`设置 ${model.modelId}`}
-                          className="ui-button-secondary px-2 py-1"
-                          type="button"
+                        <SettingsIconButton
+                          icon="settings"
+                          label={`设置 ${model.modelId}`}
+                          tooltip={`设置 ${model.modelId}`}
                           onClick={() => setSettingsModelId(model.id)}
-                        >
-                          设置
-                        </button>
-                        <button
-                          aria-label={`测试模型连通性 ${model.modelId}`}
-                          className="ui-button-secondary px-2 py-1"
-                          type="button"
+                        />
+                        <SettingsIconButton
+                          icon={connectivity?.loading ? "loader" : "zap"}
+                          label={`测试模型连通性 ${model.modelId}`}
+                          tooltip={connectivity?.loading ? `正在测试 ${model.modelId}` : `测试 ${model.modelId}`}
                           onClick={() => handleTestModel(model.id)}
                           disabled={connectivity?.loading}
                           aria-busy={connectivity?.loading ? true : undefined}
-                        >
-                          {connectivity?.loading ? "测试中…" : "测试"}
-                        </button>
-                        <button
-                          aria-label={`删除 ${model.modelId}`}
-                          className="ui-button-secondary px-2 py-1"
-                          type="button"
+                        />
+                        <SettingsIconButton
+                          icon="trash"
+                          label={`删除 ${model.modelId}`}
+                          tooltip={`删除 ${model.modelId}`}
                           onClick={() => deleteModel(model.id)}
-                        >
-                          删除
-                        </button>
+                        />
                       </div>
                     </div>
                     {statusText ? (
@@ -522,6 +508,20 @@ interface ModelSettingsDialogProps {
   onChangeSupportsVision: (supportsVision: boolean) => void;
 }
 
+function formatRemoteModelOptionLabel(remoteModel: { id: string; displayName: string }, alreadyAdded: boolean): string {
+  const displayName = getRemoteModelDisplayName(remoteModel);
+  const title = displayName === remoteModel.id ? remoteModel.id : `${displayName} ${remoteModel.id}`;
+  return alreadyAdded ? `已添加 ${title}` : title;
+}
+
+function getRemoteModelDisplayName(remoteModel: { id: string; displayName: string }): string {
+  return remoteModel.displayName.trim() || remoteModel.id;
+}
+
+function getProviderModelDisplayName(model: ProviderModel): string {
+  return model.displayName.trim() || model.modelId;
+}
+
 function ModelSettingsDialog({ model, onClose, onChangeModelId, onChangeSupportsVision }: ModelSettingsDialogProps) {
   const [modelIdError, setModelIdError] = useState("");
   const supportsVision = Boolean(model.supportsVision);
@@ -545,9 +545,7 @@ function ModelSettingsDialog({ model, onClose, onChangeModelId, onChangeSupports
             <h4 className="context-dialog-title">模型设置</h4>
             <p className="ui-muted mt-1 truncate text-xs">{model.modelId}</p>
           </div>
-          <button className="ui-button-secondary context-dialog-close" type="button" aria-label="关闭模型设置" onClick={onClose}>
-            关闭
-          </button>
+          <button className="ui-button-secondary context-dialog-close" type="button" aria-label="关闭模型设置" data-soft-tooltip="关闭模型设置" onClick={onClose} />
         </div>
         <label className="grid gap-1 text-sm">
           模型 ID
@@ -571,24 +569,5 @@ function ModelSettingsDialog({ model, onClose, onChangeModelId, onChangeSupports
         </p>
       </section>
     </>
-  );
-}
-
-function ApiKeyVisibilityIcon({ visible }: { visible: boolean }) {
-  return (
-    <span
-      className={
-        visible
-          ? "api-key-visibility-icon api-key-visibility-icon-open tavily-api-key-visibility-icon tavily-api-key-visibility-icon-open"
-          : "api-key-visibility-icon api-key-visibility-icon-closed tavily-api-key-visibility-icon tavily-api-key-visibility-icon-closed"
-      }
-      aria-hidden="true"
-    >
-      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-        <path d="M2.75 12s3.25-5.5 9.25-5.5 9.25 5.5 9.25 5.5-3.25 5.5-9.25 5.5S2.75 12 2.75 12Z" />
-        {visible ? <circle cx="12" cy="12" r="2.75" /> : null}
-        {visible ? null : <path d="M4.5 4.5 19.5 19.5" />}
-      </svg>
-    </span>
   );
 }

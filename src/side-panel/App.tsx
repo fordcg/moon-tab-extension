@@ -35,9 +35,7 @@ export function App() {
   const searchParams = new URLSearchParams(window.location.search);
   const floatingMode = searchParams.get("floating") === "1";
   const floatingTabId = resolveFloatingTabId(searchParams.get("tabId"));
-  const historyPanelDefaultOpen = useAppStore((state) => state.chatPreferences.historyDrawerDefaultOpen);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
-  const historyPanelUserToggled = useRef(false);
   const loadChannelConfig = useAppStore((state) => state.loadChannelConfig);
   const loadExtractionRules = useAppStore((state) => state.loadExtractionRules);
   const loadPromptTemplates = useAppStore((state) => state.loadPromptTemplates);
@@ -79,7 +77,6 @@ export function App() {
   };
 
   const handleToggleHistoryPanel = () => {
-    historyPanelUserToggled.current = true;
     setHistoryPanelOpen((value) => !value);
   };
 
@@ -125,12 +122,6 @@ export function App() {
   useEffect(() => {
     void Promise.all([loadChannelConfig(), loadExtractionRules(), loadPromptTemplates(), loadChatData(), loadSyncSettings()]).then(() => refreshPageContext());
   }, [loadChannelConfig, loadExtractionRules, loadPromptTemplates, loadChatData, loadSyncSettings, refreshPageContext]);
-
-  useEffect(() => {
-    if (!historyPanelDefaultOpen && !historyPanelUserToggled.current) {
-      setHistoryPanelOpen(false);
-    }
-  }, [historyPanelDefaultOpen]);
 
   useEffect(() => {
     const runtime = globalThis.chrome?.runtime;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "../../state/appStore";
+import { SettingsIconButton } from "./SettingsIconButton";
 
 export function AutomationDiagnostics() {
   const diagnostics = useAppStore((state) => state.browserAutomationDiagnostics);
@@ -20,21 +21,26 @@ export function AutomationDiagnostics() {
   return (
     <section className="grid w-full gap-3 border-b border-[var(--color-hairline)] pb-4" aria-labelledby="automation-diagnostics-title">
       <div className="flex min-w-0 items-center justify-between gap-3">
-        <button
-          className="automation-diagnostics-toggle min-w-0 text-left"
-          type="button"
+        <div
+          className="automation-diagnostics-summary min-w-0 text-left"
           aria-expanded={expanded}
           aria-controls="automation-diagnostics-panel"
-          onClick={() => setExpanded((value) => !value)}
         >
           <span id="automation-diagnostics-title" className="text-base font-semibold">
             浏览器自动化诊断
           </span>
           <span className="automation-diagnostics-toggle-meta ui-muted text-xs">{summary}</span>
-        </button>
-        <button className="ui-button-secondary shrink-0 px-3 py-1 text-xs" type="button" onClick={() => void refresh()}>
-          刷新
-        </button>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <SettingsIconButton
+            icon={expanded ? "chevron-up" : "chevron-down"}
+            label={expanded ? "收起浏览器自动化诊断" : "展开浏览器自动化诊断"}
+            aria-expanded={expanded}
+            aria-controls="automation-diagnostics-panel"
+            onClick={() => setExpanded((value) => !value)}
+          />
+          <SettingsIconButton icon="refresh" label="刷新" onClick={() => void refresh()} />
+        </div>
       </div>
       {expanded ? (
         <dl id="automation-diagnostics-panel" className="grid gap-2 text-sm sm:grid-cols-2">

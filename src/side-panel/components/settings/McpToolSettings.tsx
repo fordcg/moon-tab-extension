@@ -3,6 +3,8 @@ import type { ModelToolAvailabilityStatus } from "../../../shared/models/types";
 import type { McpServerConfig } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { sendRuntimeMessage } from "../../state/runtimeMessage";
+import { AutomationDiagnostics } from "./AutomationDiagnostics";
+import { SettingsIconButton } from "./SettingsIconButton";
 
 interface BuiltInToolHealth {
   id: string;
@@ -159,6 +161,8 @@ export function McpToolSettings() {
         <p>{statusLoading ? "正在读取工具状态..." : statusMessage}</p>
       </div>
 
+      <AutomationDiagnostics />
+
       {builtInTools.some((tool) => tool.availability) ? (
         <section className="grid gap-2" aria-label="内置工具健康">
           <h4 className="text-sm font-semibold">内置工具健康</h4>
@@ -195,14 +199,12 @@ export function McpToolSettings() {
           )}
         </div>
         <div className="chat-preference-tool-bulk-actions">
-          <button
-            className="ui-button-secondary"
-            type="button"
+          <SettingsIconButton
+            icon="eraser"
+            label="清空记录"
             disabled={auditLog.length === 0}
             onClick={() => void sendRuntimeMessage({ type: "agentTools.clearAuditLog" }).then(loadStatus)}
-          >
-            清空记录
-          </button>
+          />
         </div>
       </section>
 
@@ -266,24 +268,31 @@ export function McpToolSettings() {
             : `保存并刷新会自动接入本地 Bridge（${bridgeBaseUrl}）。请先启动 Bridge，再填写 API Key。`}
         </p>
         <div className="chat-preference-tool-bulk-actions">
-          <button className="ui-button-primary" type="button" disabled={grokBusy} onClick={() => void saveGrokConfig()}>
-            保存并刷新
-          </button>
-          <button className="ui-button-secondary" type="button" disabled={grokBusy} onClick={() => void refreshGrokTools()}>
-            刷新工具
-          </button>
-          <button
-            className="ui-button-secondary"
-            type="button"
+          <SettingsIconButton
+            icon={grokBusy ? "loader" : "save"}
+            label="保存并刷新"
+            variant="primary"
+            disabled={grokBusy}
+            aria-busy={grokBusy ? true : undefined}
+            onClick={() => void saveGrokConfig()}
+          />
+          <SettingsIconButton
+            icon={grokBusy ? "loader" : "refresh"}
+            label="刷新工具"
+            disabled={grokBusy}
+            aria-busy={grokBusy ? true : undefined}
+            onClick={() => void refreshGrokTools()}
+          />
+          <SettingsIconButton
+            icon="key-x"
+            label="清除已保存 Key"
             disabled={grokBusy || !hasGrokApiKey}
             onClick={() => {
               if (window.confirm("确定清除本机保存的 Grok API Key？")) {
                 void saveGrokConfig(true);
               }
             }}
-          >
-            清除已保存 Key
-          </button>
+          />
         </div>
       </section>
     </section>

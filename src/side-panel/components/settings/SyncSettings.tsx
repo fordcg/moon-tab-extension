@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
+import { SettingsIconButton } from "./SettingsIconButton";
 import { SettingsSelect } from "./SettingsSelect";
 
 export function SyncSettings() {
@@ -268,12 +269,20 @@ export function SyncSettings() {
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <button className="ui-button-secondary" type="button" disabled={!syncSettings.syncEnabled || syncOperation.loading} onClick={() => void backupNow()}>
-          手动备份
-        </button>
-        <button className="ui-button-secondary" type="button" disabled={!syncSettings.syncEnabled || syncOperation.loading} onClick={handleRestore}>
-          手动恢复
-        </button>
+        <SettingsIconButton
+          icon={syncOperation.loading ? "loader" : "download"}
+          label="手动备份"
+          disabled={!syncSettings.syncEnabled || syncOperation.loading}
+          aria-busy={syncOperation.loading ? true : undefined}
+          onClick={() => void backupNow()}
+        />
+        <SettingsIconButton
+          icon={syncOperation.loading ? "loader" : "upload"}
+          label="手动恢复"
+          disabled={!syncSettings.syncEnabled || syncOperation.loading}
+          aria-busy={syncOperation.loading ? true : undefined}
+          onClick={handleRestore}
+        />
       </div>
       {restoreDialogOpen ? (
         <RestoreBackupDialog
@@ -308,9 +317,7 @@ function RestoreBackupDialog({ backups, loading, selectedBackupId, onSelectBacku
             <h4 className="context-dialog-title">选择远程备份恢复</h4>
             <p className="ui-muted mt-1 text-xs">恢复会覆盖本地业务数据，但会保留本地密钥和远程凭据</p>
           </div>
-          <button className="ui-button-secondary context-dialog-close" type="button" aria-label="关闭恢复弹窗" onClick={onCancel}>
-            关闭
-          </button>
+          <button className="ui-button-secondary context-dialog-close" type="button" aria-label="关闭恢复弹窗" data-soft-tooltip="关闭恢复弹窗" onClick={onCancel} />
         </div>
         <div className="grid max-h-72 gap-2 overflow-y-auto">
           {loading ? <p className="text-sm text-[var(--color-muted)]">正在读取远程备份</p> : null}
@@ -336,12 +343,8 @@ function RestoreBackupDialog({ backups, loading, selectedBackupId, onSelectBacku
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="ui-button-primary" type="button" disabled={!selectedBackupId || loading} onClick={onConfirm}>
-            确认覆盖本地数据并恢复
-          </button>
-          <button className="ui-button-secondary" type="button" onClick={onCancel}>
-            取消
-          </button>
+          <SettingsIconButton icon="check" label="确认覆盖本地数据并恢复" variant="primary" disabled={!selectedBackupId || loading} onClick={onConfirm} />
+          <SettingsIconButton icon="x" label="取消" onClick={onCancel} />
         </div>
       </section>
     </>

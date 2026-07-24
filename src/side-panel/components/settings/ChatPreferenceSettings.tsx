@@ -17,6 +17,7 @@ import { useAppStore } from "../../state/appStore";
 import { formatModelLabelWithVision } from "../ModelVisionIndicator";
 import { useComposedTextInput } from "../useComposedTextInput";
 import { GlobalPreferenceNumberInput } from "./GlobalPreferenceNumberInput";
+import { SettingsIconButton } from "./SettingsIconButton";
 import { SettingsSelect } from "./SettingsSelect";
 
 const sendShortcutOptions: Array<{ value: SendShortcut; label: string }> = [
@@ -344,8 +345,8 @@ export function ChatPreferenceSettings() {
           </label>
         </div>
         <div className="chat-preference-tool-bulk-actions">
-          <button className="ui-button-secondary" type="button" onClick={handleEnableFilteredTools}>启用筛选结果</button>
-          <button className="ui-button-secondary" type="button" onClick={handleDisableFilteredTools}>禁用筛选结果</button>
+          <SettingsIconButton icon="check-circle" label="启用筛选结果" onClick={handleEnableFilteredTools} />
+          <SettingsIconButton icon="x-circle" label="禁用筛选结果" onClick={handleDisableFilteredTools} />
         </div>
         {registeredTools.length > 0 ? (
           <div className="chat-preference-tool-group-list">
@@ -433,9 +434,10 @@ export function ChatPreferenceSettings() {
               <code className="break-all">npm run model-diagnostics:install-autostart</code>
               <span>或手动启动：</span>
               <code className="break-all">npm run model-diagnostics:ensure</code>
-              <button
-                type="button"
-                className="ui-button-secondary mt-1 w-fit rounded px-2 py-1 text-xs"
+              <SettingsIconButton
+                className="mt-1"
+                icon="refresh"
+                label="重新检测/尝试启动"
                 onClick={() => {
                   void (async () => {
                     setLogSinkStatus("starting");
@@ -443,9 +445,7 @@ export function ChatPreferenceSettings() {
                     setLogSinkStatus(status);
                   })();
                 }}
-              >
-                重新检测/尝试启动
-              </button>
+              />
             </div>
           ) : null}
         </div>
@@ -468,18 +468,6 @@ export function ChatPreferenceSettings() {
           onChange={(value) => void updateChatPreferences({ followUpBehavior: value as ChatPreferenceValues["followUpBehavior"] })}
         />
         <span className="ui-muted text-xs">运行中发送草稿时使用；Ctrl+Shift+Enter 会执行相反操作。</span>
-      </label>
-      <label className="chat-preference-switch">
-        <input
-          className="chat-preference-switch-input"
-          type="checkbox"
-          checked={chatPreferences.historyDrawerDefaultOpen}
-          onChange={(event) => void updateChatPreferences({ historyDrawerDefaultOpen: event.target.checked })}
-        />
-        <span className="chat-preference-switch-control" aria-hidden="true">
-          <span className="chat-preference-switch-thumb" />
-        </span>
-        <span className="chat-preference-switch-label">默认展开左侧历史面板</span>
       </label>
       <label className="chat-preference-switch">
         <input

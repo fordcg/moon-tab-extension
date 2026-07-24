@@ -1,5 +1,6 @@
 import { useAppStore } from "../../state/appStore";
 import { useComposedTextInput } from "../useComposedTextInput";
+import { SettingsIconButton } from "./SettingsIconButton";
 
 interface MetapiAdminSettingsPanelProps {
   compact?: boolean;
@@ -62,9 +63,9 @@ export function MetapiAdminSettingsPanel({ compact = false }: MetapiAdminSetting
         />
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="ui-button-secondary rounded px-3 py-2 text-sm"
+        <SettingsIconButton
+          icon="save"
+          label="保存"
           onClick={() => {
             void updateMetapiAdminSettings({
               baseUrl: baseUrlInput.value.trim() || "http://127.0.0.1:4000",
@@ -79,9 +80,7 @@ export function MetapiAdminSettingsPanel({ compact = false }: MetapiAdminSetting
               });
             });
           }}
-        >
-          保存
-        </button>
+        />
         <span className="ui-muted text-xs">
           {metapiAdminSettings.authToken ? "令牌状态：已配置" : "令牌状态：未配置"}
         </span>

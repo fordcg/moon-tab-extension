@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type KeyboardEvent, type RefObject } from "react";
-import { AutomationDiagnostics } from "./settings/AutomationDiagnostics";
+import { SettingsActionIcon } from "./settings/SettingsIconButton";
 
 const ChannelManagement = lazy(() => import("./settings/ChannelManagement").then((module) => ({ default: module.ChannelManagement })));
 const ExtractionRules = lazy(() => import("./settings/ExtractionRules").then((module) => ({ default: module.ExtractionRules })));
@@ -80,7 +80,9 @@ export function SettingsPanel({
         <span className="settings-dialog-title" id="settings-dialog-title">
           设置
         </span>
-        <button ref={closeButtonRef} className="settings-dialog-back ui-button-secondary" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose} />
+        <button ref={closeButtonRef} className="settings-dialog-back ui-button-secondary" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose}>
+          <SettingsActionIcon name="x" />
+        </button>
       </div>
       <div className="settings-dialog-content mx-auto grid w-[80%] gap-4">
         <div className="min-w-0 space-y-3">
@@ -108,7 +110,6 @@ export function SettingsPanel({
           </div>
         </div>
         <div className="grid min-w-0 gap-4" role="tabpanel" id={`settings-tabpanel-${activeTab}`} aria-labelledby={`settings-tab-${activeTab}`} tabIndex={0}>
-          <AutomationDiagnostics />
           <Suspense fallback={<div role="status">设置内容加载中…</div>}>
             {activeTab === "channels" ? <ChannelManagement /> : null}
             {activeTab === "rules" ? <ExtractionRules /> : null}

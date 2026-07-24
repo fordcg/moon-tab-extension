@@ -946,7 +946,7 @@ describe("App", () => {
     expect(screen.getByRole("combobox", { name: "发送快捷键" })).toHaveDisplayValue("Enter");
     expect(Array.from(screen.getByRole("combobox", { name: "发送快捷键" }).querySelectorAll("option")).map((option) => option.textContent)).not.toContain("Ctrl+Shift+Enter");
     expect(screen.getByRole("combobox", { name: "跟进行为" })).toHaveDisplayValue("排队");
-    expect(screen.getByRole("checkbox", { name: "默认展开左侧历史面板" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "默认展开左侧历史面板" })).not.toBeInTheDocument();
     expect(styles).toContain(".chat-preference-switch-input");
     expect(styles).toContain(".chat-preference-switch-control");
     expect(styles).toContain(".chat-preference-switch-input:checked + .chat-preference-switch-control");
@@ -961,7 +961,7 @@ describe("App", () => {
     expect(styles).toContain("align-items: start;");
   });
 
-  it("设置页展示浏览器自动化诊断和 Network 来源", async () => {
+  it("工具和 MCP 页展示浏览器自动化诊断和 Network 来源", async () => {
     const sendMessage = vi.fn((message: { type: string }, callback: (response: unknown) => void) => {
       if (message.type === "browserControl.getDiagnostics") {
         callback({
@@ -1006,11 +1006,20 @@ describe("App", () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "设置" }));
 
-    const diagnosticsToggle = await screen.findByRole("button", { name: /浏览器自动化诊断/ });
+    expect(await screen.findByRole("heading", { name: "模型渠道" })).toBeInTheDocument();
+    expect(screen.queryByText("浏览器自动化诊断")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: "工具和 MCP" }));
+
+    expect(await screen.findByText("浏览器自动化诊断")).toBeInTheDocument();
+    const diagnosticsToggle = await screen.findByRole("button", { name: "展开浏览器自动化诊断" });
     expect(diagnosticsToggle).toHaveAttribute("aria-expanded", "false");
+    expect(diagnosticsToggle).toHaveTextContent("");
     expect(screen.queryByText("debugger_recorder")).not.toBeInTheDocument();
     await userEvent.click(diagnosticsToggle);
-    expect(diagnosticsToggle).toHaveAttribute("aria-expanded", "true");
+    const collapseDiagnosticsToggle = screen.getByRole("button", { name: "收起浏览器自动化诊断" });
+    expect(collapseDiagnosticsToggle).toHaveAttribute("aria-expanded", "true");
+    expect(collapseDiagnosticsToggle).toHaveTextContent("");
     expect(screen.getByText("debugger_recorder")).toBeInTheDocument();
     expect(screen.getByText("12 可用 / 4 不可用")).toBeInTheDocument();
   });
@@ -1611,14 +1620,14 @@ describe("App", () => {
     expect(updateActiveSessionChatPreferences).toHaveBeenCalledWith({ systemPrompt: "始终" });
   });
 
-  it("聊天偏好可以控制宽面板左侧历史区域默认折叠并手动展开", async () => {
+  it("左侧历史区域忽略旧默认展开偏好并保留手动展开", async () => {
     await saveAppSetting({
       key: "chatPreferences",
       value: {
         systemPrompt: "你是网页助手",
         temperature: 0.7,
         maxTokens: 1024,
-        historyDrawerDefaultOpen: false,
+        historyDrawerDefaultOpen: true,
       },
       updatedAt: 1,
     });
@@ -1631,8 +1640,8 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "展开历史对话" }));
 
-    expect(screen.getByLabelText("历史会话")).toBeInTheDocument();
-    expect(screen.getByText("默认文件夹")).toBeInTheDocument();
+    expect(await screen.findByLabelText("历史会话")).toBeInTheDocument();
+    expect(await screen.findByText("默认文件夹")).toBeInTheDocument();
   });
 
   it("聊天偏好可以保存发送按钮快捷键", async () => {
@@ -4212,8 +4221,12 @@ describe("App", () => {
 
     const settingsDialog = screen.getByRole("dialog", { name: "设置" });
     expect(settingsDialog).toHaveClass("sidepanel-drawer-dialog", "settings-dialog");
+    const closeSettingsButton = screen.getByRole("button", { name: "关闭设置" });
+    expect(closeSettingsButton.querySelector(".settings-action-icon")).not.toBeNull();
+    expect(closeSettingsButton).toHaveTextContent("");
     expect(styles).toContain(".sidepanel-drawer-pages");
     expect(styles).toContain(".settings-drawer-page");
+    expect(styles).toMatch(/\.settings-dialog-back::before\s*\{[\s\S]*content:\s*none !important/);
     expect(screen.getByRole("tab", { name: "渠道管理" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "提取规则" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "同步设置" })).toBeInTheDocument();
@@ -4241,21 +4254,40 @@ describe("App", () => {
     expect(screen.queryByLabelText("AI 标题生成模型")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("默认对话模型")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新增渠道" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "新增渠道" })).toHaveAttribute("data-soft-tooltip", "新增渠道");
+    expect(screen.getByRole("button", { name: "新增渠道" })).toHaveTextContent("");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByText(/还没有渠道/)).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "新增渠道" }));
+    const addModelButton = await screen.findByRole("button", { name: "添加模型" });
+    expect(addModelButton).toHaveAttribute("data-soft-tooltip", "添加模型");
+    expect(addModelButton).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "获取模型列表" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "删除渠道" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "清空所有" })).toHaveAttribute("data-soft-tooltip", "清空所有");
+    expect(screen.getByRole("button", { name: "清空所有" })).toHaveTextContent("");
+    expect(styles).toMatch(/\.settings-dialog \.model-row-content\s*\{[\s\S]*grid-template-columns:\s*minmax\(8rem,\s*1fr\)\s*auto/);
+    expect(styles).toMatch(/@media \(max-width:\s*520px\)\s*\{\s*\.settings-dialog \.model-row-content\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(styles).toMatch(/\.settings-dialog \.remote-model-option\s*\{[\s\S]*grid-template-columns:\s*auto\s+minmax\(0,\s*1fr\)/);
+    expect(styles).toContain(".settings-dialog .remote-model-status-marker");
+    expect(styles).toContain(".settings-dialog .model-list-subtitle");
+
     await user.click(screen.getByRole("tab", { name: "提取规则" }));
 
-    expect(await screen.findByRole("button", { name: "新增规则" })).toBeInTheDocument();
+    const addRuleButton = await screen.findByRole("button", { name: "新增规则" });
+    expect(addRuleButton).toHaveTextContent("");
     expect(screen.queryByLabelText("CSS/XPath 列表")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "提示词" }));
     expect(await screen.findByRole("heading", { name: "提示词" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新增提示词" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新增提示词" })).toHaveTextContent("");
 
     await user.click(screen.getByRole("tab", { name: "任务策略" }));
     expect(await screen.findByRole("heading", { name: "任务策略" })).toBeInTheDocument();
     expect(screen.getByText("Network/API 分析")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导入 JSON" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "展开 Skill 策略" })).toHaveTextContent("");
 
     await user.click(screen.getByRole("tab", { name: "同步设置" }));
 
@@ -4263,8 +4295,8 @@ describe("App", () => {
     expect(screen.getByRole("checkbox", { name: "开启自动同步" })).not.toBeChecked();
     expect(screen.getByText("备份当前插件域本地存储的全部内容，密钥和远程凭据除外")).toBeInTheDocument();
     expect(screen.getByText("加密关闭时，API Key、聊天记录和配置会以明文进入远程备份")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "手动备份" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "手动恢复" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "手动备份" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "手动恢复" })).toHaveTextContent("");
   });
 
   it("同步设置提供三种备份目标、独立自动同步和加密风险提示", async () => {
@@ -4359,14 +4391,18 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "新增提示词" }));
     await user.type(screen.getByRole("textbox", { name: "提示词标题" }), "第三条");
     await user.type(screen.getByRole("textbox", { name: "Prompt 内容" }), "第三条内容");
-    await user.click(screen.getByRole("button", { name: "保存提示词" }));
+    const savePromptButton = screen.getByRole("button", { name: "保存提示词" });
+    expect(savePromptButton).toHaveTextContent("");
+    await user.click(savePromptButton);
 
     expect(await screen.findByRole("button", { name: /第三条/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /第三条/ }));
     await user.clear(screen.getByRole("textbox", { name: "提示词标题" }));
     await user.type(screen.getByRole("textbox", { name: "提示词标题" }), "第三条已编辑");
-    await user.click(screen.getByRole("button", { name: "保存提示词" }));
+    const saveEditedPromptButton = screen.getByRole("button", { name: "保存提示词" });
+    expect(saveEditedPromptButton).toHaveTextContent("");
+    await user.click(saveEditedPromptButton);
 
     expect(await screen.findByRole("button", { name: /第三条已编辑/ })).toBeInTheDocument();
 
@@ -4384,7 +4420,9 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: /第三条已编辑/ }));
     vi.spyOn(window, "confirm").mockReturnValueOnce(true);
-    await user.click(screen.getByRole("button", { name: "删除提示词" }));
+    const deletePromptButton = screen.getByRole("button", { name: "删除提示词" });
+    expect(deletePromptButton).toHaveTextContent("");
+    await user.click(deletePromptButton);
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: /第三条已编辑/ })).not.toBeInTheDocument();
@@ -4603,7 +4641,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(screen.getByRole("button", { name: "新增渠道" }));
+    await user.click(await screen.findByRole("button", { name: "新增渠道" }));
     await user.click(screen.getByRole("button", { name: "新增渠道" }));
 
     expect(screen.getByRole("button", { name: /新渠道 1/ })).toBeInTheDocument();
@@ -4627,9 +4665,8 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "新增渠道" }));
     await user.type(screen.getByRole("textbox", { name: "批量添加模型" }), "qwen-plus, deepseek-chat, qwen-plus{enter}");
 
-    expect(screen.getByText("qwen-plus")).toBeInTheDocument();
-    expect(screen.getByText("deepseek-chat")).toBeInTheDocument();
-    expect(screen.getAllByText("qwen-plus")).toHaveLength(1);
+    expect(screen.getAllByText("qwen-plus").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("deepseek-chat").length).toBeGreaterThanOrEqual(2);
     expect(useAppStore.getState().models.map((model) => model.modelId)).toEqual(["qwen-plus", "deepseek-chat"]);
   });
 
@@ -4733,11 +4770,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(screen.getByRole("button", { name: "新增渠道" }));
     await user.click(screen.getByRole("button", { name: "获取模型列表" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("模型列表已更新");
-    expect(screen.getByRole("region", { name: "当前渠道详情" }).textContent).not.toContain("模型列表已更新");
+    expect(await screen.findByRole("status")).toHaveTextContent("模型列表获取成功");
+    expect(screen.getByRole("region", { name: "当前渠道详情" }).textContent).not.toContain("模型列表获取成功");
     await user.type(await screen.findByRole("combobox", { name: "搜索模型" }), "mini");
 
-    expect(screen.queryByRole("option", { name: /GPT-4.1 gpt-4.1$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /GPT-4\.1 gpt-4\.1$/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /GPT-4.1 mini/ }));
 
     expect(screen.getAllByText("gpt-4.1-mini").length).toBeGreaterThan(0);
@@ -4767,7 +4804,7 @@ describe("App", () => {
     expect(testedModelRow).not.toHaveClass("border-[var(--color-success)]");
   });
 
-  it("已添加模型列表只展示 model_id 和删除测试操作", async () => {
+  it("已添加模型列表用名称和 model_id 两行展示并保留图标操作", async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -4775,11 +4812,62 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "新增渠道" }));
     await user.click(screen.getByRole("button", { name: "添加模型" }));
 
-    expect(screen.getByText("gpt-4.1-mini")).toBeInTheDocument();
-    expect(screen.queryByText("新模型 1")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "删除 gpt-4.1-mini" })).toBeInTheDocument();
+    expect(screen.getByText("新模型 1")).toHaveClass("model-list-title");
+    expect(screen.getByText("gpt-4.1-mini")).toHaveClass("model-list-subtitle");
+    expect(screen.getByRole("button", { name: "设置 gpt-4.1-mini" })).toHaveAttribute("data-soft-tooltip", "设置 gpt-4.1-mini");
+    expect(screen.getByRole("button", { name: "设置 gpt-4.1-mini" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toHaveAttribute("data-soft-tooltip", "测试 gpt-4.1-mini");
+    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toHaveTextContent("");
+    expect(screen.getByRole("button", { name: "删除 gpt-4.1-mini" })).toHaveAttribute("data-soft-tooltip", "删除 gpt-4.1-mini");
+    expect(screen.getByRole("button", { name: "删除 gpt-4.1-mini" })).toHaveTextContent("");
     expect(screen.queryByRole("region", { name: "连通性校验" })).not.toBeInTheDocument();
+  });
+
+  it("远端模型和已添加模型都以名称为主行、model_id 为副行", async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn((message: { type?: string }, callback?: (response: unknown) => void) => {
+      let response: unknown = { ok: true };
+
+      if (message.type === "pageContext.extract") {
+        response = {
+          ok: true,
+          text: "",
+          truncated: false,
+          usedFallback: true,
+        };
+      } else if (message.type === "modelCatalog.list") {
+        response = {
+          ok: true,
+          models: [{ id: "gpt-5.4", displayName: "GPT 5.5" }],
+        };
+      }
+
+      callback?.(response);
+      return Promise.resolve(response);
+    });
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage,
+      },
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.click(screen.getByRole("button", { name: "新增渠道" }));
+    await user.click(screen.getByRole("button", { name: "获取模型列表" }));
+
+    const remoteOption = await screen.findByRole("option", { name: "GPT 5.5 gpt-5.4" });
+    expect(remoteOption.querySelector(".remote-model-title")).toHaveTextContent("GPT 5.5");
+    expect(remoteOption.querySelector(".remote-model-subtitle")).toHaveTextContent("gpt-5.4");
+    expect(remoteOption.querySelector(".remote-model-status-marker")).toBeInTheDocument();
+
+    await user.click(remoteOption);
+
+    const modelRow = screen.getByRole("button", { name: "设置 gpt-5.4" }).closest("article");
+    expect(modelRow).not.toBeNull();
+    expect(within(modelRow as HTMLElement).getByText("GPT 5.5")).toHaveClass("model-list-title");
+    expect(within(modelRow as HTMLElement).getByText("gpt-5.4")).toHaveClass("model-list-subtitle");
   });
 
   it("视觉模型可以选择图片、粘贴图片、预览放大并随消息发送图片", async () => {
@@ -5365,15 +5453,20 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "设置" }));
     await user.click(screen.getByRole("button", { name: "新增渠道" }));
     await user.click(screen.getByRole("button", { name: "获取模型列表" }));
-    await user.click(await screen.findByRole("option", { name: /GPT-4.1.*gpt-4.1$/ }));
+    await user.click(await screen.findByRole("option", { name: /GPT-4\.1 gpt-4\.1$/ }));
     await user.click(screen.getByRole("option", { name: /GPT-4.1 mini/ }));
 
     await user.click(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1" }));
 
-    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1" })).toHaveTextContent("测试中…");
+    const firstTestButton = screen.getByRole("button", { name: "测试模型连通性 gpt-4.1" });
+    expect(firstTestButton).toHaveAttribute("aria-busy", "true");
+    expect(firstTestButton).toHaveAttribute("data-soft-tooltip", "正在测试 gpt-4.1");
+    expect(firstTestButton).toHaveTextContent("");
     expect(screen.getByText("正在测试连通性…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toHaveTextContent("测试");
-    expect(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" })).toBeEnabled();
+    const secondTestButton = screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" });
+    expect(secondTestButton).not.toHaveAttribute("aria-busy");
+    expect(secondTestButton).toHaveTextContent("");
+    expect(secondTestButton).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "测试模型连通性 gpt-4.1-mini" }));
 
@@ -5387,6 +5480,7 @@ describe("App", () => {
 
   it("可以删除当前渠道并清理渠道下模型", async () => {
     const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
@@ -5395,7 +5489,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "删除渠道" }));
 
     expect(screen.queryByRole("button", { name: /新渠道 1/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("新模型 1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "设置 gpt-4.1-mini" })).not.toBeInTheDocument();
+    expect(confirmSpy).toHaveBeenCalledWith("确认删除渠道「新渠道 1」及其模型吗？");
+    confirmSpy.mockRestore();
   });
 
   it("启动时从本地存储读取渠道和模型", async () => {
@@ -5490,7 +5586,7 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("URL 正则"), { target: { value: "https://example\\.com/.*" } });
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
-    expect(await screen.findByRole("button", { name: /https:\/\/example\\\.com\/\.\*/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "https://example\\.com/.*" })).toBeInTheDocument();
   });
 
   it("点击 AI 生成后先选择模型，再展示 URL 正则候选并可填充输入框", async () => {

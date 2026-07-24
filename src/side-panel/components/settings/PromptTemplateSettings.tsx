@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DragEvent } from "react";
 import type { PromptTemplate } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
+import { SettingsIconButton } from "./SettingsIconButton";
 
 export function PromptTemplateSettings() {
   const promptTemplates = useAppStore((state) => state.promptTemplates);
@@ -78,9 +79,7 @@ export function PromptTemplateSettings() {
     <section className="grid w-full gap-3" aria-label="提示词">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-base font-semibold">提示词</h3>
-        <button className="ui-button-secondary" type="button" onClick={createDraft}>
-          新增提示词
-        </button>
+        <SettingsIconButton icon="plus" label="新增提示词" onClick={createDraft} />
       </div>
       {promptTemplates.length === 0 && expandedPromptId !== "draft-prompt" ? (
         <p className="rounded-lg border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] p-3 text-sm text-[var(--color-muted)]">
@@ -168,12 +167,8 @@ function PromptTemplateEditor({ draft, validationMessage, onChange, onSave, onDe
       </label>
       {validationMessage ? <p className="text-sm text-[var(--color-error)]">{validationMessage}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <button className="ui-button-primary" type="button" onClick={onSave}>
-          保存提示词
-        </button>
-        <button className="ui-button-secondary" type="button" onClick={onDelete}>
-          删除提示词
-        </button>
+        <SettingsIconButton icon="save" label="保存提示词" variant="primary" onClick={onSave} />
+        <SettingsIconButton icon="trash" label="删除提示词" onClick={onDelete} />
       </div>
     </div>
   );

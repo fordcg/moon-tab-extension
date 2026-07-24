@@ -10,6 +10,7 @@ import type {
 } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { MetapiAdminSettingsPanel } from "./MetapiAdminSettings";
+import { SettingsIconButton } from "./SettingsIconButton";
 
 const sourceLabels: Record<AutomationPlaybookSource, string> = {
   builtin: "内置策略",
@@ -127,12 +128,8 @@ export function AutomationPlaybookSettings() {
 
         <div className="ui-panel grid gap-2 p-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <button
-              type="button"
+            <div
               className="grid min-w-0 flex-1 gap-0.5 rounded text-left"
-              aria-expanded={skillSectionOpen}
-              aria-controls="skill-strategy-panel"
-              onClick={() => setSkillSectionOpen((open) => !open)}
             >
               <span className="flex flex-wrap items-center gap-2">
                 <h4 className="text-sm font-semibold">Skill 策略</h4>
@@ -144,27 +141,24 @@ export function AutomationPlaybookSettings() {
                 </span>
               </span>
               <span className="ui-muted text-xs">
-                Metapi 运维与导入的 JSON 策略；点击{skillSectionOpen ? "收起" : "展开"}
+                Metapi 运维与导入的 JSON 策略
               </span>
-            </button>
+            </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className="rounded border border-slate-300 px-2 py-1 text-xs"
+              <SettingsIconButton
+                icon={importing ? "loader" : "upload"}
+                label="导入 JSON"
                 onClick={handleImportClick}
                 disabled={importing}
-              >
-                导入 JSON
-              </button>
-              <button
-                type="button"
-                className="rounded border border-slate-300 px-2 py-1 text-xs"
+                aria-busy={importing ? true : undefined}
+              />
+              <SettingsIconButton
+                icon={skillSectionOpen ? "chevron-up" : "chevron-down"}
+                label={skillSectionOpen ? "收起 Skill 策略" : "展开 Skill 策略"}
                 aria-expanded={skillSectionOpen}
                 aria-controls="skill-strategy-panel"
                 onClick={() => setSkillSectionOpen((open) => !open)}
-              >
-                {skillSectionOpen ? "收起" : "展开"}
-              </button>
+              />
             </div>
             <input
               ref={fileInputRef}
@@ -302,24 +296,18 @@ function PlaybookCard({
         {playbook.recommendedCapabilities.map((capability) => (
           <span key={capability} className="rounded border border-slate-200 px-2 py-1">{capability}</span>
         ))}
-        <button
-          type="button"
-          className="rounded border border-slate-300 px-2 py-1 text-xs"
+        <SettingsIconButton
+          icon={detailsExpanded ? "chevron-up" : "chevron-down"}
+          label={`${detailsExpanded ? "收起" : "查看"}任务策略 ${playbook.title} 详细信息`}
           aria-expanded={detailsExpanded}
-          aria-label={`${detailsExpanded ? "收起" : "查看"}任务策略 ${playbook.title} 详细信息`}
           onClick={onToggleDetails}
-        >
-          {detailsExpanded ? "收起" : "详细"}
-        </button>
+        />
         {onDelete ? (
-          <button
-            type="button"
-            className="rounded border border-slate-300 px-2 py-1 text-xs"
-            aria-label={`删除任务策略 ${playbook.title}`}
+          <SettingsIconButton
+            icon="trash"
+            label={`删除任务策略 ${playbook.title}`}
             onClick={onDelete}
-          >
-            删除
-          </button>
+          />
         ) : null}
       </div>
       {detailsExpanded ? (

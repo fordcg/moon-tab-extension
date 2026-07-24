@@ -3,6 +3,7 @@ import { diagnosticDebug } from "../../../shared/diagnosticLogging";
 import type { ExtractionRule } from "../../../shared/types";
 import { useAppStore } from "../../state/appStore";
 import { formatModelLabelWithVision } from "../ModelVisionIndicator";
+import { SettingsIconButton } from "./SettingsIconButton";
 
 const DEBUG_PREFIX = "[提取规则 AI 生成诊断]";
 
@@ -144,9 +145,7 @@ export function ExtractionRules() {
     <section className="grid w-full gap-3" aria-label="提取规则">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-base font-semibold">提取规则</h3>
-        <button className="ui-button-secondary" type="button" onClick={createDraft}>
-          新增规则
-        </button>
+        <SettingsIconButton icon="plus" label="新增规则" onClick={createDraft} />
       </div>
       <div className="grid gap-2">
         {orderedRules.map((rule) => {
@@ -171,12 +170,8 @@ export function ExtractionRules() {
                   <span className="ui-muted block truncate text-xs">{rule.urlPattern}</span>
                 </button>
                 <div className="flex shrink-0 gap-1">
-                  <button className="ui-button-secondary px-2 py-1" type="button" onClick={() => void moveRule(rule.id, "up")}>
-                    上移
-                  </button>
-                  <button className="ui-button-secondary px-2 py-1" type="button" onClick={() => void moveRule(rule.id, "down")}>
-                    下移
-                  </button>
+                  <SettingsIconButton icon="arrow-up" label={`上移规则 ${rule.alias || rule.urlPattern}`} onClick={() => void moveRule(rule.id, "up")} />
+                  <SettingsIconButton icon="arrow-down" label={`下移规则 ${rule.alias || rule.urlPattern}`} onClick={() => void moveRule(rule.id, "down")} />
                 </div>
               </div>
               {expanded ? (
@@ -270,9 +265,13 @@ function RuleEditor({
             value={draft.urlPattern}
             onChange={(event) => onChange({ ...draft, urlPattern: event.target.value })}
           />
-          <button className="ui-button-secondary whitespace-nowrap" type="button" onClick={onOpenGenerationModels} disabled={generatingPatterns}>
-            AI 生成
-          </button>
+          <SettingsIconButton
+            icon={generatingPatterns ? "loader" : "sparkles"}
+            label="AI 生成"
+            onClick={onOpenGenerationModels}
+            disabled={generatingPatterns}
+            aria-busy={generatingPatterns ? true : undefined}
+          />
         </span>
       </label>
       {generationMessage ? <p className="text-sm text-[var(--color-error)]">{generationMessage}</p> : null}
@@ -323,12 +322,8 @@ function RuleEditor({
       </label>
       {validationMessage ? <p className="text-sm text-[var(--color-error)]">{validationMessage}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <button className="ui-button-primary" type="button" onClick={onSave}>
-          保存规则
-        </button>
-        <button className="ui-button-secondary" type="button" onClick={onDelete}>
-          删除规则
-        </button>
+        <SettingsIconButton icon="save" label="保存规则" variant="primary" onClick={onSave} />
+        <SettingsIconButton icon="trash" label="删除规则" onClick={onDelete} />
       </div>
     </div>
   );
