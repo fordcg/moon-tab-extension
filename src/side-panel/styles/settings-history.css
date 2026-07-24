@@ -1,0 +1,2579 @@
+/* Settings may stay mounted after warm-up. Idle: only the active page paints. */
+.sidepanel-drawer-dialog:not(.is-page-transitioning) .sidepanel-drawer-page[aria-hidden="true"] {
+  display: none !important;
+}
+
+/* Restore settings scroll: shell height → pages → page → panel → content. */
+.history-drawer.settings-dialog .sidepanel-drawer-pages,
+.history-drawer.settings-dialog .sidepanel-drawer-page-settings,
+.history-drawer.settings-dialog .settings-drawer-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.history-drawer.settings-dialog .settings-dialog-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Transition: stack both pages so the slide cannot reflow the shell. */
+.sidepanel-drawer-dialog.is-page-transitioning {
+  overflow: hidden;
+}
+
+.sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-page {
+  bottom: 0;
+  display: flex !important;
+  flex-direction: column;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  will-change: transform, opacity;
+}
+
+.sidepanel-drawer-page[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+/* Enter and return: single-phase simultaneous out/in (shell height flips immediately). */
+.sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history {
+  animation: sidepanel-slide-out-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 1;
+}
+
+.sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-settings {
+  animation: sidepanel-slide-in-from-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 2;
+}
+
+/*
+ * Return: keep history in normal flow so the shell gets real content height at
+ * click time. Leaving settings stays absolute and slides out on top. If both
+ * pages stay absolute (default is-page-transitioning), height collapses to
+ * padding-only — the thin pill flash.
+ */
+.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history {
+  animation: sidepanel-slide-in-from-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  bottom: auto;
+  left: auto;
+  position: relative;
+  right: auto;
+  top: auto;
+  z-index: 2;
+}
+
+.sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings {
+  animation: sidepanel-slide-out-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 1;
+}
+
+.drawer-panel.history-drawer .drawer-header {
+  display: none;
+}
+
+.drawer-panel.history-drawer .drawer-icon-button {
+  display: none;
+}
+
+.drawer-panel.history-drawer .history-dialog-body {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: visible;
+}
+
+.drawer-panel.history-drawer .history-dialog-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+  scrollbar-width: none;
+  width: 100%;
+}
+
+.drawer-panel.history-drawer .history-dialog-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.history-drawer .session-list-compact {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  opacity: 1;
+  padding: 0;
+  transform: none;
+  width: 100%;
+}
+
+.history-drawer .session-list-header,
+.history-drawer .session-folder-row {
+  display: none;
+}
+
+/* Compact recent menu hides archive; expanded "更多对话" shows it. */
+.history-drawer:not(.is-history-expanded) .session-archive-bottom {
+  display: none;
+}
+
+/* Session list scrolls; archive footer stays pinned and never paints under the list. */
+.history-drawer.is-history-expanded .session-list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.history-drawer.is-history-expanded .session-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.history-drawer.is-history-expanded .session-folder-stack-scroll {
+  min-height: 0;
+  overflow: visible;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom {
+  background: var(--sidepanel-surface, #f3f6fb);
+  border-top: 1px solid #d7dee8;
+  display: block;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 0.125rem 0 0;
+  position: relative;
+  z-index: 2;
+}
+
+/* The global history rule hides every folder row; restore the archive toggle. */
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-row {
+  align-items: center;
+  background: transparent;
+  color: #24272d;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-toggle:hover,
+.history-drawer.is-history-expanded .session-archive-bottom .session-folder-toggle:focus-visible {
+  color: var(--sidepanel-ink-strong);
+  outline: 0;
+}
+
+.history-drawer.is-history-expanded .session-archive-bottom .session-count {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+}
+
+.history-drawer .session-list-scroll,
+.history-drawer .session-folder-stack-scroll {
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+  overflow: visible;
+}
+
+.history-drawer .session-folder-stack,
+.history-drawer .session-folder,
+.history-drawer .session-item-stack {
+  background: transparent;
+  box-shadow: none;
+  display: grid;
+  gap: 0;
+}
+
+.history-drawer .session-empty {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: #5f6b7a;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.8125rem;
+  line-height: 1.375rem;
+  margin: 0;
+  min-height: 2.3125rem;
+  outline: 0;
+  padding: 0 0.9375rem;
+}
+
+.history-drawer .session-empty::before {
+  background:
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.0625rem / 0.875rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.34375rem / 0.5625rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.625rem / 0.875rem 0.125rem no-repeat;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.8125rem;
+  opacity: 0.55;
+  width: 1rem;
+}
+
+.history-drawer .session-item {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+  outline: 0;
+  padding: 0;
+}
+
+.history-drawer .session-item-active {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+
+.history-drawer .session-item-row {
+  align-items: center;
+  color: #24272d;
+  display: flex;
+  gap: 0.8125rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
+}
+
+.history-drawer .session-item-row:hover,
+.history-drawer .session-item-row:focus-within {
+  background: #e9eef6;
+}
+
+.history-drawer .session-item-row::before {
+  background:
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.0625rem / 0.875rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.34375rem / 0.5625rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) left 0.0625rem top 0.625rem / 0.875rem 0.125rem no-repeat;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.8125rem;
+  opacity: 0.88;
+  width: 1rem;
+}
+
+.history-drawer .session-item-active .session-item-row {
+  background: #e6e8eb;
+}
+
+.history-drawer .session-title-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: inherit;
+  flex: 1 1 auto;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.375rem;
+  min-width: 0;
+  outline: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.history-drawer .session-title-button:focus,
+.history-drawer .session-title-button:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  outline: 0;
+}
+
+.history-drawer .session-empty,
+.history-drawer .sidepanel-history-more-action,
+.history-drawer .sidepanel-drawer-action {
+  box-shadow: none;
+  outline: 0;
+}
+
+.history-drawer .sidepanel-history-more-action:focus,
+.history-drawer .sidepanel-history-more-action:focus-visible,
+.history-drawer .sidepanel-drawer-action:focus,
+.history-drawer .sidepanel-drawer-action:focus-visible {
+  background: #e9eef6;
+  box-shadow: none;
+  outline: 0;
+}
+
+.history-drawer .session-item-menu-wrap {
+  display: flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0;
+  position: relative;
+  transform: none;
+  transition: opacity 120ms ease-out;
+  z-index: 2;
+}
+
+.history-drawer .session-item-row:hover .session-item-menu-wrap,
+.history-drawer .session-item-row:focus-within .session-item-menu-wrap,
+.history-drawer .session-item-active .session-item-menu-wrap,
+.history-drawer .session-item-menu-wrap:has(.session-menu) {
+  opacity: 1;
+}
+
+/* Open menu creates a higher stacking context so sibling ⋯ buttons cannot paint
+   through the fixed session menu (fixed still inherits ancestor stacking). */
+.history-drawer .session-item:has(.session-menu) {
+  position: relative;
+  z-index: 20;
+}
+
+.history-drawer .session-item-menu-wrap:has(.session-menu),
+.history-drawer .session-item-menu-wrap:has(.session-menu-button[aria-expanded="true"]) {
+  z-index: 40;
+}
+
+.history-drawer .session-menu-button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--sidepanel-muted);
+  display: grid;
+  font-size: 1.125rem;
+  height: 2rem;
+  line-height: 1;
+  padding: 0;
+  place-items: center;
+  width: 2rem;
+}
+
+.history-drawer .session-menu-button:hover,
+.history-drawer .session-menu-button[aria-expanded="true"] {
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink-strong);
+}
+
+.history-drawer .session-menu {
+  background: #fff;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.625rem;
+  box-shadow: 0 12px 28px rgb(31 41 55 / 14%);
+  min-width: 7.5rem;
+  padding: 0.25rem;
+  right: 0;
+  top: 2.125rem;
+  z-index: 80;
+}
+
+.history-drawer .session-menu-item {
+  border-radius: 0.5rem;
+  color: var(--sidepanel-ink);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.history-drawer .session-menu-item:hover {
+  background: var(--sidepanel-control);
+  color: var(--sidepanel-ink-strong);
+}
+
+.sidepanel-drawer-footer {
+  border-top: 1px solid #d7dee8;
+  display: grid;
+  gap: 0;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0 0;
+}
+
+.sidepanel-drawer-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #24272d;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.8125rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
+  text-align: left;
+  width: 100%;
+}
+
+.sidepanel-drawer-action:hover {
+  background: #e9eef6;
+}
+
+.sidepanel-drawer-action:focus,
+.sidepanel-drawer-action:focus-visible {
+  background: #e9eef6;
+  box-shadow: none;
+  outline: 0;
+}
+
+.sidepanel-drawer-action svg {
+  fill: none;
+  flex: 0 0 auto;
+  height: 1.1875rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2px;
+  width: 1.1875rem;
+}
+
+.sidepanel-drawer-action > span:first-of-type {
+  min-width: 0;
+}
+
+.sidepanel-drawer-action-status {
+  color: var(--sidepanel-muted);
+  flex: 0 0 auto;
+  font-size: 0.765625rem;
+  line-height: 1.1875rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.sidepanel-browser-control-action.is-enabled .sidepanel-drawer-action-status {
+  color: var(--sidepanel-blue);
+  font-weight: 600;
+}
+
+.sidepanel-drawer-action-chevron::after {
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  content: "";
+  height: 0.5rem;
+  margin-left: auto;
+  transform: rotate(45deg);
+  width: 0.5rem;
+}
+
+
+.automation-diagnostics-summary,
+.automation-diagnostics-toggle {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: 0;
+}
+
+.automation-diagnostics-toggle-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-diagnostics-summary[aria-expanded="true"] .automation-diagnostics-toggle-meta,
+.automation-diagnostics-toggle[aria-expanded="true"] .automation-diagnostics-toggle-meta {
+  display: none;
+}
+
+.settings-dialog {
+  background: var(--sidepanel-surface) !important;
+  border: 1px solid var(--sidepanel-surface-line) !important;
+  border-radius: 0.875rem !important;
+  bottom: auto !important;
+  box-sizing: border-box;
+  box-shadow: 0 12px 28px rgb(31 41 55 / 14%) !important;
+  color: var(--sidepanel-ink) !important;
+  display: flex !important;
+  flex-direction: column;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif !important;
+  gap: 0 !important;
+  height: var(--sidepanel-settings-dialog-height) !important;
+  left: auto !important;
+  letter-spacing: 0 !important;
+  max-height: var(--sidepanel-settings-dialog-height) !important;
+  max-width: var(--sidepanel-popover-width) !important;
+  min-height: 0;
+  overflow: hidden !important;
+  padding: 0 !important;
+  pointer-events: auto;
+  position: fixed !important;
+  right: var(--sidepanel-popover-right) !important;
+  top: 3.875rem !important;
+  transform: none;
+  width: var(--sidepanel-popover-width) !important;
+  z-index: 50 !important;
+}
+
+.settings-dialog-header {
+  align-items: center;
+  border-bottom: 1px solid var(--sidepanel-line-soft);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+}
+
+.settings-dialog-title {
+  color: var(--sidepanel-ink-strong);
+  flex: 1 1 auto;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  min-width: 0;
+  padding: 0 0.125rem;
+}
+
+.settings-dialog-nav,
+.settings-dialog-back {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  flex: 0 0 auto;
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  padding: 0 !important;
+  place-items: center;
+  width: 2.25rem !important;
+}
+
+.settings-dialog-nav::before,
+.settings-dialog-back::before {
+  background: currentColor;
+  content: "";
+  display: block;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.settings-dialog-nav::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+}
+
+.settings-dialog-back::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+}
+
+.settings-dialog-nav:hover,
+.settings-dialog-back:hover,
+.settings-dialog-nav:focus-visible,
+.settings-dialog-back:focus-visible {
+  background: var(--sidepanel-control-hover) !important;
+  outline: 0;
+}
+
+.settings-dialog-content {
+  align-content: start;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  margin: 0 !important;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem !important;
+  scrollbar-color: var(--sidepanel-line) transparent;
+  width: 100% !important;
+}
+
+.settings-dialog .settings-tabs-scroll {
+  gap: 0.375rem !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding-bottom: 0.375rem !important;
+  scrollbar-color: var(--sidepanel-line) transparent;
+  scrollbar-width: thin;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar-thumb {
+  background: var(--sidepanel-line);
+  border-radius: 999px;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-tab-button {
+  border: 1px solid transparent;
+  border-radius: 999px !important;
+  color: var(--sidepanel-ink) !important;
+  font-size: 0.8125rem !important;
+  min-height: 2.25rem;
+  padding: 0 0.75rem !important;
+}
+
+.settings-tab-button:hover,
+.settings-tab-button:focus-visible {
+  background: var(--sidepanel-control-hover) !important;
+  outline: 0;
+}
+
+.settings-tab-button-active {
+  background: var(--sidepanel-blue-soft) !important;
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 20%, var(--sidepanel-line)) !important;
+  color: var(--sidepanel-blue) !important;
+  font-weight: 600;
+}
+
+body:has(.model-settings-dialog) .dialog-overlay,
+body:has(.image-preview-dialog) .dialog-overlay,
+body:has(.boundary-choice-dialog) .dialog-overlay {
+  backdrop-filter: none !important;
+  background: rgb(32 36 42 / 10%) !important;
+}
+
+.model-settings-dialog {
+  --tw-translate-x: -50% !important;
+  --tw-translate-y: -50% !important;
+  align-content: start;
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: var(--sidepanel-shadow) !important;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif !important;
+  gap: 0.5rem !important;
+  left: 50% !important;
+  letter-spacing: 0 !important;
+  max-height: min(78vh, calc(100dvh - 2rem)) !important;
+  overflow: hidden auto !important;
+  padding: 0.5rem !important;
+  position: fixed !important;
+  right: auto !important;
+  scrollbar-color: var(--sidepanel-line) transparent;
+  scrollbar-width: thin;
+  top: 50% !important;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y)) !important;
+  width: min(22rem, calc(100vw - 2rem)) !important;
+}
+
+.model-settings-dialog .context-dialog-header {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  display: flex !important;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 2.25rem;
+  padding: 0 0.125rem 0.375rem;
+}
+
+.model-settings-dialog .context-dialog-title {
+  color: var(--sidepanel-ink-strong) !important;
+  font-family: inherit !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.25rem !important;
+  margin: 0 !important;
+}
+
+.model-settings-dialog .context-dialog-close {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  flex: 0 0 auto;
+  font-size: 0 !important;
+  height: 2.25rem !important;
+  line-height: 0 !important;
+  min-height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  overflow: hidden;
+  padding: 0 !important;
+  place-items: center;
+  width: 2.25rem !important;
+}
+
+.model-settings-dialog .context-dialog-close::before {
+  background: currentColor;
+  content: "";
+  display: block;
+  height: 1.25rem;
+  width: 1.25rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+}
+
+.model-settings-dialog .context-dialog-close:hover,
+.model-settings-dialog .context-dialog-close:focus-visible {
+  background: var(--sidepanel-control-hover) !important;
+  outline: 0;
+}
+
+.model-settings-dialog .chat-preference-switch {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+  display: flex;
+  font-size: 0.8125rem !important;
+  font-weight: 500;
+  gap: 0.5rem !important;
+  line-height: 1.25rem !important;
+  min-height: 2.25rem !important;
+  padding: 0.375rem 0.625rem !important;
+}
+
+.model-settings-dialog .chat-preference-switch:hover,
+.model-settings-dialog .chat-preference-switch:focus-within {
+  background: var(--sidepanel-control-hover) !important;
+}
+
+.model-settings-dialog .chat-preference-switch-control {
+  background: var(--sidepanel-line) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 999px !important;
+  flex: 0 0 auto;
+  height: 1.25rem !important;
+  width: 2.25rem !important;
+}
+
+.model-settings-dialog .chat-preference-switch-thumb {
+  background: var(--sidepanel-canvas) !important;
+  border: 0 !important;
+  box-shadow: 0 1px 2px rgb(31 41 55 / 12%);
+  height: 1rem !important;
+  left: 0.125rem !important;
+  width: 1rem !important;
+}
+
+.model-settings-dialog .chat-preference-switch-input:checked + .chat-preference-switch-control {
+  background: var(--sidepanel-blue) !important;
+  border-color: var(--sidepanel-blue) !important;
+}
+
+.model-settings-dialog .chat-preference-switch-input:checked + .chat-preference-switch-control .chat-preference-switch-thumb {
+  transform: translateX(1rem) !important;
+}
+
+.image-preview-dialog,
+.boundary-choice-dialog {
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: var(--sidepanel-shadow) !important;
+  color: var(--sidepanel-ink) !important;
+}
+
+.model-select-menu {
+  background: var(--sidepanel-blue-soft);
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 0.875rem;
+  bottom: 4.75rem;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%);
+  box-sizing: border-box;
+  color: var(--sidepanel-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* Outer shell stays non-scrolling; .model-select-option-list owns overflow.
+     SettingsSelect and ModelSelector both wrap options in that list. */
+  max-height: min(20rem, calc(100dvh - 1.5rem));
+  overflow: hidden;
+  padding: 0;
+  position: fixed;
+  right: 0.75rem;
+  width: min(22rem, calc(100vw - 1.5rem));
+  z-index: 70;
+}
+
+.model-select-option {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--sidepanel-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  width: 100%;
+}
+
+.model-select-option:hover,
+.model-select-option:focus-visible {
+  background: var(--sidepanel-row-hover);
+  outline: 0;
+}
+
+.model-select-option-active {
+  background: transparent;
+  color: var(--sidepanel-ink);
+}
+
+.model-select-option-label {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-option-check {
+  background: var(--sidepanel-blue);
+  border-radius: 999px;
+  color: #fff;
+  display: grid;
+  font-size: 0;
+  height: 0.75rem;
+  place-items: center;
+  width: 0.75rem;
+}
+
+.model-select-option-check::before {
+  content: "✓";
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(0.0625rem);
+}
+
+@keyframes sidepanel-slide-in-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(min(100%, 22rem));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sidepanel-slide-out-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(min(100%, 22rem));
+  }
+}
+
+@keyframes sidepanel-slide-in-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * min(100%, 22rem)));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sidepanel-slide-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(calc(-1 * min(100%, 22rem)));
+  }
+}
+
+.drawer-panel.history-drawer {
+  box-shadow:
+    0 8px 18px rgb(31 41 55 / 24%),
+    0 2px 6px rgb(31 41 55 / 18%);
+  height: auto;
+}
+
+.drawer-panel.history-drawer.is-history-expanded {
+  max-height: var(--sidepanel-history-expanded-height);
+  padding: 0.375rem 0 0.625rem;
+}
+
+.drawer-panel.history-drawer.is-history-expanded .history-dialog-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Outer host sizes the list+archive column; only .session-list-scroll scrolls. */
+.drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  max-height: calc(var(--sidepanel-history-expanded-height) - 3.25rem);
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 0;
+}
+
+.drawer-panel.history-drawer.is-history-expanded .history-dialog-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.history-drawer.is-history-expanded .session-list-compact {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.history-drawer .session-menu.sidepanel-menu-floating {
+  bottom: auto;
+  left: var(--sidepanel-session-menu-left, 0);
+  position: fixed;
+  right: auto;
+  top: var(--sidepanel-session-menu-top, 0);
+  z-index: 130;
+}
+
+.history-drawer .session-menu-delete-confirm {
+  background: color-mix(in srgb, #c24135 12%, #fff);
+  color: #9f2f27;
+}
+
+.history-drawer .session-menu-delete-confirm:hover {
+  background: #c24135;
+  color: #fff;
+}
+
+.sidepanel-history-more-header {
+  display: none;
+}
+
+.history-drawer.is-history-expanded .sidepanel-history-more-header {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 2.5rem;
+  padding: 0 0.9375rem 0.25rem;
+}
+
+.sidepanel-history-back {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #24272d;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.5rem;
+  min-height: 2rem;
+  padding: 0 0.375rem;
+}
+
+.sidepanel-history-back::before {
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  content: "";
+  height: 0.5rem;
+  transform: rotate(-45deg);
+  width: 0.5rem;
+}
+
+.sidepanel-history-back:hover,
+.sidepanel-history-back:focus-visible {
+  background: #e9eef6;
+  outline: 0;
+}
+
+.sidepanel-history-back:focus-visible,
+.sidepanel-history-more-action:focus-visible {
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--sidepanel-blue) 24%, transparent);
+}
+
+.sidepanel-history-hidden-compact {
+  display: none !important;
+}
+
+.sidepanel-history-more-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #24272d;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 400;
+  gap: 0.8125rem;
+  min-height: 2.3125rem;
+  padding: 0 0.9375rem;
+  text-align: left;
+  width: 100%;
+}
+
+.sidepanel-history-more-action:hover {
+  background: #e9eef6;
+}
+
+.sidepanel-history-more-action::before {
+  background:
+    radial-gradient(circle, currentColor 0 0.09375rem, transparent 0.1rem) left 0.0625rem center / 0.25rem 0.25rem no-repeat,
+    radial-gradient(circle, currentColor 0 0.09375rem, transparent 0.1rem) left 0.375rem center / 0.25rem 0.25rem no-repeat,
+    radial-gradient(circle, currentColor 0 0.09375rem, transparent 0.1rem) left 0.6875rem center / 0.25rem 0.25rem no-repeat;
+  content: "";
+  flex: 0 0 1rem;
+  height: 0.8125rem;
+  opacity: 0.9;
+}
+
+.sidepanel-history-more-action::after {
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  content: "";
+  height: 0.5rem;
+  margin-left: auto;
+  transform: rotate(45deg);
+  width: 0.5rem;
+}
+
+.history-drawer.is-history-expanded .sidepanel-history-more-action,
+.history-drawer.is-history-expanded .sidepanel-drawer-footer {
+  display: none;
+}
+
+/* History expanded list scrolls without a visible custom track/thumb. */
+.sidepanel-history-scrollbar,
+.sidepanel-history-scrollbar-thumb {
+  display: none !important;
+}
+
+.settings-dialog {
+  box-shadow:
+    0 8px 18px rgb(31 41 55 / 24%),
+    0 2px 6px rgb(31 41 55 / 18%) !important;
+  letter-spacing: 0 !important;
+}
+
+.settings-dialog-header {
+  gap: 0;
+  justify-content: space-between;
+}
+
+.settings-dialog-title {
+  line-height: 1rem;
+  margin: 0;
+}
+
+.settings-dialog-nav,
+.settings-dialog-back {
+  font-size: 0 !important;
+  height: 2rem !important;
+  justify-content: center;
+  line-height: 0 !important;
+  min-height: 2rem !important;
+  min-width: 2rem !important;
+  overflow: hidden;
+  width: 2rem !important;
+}
+
+.settings-dialog-nav-spacer {
+  flex: 0 0 2rem;
+  height: 2rem;
+  width: 2rem;
+}
+
+.settings-dialog-nav::before,
+.settings-dialog-back::before {
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.settings-dialog-nav::before {
+  -webkit-mask-size: 1.125rem 1.125rem;
+  mask-size: 1.125rem 1.125rem;
+}
+
+.settings-dialog-back::before {
+  -webkit-mask-size: 1.125rem 1.125rem;
+  mask-size: 1.125rem 1.125rem;
+}
+
+.settings-dialog-nav:hover,
+.settings-dialog-back:hover,
+.settings-dialog-nav:focus-visible,
+.settings-dialog-back:focus-visible {
+  background: var(--sidepanel-row-hover) !important;
+}
+
+.settings-dialog-back::before {
+  content: none !important;
+  display: none !important;
+}
+
+.settings-dialog > .mx-auto,
+.settings-dialog > .grid,
+.settings-dialog .mx-auto.grid,
+.settings-dialog-content {
+  align-content: start !important;
+  flex: 1 1 auto;
+  gap: 0.125rem !important;
+  margin: 0 !important;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: 0.5rem !important;
+  scrollbar-width: none;
+  width: 100% !important;
+}
+
+.settings-dialog > .mx-auto::-webkit-scrollbar,
+.settings-dialog > .grid::-webkit-scrollbar,
+.settings-dialog .mx-auto.grid::-webkit-scrollbar,
+.settings-dialog-content::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-dialog h2:first-child {
+  display: none !important;
+}
+
+.settings-dialog .settings-tabs-scroll {
+  border-bottom: 1px solid var(--sidepanel-line-soft);
+  gap: 0.125rem !important;
+  margin: 0;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 0 0 0.5rem;
+  scrollbar-color: var(--sidepanel-line) transparent;
+  scrollbar-width: thin;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar {
+  display: block !important;
+  height: 6px;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar-thumb {
+  background: var(--sidepanel-line);
+  border-radius: 999px;
+}
+
+.settings-dialog .settings-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-dialog .settings-tabs-scroll button {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.5rem !important;
+  white-space: nowrap;
+}
+
+.settings-dialog .settings-tabs-scroll button:hover,
+.settings-dialog .settings-tabs-scroll button:focus-visible {
+  background: var(--sidepanel-row-hover) !important;
+  outline: 0;
+}
+
+.settings-dialog .settings-tabs-scroll button[aria-selected="true"] {
+  background: var(--sidepanel-blue) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-canvas) !important;
+}
+
+.settings-dialog .ui-panel,
+.settings-dialog .ui-card,
+.settings-dialog .bg-\[var\(--color-surface-soft\)\],
+.settings-dialog .bg-\[var\(--color-surface-card\)\],
+.settings-dialog .bg-\[var\(--color-surface-cream-strong\)\],
+.settings-dialog .bg-\[var\(--color-canvas\)\] {
+  background: transparent !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+}
+
+.settings-dialog .border-\[var\(--color-primary\)\],
+.settings-dialog .border-\[var\(--color-success\)\],
+.settings-dialog .border-\[var\(--color-warning\)\],
+.settings-dialog .border-\[var\(--color-error\)\],
+.settings-dialog .border-\[var\(--color-hairline\)\] {
+  border-color: var(--sidepanel-line-soft) !important;
+}
+
+.settings-dialog .chat-preference-switch,
+.settings-dialog .chat-preference-network-types,
+.settings-dialog .chat-preference-network-type-chip {
+  background: transparent !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+}
+
+.settings-dialog .chat-preference-switch:hover,
+.settings-dialog .chat-preference-network-type-chip:has(input:not(:disabled)):hover {
+  background: var(--sidepanel-row-hover) !important;
+  border-color: var(--sidepanel-line-soft) !important;
+}
+
+.settings-dialog .chat-preference-switch-control {
+  background: var(--sidepanel-control) !important;
+  border-color: var(--sidepanel-line-soft) !important;
+}
+
+.settings-dialog .chat-preference-switch-input:checked + .chat-preference-switch-control {
+  background: var(--sidepanel-blue) !important;
+  border-color: var(--sidepanel-blue) !important;
+}
+
+.settings-dialog .chat-preference-network-type-chip:has(input:checked) {
+  background: color-mix(in srgb, var(--sidepanel-blue) 12%, transparent) !important;
+  border-color: var(--sidepanel-blue) !important;
+  color: var(--sidepanel-blue) !important;
+}
+
+.settings-dialog [class*="surface-card"],
+.settings-dialog [class*="surface-cream"],
+.settings-dialog [class*="surface-soft"] {
+  background: transparent !important;
+}
+
+.settings-dialog section,
+.settings-dialog article,
+.settings-dialog label {
+  letter-spacing: 0 !important;
+}
+
+.settings-dialog h3,
+.settings-dialog h4 {
+  color: var(--sidepanel-ink-strong) !important;
+  font-family: inherit !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.25rem !important;
+}
+
+.settings-dialog p,
+.settings-dialog .ui-muted,
+.settings-dialog .text-\[var\(--color-muted\)\] {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.25rem !important;
+}
+
+.settings-dialog .ui-input,
+.settings-dialog textarea,
+.settings-dialog input,
+.settings-dialog select {
+  background: var(--sidepanel-canvas) !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-ink) !important;
+  font-size: 0.8125rem !important;
+  min-height: 2.25rem !important;
+}
+
+.settings-dialog textarea {
+  min-height: 5.5rem !important;
+}
+
+.settings-dialog .ui-input:focus,
+.settings-dialog textarea:focus,
+.settings-dialog input:focus,
+.settings-dialog select:focus {
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 36%, var(--sidepanel-line)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sidepanel-blue) 18%, transparent) !important;
+  outline: 0 !important;
+}
+
+.settings-dialog .ui-button-secondary {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+}
+
+.settings-dialog .ui-button-secondary:hover,
+.settings-dialog .ui-button-secondary:focus-visible {
+  background: var(--sidepanel-row-hover) !important;
+  outline: 0;
+}
+
+.settings-dialog .ui-button-primary {
+  background: var(--sidepanel-blue) !important;
+  border: 1px solid transparent !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-canvas) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  min-height: 2.25rem !important;
+  padding: 0.375rem 0.75rem !important;
+}
+
+.settings-dialog .ui-button-primary:hover:not(:disabled) {
+  background: var(--sidepanel-blue-deep) !important;
+}
+
+.settings-dialog .ui-button-secondary:focus-visible,
+.settings-dialog .ui-button-primary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--sidepanel-blue) 24%, transparent) !important;
+  outline-offset: 2px !important;
+}
+
+.settings-dialog .settings-icon-button {
+  align-items: center;
+  display: inline-flex !important;
+  height: 2.25rem;
+  justify-content: center;
+  min-height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 !important;
+  width: 2.25rem;
+}
+
+.settings-dialog .settings-icon-button:disabled {
+  color: var(--sidepanel-muted) !important;
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.settings-dialog .channel-management-header {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.5rem;
+  padding-inline: 0.25rem;
+}
+
+.settings-dialog .channel-management-actions,
+.settings-dialog .channel-detail-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.375rem;
+}
+
+.settings-dialog .channel-detail-panel {
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+}
+
+.settings-dialog .channel-detail-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-dialog .channel-name-field {
+  min-width: 0;
+}
+
+@media (max-width: 380px) {
+  .settings-dialog .channel-detail-toolbar {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-dialog .channel-detail-actions {
+    justify-content: flex-start;
+  }
+}
+
+.settings-action-icon,
+.settings-action-icon svg {
+  display: block;
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.settings-action-icon {
+  pointer-events: none;
+}
+
+.settings-action-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.settings-action-icon-loading {
+  animation: settings-action-spin 850ms linear infinite;
+  transform-origin: center;
+}
+
+.settings-dialog .remote-model-option {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 2.625rem;
+  width: 100%;
+}
+
+.settings-dialog .remote-model-option-body {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.settings-dialog .remote-model-title,
+.settings-dialog .remote-model-subtitle,
+.settings-dialog .model-list-title,
+.settings-dialog .model-list-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-dialog .remote-model-status-marker {
+  align-items: center;
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 999px;
+  color: var(--sidepanel-muted);
+  display: inline-flex;
+  height: 1.5rem;
+  justify-content: center;
+  width: 1.5rem;
+}
+
+.settings-dialog .remote-model-status-marker .settings-action-icon,
+.settings-dialog .remote-model-status-marker .settings-action-icon svg {
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.settings-dialog .remote-model-option[aria-disabled="true"] .remote-model-status-marker {
+  background: color-mix(in srgb, var(--sidepanel-blue) 12%, transparent);
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 36%, var(--sidepanel-line));
+  color: var(--sidepanel-blue);
+}
+
+.settings-dialog .model-row-content {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  min-height: 2.625rem;
+  min-width: 0;
+}
+
+.settings-dialog .model-connectivity-card .model-list-name {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.settings-dialog .model-list-title-row {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.settings-dialog .model-row-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.375rem;
+  min-height: 2.25rem;
+}
+
+.settings-dialog .model-row-actions .chat-preference-switch {
+  border: 0 !important;
+  gap: 0 !important;
+  height: 2.25rem;
+  min-height: 2.25rem !important;
+  min-width: 3.25rem;
+  padding: 0 0.375rem !important;
+}
+
+@media (max-width: 520px) {
+  .settings-dialog .model-row-content {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-dialog .model-row-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@keyframes settings-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-action-icon-loading {
+    animation: none;
+  }
+}
+
+body:has(.context-dialog) .dialog-overlay {
+  background: transparent !important;
+}
+
+.context-dialog {
+  background: var(--sidepanel-blue-soft) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  bottom: 4.25rem !important;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%) !important;
+  color: var(--sidepanel-ink) !important;
+  display: flex !important;
+  flex-direction: column;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif !important;
+  gap: 0 !important;
+  height: min(14rem, calc(100dvh - 8rem)) !important;
+  left: 1rem !important;
+  letter-spacing: 0 !important;
+  max-height: none !important;
+  overflow: hidden;
+  padding: 0 !important;
+  position: fixed !important;
+  right: 9rem !important;
+  top: auto !important;
+  transform: none !important;
+  width: auto !important;
+  z-index: 50 !important;
+}
+
+.context-dialog-header,
+.context-dialog-close,
+.context-preview {
+  display: none !important;
+}
+
+.context-tab-list {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 0.75rem, black calc(100% - 1.25rem), transparent);
+  align-content: start !important;
+  display: grid !important;
+  flex: 1 1 auto;
+  gap: 0.125rem !important;
+  grid-auto-flow: row !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-height: none !important;
+  min-height: 0;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding: 0.5rem;
+  scrollbar-width: none;
+}
+
+.context-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.context-tab-item,
+.context-tab-item-active {
+  align-items: center !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  cursor: pointer;
+  display: flex !important;
+  flex-shrink: 0;
+  flex-wrap: nowrap !important;
+  gap: 0.5rem !important;
+  min-height: 2.25rem;
+  min-width: 0 !important;
+  overflow: hidden;
+  padding: 0.375rem 0.625rem !important;
+  position: relative;
+  transition: background 120ms ease-out;
+}
+
+.context-tab-item:hover,
+.context-tab-item-active:hover {
+  background: var(--sidepanel-row-hover) !important;
+}
+
+.context-tab-item:focus-visible,
+.context-tab-item-active:focus-visible {
+  box-shadow: 0 0 0 3px rgb(20 95 215 / 24%);
+  outline: 0;
+}
+
+.context-tab-title-row {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: nowrap !important;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.context-tab-title {
+  color: var(--sidepanel-ink-strong) !important;
+  flex: 1 1 auto;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25rem !important;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-tab-url,
+.context-tab-error {
+  display: none !important;
+}
+
+/* Active badge is informational only ("这是当前 tab") and not user-toggleable.
+   Hide it so the row only shows the controllable blue selected checkmark —
+   otherwise the light circle next to the check looks like a second state indicator. */
+.context-tab-active-badge {
+  display: none !important;
+}
+
+/* Match tools-popup selected check (.composer-switch[aria-checked=true]::before).
+   Badge still has text "注入"; keep it out of layout so only the absolute check
+   is centered — otherwise the text becomes a second grid item and the ✓ sits high. */
+.context-tab-selected-badge {
+  align-self: center;
+  background: var(--sidepanel-blue);
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: transparent;
+  display: inline-block !important;
+  flex: 0 0 0.75rem;
+  font-size: 0;
+  height: 0.75rem;
+  line-height: 0;
+  margin-left: auto;
+  max-width: 0.75rem;
+  min-width: 0.75rem;
+  overflow: hidden;
+  padding: 0 !important;
+  position: relative;
+  width: 0.75rem;
+}
+
+.context-tab-selected-badge::before {
+  box-sizing: border-box;
+  color: #ffffff;
+  content: "✓";
+  display: grid;
+  font-size: 0.5rem;
+  font-weight: 700;
+  height: 100%;
+  inset: 0;
+  line-height: 1;
+  padding-top: 0.0625rem;
+  place-items: center;
+  position: absolute;
+  width: 100%;
+}
+
+/* Native remaining popup parity: align secondary React popups with the old light side-panel skin. */
+.slash-command-menu {
+  background: var(--sidepanel-blue-soft) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  bottom: calc(100% + 0.5rem) !important;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%) !important;
+  box-sizing: border-box;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  gap: 0.125rem !important;
+  left: 0 !important;
+  max-height: min(14rem, 40dvh) !important;
+  overflow: hidden auto !important;
+  padding: 0.375rem !important;
+  position: absolute !important;
+  right: 0 !important;
+  top: auto !important;
+  width: auto !important;
+  z-index: 40 !important;
+}
+
+.slash-command-option {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  gap: 0.125rem !important;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem !important;
+}
+
+.slash-command-option:hover,
+.slash-command-option:focus-visible,
+.slash-command-option-active {
+  background: var(--sidepanel-row-hover) !important;
+  box-shadow: none !important;
+  outline: 0;
+}
+
+.slash-command-title {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25rem !important;
+}
+
+.slash-command-content,
+.slash-command-empty {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.125rem !important;
+}
+
+.at-mention-menu .slash-command-option {
+  gap: 0.125rem !important;
+}
+
+.at-mention-option-row {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.at-mention-option-row .slash-command-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-mention-badge {
+  color: var(--sidepanel-muted);
+  flex: 0 0 auto;
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
+.at-mention-badge-selected {
+  color: var(--sidepanel-ink-strong);
+}
+
+.composer-mode-menu {
+  position: fixed !important;
+  z-index: 80 !important;
+  background: var(--sidepanel-blue-soft) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%) !important;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  gap: 0.125rem !important;
+  max-height: min(16rem, calc(100dvh - 1.5rem)) !important;
+  overflow-y: auto !important;
+  padding: 0.375rem !important;
+  width: min(17rem, calc(100vw - 1.5rem)) !important;
+  transform: none !important;
+}
+
+.composer-mode-menu-header {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.125rem !important;
+  padding: 0.25rem 0.625rem 0.375rem !important;
+}
+
+.composer-mode-option {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+  grid-template-columns: 1.25rem minmax(0, 1fr) 1.125rem !important;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.625rem !important;
+}
+
+.composer-mode-option:hover,
+.composer-mode-option:focus-visible,
+.composer-mode-option[aria-selected="true"] {
+  background: var(--sidepanel-row-hover) !important;
+  outline: 0;
+}
+
+.composer-mode-option-icon {
+  color: var(--sidepanel-muted) !important;
+  fill: none;
+  height: 1.25rem !important;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.25rem !important;
+}
+
+.composer-mode-option-title {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25rem !important;
+}
+
+.composer-mode-option-description {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.125rem !important;
+}
+
+.composer-mode-option-check {
+  align-items: center;
+  background: var(--sidepanel-blue);
+  border-radius: 999px;
+  color: #fff !important;
+  display: grid;
+  font-size: 0.75rem !important;
+  height: 1.125rem;
+  justify-self: end;
+  line-height: 1;
+  place-items: center;
+  width: 1.125rem;
+}
+
+.composer-mode-option-check:empty {
+  background: transparent;
+}
+
+.composer-tool-menu {
+  background: var(--sidepanel-blue-soft) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%) !important;
+  color: var(--sidepanel-ink) !important;
+  gap: 0.375rem !important;
+  max-height: min(52dvh, calc(100dvh - 5rem)) !important;
+  overflow-y: auto !important;
+  padding: 0.375rem !important;
+  width: min(20rem, calc(100vw - 1.5rem)) !important;
+}
+
+
+
+.composer-tool-menu-actions {
+  gap: 0.125rem !important;
+}
+
+.composer-tool-menu-action,
+.composer-tool-menu-item {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-ink) !important;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem !important;
+}
+
+.composer-tool-menu-item {
+  align-items: center !important;
+  column-gap: 0.5rem !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  text-align: left !important;
+}
+
+.composer-tool-menu-item-copy {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.composer-tool-menu-item-check {
+  background: var(--sidepanel-blue) !important;
+  border-radius: 999px !important;
+  box-sizing: border-box;
+  color: #ffffff !important;
+  display: inline-grid !important;
+  flex: 0 0 auto;
+  font-size: 0.5rem !important;
+  font-weight: 700 !important;
+  height: 0.75rem !important;
+  line-height: 1 !important;
+  padding-top: 0.0625rem;
+  place-items: center;
+  width: 0.75rem !important;
+}
+
+.composer-tool-menu-action:hover,
+.composer-tool-menu-action:focus-visible,
+.composer-tool-menu-item:not(:disabled):hover,
+.composer-tool-menu-item:focus-visible,
+.composer-tool-menu-item-active {
+  background: var(--sidepanel-row-hover) !important;
+  border-color: transparent !important;
+  color: var(--sidepanel-ink-strong) !important;
+  outline: 0;
+}
+
+.composer-tool-menu-group-title,
+.composer-tool-menu-group-hint,
+.composer-tool-menu-item-description,
+.composer-tool-menu-empty {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.125rem !important;
+}
+
+.composer-tool-menu-item-name {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25rem !important;
+}
+
+.chat-export-menu {
+  background: var(--sidepanel-blue-soft) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%) !important;
+  padding: 0.375rem !important;
+}
+
+.chat-export-menu-item {
+  background: transparent !important;
+  border-radius: 0.5rem !important;
+  color: var(--sidepanel-ink) !important;
+  font-size: 0.8125rem !important;
+  min-height: 2.25rem;
+}
+
+.chat-export-menu-item:hover,
+.chat-export-menu-item:focus-visible {
+  background: var(--sidepanel-row-hover) !important;
+  outline: 0;
+}
+
+.image-preview-dialog {
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: var(--sidepanel-shadow) !important;
+  color: var(--sidepanel-ink) !important;
+  gap: 0.5rem !important;
+  padding: 0.5rem !important;
+}
+
+.image-preview-dialog img {
+  background: #20242a !important;
+  border-radius: 0.625rem !important;
+}
+
+.image-preview-close {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+  color: var(--sidepanel-ink) !important;
+  display: grid !important;
+  font-size: 0 !important;
+  height: 2.25rem !important;
+  justify-self: end;
+  line-height: 0 !important;
+  min-height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  overflow: hidden;
+  padding: 0 !important;
+  place-items: center;
+  width: 2.25rem !important;
+}
+
+.image-preview-close::before {
+  background: currentColor;
+  content: "";
+  display: block;
+  height: 1.25rem;
+  width: 1.25rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 1.25rem 1.25rem no-repeat;
+}
+
+.image-preview-close:hover,
+.image-preview-close:focus-visible {
+  background: var(--sidepanel-row-hover) !important;
+  outline: 0;
+}
+
+.boundary-choice-dialog {
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: var(--sidepanel-shadow) !important;
+  color: var(--sidepanel-ink) !important;
+  gap: 0.625rem !important;
+  max-height: min(78vh, calc(100dvh - 2rem)) !important;
+  overflow: hidden auto !important;
+  padding: 0.75rem !important;
+  width: var(--sidepanel-popover-width) !important;
+}
+
+.boundary-choice-title {
+  color: var(--sidepanel-ink-strong) !important;
+  font-size: 0.9375rem !important;
+  line-height: 1.35 !important;
+}
+
+.boundary-choice-reason,
+.boundary-choice-description,
+.boundary-choice-grants {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.25rem !important;
+}
+
+.boundary-choice-item {
+  background: transparent !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+}
+
+.boundary-choice-item:hover,
+.boundary-choice-item:focus-visible,
+.boundary-choice-item-active {
+  background: var(--sidepanel-row-hover) !important;
+  border-color: var(--sidepanel-line-soft) !important;
+  outline: 0;
+}
+
+.boundary-choice-action-button {
+  min-height: 2.25rem !important;
+}
+
+.private-switch-dialog {
+  background: var(--sidepanel-canvas) !important;
+  border: 1px solid var(--sidepanel-line) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: var(--sidepanel-shadow) !important;
+  color: var(--sidepanel-ink) !important;
+}
+
+.private-switch-dialog-title {
+  color: var(--sidepanel-ink-strong) !important;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 0.9375rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}
+
+.private-switch-dialog-description {
+  color: var(--sidepanel-muted) !important;
+  font-size: 0.8125rem !important;
+}
+
+
+.notification-host {
+  position: fixed !important;
+  top: 0.65rem !important;
+  left: 50% !important;
+  right: auto !important;
+  z-index: 80 !important;
+  display: grid !important;
+  justify-items: center !important;
+  gap: 0.4rem !important;
+  width: min(17.5rem, calc(100vw - 1rem)) !important;
+  transform: translateX(-50%) !important;
+  pointer-events: none !important;
+}
+
+.notification {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 0.45rem 0.5rem !important;
+  min-width: 0 !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  min-height: 2.15rem !important;
+  padding: 0.4rem 0.4rem 0.4rem 0.5rem !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--color-primary, #145fd7) 16%, rgb(255 255 255 / 62%)) 0%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 8%, rgb(255 255 255 / 34%)) 52%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 12%, rgb(255 255 255 / 48%)) 100%
+    ) !important;
+  box-shadow:
+    0 12px 28px rgb(20 95 215 / 12%),
+    0 1px 0 rgb(255 255 255 / 55%) inset,
+    0 -1px 0 rgb(20 95 215 / 6%) inset !important;
+  backdrop-filter: blur(18px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.4) !important;
+  color: var(--sidepanel-ink, #303237) !important;
+  overflow: hidden !important;
+  pointer-events: auto !important;
+}
+
+.notification-success,
+.notification-warning,
+.notification-error,
+.notification-info {
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--color-primary, #145fd7) 16%, rgb(255 255 255 / 62%)) 0%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 8%, rgb(255 255 255 / 34%)) 52%,
+      color-mix(in srgb, var(--color-primary, #145fd7) 12%, rgb(255 255 255 / 48%)) 100%
+    ) !important;
+  border: 0 !important;
+  border-color: transparent !important;
+}
+
+.notification-accent {
+  display: none !important;
+}
+
+.notification-icon {
+  background: rgb(255 255 255 / 48%) !important;
+  border: 0 !important;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 50%) inset !important;
+  border-radius: 999px !important;
+  display: grid !important;
+  height: 1.2rem !important;
+  place-items: center !important;
+  width: 1.2rem !important;
+  color: var(--color-primary, #145fd7) !important;
+}
+
+.notification-glyph {
+  width: 0.72rem !important;
+  height: 0.72rem !important;
+  display: block !important;
+}
+
+.notification-success .notification-icon {
+  color: var(--color-success, #2f7d55) !important;
+  background: color-mix(in srgb, var(--color-success, #2f7d55) 14%, rgb(255 255 255 / 50%)) !important;
+}
+
+.notification-warning .notification-icon {
+  color: var(--color-warning, #d97706) !important;
+  background: color-mix(in srgb, var(--color-warning, #d97706) 14%, rgb(255 255 255 / 50%)) !important;
+}
+
+.notification-error .notification-icon {
+  color: var(--color-error, #c0453f) !important;
+  background: color-mix(in srgb, var(--color-error, #c0453f) 14%, rgb(255 255 255 / 50%)) !important;
+}
+
+.notification-info .notification-icon {
+  color: var(--color-primary, #145fd7) !important;
+  background: color-mix(in srgb, var(--color-primary, #145fd7) 14%, rgb(255 255 255 / 50%)) !important;
+}
+
+.notification-title {
+  color: var(--sidepanel-ink-strong, #20242a) !important;
+  font-size: 0.75rem !important;
+  font-weight: 550 !important;
+  line-height: 1.3 !important;
+  letter-spacing: 0.005em !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.notification-message {
+  color: var(--sidepanel-muted, #68707d) !important;
+  font-size: 0.6875rem !important;
+  line-height: 1.3 !important;
+  margin: 0.08rem 0 0 !important;
+  overflow-wrap: anywhere !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+  overflow: hidden !important;
+}
+
+.notification-compact {
+  align-items: center !important;
+  border-radius: 999px !important;
+}
+
+.notification-compact .notification-title {
+  white-space: nowrap !important;
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.notification:not(.notification-compact) {
+  border-radius: 0.85rem !important;
+  align-items: start !important;
+  padding-top: 0.45rem !important;
+  padding-bottom: 0.45rem !important;
+}
+
+.notification:not(.notification-compact) .notification-icon {
+  margin-top: 0.05rem !important;
+}
+
+.notification-close {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  color: color-mix(in srgb, var(--sidepanel-muted, #68707d) 88%, transparent) !important;
+  display: grid !important;
+  font-size: 0 !important;
+  height: 1.15rem !important;
+  line-height: 0 !important;
+  padding: 0 !important;
+  place-items: center !important;
+  width: 1.15rem !important;
+}
+
+.notification-close::before {
+  background: currentColor;
+  content: "";
+  display: block;
+  height: 0.62rem;
+  width: 0.62rem;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 0.62rem 0.62rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / 0.62rem 0.62rem no-repeat;
+}
+
+.notification-close:hover,
+.notification-close:focus-visible {
+  background: rgb(255 255 255 / 45%) !important;
+  color: var(--sidepanel-ink, #303237) !important;
+  outline: 0;
+}
+
+/* Restored native side-panel details that were lost during the React migration. */
+.model-select-option-list {
+  align-content: start;
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.125rem;
+  max-height: inherit;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.375rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.model-select-option-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* SettingsSelect menus can receive an inline max-height from viewport math;
+   keep the scroll container flexible so it actually uses that budget. */
+.settings-dialog .sidepanel-settings-select .model-select-option-list,
+.settings-dialog .sidepanel-channel-select .model-select-option-list {
+  max-height: none;
+}
+
+.model-select-group {
+  display: grid;
+  gap: 0.125rem;
+  padding-top: 0.25rem;
+}
+
+.model-select-group:first-of-type {
+  padding-top: 0;
+}
+
+.model-select-group-title {
+  color: var(--sidepanel-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1rem;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+}
+
+.model-select-option-copy {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.model-select-option-name {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-menu-empty {
+  color: var(--sidepanel-muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  margin: 0;
+  padding: 0.625rem 0.5rem;
+  text-align: center;
+}
+
+/* Pin to the top of the empty-state column so it uses the free upper space
+   instead of sitting directly above the greeting mid-panel. */
+.sidepanel-move-conversation {
+  align-items: center;
+  align-self: stretch;
+  background: var(--sidepanel-control);
+  border: 1px solid var(--sidepanel-line-soft);
+  border-radius: 0.5rem;
+  box-sizing: border-box;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0 0 0.25rem;
+  max-width: none;
+  min-height: 2.25rem;
+  order: -1;
+  padding: 0.3125rem 0.375rem 0.3125rem 0.75rem;
+  width: 100%;
+}
+
+.sidepanel-move-conversation-title {
+  color: var(--sidepanel-ink-strong);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidepanel-move-conversation-button {
+  align-items: center;
+  background: var(--sidepanel-blue);
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--sidepanel-canvas);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  gap: 0.25rem;
+  line-height: 1;
+  min-height: 1.75rem;
+  padding: 0 0.625rem;
+  transition: background-color 140ms ease-out, transform 140ms ease-out, opacity 140ms ease-out;
+  white-space: nowrap;
+}
+
+.sidepanel-move-conversation-button-icon {
+  fill: none;
+  height: 0.8125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 0.8125rem;
+}
+
+.sidepanel-move-conversation-button:hover,
+.sidepanel-move-conversation-button:focus-visible {
+  background: var(--sidepanel-blue-deep);
+  outline: 0;
+}
+
+.sidepanel-move-conversation-button:active {
+  transform: translateY(1px);
+}
+
+.sidepanel-jump-latest {
+  align-items: center;
+  background: var(--sidepanel-canvas);
+  border: 1px solid var(--sidepanel-line);
+  border-radius: 999px;
+  bottom: 0.75rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  color: var(--sidepanel-blue);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  justify-content: center;
+  left: 50%;
+  line-height: 1;
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  pointer-events: auto;
+  position: absolute;
+  transform: translateX(-50%);
+  transition: background 140ms ease-out, border-color 140ms ease-out, transform 140ms ease-out;
+  z-index: 40;
+}
+
+.sidepanel-jump-latest:hover,
+.sidepanel-jump-latest:focus-visible {
+  background: var(--sidepanel-blue-soft);
+  border-color: color-mix(in srgb, var(--sidepanel-blue) 28%, var(--sidepanel-line));
+  outline: 0;
+}
+
+.sidepanel-jump-latest:active {
+  transform: translateX(-50%) translateY(1px);
+}
+
+.sidepanel-jump-latest[hidden] {
+  display: none !important;
+}
+
+body.sidepanel-regenerate-direct-pending .message-regenerate-popover {
+  pointer-events: none;
+}
+
+body.sidepanel-stop-requested .composer-abort-button {
+  cursor: progress;
+}
+
+.sidepanel-preview-notice {
+  align-items: center;
+  background: transparent;
+  border-bottom: 1px solid var(--sidepanel-line-soft);
+  color: var(--sidepanel-ink);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+}
+
+/* Keep tab rows visible while context extract runs. Hiding non-current rows
+   with visibility:hidden made the dialog text flash on open/select. */
+.context-tab-item.is-loading {
+  cursor: progress;
+}
+
+.sidepanel-tab-favicon {
+  background: var(--sidepanel-control);
+  border-radius: 0.25rem;
+  flex: 0 0 auto;
+  height: 1rem;
+  object-fit: cover;
+  width: 1rem;
+}
+
+.sidepanel-tab-favicon[hidden] {
+  display: none !important;
+}
+
+.context-tab-list-scrollbar {
+  display: none !important;
+}
+
+.context-tab-list-scrollbar-thumb {
+  display: none !important;
+}
+
+.sidepanel-history-content.is-history-page-out-left {
+  animation: sidepanel-slide-out-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sidepanel-history-content.is-history-page-in-right {
+  animation: sidepanel-slide-in-from-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sidepanel-history-content.is-history-page-out-right {
+  animation: sidepanel-slide-out-right 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sidepanel-history-content.is-history-page-in-left {
+  animation: sidepanel-slide-in-from-left 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidepanel-move-conversation-button,
+  .sidepanel-jump-latest {
+    transition-duration: 0.01ms;
+  }
+
+  .sidepanel-drawer-dialog.is-page-transitioning .sidepanel-drawer-pages,
+  .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-history,
+  .sidepanel-drawer-dialog.is-history-to-settings .sidepanel-drawer-page-settings,
+  .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-history,
+  .sidepanel-drawer-dialog.is-settings-to-history .sidepanel-drawer-page-settings,
+  .sidepanel-history-content.is-history-page-out-left,
+  .sidepanel-history-content.is-history-page-in-right,
+  .sidepanel-history-content.is-history-page-out-right,
+  .sidepanel-history-content.is-history-page-in-left {
+    animation: none !important;
+  }
+}
+
